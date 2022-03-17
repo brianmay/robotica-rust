@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::{thread, env, str};
-use std::time::Duration;
-use log::*;
-use paho_mqtt::Message;
-use paho_mqtt as mqtt;
-use tokio::sync::mpsc;
 use anyhow::Result;
+use log::*;
+use paho_mqtt as mqtt;
+use paho_mqtt::Message;
+use std::collections::HashMap;
+use std::time::Duration;
+use std::{env, str, thread};
+use tokio::sync::mpsc;
 
 #[derive(Debug)]
 pub enum MqttMessage {
@@ -136,7 +136,6 @@ impl Drop for Mqtt {
     }
 }
 
-
 #[derive(Clone)]
 struct Subscription {
     #[allow(dead_code)]
@@ -179,7 +178,6 @@ impl Default for Subscriptions {
     }
 }
 
-
 fn try_reconnect(cli: &mqtt::Client) -> bool {
     println!("Connection lost. Waiting to retry connection");
     for _ in 0..12 {
@@ -204,4 +202,13 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
     if let Err(e) = cli.subscribe_many(&topics, &qos) {
         error!("Error subscribes topics: {:?}", e);
     }
+}
+
+pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMessage>) {
+    tokio::spawn(async move {
+        while let Some(v) = input.recv().await {
+            // let msg = Message::new("test", v, 0);
+            mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
+        }
+    });
 }
