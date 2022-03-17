@@ -130,11 +130,11 @@ fn filter<T: Send + core::fmt::Debug + 'static>(
     rx
 }
 
-async fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MainMessage>) {
+async fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMessage>) {
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
             // let msg = Message::new("test", v, 0);
-            mqtt_out.send(MainMessage::MqttOut(v)).await.unwrap();
+            mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
         }
     });
 }
@@ -166,7 +166,7 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
 }
 
 #[derive(Debug)]
-enum MainMessage {
+enum MqttMessage {
     MqttIn(Option<Message>),
     MqttOut(Message),
 }
@@ -221,9 +221,9 @@ async fn main() -> Result<()> {
 struct Mqtt {
     a: Option<thread::JoinHandle<()>>,
     b: Option<thread::JoinHandle<()>>,
-    rx: Option<mpsc::Receiver<MainMessage>>,
-    tx: Option<mpsc::Sender<MainMessage>>,
-    tx_private: Option<mpsc::Sender<MainMessage>>,
+    rx: Option<mpsc::Receiver<MqttMessage>>,
+    tx: Option<mpsc::Sender<MqttMessage>>,
+    tx_private: Option<mpsc::Sender<MqttMessage>>,
 }
 
 impl Mqtt {
@@ -239,7 +239,7 @@ impl Mqtt {
         }
     }
 
-    fn take_tx(&mut self) -> Result<mpsc::Sender<MainMessage>> {
+    fn take_tx(&mut self) -> Result<mpsc::Sender<MqttMessage>> {
         self.tx
             .take()
             .ok_or_else(|| anyhow::anyhow!("tx value taken"))
@@ -268,7 +268,7 @@ impl Mqtt {
         let tx = self.tx_private.clone().unwrap();
         let a = thread::spawn(move || {
             for msg_or_none in mqtt_in_rx.iter() {
-                tx.blocking_send(MainMessage::MqttIn(msg_or_none)).unwrap();
+                tx.blocking_send(MqttMessage::MqttIn(msg_or_none)).unwrap();
             }
         });
 
@@ -301,9 +301,9 @@ impl Mqtt {
             subscribe_topics(&cli, &subscriptions);
 
             while let Some(msg) = rx.blocking_recv() {
-                let msg: MainMessage = msg;
+                let msg: MqttMessage = msg;
                 match msg {
-                    MainMessage::MqttIn(msg_or_none) => {
+                    MqttMessage::MqttIn(msg_or_none) => {
                         if let Some(msg) = msg_or_none {
                             let topic = msg.topic();
                             let payload = msg.payload();
@@ -320,7 +320,7 @@ impl Mqtt {
                             };
                         }
                     }
-                    MainMessage::MqttOut(msg) => cli.publish(msg).unwrap(),
+                    MqttMessage::MqttOut(msg) => cli.publish(msg).unwrap(),
                 }
             }
         });
@@ -341,7 +341,7 @@ impl Drop for Mqtt {
     }
 }
 
-async fn setup_pipes(main_tx: &mpsc::Sender<MainMessage>) -> Subscriptions {
+async fn setup_pipes(main_tx: &mpsc::Sender<MqttMessage>) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
     let rx = subscriptions.subscription("state/Brian/Fan/power");
