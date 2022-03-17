@@ -8,23 +8,21 @@ use tokio::sync::mpsc;
 
 fn has_changed<T: Send + Eq + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
-) -> mpsc::Receiver<(Option<T>, T)> {
+) -> mpsc::Receiver<(T, T)> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         let mut old_value: Option<T> = None;
         while let Some(v) = input.recv().await {
-            let has_changed = if let Some(prev) = &old_value {
-                *prev != v
-            } else {
-                true
+            if let Some(prev) = old_value {
+                if prev != v {
+                    let v_clone = v.clone();
+                    let a = tx.send((prev, v_clone)).await;
+                    a.unwrap_or_else(|err| {
+                        error!("send operation failed {err}");
+                    });
+                }
             };
-            if has_changed {
-                let a = tx.send((old_value, v.clone()));
-                a.await.unwrap_or_else(|err| {
-                    error!("send operation failed {err}");
-                });
-                old_value = Some(v);
-            };
+            old_value = Some(v);
         }
     });
 
@@ -58,14 +56,13 @@ fn power_to_enum(value: String) -> Power {
     }
 }
 
-fn changed_to_string(value: (Option<Power>, Power)) -> Option<String> {
+fn changed_to_string(value: (Power, Power)) -> Option<String> {
     match value {
-        (None, _) => None,
-        (Some(Power::Error), _) => None,
-        (Some(_), Power::Error) => None,
-        (Some(_), Power::Off) => Some("Fan has been turned off".to_string()),
-        (Some(_), Power::On) => Some("Fan has been turned on".to_string()),
-        (Some(_), Power::HardOff) => Some("Fan has been turned off at power point".to_string()),
+        (Power::Error, _) => None,
+        (_, Power::Error) => None,
+        (_, Power::Off) => Some("Fan has been turned off".to_string()),
+        (_, Power::On) => Some("Fan has been turned on".to_string()),
+        (_, Power::HardOff) => Some("Fan has been turned off at power point".to_string()),
     }
 }
 
