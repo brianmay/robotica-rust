@@ -1,5 +1,5 @@
 use log::*;
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc};
 
 pub fn has_changed<T: Send + Eq + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
@@ -69,6 +69,37 @@ pub fn filter<T: Send + core::fmt::Debug + 'static>(
             let filter = callback(&v);
             if filter {
                 tx.send(v).await.unwrap();
+            }
+        }
+    });
+
+    rx
+}
+
+pub fn gate<T: Send + core::fmt::Debug + 'static>(
+    mut input: mpsc::Receiver<T>,
+    mut gate: mpsc::Receiver<bool>,
+) -> mpsc::Receiver<T> {
+    let (tx, rx) = mpsc::channel(10);
+    tokio::spawn(async move {
+        let mut filter = true;
+        loop {
+            select! {
+                input = input.recv() => {
+                    if let Some(input) = input {
+                        if filter {
+                            tx.send(input).await.unwrap();
+                        }
+                    } else {
+                        break;
+                    }
+
+                }
+                gate = gate.recv() => {
+                    if let Some(gate) = gate {
+                        filter = gate;
+                    }
+                }
             }
         }
     });
