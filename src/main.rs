@@ -6,7 +6,7 @@ use std::str;
 use tokio::sync::mpsc::{self, Receiver};
 
 use robotica_nodes_rust::{
-    generic::{debug, filter_map, gate, has_changed, map},
+    filters::generic::{debug, filter_map, gate, has_changed, map},
     sources::mqtt::{publish, Mqtt, MqttMessage, Subscriptions},
 };
 
