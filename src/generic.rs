@@ -26,7 +26,7 @@ pub fn has_changed<T: Send + Eq + Clone + 'static>(
 
 pub fn map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
-    callback: fn(T) -> U,
+    callback: impl Send + 'static + Fn(T) -> U,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
@@ -41,15 +41,31 @@ pub fn map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Debug + 's
     rx
 }
 
+pub fn debug<T: Send + core::fmt::Debug + 'static>(
+    mut input: mpsc::Receiver<T>,
+    msg: String,
+) -> mpsc::Receiver<T> {
+    let (tx, rx) = mpsc::channel(10);
+    tokio::spawn(async move {
+        while let Some(v) = input.recv().await {
+            println!("debug {msg} {v:?}");
+            tx.send(v).await.unwrap();
+        }
+    });
+
+    rx
+}
+
 pub fn filter_map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
-    callback: fn(T) -> Option<U>,
+    callback: impl Send + 'static + Fn(T) -> Option<U>,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
             println!("filter_map {v:?}");
-            if let Some(v) = callback(v) {
+            let filter = callback(v);
+            if let Some(v) = filter {
                 println!("--> {v:?}");
                 tx.send(v).await.unwrap();
             }
@@ -61,7 +77,7 @@ pub fn filter_map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Deb
 
 pub fn filter<T: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
-    callback: fn(&T) -> bool,
+    callback: impl Send + 'static + Fn(&T) -> bool,
 ) -> mpsc::Receiver<T> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {

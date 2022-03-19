@@ -3,10 +3,10 @@ use mqtt::Message;
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 use std::str;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Receiver};
 
 use robotica_nodes_rust::{
-    generic::{filter_map, has_changed, map},
+    generic::{debug, filter_map, gate, has_changed, map},
     sources::mqtt::{publish, Mqtt, MqttMessage, Subscriptions},
 };
 
@@ -37,6 +37,10 @@ fn power_to_enum(value: String) -> Power {
     }
 }
 
+fn power_to_bool(value: String) -> bool {
+    matches!(value.as_str(), "ON")
+}
+
 fn changed_to_string(value: (Power, Power)) -> Option<String> {
     match value {
         (Power::Error, _) => None,
@@ -47,11 +51,11 @@ fn changed_to_string(value: (Power, Power)) -> Option<String> {
     }
 }
 
-fn string_to_message(str: String) -> Message {
+fn string_to_message(str: String, topic: &str) -> Message {
     let msg = AudioMessage {
         message: MessageText { text: str },
     };
-    let topic = "command/Brian/Robotica";
+    // let topic = "command/Brian/Robotica";
     let payload = serde_json::to_string(&msg).unwrap();
     Message::new(topic, payload, 0)
 }
@@ -68,15 +72,39 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn setup_pipes(main_tx: &mpsc::Sender<MqttMessage>) -> Subscriptions {
+fn message_location(
+    rx: Receiver<String>,
+    subscriptions: &mut Subscriptions,
+    mqtt: &mpsc::Sender<MqttMessage>,
+    location: &str,
+) {
+    let gate_topic = format!("state/{}/Messages/power", location);
+    let command_topic = format!("command/{}/Robotica", location);
+
+    let do_gate = subscriptions.subscribe(&gate_topic);
+    let do_gate = map(do_gate, power_to_bool);
+    let do_gate = debug(do_gate, format!("gate {location}"));
+    let rx = gate(rx, do_gate);
+    let rx = map(rx, move |v| string_to_message(v, &command_topic));
+    publish(rx, mqtt.clone());
+}
+
+fn message(
+    rx: Receiver<String>,
+    subscriptions: &mut Subscriptions,
+    mqtt: &mpsc::Sender<MqttMessage>,
+) {
+    message_location(rx, subscriptions, mqtt, "Brian");
+}
+
+fn setup_pipes(mqtt: &mpsc::Sender<MqttMessage>) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
-    let rx = subscriptions.subscription("state/Brian/Fan/power");
+    let rx = subscriptions.subscribe("state/Brian/Fan/power");
     let rx = map(rx, power_to_enum);
     let rx = has_changed(rx);
     let rx = filter_map(rx, changed_to_string);
-    let rx = map(rx, string_to_message);
-    publish(rx, main_tx.clone());
+    message(rx, &mut subscriptions, mqtt);
 
     subscriptions
 }

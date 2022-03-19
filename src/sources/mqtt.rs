@@ -157,7 +157,7 @@ impl Subscriptions {
         }
     }
 
-    pub fn subscription(&mut self, topic: &str) -> mpsc::Receiver<String> {
+    pub fn subscribe(&mut self, topic: &str) -> mpsc::Receiver<String> {
         let (tx, rx) = mpsc::channel(10);
         let subscription = Subscription {
             topic: topic.to_string(),
