@@ -8,7 +8,7 @@ use tokio::sync::mpsc::{self, Receiver};
 use robotica_nodes_rust::{
     filters::{
         generic::{debug, filter_map, gate, has_changed, map},
-        timers::delay_true,
+        timers::{delay_true, timer},
     },
     sources::mqtt::{publish, Mqtt, MqttMessage, Subscriptions},
 };
@@ -89,6 +89,8 @@ fn message_location(
     let do_gate = debug(do_gate, format!("gate1 {location}"));
     let do_gate = delay_true(do_gate, Duration::from_secs(5));
     let do_gate = debug(do_gate, format!("gate2 {location}"));
+    let do_gate = timer(do_gate, Duration::from_secs(1));
+    let do_gate = debug(do_gate, format!("gate3 {location}"));
     let rx = gate(rx, do_gate);
     let rx = map(rx, move |v| string_to_message(v, &command_topic));
     publish(rx, mqtt.clone());
