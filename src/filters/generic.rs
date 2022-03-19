@@ -1,5 +1,6 @@
-use log::*;
 use tokio::{select, sync::mpsc};
+
+use crate::send;
 
 pub fn has_changed<T: Send + Eq + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
@@ -11,10 +12,7 @@ pub fn has_changed<T: Send + Eq + Clone + 'static>(
             if let Some(prev) = old_value {
                 if prev != v {
                     let v_clone = v.clone();
-                    let a = tx.send((prev, v_clone)).await;
-                    a.unwrap_or_else(|err| {
-                        error!("send operation failed {err}");
-                    });
+                    send(&tx, (prev, v_clone)).await;
                 }
             };
             old_value = Some(v);
@@ -24,17 +22,15 @@ pub fn has_changed<T: Send + Eq + Clone + 'static>(
     rx
 }
 
-pub fn map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Debug + 'static>(
+pub fn map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
     callback: impl Send + 'static + Fn(T) -> U,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
-            println!("map {v:?}");
             let v = callback(v);
-            println!("--> {v:?}");
-            tx.send(v).await.unwrap();
+            send(&tx, v).await;
         }
     });
 
@@ -49,25 +45,24 @@ pub fn debug<T: Send + core::fmt::Debug + 'static>(
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
             println!("debug {msg} {v:?}");
-            tx.send(v).await.unwrap();
+            send(&tx, v).await;
         }
     });
 
     rx
 }
 
-pub fn filter_map<T: Send + core::fmt::Debug + 'static, U: Send + core::fmt::Debug + 'static>(
+pub fn filter_map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
     callback: impl Send + 'static + Fn(T) -> Option<U>,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
-            println!("filter_map {v:?}");
             let filter = callback(v);
             if let Some(v) = filter {
                 println!("--> {v:?}");
-                tx.send(v).await.unwrap();
+                send(&tx, v).await;
             }
         }
     });
@@ -84,7 +79,7 @@ pub fn filter<T: Send + core::fmt::Debug + 'static>(
         while let Some(v) = input.recv().await {
             let filter = callback(&v);
             if filter {
-                tx.send(v).await.unwrap();
+                send(&tx, v).await;
             }
         }
     });
@@ -104,7 +99,7 @@ pub fn gate<T: Send + core::fmt::Debug + 'static>(
                 input = input.recv() => {
                     if let Some(input) = input {
                         if filter {
-                            tx.send(input).await.unwrap();
+                            send(&tx, input).await;
                         }
                     } else {
                         break;
