@@ -51,7 +51,7 @@ impl Mqtt {
 
         let create_opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(&uri)
-            .client_id("rust-nodes".to_string())
+            .client_id("robotica-rust-nodes".to_string()) // FIXME: This is bad
             .finalize();
 
         // Create a client.
