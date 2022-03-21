@@ -22,7 +22,7 @@ pub fn has_changed<T: Send + Eq + Clone + 'static>(
     rx
 }
 
-pub fn map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
+pub fn map<T: Send + 'static, U: Send + 'static>(
     mut input: mpsc::Receiver<T>,
     callback: impl Send + 'static + Fn(T) -> U,
 ) -> mpsc::Receiver<U> {
@@ -52,7 +52,7 @@ pub fn debug<T: Send + core::fmt::Debug + 'static>(
     rx
 }
 
-pub fn filter_map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
+pub fn filter_map<T: Send + 'static, U: Send + 'static>(
     mut input: mpsc::Receiver<T>,
     callback: impl Send + 'static + Fn(T) -> Option<U>,
 ) -> mpsc::Receiver<U> {
@@ -61,7 +61,6 @@ pub fn filter_map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
         while let Some(v) = input.recv().await {
             let filter = callback(v);
             if let Some(v) = filter {
-                println!("--> {v:?}");
                 send(&tx, v).await;
             }
         }
@@ -70,7 +69,7 @@ pub fn filter_map<T: Send + 'static, U: Send + core::fmt::Debug + 'static>(
     rx
 }
 
-pub fn filter<T: Send + core::fmt::Debug + 'static>(
+pub fn filter<T: Send + 'static>(
     mut input: mpsc::Receiver<T>,
     callback: impl Send + 'static + Fn(&T) -> bool,
 ) -> mpsc::Receiver<T> {
@@ -87,7 +86,7 @@ pub fn filter<T: Send + core::fmt::Debug + 'static>(
     rx
 }
 
-pub fn gate<T: Send + core::fmt::Debug + 'static>(
+pub fn gate<T: Send + 'static>(
     mut input: mpsc::Receiver<T>,
     mut gate: mpsc::Receiver<bool>,
 ) -> mpsc::Receiver<T> {
