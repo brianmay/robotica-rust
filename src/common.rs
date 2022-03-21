@@ -26,7 +26,7 @@ impl ChainMessage for Receiver<String> {
 }
 
 fn power_to_bool(value: String) -> bool {
-    matches!(value.as_str(), "ON")
+    value == "ON"
 }
 
 #[derive(Serialize, Deserialize, Debug)]
