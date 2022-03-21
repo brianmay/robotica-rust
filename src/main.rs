@@ -4,7 +4,7 @@ use anyhow::Result;
 use common::ChainMessage;
 use tokio::sync::mpsc;
 
-use robotica_nodes_rust::{
+use robotica_node_rust::{
     filters::ChainGeneric,
     sources::mqtt::{Mqtt, MqttMessage, Subscriptions},
 };

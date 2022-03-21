@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use paho_mqtt::Message;
-use robotica_nodes_rust::{
+use robotica_node_rust::{
     filters::{ChainGeneric, ChainTimer},
     sources::{
         mqtt::{MqttMessage, Subscriptions},

@@ -401,7 +401,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "robotica-nodes-rust"
+name = "robotica-node-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
