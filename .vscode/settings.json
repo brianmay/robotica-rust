@@ -2,8 +2,11 @@
     "cSpell.words": [
         "asyncio",
         "chrono",
+        "Clippy",
         "color",
         "conn",
+        "deps",
+        "Dwarnings",
         "failred",
         "geofence",
         "mqtt",
