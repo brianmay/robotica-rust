@@ -1,4 +1,5 @@
 mod flows;
+mod http;
 
 use anyhow::Result;
 use flows::google;
@@ -38,6 +39,7 @@ use robotica_node_rust::sources::mqtt::{Mqtt, MqttMessage, Subscriptions};
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+    http::start().await;
 
     let mut mqtt = Mqtt::new().await;
     let tx = mqtt.take_tx()?;
