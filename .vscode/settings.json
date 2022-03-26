@@ -7,7 +7,6 @@
         "conn",
         "deps",
         "Dwarnings",
-        "failred",
         "geofence",
         "mqtt",
         "paho",

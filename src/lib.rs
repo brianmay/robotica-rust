@@ -7,6 +7,6 @@ use tokio::sync::mpsc::Sender;
 pub async fn send<T>(tx: &Sender<T>, data: T) {
     let a = tx.send(data).await;
     a.unwrap_or_else(|err| {
-        panic!("send operation failred {err}");
+        panic!("send operation failed {err}");
     });
 }
