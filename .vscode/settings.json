@@ -12,6 +12,7 @@
         "mqtt",
         "paho",
         "reqwest",
+        "Swatinem",
         "teslamate",
         "Timelike",
         "timezone",
