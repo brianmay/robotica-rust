@@ -1,6 +1,6 @@
-use tokio::{select, sync::mpsc};
-
 use crate::send;
+use log::*;
+use tokio::{select, sync::mpsc};
 
 pub fn has_changed<T: Send + Eq + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
@@ -37,6 +37,23 @@ pub fn map<T: Send + 'static, U: Send + 'static>(
     rx
 }
 
+pub fn map_with_state<T: Send + 'static, U: Send + 'static, V: Send + 'static>(
+    mut input: mpsc::Receiver<T>,
+    initial: V,
+    callback: impl Send + 'static + Fn(&mut V, T) -> U,
+) -> mpsc::Receiver<U> {
+    let (tx, rx) = mpsc::channel(10);
+    let mut state: V = initial;
+    tokio::spawn(async move {
+        while let Some(v) = input.recv().await {
+            let v = callback(&mut state, v);
+            send(&tx, v).await;
+        }
+    });
+
+    rx
+}
+
 pub fn debug<T: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
     msg: String,
@@ -44,7 +61,7 @@ pub fn debug<T: Send + core::fmt::Debug + 'static>(
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
-            println!("debug {msg} {v:?}");
+            debug!("debug {msg} {v:?}");
             send(&tx, v).await;
         }
     });

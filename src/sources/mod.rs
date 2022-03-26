@@ -3,6 +3,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use self::mqtt::MqttMessage;
 
+pub mod life360;
 pub mod mqtt;
 
 pub trait ChainMqtt {

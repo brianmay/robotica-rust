@@ -3,14 +3,14 @@ use tokio::{select, sync::mpsc};
 use crate::send;
 
 pub fn requires_plugin(
-    mut battery_level: mpsc::Receiver<u16>,
+    mut battery_level: mpsc::Receiver<usize>,
     mut plugged_in: mpsc::Receiver<bool>,
     mut geofence: mpsc::Receiver<String>,
     mut reminder: mpsc::Receiver<bool>,
 ) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
-        let mut the_battery_level: Option<u16> = None;
+        let mut the_battery_level: Option<usize> = None;
         let mut the_plugged_in: Option<bool> = None;
         let mut the_geofence: Option<String> = None;
         let mut the_reminder: Option<bool> = None;

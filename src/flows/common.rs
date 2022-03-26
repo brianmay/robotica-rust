@@ -1,14 +1,14 @@
-use std::time::Duration;
-
+use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
-    filters::{ChainGeneric, ChainTimer},
+    filters::{ChainDebug, ChainGeneric, ChainTimer},
     sources::{
         mqtt::{MqttMessage, Subscriptions},
         ChainMqtt,
     },
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub trait ChainMessage {
@@ -25,8 +25,29 @@ impl ChainMessage for Receiver<String> {
     }
 }
 
-fn power_to_bool(value: String) -> bool {
+pub fn power_to_bool(value: String) -> bool {
     value == "ON"
+}
+
+pub fn string_to_integer(str: String) -> Option<usize> {
+    match str.parse::<usize>() {
+        Ok(value) => Some(value),
+        Err(_) => {
+            error!("Invalid integer {str} received");
+            None
+        }
+    }
+}
+
+pub fn string_to_bool(str: String) -> Option<bool> {
+    match str.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        str => {
+            error!("Invalid bool {str} received");
+            None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,7 +64,6 @@ fn string_to_message(str: String, topic: &str) -> Message {
     let msg = AudioMessage {
         message: MessageText { text: str },
     };
-    // let topic = "command/Brian/Robotica";
     let payload = serde_json::to_string(&msg).unwrap();
     Message::new(topic, payload, 0)
 }
