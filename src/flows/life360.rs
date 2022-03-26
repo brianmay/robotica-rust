@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use paho_mqtt::Message;
 use robotica_node_rust::{
-    filters::{ChainDebug, ChainGeneric, ChainSplit},
+    filters::{ChainGeneric, ChainSplit},
     sources::{
         life360::{self, Member},
         mqtt::{MqttMessage, Subscriptions},
@@ -77,15 +77,14 @@ fn changed_to_message(changed: Changed) -> Option<String> {
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
-    let circles = life360::circles().debug("circles".to_string());
-
+    let circles = life360::circles();
     let (circles1, circles2) = circles.split2();
 
     circles1
         .map(|m| {
             let topic = format!("life360/{}", m.id);
             let payload = serde_json::to_string(&m).unwrap();
-            Message::new(topic, payload, 0)
+            Message::new_retained(topic, payload, 0)
         })
         .publish(mqtt_out.clone());
 

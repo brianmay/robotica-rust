@@ -23,6 +23,7 @@ use tokio::{
 };
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "UPPERCASE")]
 enum Power {
     On,
     Off,
@@ -229,9 +230,9 @@ fn timer_to_auto(location: &str, device: &str) -> Message {
         },
     };
 
-    let topic = format!("google/{location}/{device}/in");
+    let topic = format!("command/{location}/{device}/scene/auto");
     let payload = serde_json::to_string(&command).unwrap();
-    Message::new(topic, payload, 0)
+    Message::new_retained(topic, payload, 0)
 }
 
 fn light(

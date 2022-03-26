@@ -1,14 +1,13 @@
 use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
-    filters::{ChainDebug, ChainGeneric, ChainTimer},
+    filters::{ChainDebug, ChainGeneric},
     sources::{
         mqtt::{MqttMessage, Subscriptions},
         ChainMqtt,
     },
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub trait ChainMessage {
@@ -77,17 +76,11 @@ pub fn message_location(
     let gate_topic = format!("state/{}/Messages/power", location);
     let command_topic = format!("command/{}/Robotica", location);
 
-    let do_gate = subscriptions
-        .subscribe(&gate_topic)
-        .map(power_to_bool)
-        .debug(format!("gate1 {location}"))
-        .delay_true(Duration::from_secs(5))
-        .debug(format!("gate2 {location}"))
-        .timer(Duration::from_secs(1))
-        .debug(format!("gate3 {location}"));
+    let do_gate = subscriptions.subscribe(&gate_topic).map(power_to_bool);
 
     rx.gate(do_gate)
         .map(move |v| string_to_message(v, &command_topic))
+        .debug("outgoing message")
         .publish(mqtt.clone());
 }
 

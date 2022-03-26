@@ -57,22 +57,23 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
     let (geofence1, geofence2) = geofence.split2();
 
     geofence1
-        .debug("geofence".to_string())
+        .debug("geofence")
         .has_changed()
         .map(geofence_to_message)
         .message(subscriptions, mqtt_out);
 
     plugged_in1
-        .debug("plugged_in".to_string())
+        .debug("plugged_in")
         .has_changed()
         .map(plugged_in_to_message)
         .message(subscriptions, mqtt_out);
 
     is_insecure(is_user_present, locked)
+        .debug("is_insecure")
         .has_changed()
         .map(|v| v.1)
         .delay_true(Duration::from_secs(60 * 2))
-        .timer(Duration::from_secs(60 * 10))
+        .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
             if v {
                 "The tesla is lonely and insecure".to_string()
@@ -83,9 +84,10 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
         .message(subscriptions, mqtt_out);
 
     requires_plugin(battery_level, plugged_in2, geofence2, reminder)
+        .debug("requires_pluginsd")
         .has_changed()
         .map(|v| v.1)
-        .timer(Duration::from_secs(60 * 10))
+        .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
             if v {
                 "The tesla requires plugging in".to_string()

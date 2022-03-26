@@ -56,8 +56,9 @@ pub fn map_with_state<T: Send + 'static, U: Send + 'static, V: Send + 'static>(
 
 pub fn debug<T: Send + core::fmt::Debug + 'static>(
     mut input: mpsc::Receiver<T>,
-    msg: String,
+    msg: &str,
 ) -> mpsc::Receiver<T> {
+    let msg = msg.to_string();
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {

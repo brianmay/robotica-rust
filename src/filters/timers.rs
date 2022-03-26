@@ -50,7 +50,7 @@ async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
     }
 }
 
-pub fn timer(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
+pub fn timer_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         let mut interval: Option<Interval> = None;

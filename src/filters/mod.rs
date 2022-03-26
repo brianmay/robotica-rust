@@ -11,7 +11,7 @@ pub trait ChainChanged<T> {
 }
 
 pub trait ChainDebug<T> {
-    fn debug(self, msg: String) -> Receiver<T>;
+    fn debug(self, msg: &str) -> Receiver<T>;
 }
 
 pub trait ChainGeneric<T> {
@@ -32,7 +32,7 @@ pub trait ChainGeneric<T> {
 
 pub trait ChainTimer {
     fn delay_true(self, duration: Duration) -> Receiver<bool>;
-    fn timer(self, duration: Duration) -> Receiver<bool>;
+    fn timer_true(self, duration: Duration) -> Receiver<bool>;
 }
 
 pub trait ChainSplit<T: Send + Clone + 'static> {
@@ -45,7 +45,7 @@ impl<T: Send + Eq + Debug + Clone + 'static> ChainChanged<T> for Receiver<T> {
     }
 }
 impl<T: Send + Debug + 'static> ChainDebug<T> for Receiver<T> {
-    fn debug(self, msg: String) -> Receiver<T> {
+    fn debug(self, msg: &str) -> Receiver<T> {
         generic::debug(self, msg)
     }
 }
@@ -84,8 +84,8 @@ impl ChainTimer for Receiver<bool> {
         timers::delay_true(self, duration)
     }
 
-    fn timer(self, duration: Duration) -> Receiver<bool> {
-        timers::timer(self, duration)
+    fn timer_true(self, duration: Duration) -> Receiver<bool> {
+        timers::timer_true(self, duration)
     }
 }
 

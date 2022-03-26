@@ -52,10 +52,10 @@ pub struct Location {
     pub timestamp: String,
     pub name: Option<String>,
     pub place_type: Option<String>,
-    pub source: String,
-    pub source_id: String,
-    pub address1: String,
-    pub address2: String,
+    pub source: Option<String>,
+    pub source_id: Option<String>,
+    pub address1: Option<String>,
+    pub address2: Option<String>,
     pub short_address: String,
     pub in_transit: String,
     pub trip_id: Option<String>,
@@ -105,7 +105,7 @@ struct Circle {
     // id: String,
     // name: String,
     // color: String,
-    #[serde(rename = "type")]
+    // #[serde(rename = "type")]
     // circle_type: String,
     // created_at: String,
     // member_count: String,
@@ -126,11 +126,9 @@ pub fn circles() -> mpsc::Receiver<Member> {
         let mut interval = time::interval(Duration::from_secs(15));
 
         loop {
-            debug!("circles: got tick {interval:?}");
             if let Err(err) = do_tick(&login, &tx).await {
-                error!("circles: got err: {err}");
+                error!("life360: {err}");
             }
-            debug!("circles: processed tick");
 
             interval.tick().await;
         }
@@ -214,5 +212,6 @@ async fn get_circle_details(login: &Login, circle: &ListItem) -> Result<Circle> 
     let d = &mut serde_json::Deserializer::from_str(&payload);
     let circle: Circle =
         serde_path_to_error::deserialize(d).map_err(|e| anyhow!("get_circle_details: {e}"))?;
+
     Ok(circle)
 }

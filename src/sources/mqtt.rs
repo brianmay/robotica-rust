@@ -204,11 +204,17 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
     }
 }
 
-pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMessage>) {
+pub fn publish(mut input: mpsc::Receiver<Message>, _mqtt_out: mpsc::Sender<MqttMessage>) {
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
+            info!(
+                "outgoing {} {} {}",
+                v.retained(),
+                v.topic(),
+                str::from_utf8(v.payload()).unwrap().to_string()
+            )
             // let msg = Message::new("test", v, 0);
-            mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
+            // mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
         }
     });
 }
