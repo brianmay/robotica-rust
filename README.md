@@ -71,4 +71,4 @@ This project. Features:
 * Structured as a library, so the parts not-specific to my setup can be shared by different projects.
 * Logging still needs more work. Not sure how to approach this yet.
 
-Current progress: Basic building blocks exist, but still more work needs to be done before it can replace my previous iteration.
+Current progress: Basic building blocks exist. Still need to use this in connection with nod-red for some stuff I haven't ported over yet. Such as Google integration.

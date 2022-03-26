@@ -5,6 +5,7 @@ use self::mqtt::MqttMessage;
 
 pub mod life360;
 pub mod mqtt;
+pub mod timer;
 
 pub trait ChainMqtt {
     fn publish(self, mqtt_out: Sender<MqttMessage>);

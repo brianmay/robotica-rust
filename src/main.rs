@@ -1,6 +1,7 @@
 mod flows;
 
 use anyhow::Result;
+use flows::google;
 use flows::life360;
 use flows::tesla;
 use tokio::sync::mpsc;
@@ -53,6 +54,7 @@ fn setup_pipes(mqtt: &mpsc::Sender<MqttMessage>) -> Subscriptions {
 
     tesla::start(&mut subscriptions, mqtt, 1);
     life360::start(&mut subscriptions, mqtt);
+    google::start(&mut subscriptions, mqtt);
 
     // subscriptions
     //     .subscribe("state/Brian/Fan/power")
