@@ -84,7 +84,7 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
         .message(subscriptions, mqtt_out);
 
     requires_plugin(battery_level, plugged_in2, geofence2, reminder)
-        .debug("requires_pluginsd")
+        .debug("requires_plugin")
         .has_changed()
         .map(|v| v.1)
         .timer_true(Duration::from_secs(60 * 10))
