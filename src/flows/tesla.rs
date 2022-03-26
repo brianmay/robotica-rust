@@ -28,7 +28,11 @@ fn plugged_in_to_message((old, new): (bool, bool)) -> String {
     }
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>, car_id: usize) {
+pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+    car(1, subscriptions, mqtt_out);
+}
+
+fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
     let topic = format!("teslamate/cars/{car_id}/battery_level");
     let battery_level = subscriptions
         .subscribe(&topic)

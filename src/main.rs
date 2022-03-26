@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
 fn setup_pipes(mqtt: &mpsc::Sender<MqttMessage>) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
-    tesla::start(&mut subscriptions, mqtt, 1);
+    tesla::start(&mut subscriptions, mqtt);
     life360::start(&mut subscriptions, mqtt);
     google::start(&mut subscriptions, mqtt);
 
