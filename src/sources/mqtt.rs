@@ -45,8 +45,8 @@ impl Mqtt {
         // Use an ID for a persistent session.
         let uri = format!(
             "ssl://{}:{}",
-            env::var("MQTT_HOST").unwrap(),
-            env::var("MQTT_PORT").unwrap()
+            env::var("MQTT_HOST").expect("MQTT_HOST should be set"),
+            env::var("MQTT_PORT").expect("MQTT_PORT should be set")
         );
 
         let create_opts = mqtt::CreateOptionsBuilder::new()
@@ -81,8 +81,8 @@ impl Mqtt {
                 .ssl_options(ssl_opts)
                 .keep_alive_interval(Duration::from_secs(30))
                 .clean_session(true)
-                .user_name(env::var("MQTT_USER_NAME").unwrap())
-                .password(env::var("MQTT_PASSWORD").unwrap())
+                .user_name(env::var("MQTT_USERNAME").expect("MQTT_USERNAME should be set"))
+                .password(env::var("MQTT_PASSWORD").expect("MQTT_PASSWORD should be set"))
                 .finalize();
 
             // Connect and wait for it to complete or fail.

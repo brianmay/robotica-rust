@@ -76,6 +76,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "brian-node-rust"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "chrono-tz",
+ "env_logger",
+ "log",
+ "paho-mqtt",
+ "robotica-node-rust",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "tokio",
+ "warp",
+]
+
+[[package]]
 name = "buf_redux"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1096,9 +1114,6 @@ name = "robotica-node-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chrono",
- "chrono-tz",
- "env_logger",
  "log",
  "paho-mqtt",
  "reqwest",
@@ -1106,7 +1121,6 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "tokio",
- "warp",
 ]
 
 [[package]]
