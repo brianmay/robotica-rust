@@ -153,3 +153,5 @@ Lacking:
 * Haven't tried to save state. Hoping this won't be required. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
 
 * Not many building blocks supports. Still use node-red for some stuff, and this sends mqtt messages that we can intercept here.
+
+* Tools to debug flows easily.
