@@ -18,3 +18,23 @@ pub fn timer(duration: Duration) -> mpsc::Receiver<bool> {
 
     rx
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio::time::timeout;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_timer() {
+        let duration = Duration::from_millis(100);
+        let wait_duration = Duration::from_millis(200);
+
+        let mut rx = timer(duration);
+
+        let v = timeout(wait_duration, rx.recv()).await;
+        assert!(matches!(v, Ok(Some(true))));
+        let v = timeout(wait_duration, rx.recv()).await;
+        assert!(matches!(v, Ok(Some(true))));
+    }
+}

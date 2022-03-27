@@ -20,3 +20,18 @@ impl<T: Send + Clone + 'static> ChainNull<T> for Receiver<T> {
         null(self);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_null() {
+        let (tx, rx) = mpsc::channel(1);
+        null(rx);
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+    }
+}
