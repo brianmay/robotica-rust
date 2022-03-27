@@ -5,7 +5,7 @@ on:
   - pull_request
 
 jobs:
-  build_and_test:
+  test:
     name: Rust project
     runs-on: ubuntu-latest
     steps:
@@ -22,3 +22,11 @@ jobs:
         run: cargo build
       - name: Test
         run: cargo test
+
+  push:
+    name: Push
+    uses: brianmay/workflows/.github/workflows/docker.yaml@c8e75f9a7e2cbad8d294ddbe829b1457ae0568aa
+    secrets:
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+    needs:
+      - test
