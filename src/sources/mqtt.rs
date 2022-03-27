@@ -208,7 +208,7 @@ pub fn publish(mut input: mpsc::Receiver<Message>, _mqtt_out: mpsc::Sender<MqttM
     tokio::spawn(async move {
         while let Some(v) = input.recv().await {
             info!(
-                "outgoing {} {} {}",
+                "outgoing mqtt {} {} {}",
                 v.retained(),
                 v.topic(),
                 str::from_utf8(v.payload()).unwrap().to_string()

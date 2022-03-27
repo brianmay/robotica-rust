@@ -79,8 +79,8 @@ pub fn message_location(
     let do_gate = subscriptions.subscribe(&gate_topic).map(power_to_bool);
 
     rx.gate(do_gate)
-        .map(move |v| string_to_message(v, &command_topic))
         .debug("outgoing message")
+        .map(move |v| string_to_message(v, &command_topic))
         .publish(mqtt.clone());
 }
 

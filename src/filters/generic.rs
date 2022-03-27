@@ -113,24 +113,129 @@ pub fn gate<T: Send + 'static>(
         let mut filter = true;
         loop {
             select! {
-                input = input.recv() => {
-                    if let Some(input) = input {
-                        if filter {
-                            send(&tx, input).await;
-                        }
-                    } else {
-                        break;
-                    }
-
-                }
-                gate = gate.recv() => {
-                    if let Some(gate) = gate {
-                        filter = gate;
+                Some(input) = input.recv() => {
+                    if filter {
+                        send(&tx, input).await;
                     }
                 }
+                Some(gate) = gate.recv() => {
+                    filter = gate;
+                }
+                else => { break; }
             }
         }
     });
 
     rx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_has_changed() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = has_changed(rx);
+
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, (10, 20));
+    }
+
+    #[tokio::test]
+    async fn test_map() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = map(rx, |x| x + 1);
+
+        tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 11);
+
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 21);
+    }
+
+    #[tokio::test]
+    async fn test_map_with_state() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = map_with_state(rx, 3, |state, x| {
+            *state += 1;
+            x + *state
+        });
+
+        tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 14);
+
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 25);
+    }
+
+    #[tokio::test]
+    async fn test_debug() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = debug(rx, "message");
+
+        tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 10);
+
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 20);
+    }
+
+    #[tokio::test]
+    async fn test_filter_map() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = filter_map(rx, |v| if v > 10 { Some(v + 1) } else { None });
+
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 21);
+    }
+
+    #[tokio::test]
+    async fn test_filter() {
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = filter(rx, |&v| v > 10);
+
+        tx.send(10).await.unwrap();
+        tx.send(10).await.unwrap();
+        tx.send(20).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 20);
+    }
+
+    #[tokio::test]
+    async fn test_gate() {
+        // FIXME: This test is awful
+        // Sleep required to try to force gate to process messages in correct order.
+        let (gate_tx, gate_rx) = mpsc::channel(10);
+
+        let (tx, rx) = mpsc::channel(10);
+        let mut rx = gate(rx, gate_rx);
+
+        tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 10);
+
+        gate_tx.send(false).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        tx.send(20).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        gate_tx.send(true).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        tx.send(30).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 30);
+    }
 }
