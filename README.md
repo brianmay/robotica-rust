@@ -1,5 +1,83 @@
 # robotica-node-rust
-Control IOT devices
+Manipulate asynchronous events, using asynchronous tasks.
+
+## Example Code
+
+```rust
+let car_id = 1;
+let topic = format!("teslamate/cars/{car_id}/plugged_in");
+subscriptions.subscribe(&topic)
+    .filter_map(string_to_bool)
+    .debug("plugged_in")
+    .has_changed()
+    .map(plugged_in_to_message)
+    .map(string_to_message)
+    .publish(subscriptions, mqtt_out);
+```
+
+This will do the following:
+
+* Subscribe to mqtt topic.
+* Events get filtered via the `string_to_bool` function.
+
+    ```rust
+    pub fn string_to_bool(str: String) -> Option<bool> {
+        match str.as_str() {
+            "true" => Some(true),
+            "false" => Some(false),
+            str => {
+                error!("Invalid bool {str} received");
+                None
+            }
+        }
+    }
+    ```
+
+* Events get filtered via debug plugin, which outputs them using `log::debug!(...)`.
+* Checks to see if value has changed compared with last time if so sends (old_value, new_value) tuple. Value is not sent if there have not been any changes.
+* `plugged_in_to_message` takes this value and turns it into a mqtt message.
+
+    ```rust
+    fn plugged_in_to_message((old, new): (bool, bool)) -> String {
+        match (old, new) {
+            (false, true) => "The tesla has been plugged in".to_string(),
+            (true, false) => "The tesla been disconnected".to_string(),
+            (true, true) => "The tesla is still plugged in".to_string(),
+            (false, false) => "The tesla is still disconnected".to_string(),
+        }
+    }
+    ```
+
+  Note the last two cases must be defined but not used because unchanged events are not currently sent from `has_changed()`.
+* `string_to_message` takes the string message and converts it to an outgoing MQTT message. This is done using the message format expected by robotica.
+
+    ```rust
+    fn string_to_message(str: String) -> Message {
+        let msg = AudioMessage {
+            message: MessageText { text: str },
+        };
+        let topic = "command/Brian/Robotica";
+        let payload = serde_json::to_string(&msg).unwrap();
+        Message::new(&topic, payload, 0)
+    }
+    ```
+
+* This value is sent using mqtt.
+
+Here is a diagram to demonstrate an example flow. It is assumed that the threads just began. As a result `has_changed` does not consider the first message to have changed because it has nothing to compare it against.
+
+```mermaid
+sequenceDiagram
+    Subscribe->>string_to_bool: "true"
+    string_to_bool->>debug: true
+    debug->>has_changed: true
+    Subscribe->>string_to_bool: "false"
+    string_to_bool->>debug: false
+    debug->>has_changed: false
+    has_changed->>plugged_in_to_message: (true, false)
+    plugged_in_to_message->>string_to_message: "The tesla been disconnected"
+    string_to_message->>publish: {topic: ..., payload: ...}
+```
 
 ## Rationale
 
@@ -62,13 +140,16 @@ I still like some features of this implementation. However I think it is far too
 This project. Features:
 
 * Design is considerably simpler.
-* Type checking is enforced at compile time.
+* Type checking between threads is enforced at compile time.
 * Creating/maintaining/reading flows is a lot easier.
 * Uses asyncio threads.
-* Threads do not get restarted automatically if there is a runtime error.
-* But hopefully most errors will get picked up at compile time.
-* Haven't tried to save state. Hoping this won't be required. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
 * Structured as a library, so the parts not-specific to my setup can be shared by different projects.
-* Logging still needs more work. Not sure how to approach this yet.
 
-Current progress: Basic building blocks exist. Still need to use this in connection with nod-red for some stuff I haven't ported over yet. Such as Google integration.
+Lacking:
+
+* No monitoring of death of threads. Possibly the send function should kill entire process off if it can't send rather then just the thread. Killing the thread off means slow death, as thread that is sending data will eventually try to send and die also.
+
+* Logging still needs more work. Not sure how to approach this yet.
+* Haven't tried to save state. Hoping this won't be required. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
+
+* Not many building blocks supports. Still use node-red for some stuff, and this sends mqtt messages that we can intercept here.
