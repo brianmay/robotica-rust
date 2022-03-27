@@ -14,9 +14,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v1
-      - name: Build | Fmt Check
+      - name: Fmt Check
         run: cargo fmt -- --check
-      - name: Build | Clippy
+      - name: Clippy
         run: cargo clippy --no-deps -- -Dwarnings
-      - name: Build | Compile
+      - name: Compile
         run: cargo build
+      - name: Test
+        run: cargo test
