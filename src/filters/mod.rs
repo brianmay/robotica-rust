@@ -6,8 +6,12 @@ pub mod split;
 pub mod teslamate;
 pub mod timers;
 
+pub trait ChainDiff<T> {
+    fn diff(self) -> Receiver<(Option<T>, T)>;
+}
+
 pub trait ChainChanged<T> {
-    fn has_changed(self) -> Receiver<(T, T)>;
+    fn changed(self) -> Receiver<T>;
 }
 
 pub trait ChainDebug<T> {
@@ -39,11 +43,18 @@ pub trait ChainSplit<T: Send + Clone + 'static> {
     fn split2(self) -> (Receiver<T>, Receiver<T>);
 }
 
-impl<T: Send + Eq + Debug + Clone + 'static> ChainChanged<T> for Receiver<T> {
-    fn has_changed(self) -> Receiver<(T, T)> {
-        generic::has_changed(self)
+impl<T: Send + Eq + Debug + Clone + 'static> ChainDiff<T> for Receiver<T> {
+    fn diff(self) -> Receiver<(Option<T>, T)> {
+        generic::diff(self)
     }
 }
+
+impl<T: Send + Eq + Debug + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
+    fn changed(self) -> Receiver<T> {
+        generic::changed(self)
+    }
+}
+
 impl<T: Send + Debug + 'static> ChainDebug<T> for Receiver<T> {
     fn debug(self, msg: &str) -> Receiver<T> {
         generic::debug(self, msg)

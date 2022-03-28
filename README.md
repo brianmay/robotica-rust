@@ -9,8 +9,8 @@ let topic = format!("teslamate/cars/{car_id}/plugged_in");
 subscriptions.subscribe(&topic)
     .filter_map(string_to_bool)
     .debug("plugged_in")
-    .has_changed()
-    .map(plugged_in_to_message)
+    .diff()
+    .filter_map(plugged_in_to_message)
     .map(string_to_message)
     .publish(subscriptions, mqtt_out);
 ```
@@ -34,21 +34,21 @@ This will do the following:
     ```
 
 * Events get filtered via debug plugin, which outputs them using `log::debug!(...)`.
-* Checks to see if value has changed compared with last time if so sends (old_value, new_value) tuple. Value is not sent if there have not been any changes.
+* Checks to see if what the previous value (if any) was.
 * `plugged_in_to_message` takes this value and turns it into a mqtt message.
 
     ```rust
-    fn plugged_in_to_message((old, new): (bool, bool)) -> String {
+    fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
         match (old, new) {
-            (false, true) => "The tesla has been plugged in".to_string(),
-            (true, false) => "The tesla been disconnected".to_string(),
-            (true, true) => "The tesla is still plugged in".to_string(),
-            (false, false) => "The tesla is still disconnected".to_string(),
+            (None, _) => None,
+            (Some(false), true) => Some("The tesla has been plugged in".to_string()),
+            (Some(true), false) => Some("The tesla been disconnected".to_string()),
+            (Some(true), true) => None,
+            (Some(false), false) => None,
         }
     }
     ```
 
-  Note the last two cases must be defined but not used because unchanged events are not currently sent from `has_changed()`.
 * `string_to_message` takes the string message and converts it to an outgoing MQTT message. This is done using the message format expected by robotica.
 
     ```rust

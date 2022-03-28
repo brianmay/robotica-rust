@@ -3,7 +3,7 @@ use std::time::Duration;
 use robotica_node_rust::{
     filters::{
         teslamate::{is_insecure, requires_plugin},
-        ChainChanged, ChainDebug, ChainGeneric, ChainSplit, ChainTimer,
+        ChainChanged, ChainDebug, ChainDiff, ChainGeneric, ChainSplit, ChainTimer,
     },
     sources::mqtt::{MqttMessage, Subscriptions},
 };
@@ -11,20 +11,23 @@ use tokio::sync::mpsc::Sender;
 
 use super::common::{power_to_bool, string_to_bool, string_to_integer, ChainMessage};
 
-fn geofence_to_message((old, new): (String, String)) -> String {
-    match (old.as_str(), new.as_str()) {
-        ("", new) => format!("The tesla has arrived at {new}"),
-        (old, "") => format!("The tesla has left {old}"),
-        (old, new) => format!("The tesla has left {old} and arrived at {new}"),
+fn geofence_to_message((old, new): (Option<String>, String)) -> Option<String> {
+    match (old.as_deref(), new.as_str()) {
+        (None, _) => None,
+        (Some(old), new) if old == new => None,
+        (Some(""), new) => Some(format!("The tesla has arrived at {new}")),
+        (Some(old), "") => Some(format!("The tesla has left {old}")),
+        (Some(old), new) => Some(format!("The tesla has left {old} and arrived at {new}")),
     }
 }
 
-fn plugged_in_to_message((old, new): (bool, bool)) -> String {
+fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
     match (old, new) {
-        (false, true) => "The tesla has been plugged in".to_string(),
-        (true, false) => "The tesla been disconnected".to_string(),
-        (true, true) => "The tesla is still plugged in".to_string(),
-        (false, false) => "The tesla is still disconnected".to_string(),
+        (None, _) => None,
+        (Some(false), true) => Some("The tesla has been plugged in".to_string()),
+        (Some(true), false) => Some("The tesla been disconnected".to_string()),
+        (Some(true), true) => None,
+        (Some(false), false) => None,
     }
 }
 
@@ -58,20 +61,20 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
 
     geofence1
         .debug("geofence")
-        .has_changed()
-        .map(geofence_to_message)
+        .diff()
+        .filter_map(geofence_to_message)
         .message(subscriptions, mqtt_out);
 
     plugged_in1
         .debug("plugged_in")
-        .has_changed()
-        .map(plugged_in_to_message)
+        .diff()
+        .filter_map(plugged_in_to_message)
         .message(subscriptions, mqtt_out);
 
     is_insecure(is_user_present, locked)
         .debug("is_insecure")
-        .has_changed()
-        .map(|v| v.1)
+        .diff()
+        .changed()
         .delay_true(Duration::from_secs(60 * 2))
         .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
@@ -85,8 +88,8 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
 
     requires_plugin(battery_level, plugged_in2, geofence2, reminder)
         .debug("requires_plugin")
-        .has_changed()
-        .map(|v| v.1)
+        .diff()
+        .changed()
         .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
             if v {

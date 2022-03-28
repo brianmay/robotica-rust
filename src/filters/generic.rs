@@ -2,19 +2,35 @@ use crate::send;
 use log::*;
 use tokio::{select, sync::mpsc};
 
-pub fn has_changed<T: Send + Eq + Clone + 'static>(
+pub fn changed<T: Send + Eq + 'static>(
+    mut input: mpsc::Receiver<(Option<T>, T)>,
+) -> mpsc::Receiver<T> {
+    let (tx, rx) = mpsc::channel(10);
+    tokio::spawn(async move {
+        while let Some(v) = input.recv().await {
+            let v = match v {
+                (None, _) => None,
+                (Some(old), new) if old == new => None,
+                (_, new) => Some(new),
+            };
+            if let Some(v) = v {
+                send(&tx, v).await;
+            }
+        }
+    });
+
+    rx
+}
+
+pub fn diff<T: Send + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
-) -> mpsc::Receiver<(T, T)> {
+) -> mpsc::Receiver<(Option<T>, T)> {
     let (tx, rx) = mpsc::channel(10);
     tokio::spawn(async move {
         let mut old_value: Option<T> = None;
         while let Some(v) = input.recv().await {
-            if let Some(prev) = old_value {
-                if prev != v {
-                    let v_clone = v.clone();
-                    send(&tx, (prev, v_clone)).await;
-                }
-            };
+            let v_clone = v.clone();
+            send(&tx, (old_value, v_clone)).await;
             old_value = Some(v);
         }
     });
@@ -136,13 +152,19 @@ mod tests {
     #[tokio::test]
     async fn test_has_changed() {
         let (tx, rx) = mpsc::channel(10);
-        let mut rx = has_changed(rx);
+        let mut rx = diff(rx);
 
         tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, (None, 10));
+
         tx.send(10).await.unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, (Some(10), 10));
+
         tx.send(20).await.unwrap();
         let v = rx.recv().await.unwrap();
-        assert_eq!(v, (10, 20));
+        assert_eq!(v, (Some(10), 20));
     }
 
     #[tokio::test]
