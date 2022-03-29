@@ -187,13 +187,13 @@ fn try_reconnect(cli: &mqtt::Client) {
         let sleep_time = 1000 * (attempt as u64).checked_pow(2).unwrap();
         let sleep_time = min(60_000, sleep_time);
 
-        warn!("Connection lost. Waiting {sleep_time} ms to retry connection attempt {attempt}.");
+        warn!("Connection lost to mqtt. Waiting {sleep_time} ms to retry connection attempt {attempt}.");
         thread::sleep(Duration::from_millis(sleep_time));
 
-        warn!("Trying to connect");
+        warn!("Trying to connect to mqtt");
         if cli.reconnect().is_ok() {
-            warn!("Successfully reconnected");
-            return;
+            warn!("Successfully reconnected to mqtt");
+            break;
         }
 
         attempt = attempt.saturating_add(1);
