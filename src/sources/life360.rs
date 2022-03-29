@@ -144,28 +144,52 @@ pub fn circles() -> mpsc::Receiver<Member> {
             .await
             .expect("life360 login failed");
         let mut interval = time::interval(Duration::from_secs(15));
+        let mut refresh_interval = time::interval(Duration::from_secs(60 * 5));
+        let mut circles: Option<List> = None;
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
-            if let Err(err) = do_tick(&login, &tx).await {
-                error!("life360: {err}");
-            }
+            tokio::select! {
+                _ = refresh_interval.tick() => {
+                    trace!("refresh");
+                    circles = get_circles_or_none(&login).await;
+                }
 
-            interval.tick().await;
+                _ = interval.tick() => {
+                    if circles.is_none() {
+                        circles = get_circles_or_none(&login).await;
+                    }
+                    if let Some(circles) = &circles {
+                        dispatch_circle_details(&login, circles, &tx).await;
+                    }
+                }
+            }
         }
     });
     rx
 }
 
-async fn do_tick(login: &Login, tx: &Sender<Member>) -> Result<()> {
-    let circles = get_circles(login).await?;
-    for circle in circles.circles {
-        let details = get_circle_details(login, &circle).await?;
-        for member in details.members {
-            send(tx, member).await;
+async fn get_circles_or_none(login: &Login) -> Option<List> {
+    match get_circles(login).await {
+        Err(err) => {
+            error!("get_circles: {err}");
+            None
+        }
+        Ok(c) => Some(c),
+    }
+}
+
+async fn dispatch_circle_details(login: &Login, circles: &List, tx: &Sender<Member>) {
+    for circle in &circles.circles {
+        match get_circle_details(login, circle).await {
+            Err(err) => error!("get_circle_details: {err}"),
+            Ok(details) => {
+                for member in details.members {
+                    send(tx, member).await;
+                }
+            }
         }
     }
-    Ok(())
 }
 
 async fn login(username: &str, password: &str) -> Result<Login> {
