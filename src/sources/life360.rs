@@ -3,6 +3,7 @@ use anyhow::Result;
 use log::*;
 use serde::Deserialize;
 use serde::Serialize;
+use std::cmp::min;
 use std::{env, time::Duration};
 use tokio::sync::mpsc::Sender;
 use tokio::time::MissedTickBehavior;
@@ -140,18 +141,16 @@ pub fn circles() -> mpsc::Receiver<Member> {
     tokio::spawn(async move {
         let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
         let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
-        let login = login(&username, &password)
-            .await
-            .expect("life360 login failed");
+        let login = retry_login(&username, &password).await;
         let mut interval = time::interval(Duration::from_secs(15));
         let mut refresh_interval = time::interval(Duration::from_secs(60 * 5));
         let mut circles: Option<List> = None;
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        refresh_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
                 _ = refresh_interval.tick() => {
-                    trace!("refresh");
                     circles = get_circles_or_none(&login).await;
                 }
 
@@ -167,6 +166,45 @@ pub fn circles() -> mpsc::Receiver<Member> {
         }
     });
     rx
+}
+
+async fn retry_login(username: &str, password: &str) -> Login {
+    let mut attempt: u32 = 0;
+
+    let login = loop {
+        let sleep_time = 1000 * (attempt as u64).checked_pow(2).unwrap();
+        let sleep_time = min(60_000, sleep_time);
+
+        let log_level = if attempt == 0 {
+            Level::Debug
+        } else {
+            Level::Warn
+        };
+
+        log!(
+            log_level,
+            "Waiting {sleep_time} ms to retry connection attempt {attempt}."
+        );
+        tokio::time::sleep(Duration::from_millis(sleep_time)).await;
+
+        log!(log_level, "Trying to login");
+        let login_or_none = match login(username, password).await {
+            Err(err) => {
+                error!("login: {err}");
+                None
+            }
+            Ok(login) => Some(login),
+        };
+
+        if let Some(login) = login_or_none {
+            log!(log_level, "Successfully logged in");
+            break login;
+        }
+
+        attempt = attempt.saturating_add(1);
+    };
+
+    login
 }
 
 async fn get_circles_or_none(login: &Login) -> Option<List> {
