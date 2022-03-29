@@ -6,6 +6,7 @@ use chrono_tz::Tz;
 
 use log::*;
 use paho_mqtt::Message;
+use robotica_node_rust::spawn;
 use robotica_node_rust::{
     filters::ChainChanged,
     filters::ChainDiff,
@@ -325,7 +326,7 @@ fn power(
     mut power: mpsc::Receiver<String>,
 ) -> Receiver<Power> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         let mut the_priorities: Option<Vec<u16>> = None;
         let mut the_power: Option<String> = None;
 

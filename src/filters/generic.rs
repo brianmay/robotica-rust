@@ -1,4 +1,4 @@
-use crate::send;
+use crate::{send, spawn};
 use log::*;
 use tokio::{select, sync::mpsc};
 
@@ -6,7 +6,7 @@ pub fn changed<T: Send + Eq + 'static>(
     mut input: mpsc::Receiver<(Option<T>, T)>,
 ) -> mpsc::Receiver<T> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             let v = match v {
                 (None, _) => None,
@@ -26,7 +26,7 @@ pub fn diff<T: Send + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
 ) -> mpsc::Receiver<(Option<T>, T)> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         let mut old_value: Option<T> = None;
         while let Some(v) = input.recv().await {
             let v_clone = v.clone();
@@ -43,7 +43,7 @@ pub fn map<T: Send + 'static, U: Send + 'static>(
     callback: impl Send + 'static + Fn(T) -> U,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             let v = callback(v);
             send(&tx, v).await;
@@ -60,7 +60,7 @@ pub fn map_with_state<T: Send + 'static, U: Send + 'static, V: Send + 'static>(
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
     let mut state: V = initial;
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             let v = callback(&mut state, v);
             send(&tx, v).await;
@@ -76,7 +76,7 @@ pub fn debug<T: Send + core::fmt::Debug + 'static>(
 ) -> mpsc::Receiver<T> {
     let msg = msg.to_string();
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             debug!("debug {msg} {v:?}");
             send(&tx, v).await;
@@ -91,7 +91,7 @@ pub fn filter_map<T: Send + 'static, U: Send + 'static>(
     callback: impl Send + 'static + Fn(T) -> Option<U>,
 ) -> mpsc::Receiver<U> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             let filter = callback(v);
             if let Some(v) = filter {
@@ -108,7 +108,7 @@ pub fn filter<T: Send + 'static>(
     callback: impl Send + 'static + Fn(&T) -> bool,
 ) -> mpsc::Receiver<T> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             let filter = callback(&v);
             if filter {
@@ -125,7 +125,7 @@ pub fn gate<T: Send + 'static>(
     mut gate: mpsc::Receiver<bool>,
 ) -> mpsc::Receiver<T> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         let mut filter = true;
         loop {
             select! {

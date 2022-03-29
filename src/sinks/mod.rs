@@ -1,8 +1,10 @@
 use tokio::sync::mpsc::{self, Receiver};
 
+use crate::spawn;
+
 pub fn null<T: Send + 'static>(mut input: mpsc::Receiver<T>) -> mpsc::Receiver<T> {
     let (_tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         while (input.recv().await).is_some() {
             // do nothing
         }

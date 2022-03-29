@@ -1,9 +1,10 @@
 use std::{net::IpAddr, str::FromStr};
 
+use robotica_node_rust::spawn;
 use warp::Filter;
 
 pub async fn start() {
-    tokio::spawn(async {
+    spawn(async {
         let hello = warp::path::end().map(|| "Hello! You were not invited. Go away.");
 
         let addr = IpAddr::from_str("::0").unwrap();

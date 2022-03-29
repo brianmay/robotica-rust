@@ -8,6 +8,8 @@ use std::time::Duration;
 use std::{env, str, thread};
 use tokio::sync::mpsc;
 
+use crate::spawn;
+
 #[derive(Debug)]
 pub enum MqttMessage {
     MqttIn(Option<Message>),
@@ -214,7 +216,7 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
 }
 
 pub fn publish(mut input: mpsc::Receiver<Message>, _mqtt_out: mpsc::Sender<MqttMessage>) {
-    tokio::spawn(async move {
+    spawn(async move {
         while let Some(v) = input.recv().await {
             info!(
                 "outgoing mqtt {} {} {}",

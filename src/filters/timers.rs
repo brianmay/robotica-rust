@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::time::{self, sleep_until, Interval};
 use tokio::{select, sync::mpsc, time::Instant};
 
-use crate::send;
+use crate::{send, spawn};
 
 async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     if let Some(instant) = instant {
@@ -16,7 +16,7 @@ async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
 
 pub fn delay_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         let mut delay_until: Option<Instant> = None;
 
         loop {
@@ -52,7 +52,7 @@ async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
 
 pub fn timer_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel(10);
-    tokio::spawn(async move {
+    spawn(async move {
         let mut interval: Option<Interval> = None;
 
         loop {
