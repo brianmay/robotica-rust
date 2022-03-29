@@ -9,6 +9,7 @@
         "deps",
         "Dwarnings",
         "geofence",
+        "gethostname",
         "mqtt",
         "paho",
         "reqwest",

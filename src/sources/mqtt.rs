@@ -49,9 +49,13 @@ impl Mqtt {
             env::var("MQTT_PORT").expect("MQTT_PORT should be set")
         );
 
+        let hostname = gethostname::gethostname();
+        let hostname = hostname.to_str().unwrap();
+        let client_id = format!("robotica-node-rust-{hostname}");
+
         let create_opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(&uri)
-            .client_id("robotica-rust-nodes".to_string()) // FIXME: This is bad
+            .client_id(client_id) // FIXME: This is bad
             .finalize();
 
         // Create a client.

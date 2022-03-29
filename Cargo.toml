@@ -14,6 +14,7 @@ serde_json = "1.0.79"
 anyhow = "1.0.56"
 reqwest = "0.11.10"
 serde_path_to_error = "0.1.7"
+gethostname = "0.2.3"
 
 [workspace]
 members = ["brian-node-rust"]
