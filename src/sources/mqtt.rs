@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::*;
 use paho_mqtt as mqtt;
 use paho_mqtt::Message;
+use std::cmp::min;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{env, str, thread};
@@ -112,12 +113,9 @@ impl Mqtt {
                                 subscription.tx.blocking_send(payload.clone()).unwrap();
                             }
                         } else if !cli.is_connected() {
-                            if try_reconnect(&cli) {
-                                println!("Resubscribe topics...");
-                                subscribe_topics(&cli, &subscriptions);
-                            } else {
-                                break;
-                            };
+                            try_reconnect(&cli);
+                            debug!("Resubscribe topics...");
+                            subscribe_topics(&cli, &subscriptions);
                         }
                     }
                     MqttMessage::MqttOut(msg) => cli.publish(msg).unwrap(),
@@ -183,17 +181,23 @@ impl Default for Subscriptions {
     }
 }
 
-fn try_reconnect(cli: &mqtt::Client) -> bool {
-    println!("Connection lost. Waiting to retry connection");
-    for _ in 0..12 {
-        thread::sleep(Duration::from_millis(5000));
+fn try_reconnect(cli: &mqtt::Client) {
+    let mut attempt: u32 = 1;
+    loop {
+        let sleep_time = 1000 * (attempt as u64).checked_pow(2).unwrap();
+        let sleep_time = min(60_000, sleep_time);
+
+        warn!("Connection lost. Waiting {sleep_time} ms to retry connection attempt {attempt}.");
+        thread::sleep(Duration::from_millis(sleep_time));
+
+        warn!("Trying to connect");
         if cli.reconnect().is_ok() {
-            println!("Successfully reconnected");
-            return true;
+            warn!("Successfully reconnected");
+            return;
         }
+
+        attempt = attempt.saturating_add(1);
     }
-    println!("Unable to reconnect after several attempts.");
-    false
 }
 
 fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
