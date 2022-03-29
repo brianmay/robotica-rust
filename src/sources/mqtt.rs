@@ -215,17 +215,25 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
     }
 }
 
-pub fn publish(mut input: mpsc::Receiver<Message>, _mqtt_out: mpsc::Sender<MqttMessage>) {
+pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMessage>) {
     spawn(async move {
         while let Some(v) = input.recv().await {
+            let debug_mode: bool = match env::var("DEBUG_MODE") {
+                Ok(value) => value.to_lowercase() == "true",
+                Err(_) => false,
+            };
+
             info!(
-                "outgoing mqtt {} {} {}",
+                "outgoing mqtt {} {} {} {}",
+                if debug_mode { "nop" } else { "live" },
                 v.retained(),
                 v.topic(),
                 str::from_utf8(v.payload()).unwrap().to_string()
-            )
-            // let msg = Message::new("test", v, 0);
-            // mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
+            );
+
+            if debug_mode {
+                mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
+            }
         }
     });
 }
