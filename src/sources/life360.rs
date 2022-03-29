@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::{env, time::Duration};
 use tokio::sync::mpsc::Sender;
+use tokio::time::MissedTickBehavior;
 
 use tokio::{
     sync::mpsc,
@@ -143,6 +144,7 @@ pub fn circles() -> mpsc::Receiver<Member> {
             .await
             .expect("life360 login failed");
         let mut interval = time::interval(Duration::from_secs(15));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
             if let Err(err) = do_tick(&login, &tx).await {
@@ -176,11 +178,12 @@ async fn login(username: &str, password: &str) -> Result<Login> {
 
     let client = reqwest::Client::new();
     let response = client.post(url)
-    .header("accept", "application/json")
-    .header("content-type", "application/x-www-form-urlencoded")
-    .header("authorization", "Basic U3dlcUFOQWdFVkVoVWt1cGVjcmVrYXN0ZXFhVGVXckFTV2E1dXN3MzpXMnZBV3JlY2hhUHJlZGFoVVJhZ1VYYWZyQW5hbWVqdQ==")
-    .form(&params)
-    .send().await?;
+        .header("accept", "application/json")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("authorization", "Basic U3dlcUFOQWdFVkVoVWt1cGVjcmVrYXN0ZXFhVGVXckFTV2E1dXN3MzpXMnZBV3JlY2hhUHJlZGFoVVJhZ1VYYWZyQW5hbWVqdQ==")
+        .form(&params)
+        .timeout(Duration::from_secs(30))
+        .send().await?;
 
     let response = response.error_for_status()?;
     let payload = response.text().await?;
@@ -200,6 +203,7 @@ async fn get_circles(login: &Login) -> Result<List> {
         .get(url)
         .header("accept", "application/json")
         .header("authorization", format!("Bearer {token}"))
+        .timeout(Duration::from_secs(30))
         .send()
         .await?;
 
@@ -222,6 +226,7 @@ async fn get_circle_details(login: &Login, circle: &ListItem) -> Result<Circle> 
         .get(url)
         .header("accept", "application/json")
         .header("authorization", format!("Bearer {token}"))
+        .timeout(Duration::from_secs(30))
         .send()
         .await?;
 
