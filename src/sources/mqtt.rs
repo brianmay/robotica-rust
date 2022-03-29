@@ -196,6 +196,8 @@ fn try_reconnect(cli: &mqtt::Client) {
         if cli.reconnect().is_ok() {
             warn!("Successfully reconnected to mqtt");
             break;
+        } else {
+            error!("Reconnect failed");
         }
 
         attempt = attempt.saturating_add(1);
