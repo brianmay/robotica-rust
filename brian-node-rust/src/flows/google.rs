@@ -185,7 +185,7 @@ fn robotica_to_google(power: Power, location: &str, device: &str) -> Message {
         },
         Power::Error => GoogleCommand {
             on: false,
-            online: true,
+            online: false,
         },
     };
 
