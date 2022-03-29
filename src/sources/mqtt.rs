@@ -231,7 +231,7 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
                 str::from_utf8(v.payload()).unwrap().to_string()
             );
 
-            if debug_mode {
+            if !debug_mode {
                 mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
             }
         }
