@@ -25,7 +25,7 @@ fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
     match (old, new) {
         (None, _) => None,
         (Some(false), true) => Some("The tesla has been plugged in".to_string()),
-        (Some(true), false) => Some("The tesla been disconnected".to_string()),
+        (Some(true), false) => Some("The tesla has been disconnected".to_string()),
         (Some(true), true) => None,
         (Some(false), false) => None,
     }
