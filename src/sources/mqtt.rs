@@ -103,6 +103,7 @@ impl Mqtt {
                             let topic = msg.topic();
                             let payload = msg.payload();
                             let payload = str::from_utf8(payload).unwrap().to_string();
+                            debug!("incoming mqtt {topic} {payload}");
                             for subscription in subscriptions.get(topic) {
                                 subscription.tx.blocking_send(payload.clone()).unwrap();
                             }
