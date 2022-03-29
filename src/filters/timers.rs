@@ -20,7 +20,6 @@ pub fn delay_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::
         let mut delay_until: Option<Instant> = None;
 
         loop {
-            println!("ssss {delay_until:?}");
             select! {
                 Some(v) = input.recv() => {
                     if v && delay_until.is_none() {

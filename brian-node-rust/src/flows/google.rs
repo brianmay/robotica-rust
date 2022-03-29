@@ -7,6 +7,8 @@ use chrono_tz::Tz;
 use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
+    filters::ChainChanged,
+    filters::ChainDiff,
     filters::ChainGeneric,
     send,
     sources::{
@@ -22,7 +24,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 enum Power {
     On,
@@ -48,7 +50,7 @@ struct GoogleCommand {
     online: bool,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct RoboticaColorOut {
     hue: u16,
@@ -65,7 +67,7 @@ struct RoboticaCommand {
     scene: Option<String>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct RoboticaAutoColor {
     power: Power,
@@ -192,7 +194,7 @@ fn robotica_to_google(power: Power, location: &str, device: &str) -> Message {
     Message::new(topic, payload, 0)
 }
 
-fn timer_to_auto(location: &str, device: &str) -> Message {
+fn timer_to_color(location: &str, _device: &str) -> RoboticaAutoColor {
     let now: DateTime<Utc> = Utc::now();
     let tz: Tz = "Australia/Melbourne".parse().unwrap();
     let local_now = now.with_timezone(&tz);
@@ -220,7 +222,7 @@ fn timer_to_auto(location: &str, device: &str) -> Message {
         _ => 3500,
     };
 
-    let command = RoboticaAutoColor {
+    RoboticaAutoColor {
         power: Power::On,
         color: RoboticaColorOut {
             hue: 0,
@@ -228,10 +230,12 @@ fn timer_to_auto(location: &str, device: &str) -> Message {
             brightness,
             kelvin,
         },
-    };
+    }
+}
 
+fn color_to_message(color: RoboticaAutoColor, location: &str, device: &str) -> Message {
     let topic = format!("command/{location}/{device}/scene/auto");
-    let payload = serde_json::to_string(&command).unwrap();
+    let payload = serde_json::to_string(&color).unwrap();
     Message::new_retained(topic, payload, 0)
 }
 
@@ -269,10 +273,15 @@ fn light(
     }
 
     {
-        let location = location.to_string();
-        let device = device.to_string();
+        let location1 = location.to_string();
+        let device1 = device.to_string();
+        let location2 = location.to_string();
+        let device2 = device.to_string();
         timer(Duration::from_secs(60))
-            .map(move |_| timer_to_auto(&location, &device))
+            .map(move |_| timer_to_color(&location1, &device1))
+            .diff()
+            .changed()
+            .map(move |c| color_to_message(c, &location2, &device2))
             .publish(mqtt_out.clone());
     }
 }

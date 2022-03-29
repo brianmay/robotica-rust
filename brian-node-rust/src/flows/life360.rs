@@ -13,7 +13,7 @@ use tokio::sync::mpsc::Sender;
 
 use super::common::ChainMessage;
 
-type Index = HashMap<String, Option<String>>;
+type MemberIndex = HashMap<String, Member>;
 
 #[derive(Clone)]
 struct Changed {
@@ -23,27 +23,46 @@ struct Changed {
     member: Member,
 }
 
-fn life360_location_changed(index: &mut Index, member: Member) -> Changed {
+fn member_diff(index: &mut MemberIndex, member: Member) -> (Option<Member>, Member) {
     let id = member.id.clone();
-    let new_location = member.location.name.clone();
 
     let rc = match index.get(&id) {
-        Some(old_location) => Changed {
-            changed: *old_location != new_location,
-            old_location: old_location.clone(),
-            new_location: new_location.clone(),
-            member,
-        },
-        None => Changed {
-            changed: false,
-            old_location: None,
-            new_location: new_location.clone(),
-            member,
-        },
+        None => (None, member.clone()),
+        old_value => (old_value.cloned(), member.clone()),
     };
 
-    index.insert(id, new_location);
+    index.insert(id, member);
     rc
+}
+
+fn member_location_changed((old, new): (Option<Member>, Member)) -> Changed {
+    match (old, new) {
+        (None, new) => Changed {
+            changed: false,
+            old_location: None,
+            new_location: new.location.name.clone(),
+            member: new,
+        },
+        (Some(old), new) => Changed {
+            changed: old.location.name != new.location.name,
+            old_location: old.location.name,
+            new_location: new.location.name.clone(),
+            member: new,
+        },
+    }
+}
+
+fn member_changed((old, new): (Option<Member>, Member)) -> Option<Member> {
+    match (old, new) {
+        (None, new) => Some(new),
+        (Some(old), new) => {
+            if old.same_values(&new) {
+                None
+            } else {
+                Some(new)
+            }
+        }
+    }
 }
 
 fn changed_to_message(changed: Changed) -> Option<String> {
@@ -77,10 +96,11 @@ fn changed_to_message(changed: Changed) -> Option<String> {
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
-    let circles = life360::circles();
+    let circles = life360::circles().map_with_state(HashMap::new(), member_diff);
     let (circles1, circles2) = circles.split2();
 
     circles1
+        .filter_map(member_changed)
         .map(|m| {
             let topic = format!("life360/{}", m.id);
             let payload = serde_json::to_string(&m).unwrap();
@@ -89,7 +109,7 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) 
         .publish(mqtt_out.clone());
 
     circles2
-        .map_with_state(HashMap::new(), life360_location_changed)
+        .map(member_location_changed)
         .filter_map(changed_to_message)
         .message(subscriptions, mqtt_out);
 }

@@ -43,13 +43,13 @@ pub trait ChainSplit<T: Send + Clone + 'static> {
     fn split2(self) -> (Receiver<T>, Receiver<T>);
 }
 
-impl<T: Send + Eq + Debug + Clone + 'static> ChainDiff<T> for Receiver<T> {
+impl<T: Send + Clone + 'static> ChainDiff<T> for Receiver<T> {
     fn diff(self) -> Receiver<(Option<T>, T)> {
         generic::diff(self)
     }
 }
 
-impl<T: Send + Eq + Debug + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
+impl<T: Send + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
     fn changed(self) -> Receiver<T> {
         generic::changed(self)
     }

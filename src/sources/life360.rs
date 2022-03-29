@@ -69,7 +69,7 @@ pub struct Location {
     pub user_activity: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Communication {
     pub channel: String,
@@ -97,6 +97,25 @@ pub struct Member {
     pub pin_number: Option<String>,
     pub login_email: String,
     pub login_phone: String,
+}
+
+impl Member {
+    pub fn same_values(&self, other: &Self) -> bool {
+        self.location.timestamp == other.location.timestamp
+            && self.communications == other.communications
+            && self.medical == other.medical
+            && self.relation == other.relation
+            && self.created_at == other.created_at
+            && self.activity == other.activity
+            && self.id == other.id
+            && self.first_name == other.first_name
+            && self.last_name == other.last_name
+            && self.is_admin == other.is_admin
+            && self.avatar == other.avatar
+            && self.pin_number == other.pin_number
+            && self.login_email == other.login_email
+            && self.login_phone == other.login_phone
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
