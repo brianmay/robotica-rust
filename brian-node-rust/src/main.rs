@@ -46,8 +46,8 @@ async fn main() -> Result<()> {
 
     let subscriptions: Subscriptions = setup_pipes(&tx);
     mqtt.connect(subscriptions);
+    mqtt.wait().await;
 
-    drop(mqtt);
     Ok(())
 }
 

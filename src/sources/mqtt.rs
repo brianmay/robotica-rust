@@ -1,27 +1,29 @@
 use anyhow::Result;
 use log::*;
-use paho_mqtt as mqtt;
+use paho_mqtt::AsyncClient;
+use paho_mqtt::ConnectOptionsBuilder;
+use paho_mqtt::CreateOptionsBuilder;
 use paho_mqtt::Message;
+use paho_mqtt::SslOptionsBuilder;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{env, str, thread};
+use tokio::select;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 use crate::spawn;
 
 #[derive(Debug)]
 pub enum MqttMessage {
-    MqttIn(Option<Message>),
     MqttOut(Message),
 }
 
 pub struct Mqtt {
-    a: Option<thread::JoinHandle<()>>,
-    b: Option<thread::JoinHandle<()>>,
+    b: Option<JoinHandle<()>>,
     rx: Option<mpsc::Receiver<MqttMessage>>,
     tx: Option<mpsc::Sender<MqttMessage>>,
-    tx_private: Option<mpsc::Sender<MqttMessage>>,
 }
 
 impl Mqtt {
@@ -29,11 +31,9 @@ impl Mqtt {
         let (main_tx, main_rx) = mpsc::channel(10);
 
         Mqtt {
-            a: None,
             b: None,
             rx: Some(main_rx),
-            tx: Some(main_tx.clone()),
-            tx_private: Some(main_tx),
+            tx: Some(main_tx),
         }
     }
 
@@ -56,35 +56,29 @@ impl Mqtt {
         let hostname = hostname.to_str().unwrap();
         let client_id = format!("robotica-node-rust-{hostname}");
 
-        let create_opts = mqtt::CreateOptionsBuilder::new()
+        let create_opts = CreateOptionsBuilder::new()
             .server_uri(&uri)
             .client_id(client_id) // FIXME: This is bad
             .finalize();
 
         // Create a client.
-        let mut cli = mqtt::Client::new(create_opts).unwrap_or_else(|err| {
+        let mut cli = AsyncClient::new(create_opts).unwrap_or_else(|err| {
             panic!("Error creating the client to {uri}: {:?}", err);
         });
 
-        let mqtt_in_rx = cli.start_consuming();
-        let tx = self.tx_private.clone().unwrap();
-        let a = thread::spawn(move || {
-            for msg_or_none in mqtt_in_rx.iter() {
-                tx.blocking_send(MqttMessage::MqttIn(msg_or_none)).unwrap();
-            }
-        });
+        let mqtt_in_rx = cli.get_stream(10);
 
         let rx = self.rx.take().unwrap();
-        let b = thread::spawn(move || {
+        let b = spawn(async move {
             let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
-            let ssl_opts = mqtt::SslOptionsBuilder::new()
+            let ssl_opts = SslOptionsBuilder::new()
                 .trust_store(trust_store)
                 .unwrap()
                 .finalize();
 
             // Define the set of options for the connection.
-            let conn_opts = mqtt::ConnectOptionsBuilder::new()
+            let conn_opts = ConnectOptionsBuilder::new()
                 .ssl_options(ssl_opts)
                 .keep_alive_interval(Duration::from_secs(30))
                 .clean_session(true)
@@ -93,50 +87,50 @@ impl Mqtt {
                 .finalize();
 
             // Connect and wait for it to complete or fail.
-            if let Err(e) = cli.connect(conn_opts) {
+            if let Err(e) = cli.connect(conn_opts).await {
                 panic!("Unable to connect to {uri}:\n\t{:?}", e);
             }
 
             let mut rx = rx;
 
             // Subscribe topics.
-            subscribe_topics(&cli, &subscriptions);
+            subscribe_topics(&cli, &subscriptions).await;
 
-            while let Some(msg) = rx.blocking_recv() {
-                let msg: MqttMessage = msg;
-                match msg {
-                    MqttMessage::MqttIn(msg_or_none) => {
+            loop {
+                select! {
+                    Ok(msg_or_none) = mqtt_in_rx.recv() => {
                         if let Some(msg) = msg_or_none {
                             let topic = msg.topic();
                             let payload = msg.payload();
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
                             for subscription in subscriptions.get(topic) {
-                                subscription.tx.blocking_send(payload.clone()).unwrap();
+                                subscription.tx.send(payload.clone()).await.unwrap();
                             }
                         } else if !cli.is_connected() {
-                            try_reconnect(&cli);
+                            try_reconnect(&cli).await;
                             debug!("Resubscribe topics...");
-                            subscribe_topics(&cli, &subscriptions);
+                            subscribe_topics(&cli, &subscriptions).await;
+                        }
+                    },
+                    Some(msg) = rx.recv() => {
+                        match msg {
+                            MqttMessage::MqttOut(msg) => cli.publish(msg).await.unwrap(),
                         }
                     }
-                    MqttMessage::MqttOut(msg) => cli.publish(msg).unwrap(),
-                }
+                    else => { break; }
+                };
             }
         });
 
-        self.a = Some(a);
         self.b = Some(b);
     }
 }
 
-impl Drop for Mqtt {
-    fn drop(&mut self) {
-        if let Some(a) = self.a.take() {
-            a.join().unwrap();
-        }
+impl Mqtt {
+    pub async fn wait(&mut self) {
         if let Some(b) = self.b.take() {
-            b.join().unwrap();
+            b.await.unwrap();
         }
     }
 }
@@ -183,7 +177,7 @@ impl Default for Subscriptions {
     }
 }
 
-fn try_reconnect(cli: &mqtt::Client) {
+async fn try_reconnect(cli: &AsyncClient) {
     let mut attempt: u32 = 1;
     loop {
         let sleep_time = 1000 * (attempt as u64).checked_pow(2).unwrap();
@@ -193,7 +187,7 @@ fn try_reconnect(cli: &mqtt::Client) {
         thread::sleep(Duration::from_millis(sleep_time));
 
         warn!("Trying to connect to mqtt");
-        if cli.reconnect().is_ok() {
+        if cli.reconnect().await.is_ok() {
             warn!("Successfully reconnected to mqtt");
             break;
         } else {
@@ -204,7 +198,7 @@ fn try_reconnect(cli: &mqtt::Client) {
     }
 }
 
-fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
+async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
     let topics: Vec<_> = subscriptions
         .0
         .iter()
@@ -212,7 +206,7 @@ fn subscribe_topics(cli: &mqtt::Client, subscriptions: &Subscriptions) {
         .collect();
     let qos: Vec<_> = subscriptions.0.iter().map(|_| 0).collect();
 
-    if let Err(e) = cli.subscribe_many(&topics, &qos) {
+    if let Err(e) = cli.subscribe_many(&topics, &qos).await {
         error!("Error subscribes topics: {:?}", e);
     }
 }
