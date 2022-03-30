@@ -81,7 +81,7 @@ fn changed_to_message(changed: Changed) -> Option<String> {
             old_location: Some(old_location),
             new_location: None,
             ..
-        } => Some(format!("{name} has left at {old_location}")),
+        } => Some(format!("{name} has left {old_location}")),
 
         Changed {
             old_location: Some(old_location),
