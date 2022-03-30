@@ -16,6 +16,7 @@ use tokio::time::timeout;
 
 use crate::send;
 use crate::spawn;
+use crate::PIPE_SIZE;
 
 #[derive(Debug)]
 pub enum MqttMessage {
@@ -30,7 +31,7 @@ pub struct Mqtt {
 
 impl Mqtt {
     pub async fn new() -> Self {
-        let (main_tx, main_rx) = mpsc::channel(10);
+        let (main_tx, main_rx) = mpsc::channel(PIPE_SIZE);
 
         Mqtt {
             b: None,
@@ -159,7 +160,7 @@ impl Subscriptions {
     }
 
     pub fn subscribe(&mut self, topic: &str) -> mpsc::Receiver<String> {
-        let (tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel(PIPE_SIZE);
         let subscription = Subscription {
             topic: topic.to_string(),
             tx,

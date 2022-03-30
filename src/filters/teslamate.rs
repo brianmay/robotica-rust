@@ -1,6 +1,6 @@
 use tokio::{select, sync::mpsc};
 
-use crate::{send, spawn};
+use crate::{send, spawn, PIPE_SIZE};
 
 pub fn requires_plugin(
     mut battery_level: mpsc::Receiver<usize>,
@@ -8,7 +8,7 @@ pub fn requires_plugin(
     mut geofence: mpsc::Receiver<String>,
     mut reminder: mpsc::Receiver<bool>,
 ) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let mut the_battery_level: Option<usize> = None;
         let mut the_plugged_in: Option<bool> = None;
@@ -51,7 +51,7 @@ pub fn is_insecure(
     mut is_user_present: mpsc::Receiver<bool>,
     mut locked: mpsc::Receiver<bool>,
 ) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let mut the_is_user_present: Option<bool> = None;
         let mut the_locked: Option<bool> = None;

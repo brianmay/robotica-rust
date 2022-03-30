@@ -15,6 +15,7 @@ use tokio::{
 
 use crate::send;
 use crate::spawn;
+use crate::PIPE_SIZE;
 
 #[derive(Deserialize)]
 struct Login {
@@ -138,7 +139,7 @@ struct Circle {
 }
 
 pub fn circles() -> mpsc::Receiver<Member> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
         let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");

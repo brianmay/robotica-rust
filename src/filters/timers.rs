@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::time::{self, sleep_until, Interval};
 use tokio::{select, sync::mpsc, time::Instant};
 
-use crate::{send, spawn};
+use crate::{send, spawn, PIPE_SIZE};
 
 async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     if let Some(instant) = instant {
@@ -15,7 +15,7 @@ async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
 }
 
 pub fn delay_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let mut delay_until: Option<Instant> = None;
 
@@ -51,7 +51,7 @@ async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
 }
 
 pub fn timer_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let mut interval: Option<Interval> = None;
 
@@ -87,7 +87,7 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let (tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel(PIPE_SIZE);
         let mut rx = delay_true(rx, duration);
 
         tx.send(false).await.unwrap();
@@ -109,7 +109,7 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let (tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel(PIPE_SIZE);
         let mut rx = timer_true(rx, duration);
 
         tx.send(false).await.unwrap();

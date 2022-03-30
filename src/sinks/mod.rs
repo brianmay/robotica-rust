@@ -1,9 +1,9 @@
 use tokio::sync::mpsc::{self, Receiver};
 
-use crate::spawn;
+use crate::{spawn, PIPE_SIZE};
 
 pub fn null<T: Send + 'static>(mut input: mpsc::Receiver<T>) -> mpsc::Receiver<T> {
-    let (_tx, rx) = mpsc::channel(10);
+    let (_tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         while (input.recv().await).is_some() {
             // do nothing

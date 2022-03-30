@@ -3,10 +3,10 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time;
 
-use crate::{send, spawn};
+use crate::{send, spawn, PIPE_SIZE};
 
 pub fn timer(duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(10);
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         let mut interval = time::interval(duration);
 
