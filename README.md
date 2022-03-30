@@ -1,5 +1,12 @@
 # robotica-node-rust
+
 Manipulate asynchronous events, using asynchronous tasks.
+
+## Getting started
+
+Sample code in the `brian-node-rust` directory.
+
+Sample helm chart im my helm report (see [instructions](https://github.com/brianmay/charts/) called `brian-node-rust`, note that is specific to my example, and requires the code implement a simple HTTP server for health checks. Various [values](https://github.com/brianmay/charts/blob/main/charts/brian-node-rust/values.yaml) need to be set. The image repository and tag can be overridden.
 
 ## Example Code
 
@@ -10,7 +17,7 @@ subscriptions.subscribe(&topic)
     .filter_map(string_to_bool)
     .debug("plugged_in")
     .diff()
-    .filter_map(plugged_in_to_message)
+    .filter_map(plugged_in_to_string)
     .map(string_to_message)
     .publish(subscriptions, mqtt_out);
 ```
@@ -35,10 +42,10 @@ This will do the following:
 
 * Events get filtered via debug plugin, which outputs them using `log::debug!(...)`.
 * Checks to see if what the previous value (if any) was.
-* `plugged_in_to_message` takes this value and turns it into a mqtt message.
+* `plugged_in_to_string` takes this value and turns it into a mqtt message.
 
     ```rust
-    fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
+    fn plugged_in_to_string((old, new): (Option<bool>, bool)) -> Option<String> {
         match (old, new) {
             (None, _) => None,
             (Some(false), true) => Some("The tesla has been plugged in".to_string()),
@@ -126,8 +133,7 @@ Initially I tried to get something like a distributed etcd running to save the s
 
 This worked fine. But it was a complicated solution, and I don't have a lot of confidence in in. As an example, I noticed I forgot to implement the save state code for one of the nodes. Which should be easy right? But Saving state requires that the data be serializable. And the type less design of the system means that there cannot be any guarantees that the data is serializable. If I implemented this, would I be risking crashes because I used this for non-serializable data? Either now or in the future?
 
-I tried to write code to to type checking on inputs and outputs, but this didn't work very well. And all the type checks were done at run-time not compile time. I initially tried to generate the graph of nodes and inputs/outputs at compile time, but this failed when this
-configuration contained call back functions.
+I tried to write code to to type checking on inputs and outputs, but this didn't work very well. And all the type checks were done at run-time not compile time. I initially tried to generate the graph of nodes and inputs/outputs at compile time, but this failed when this configuration contained call back functions.
 
 I also added a web interface, using Elixir life views. This was to show logs from every node in real time. Unfortunately for reasons I didn't understand the load of messages - which wasn't really that many - was too much for Elixir to handle. Absolutely everything, every process slowed to a almost complete standstill. I had to turn off most of the logging in order to get acceptable performance. I thought maybe the logs were taking to much memory, but it was CPU that was up high, not memory usage.
 
@@ -135,22 +141,31 @@ Perhaps this was not a good usage case for the live views however. I was storing
 
 I still like some features of this implementation. However I think it is far too complicated, and as a result I lack confidence in it, and my ability to make changes without accidentally breaking stuff.
 
+As an example, just recently I have started experiencing a problem where it sometimes would not send the "The Tesla has been plugged in" message, and I have no idea why.
+
 ## Robotica Node Rust
 
-This project. Features:
+Yes another rewrite. In Rust. Features:
 
 * Design is considerably simpler.
+* Uses asyncio tasks.
 * Type checking between threads is enforced at compile time.
 * Creating/maintaining/reading flows is a lot easier.
-* Uses asyncio threads.
 * Structured as a library, so the parts not-specific to my setup can be shared by different projects.
+* On unexpected failure should hopefully exit to allow monitoring system (e.g. kubernetes) to restart.
+* Updated to reduce excessive messages being sent that were the exact same as the last message.
 
-Lacking:
+Limitations:
 
-* No monitoring of death of threads. Possibly the send function should kill entire process off if it can't send rather then just the thread. Killing the thread off means slow death, as thread that is sending data will eventually try to send and die also.
+* Lost the ability to automatically restart tasks. If one task fails, need to abort everything.
+* As implemented, pipes can only have 1 receiver. Need to use split function if more required. Currently only implemented split2. A splitn function would be good.
+* Can only have one copy at a time. Or you will get duplicate outgoing events.
+
+Still to be implemented:
 
 * Logging still needs more work. Not sure how to approach this yet.
-* Haven't tried to save state. Hoping this won't be required. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
+
+* Haven't tried to save state. Hoping this won't be required. When the process starts it will subscribe to mqtt and pick up retained data which is sufficient for now. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
 
 * Not many building blocks supports. Still use node-red for some stuff, and this sends mqtt messages that we can intercept here.
 
