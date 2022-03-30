@@ -13,6 +13,7 @@ use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::send;
 use crate::spawn;
 
 #[derive(Debug)]
@@ -105,7 +106,7 @@ impl Mqtt {
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
                             for subscription in subscriptions.get(topic) {
-                                subscription.tx.send(payload.clone()).await.unwrap();
+                                send(&subscription.tx, payload.clone()).await;
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -228,7 +229,7 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
             );
 
             if !debug_mode {
-                mqtt_out.send(MqttMessage::MqttOut(v)).await.unwrap();
+                send(&mqtt_out, MqttMessage::MqttOut(v)).await;
             }
         }
     });
