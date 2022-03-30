@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time;
 
-use crate::{send, spawn, PIPE_SIZE};
+use crate::{send_and_wait, spawn, PIPE_SIZE};
 
 pub fn timer(duration: Duration) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel(PIPE_SIZE);
@@ -11,7 +11,7 @@ pub fn timer(duration: Duration) -> mpsc::Receiver<bool> {
         let mut interval = time::interval(duration);
 
         loop {
-            send(&tx, true).await;
+            send_and_wait(&tx, true).await;
             interval.tick().await;
         }
     });

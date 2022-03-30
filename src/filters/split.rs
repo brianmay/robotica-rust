@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use crate::{send, spawn, PIPE_SIZE};
+use crate::{send_and_wait, spawn, PIPE_SIZE};
 
 pub fn split2<T: Send + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
@@ -10,8 +10,8 @@ pub fn split2<T: Send + Clone + 'static>(
     spawn(async move {
         while let Some(v) = input.recv().await {
             let clone = v.clone();
-            send(&tx1, clone).await;
-            send(&tx2, v).await;
+            send_and_wait(&tx1, clone).await;
+            send_and_wait(&tx2, v).await;
         }
     });
 

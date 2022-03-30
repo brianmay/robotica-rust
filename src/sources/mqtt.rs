@@ -16,7 +16,8 @@ use tokio::time::sleep;
 use tokio::time::timeout;
 use tokio::time::Instant;
 
-use crate::send;
+use crate::send_and_wait;
+use crate::send_or_discard;
 use crate::spawn;
 use crate::PIPE_SIZE;
 
@@ -34,7 +35,7 @@ pub struct Mqtt {
 impl Mqtt {
     pub async fn new() -> Self {
         // Outgoing MQTT queue.
-        let (main_tx, main_rx) = mpsc::channel(PIPE_SIZE);
+        let (main_tx, main_rx) = mpsc::channel(50);
 
         Mqtt {
             b: None,
@@ -112,7 +113,7 @@ impl Mqtt {
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
                             for subscription in subscriptions.get(topic) {
-                                send(&subscription.tx, payload.clone()).await;
+                                send_and_wait(&subscription.tx, payload.clone()).await;
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -250,7 +251,7 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
 
             if !debug_mode {
                 let now = Instant::now();
-                send(&mqtt_out, MqttMessage::MqttOut(v, now)).await;
+                send_or_discard(&mqtt_out, MqttMessage::MqttOut(v, now)).await;
             }
         }
     });
