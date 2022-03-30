@@ -9,8 +9,13 @@ use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 pub async fn send<T>(tx: &Sender<T>, data: T) {
     let a = tx.try_send(data);
-    a.unwrap_or_else(|err| {
-        panic!("send operation failed {err}");
+    a.unwrap_or_else(|err| match err {
+        tokio::sync::mpsc::error::TrySendError::Full(_) => {
+            error!("send operation failed: pipe is full");
+        }
+        tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+            panic!("send operation failed: receiver closed connection");
+        }
     });
 }
 
