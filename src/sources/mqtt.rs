@@ -182,7 +182,7 @@ impl Default for Subscriptions {
 }
 
 async fn try_reconnect(cli: &AsyncClient) {
-    let mut attempt: u32 = 1;
+    let mut attempt: u32 = 0;
     loop {
         let sleep_time = 1000 * 2u64.checked_pow(attempt).unwrap();
         let sleep_time = min(60_000, sleep_time);
