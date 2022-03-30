@@ -21,7 +21,7 @@ pub async fn send_and_wait<T>(tx: &Sender<T>, data: T) {
     };
 }
 
-pub async fn send_or_discard<T>(tx: &Sender<T>, data: T) {
+pub fn send_or_discard<T>(tx: &Sender<T>, data: T) {
     tx.try_send(data).unwrap_or_else(|err| match err {
         tokio::sync::mpsc::error::TrySendError::Full(_) => {
             error!("send operation failed: pipe is full");

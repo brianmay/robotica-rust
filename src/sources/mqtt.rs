@@ -251,7 +251,7 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
 
             if !debug_mode {
                 let now = Instant::now();
-                send_or_discard(&mqtt_out, MqttMessage::MqttOut(v, now)).await;
+                send_or_discard(&mqtt_out, MqttMessage::MqttOut(v, now));
             }
         }
     });
