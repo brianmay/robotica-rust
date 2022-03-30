@@ -1,6 +1,6 @@
 use tokio::{select, sync::mpsc};
 
-use crate::{send_and_wait, spawn, PIPE_SIZE};
+use crate::{send_or_panic, spawn, PIPE_SIZE};
 
 pub fn requires_plugin(
     mut battery_level: mpsc::Receiver<usize>,
@@ -35,10 +35,10 @@ pub fn requires_plugin(
                 (_, _, None, _) => {}
                 (_, _, _, None) => {}
                 (Some(level), Some(false), Some("Home"), Some(true)) if level < 75 => {
-                    send_and_wait(&tx, true).await;
+                    send_or_panic(&tx, true).await;
                 }
                 (_, _, _, _) => {
-                    send_and_wait(&tx, false).await;
+                    send_or_panic(&tx, false).await;
                 }
             };
         }
@@ -67,10 +67,10 @@ pub fn is_insecure(
                 (None, _) => {}
                 (_, None) => {}
                 (Some(false), Some(false)) => {
-                    send_and_wait(&tx, false).await;
+                    send_or_panic(&tx, false).await;
                 }
                 (_, _) => {
-                    send_and_wait(&tx, false).await;
+                    send_or_panic(&tx, false).await;
                 }
             };
         }

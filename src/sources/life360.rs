@@ -13,7 +13,7 @@ use tokio::{
     time::{self},
 };
 
-use crate::send_and_wait;
+use crate::send_or_panic;
 use crate::spawn;
 use crate::PIPE_SIZE;
 
@@ -225,7 +225,7 @@ async fn dispatch_circle_details(login: &Login, circles: &List, tx: &Sender<Memb
             Err(err) => error!("get_circle_details: {err}"),
             Ok(details) => {
                 for member in details.members {
-                    send_and_wait(tx, member).await;
+                    send_or_panic(tx, member).await;
                 }
             }
         }

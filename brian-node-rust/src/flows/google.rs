@@ -12,7 +12,7 @@ use robotica_node_rust::{
     filters::ChainChanged,
     filters::ChainDiff,
     filters::ChainGeneric,
-    send_and_wait,
+    send_or_panic,
     sources::{
         mqtt::{MqttMessage, Subscriptions},
         timer::timer,
@@ -361,7 +361,7 @@ fn light_power(
             };
 
             if let Some(value) = value {
-                send_and_wait(&tx, value).await;
+                send_or_panic(&tx, value).await;
             }
         }
     });

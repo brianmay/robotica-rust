@@ -1,4 +1,4 @@
-use crate::{send_and_wait, spawn, PIPE_SIZE};
+use crate::{send_or_panic, spawn, PIPE_SIZE};
 use log::*;
 use tokio::{select, sync::mpsc};
 
@@ -14,7 +14,7 @@ pub fn changed<T: Send + Eq + 'static>(
                 (_, new) => Some(new),
             };
             if let Some(v) = v {
-                send_and_wait(&tx, v).await;
+                send_or_panic(&tx, v).await;
             }
         }
     });
@@ -30,7 +30,7 @@ pub fn diff<T: Send + Clone + 'static>(
         let mut old_value: Option<T> = None;
         while let Some(v) = input.recv().await {
             let v_clone = v.clone();
-            send_and_wait(&tx, (old_value, v_clone)).await;
+            send_or_panic(&tx, (old_value, v_clone)).await;
             old_value = Some(v);
         }
     });
@@ -46,7 +46,7 @@ pub fn map<T: Send + 'static, U: Send + 'static>(
     spawn(async move {
         while let Some(v) = input.recv().await {
             let v = callback(v);
-            send_and_wait(&tx, v).await;
+            send_or_panic(&tx, v).await;
         }
     });
 
@@ -63,7 +63,7 @@ pub fn map_with_state<T: Send + 'static, U: Send + 'static, V: Send + 'static>(
     spawn(async move {
         while let Some(v) = input.recv().await {
             let v = callback(&mut state, v);
-            send_and_wait(&tx, v).await;
+            send_or_panic(&tx, v).await;
         }
     });
 
@@ -79,7 +79,7 @@ pub fn debug<T: Send + core::fmt::Debug + 'static>(
     spawn(async move {
         while let Some(v) = input.recv().await {
             debug!("debug {msg} {v:?}");
-            send_and_wait(&tx, v).await;
+            send_or_panic(&tx, v).await;
         }
     });
 
@@ -95,7 +95,7 @@ pub fn filter_map<T: Send + 'static, U: Send + 'static>(
         while let Some(v) = input.recv().await {
             let filter = callback(v);
             if let Some(v) = filter {
-                send_and_wait(&tx, v).await;
+                send_or_panic(&tx, v).await;
             }
         }
     });
@@ -112,7 +112,7 @@ pub fn filter<T: Send + 'static>(
         while let Some(v) = input.recv().await {
             let filter = callback(&v);
             if filter {
-                send_and_wait(&tx, v).await;
+                send_or_panic(&tx, v).await;
             }
         }
     });
@@ -131,7 +131,7 @@ pub fn gate<T: Send + 'static>(
             select! {
                 Some(input) = input.recv() => {
                     if filter {
-                        send_and_wait(&tx, input).await;
+                        send_or_panic(&tx, input).await;
                     }
                 }
                 Some(gate) = gate.recv() => {
