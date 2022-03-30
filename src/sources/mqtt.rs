@@ -12,6 +12,7 @@ use std::{env, str, thread};
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 use crate::send;
 use crate::spawn;
@@ -188,11 +189,16 @@ async fn try_reconnect(cli: &AsyncClient) {
         thread::sleep(Duration::from_millis(sleep_time));
 
         warn!("Trying to connect to mqtt");
-        if cli.reconnect().await.is_ok() {
-            warn!("Successfully reconnected to mqtt");
-            break;
-        } else {
-            error!("Reconnect failed");
+        match timeout(Duration::from_secs(10), cli.reconnect()).await {
+            Ok(result) => {
+                if result.is_ok() {
+                    warn!("Successfully reconnected to mqtt");
+                    break;
+                } else {
+                    error!("Reconnect failed");
+                }
+            }
+            Err(timeout) => error!("Timeout trying to reconnect {timeout}"),
         }
 
         attempt = attempt.saturating_add(1);
