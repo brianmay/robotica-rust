@@ -62,7 +62,7 @@ impl Mqtt {
 
         let create_opts = CreateOptionsBuilder::new()
             .server_uri(&uri)
-            .client_id(client_id) // FIXME: This is bad
+            .client_id(client_id)
             .finalize();
 
         // Create a client.
