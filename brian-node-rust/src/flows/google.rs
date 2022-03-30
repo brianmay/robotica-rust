@@ -63,10 +63,16 @@ struct RoboticaColorOut {
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RoboticaCommand {
+struct RoboticaLightCommand {
     action: Option<String>,
     color: Option<RoboticaColorOut>,
     scene: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RoboticaDeviceCommand {
+    action: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
@@ -133,7 +139,7 @@ fn light_google_to_robotica(payload: String, location: &str, device: &str) -> Op
         (_, _) => "default".to_string(),
     };
 
-    let command = RoboticaCommand {
+    let command = RoboticaLightCommand {
         action,
         color: Some(color),
         scene: Some(scene),
@@ -160,12 +166,7 @@ fn device_google_to_robotica(payload: String, location: &str, device: &str) -> O
         Some("turn_off".to_string())
     };
 
-    let command = RoboticaCommand {
-        action,
-        scene: None,
-        color: None,
-    };
-
+    let command = RoboticaDeviceCommand { action };
     let topic = format!("command/{location}/{device}");
     let payload = serde_json::to_string(&command).unwrap();
     Some(Message::new(topic, payload, 0))
@@ -269,7 +270,7 @@ fn light(
 
         let location = location.to_string();
         let device = device.to_string();
-        power(priorities, power_str)
+        light_power(priorities, power_str)
             .map(move |power| robotica_to_google(power, &location, &device))
             .publish(mqtt_out.clone());
     }
@@ -298,6 +299,7 @@ fn device(
         let location = location.to_string();
         let device = device.to_string();
         let topic = format!("google/{location}/{device}/out");
+
         subscriptions
             .subscribe(&topic)
             .filter_map(move |payload| device_google_to_robotica(payload, &location, &device))
@@ -305,24 +307,28 @@ fn device(
     }
 
     {
-        let topic = format!("state/{location}/{device}/power");
-        let power_str = subscriptions.subscribe(&topic);
-
-        let topic = format!("state/{location}/{device}/priorities");
-        let priorities = subscriptions.subscribe(&topic).map(|payload| {
-            let list: Vec<u16> = serde_json::from_str(&payload).unwrap();
-            list
-        });
-
         let location = location.to_string();
         let device = device.to_string();
-        power(priorities, power_str)
+        let topic = format!("state/{location}/{device}/power");
+
+        subscriptions
+            .subscribe(&topic)
+            .map(string_to_power)
             .map(move |power| robotica_to_google(power, &location, &device))
             .publish(mqtt_out.clone());
     }
 }
 
-fn power(
+fn string_to_power(value: String) -> Power {
+    match value.as_str() {
+        "OFF" => Power::Off,
+        "ON" => Power::On,
+        "HARD_OFF" => Power::HardOff,
+        _ => Power::Error,
+    }
+}
+
+fn light_power(
     mut priorities: mpsc::Receiver<Vec<u16>>,
     mut power: mpsc::Receiver<String>,
 ) -> Receiver<Power> {
