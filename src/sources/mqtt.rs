@@ -8,10 +8,11 @@ use paho_mqtt::SslOptionsBuilder;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::time::Duration;
-use std::{env, str, thread};
+use std::{env, str};
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use tokio::time::timeout;
 
 use crate::send;
@@ -187,7 +188,7 @@ async fn try_reconnect(cli: &AsyncClient) {
         let sleep_time = min(60_000, sleep_time);
 
         warn!("Connection lost to mqtt. Waiting {sleep_time} ms to retry connection attempt {attempt}.");
-        thread::sleep(Duration::from_millis(sleep_time));
+        sleep(Duration::from_millis(sleep_time)).await;
 
         warn!("Trying to connect to mqtt");
         match timeout(Duration::from_secs(10), cli.reconnect()).await {
