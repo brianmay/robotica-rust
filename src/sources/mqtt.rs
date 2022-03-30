@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::timeout;
+use tokio::time::Instant;
 
 use crate::send;
 use crate::spawn;
@@ -21,7 +22,7 @@ use crate::PIPE_SIZE;
 
 #[derive(Debug)]
 pub enum MqttMessage {
-    MqttOut(Message),
+    MqttOut(Message, Instant),
 }
 
 pub struct Mqtt {
@@ -33,7 +34,7 @@ pub struct Mqtt {
 impl Mqtt {
     pub async fn new() -> Self {
         // Outgoing MQTT queue.
-        let (main_tx, main_rx) = mpsc::channel(4);
+        let (main_tx, main_rx) = mpsc::channel(PIPE_SIZE);
 
         Mqtt {
             b: None,
@@ -120,8 +121,12 @@ impl Mqtt {
                         }
                     },
                     Some(msg) = rx.recv() => {
+                        let now = Instant::now();
                         match msg {
-                            MqttMessage::MqttOut(msg) => cli.publish(msg).await.unwrap(),
+                            MqttMessage::MqttOut(_, instant) if message_expired(&now, &instant) => {
+                                warn!("Discarding outgoing message as too old");
+                            },
+                            MqttMessage::MqttOut(msg, _) => cli.publish(msg).await.unwrap(),
                         }
                     }
                     else => { break; }
@@ -131,6 +136,10 @@ impl Mqtt {
 
         self.b = Some(b);
     }
+}
+
+fn message_expired(now: &Instant, sent: &Instant) -> bool {
+    (*now - *sent) > Duration::from_secs(300)
 }
 
 impl Mqtt {
@@ -240,7 +249,8 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
             );
 
             if !debug_mode {
-                send(&mqtt_out, MqttMessage::MqttOut(v)).await;
+                let now = Instant::now();
+                send(&mqtt_out, MqttMessage::MqttOut(v, now)).await;
             }
         }
     });
