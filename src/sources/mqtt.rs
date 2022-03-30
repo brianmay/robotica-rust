@@ -32,7 +32,8 @@ pub struct Mqtt {
 
 impl Mqtt {
     pub async fn new() -> Self {
-        let (main_tx, main_rx) = mpsc::channel(PIPE_SIZE);
+        // Outgoing MQTT queue.
+        let (main_tx, main_rx) = mpsc::channel(4);
 
         Mqtt {
             b: None,
@@ -70,7 +71,8 @@ impl Mqtt {
             panic!("Error creating the client to {uri}: {:?}", err);
         });
 
-        let mqtt_in_rx = cli.get_stream(10);
+        // Main incoming MQTT queue.
+        let mqtt_in_rx = cli.get_stream(PIPE_SIZE);
 
         let rx = self.rx.take().unwrap();
         let b = spawn(async move {
@@ -161,6 +163,7 @@ impl Subscriptions {
     }
 
     pub fn subscribe(&mut self, topic: &str) -> mpsc::Receiver<String> {
+        // Per subscription incoming MQTT queue.
         let (tx, rx) = mpsc::channel(PIPE_SIZE);
         let subscription = Subscription {
             topic: topic.to_string(),

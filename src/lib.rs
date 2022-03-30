@@ -7,7 +7,7 @@ use std::future::Future;
 use log::*;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
-pub const PIPE_SIZE: usize = 4;
+pub const PIPE_SIZE: usize = 10;
 
 pub async fn send<T>(tx: &Sender<T>, data: T) {
     let a = tx.try_send(data);
