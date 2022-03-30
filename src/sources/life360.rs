@@ -174,7 +174,7 @@ async fn retry_login(username: &str, password: &str) -> Login {
     let mut attempt: u32 = 0;
 
     let login = loop {
-        let sleep_time = 1000 * (attempt as u64).checked_pow(2).unwrap();
+        let sleep_time = 1000 * 2u64.checked_pow(attempt).unwrap();
         let sleep_time = min(60_000, sleep_time);
 
         let log_level = if attempt == 0 {
