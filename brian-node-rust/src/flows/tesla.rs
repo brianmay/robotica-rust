@@ -15,8 +15,8 @@ fn geofence_to_message((old, new): (Option<String>, String)) -> Option<String> {
     match (old.as_deref(), new.as_str()) {
         (None, _) => None,
         (Some(old), new) if old == new => None,
-        (Some(""), new) => Some(format!("The tesla has arrived at {new}")),
-        (Some(old), "") => Some(format!("The tesla has left {old}")),
+        (Some("nowhere"), new) => Some(format!("The tesla has arrived at {new}")),
+        (Some(old), "nowhere") => Some(format!("The tesla has left {old}")),
         (Some(old), new) => Some(format!("The tesla has left {old} and arrived at {new}")),
     }
 }
