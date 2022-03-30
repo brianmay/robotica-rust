@@ -1,7 +1,7 @@
 use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
-    filters::{ChainDebug, ChainGeneric},
+    filters::{split::split2, ChainDebug, ChainGeneric},
     sources::{
         mqtt::{MqttMessage, Subscriptions},
         ChainMqtt,
@@ -89,5 +89,7 @@ pub fn message(
     subscriptions: &mut Subscriptions,
     mqtt: &Sender<MqttMessage>,
 ) {
-    message_location(rx, subscriptions, mqtt, "Brian");
+    let (rx1, rx2) = split2(rx);
+    message_location(rx1, subscriptions, mqtt, "Brian");
+    message_location(rx2, subscriptions, mqtt, "Dining");
 }
