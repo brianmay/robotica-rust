@@ -79,7 +79,6 @@ pub fn message_location(
     let do_gate = subscriptions.subscribe(&gate_topic).map(power_to_bool);
 
     rx.gate(do_gate)
-        .debug("outgoing message")
         .map(move |v| string_to_message(v, &command_topic))
         .publish(mqtt.clone());
 }
@@ -89,6 +88,7 @@ pub fn message(
     subscriptions: &mut Subscriptions,
     mqtt: &Sender<MqttMessage>,
 ) {
+    let rx = rx.debug("outgoing message");
     let (rx1, rx2) = split2(rx);
     message_location(rx1, subscriptions, mqtt, "Brian");
     message_location(rx2, subscriptions, mqtt, "Dining");
