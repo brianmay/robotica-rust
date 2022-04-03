@@ -41,7 +41,11 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) 
         .changed()
         .debug("Brian is in bedroom (changed)")
         .map(|v| {
-            let action = if v { None } else { Some("turn_on".to_string()) };
+            let action = if v {
+                None
+            } else {
+                Some("turn_off".to_string())
+            };
             let command = RoboticaLightCommand {
                 action,
                 color: None,
