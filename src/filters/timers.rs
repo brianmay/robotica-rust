@@ -49,7 +49,7 @@ pub fn delay_cancel(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc
         loop {
             select! {
                 Some(v) = input.recv() => {
-                    if v && delay_until.is_none() {
+                    if v {
                         delay_until = Some(Instant::now() + duration);
                     } else if !v {
                         delay_until = None;
