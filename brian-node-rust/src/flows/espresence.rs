@@ -34,10 +34,11 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) 
         })
         .map(|b| b.distance < 20.0)
         .debug("Brian is in bedroom")
+        .startup_delay(Duration::from_secs(10), false)
         .delay_cancel(Duration::from_secs(10))
         .debug("Brian is in bedroom (delayed)")
         .diff()
-        .changed_or_unknown()
+        .changed()
         .debug("Brian is in bedroom (changed)")
         .map(|v| {
             let action = if v { None } else { Some("turn_on".to_string()) };

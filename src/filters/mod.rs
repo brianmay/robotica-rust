@@ -8,11 +8,11 @@ pub mod timers;
 
 pub trait ChainDiff<T> {
     fn diff(self) -> Receiver<(Option<T>, T)>;
+    fn diff_with_initial_value(self, initial_value: Option<T>) -> Receiver<(Option<T>, T)>;
 }
 
 pub trait ChainChanged<T> {
     fn changed(self) -> Receiver<T>;
-    fn changed_or_unknown(self) -> Receiver<T>;
 }
 
 pub trait ChainDebug<T> {
@@ -33,6 +33,7 @@ pub trait ChainGeneric<T> {
     ) -> Receiver<U>;
     fn filter(self, callback: impl Send + 'static + Fn(&T) -> bool) -> Receiver<T>;
     fn gate(self, gate: Receiver<bool>) -> Receiver<T>;
+    fn startup_delay(self, duration: Duration, value: T) -> Receiver<T>;
 }
 
 pub trait ChainTimer {
@@ -49,14 +50,14 @@ impl<T: Send + Clone + 'static> ChainDiff<T> for Receiver<T> {
     fn diff(self) -> Receiver<(Option<T>, T)> {
         generic::diff(self)
     }
+    fn diff_with_initial_value(self, initial_value: Option<T>) -> Receiver<(Option<T>, T)> {
+        generic::diff_with_initial_value(self, initial_value)
+    }
 }
 
 impl<T: Send + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
     fn changed(self) -> Receiver<T> {
         generic::changed(self)
-    }
-    fn changed_or_unknown(self) -> Receiver<T> {
-        generic::changed_or_unknown(self)
     }
 }
 
@@ -92,6 +93,10 @@ impl<T: Send + 'static> ChainGeneric<T> for Receiver<T> {
 
     fn gate(self, gate: Receiver<bool>) -> Receiver<T> {
         generic::gate(self, gate)
+    }
+
+    fn startup_delay(self, duration: Duration, value: T) -> Receiver<T> {
+        timers::startup_delay(self, duration, value)
     }
 }
 

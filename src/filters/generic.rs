@@ -22,32 +22,17 @@ pub fn changed<T: Send + Eq + 'static>(
     rx
 }
 
-pub fn changed_or_unknown<T: Send + Eq + 'static>(
-    mut input: mpsc::Receiver<(Option<T>, T)>,
-) -> mpsc::Receiver<T> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
-    spawn(async move {
-        while let Some(v) = input.recv().await {
-            let v = match v {
-                (None, new) => Some(new),
-                (Some(old), new) if old == new => None,
-                (_, new) => Some(new),
-            };
-            if let Some(v) = v {
-                send_or_panic(&tx, v).await;
-            }
-        }
-    });
-
-    rx
+pub fn diff<T: Send + Clone + 'static>(input: mpsc::Receiver<T>) -> mpsc::Receiver<(Option<T>, T)> {
+    diff_with_initial_value(input, None)
 }
 
-pub fn diff<T: Send + Clone + 'static>(
+pub fn diff_with_initial_value<T: Send + Clone + 'static>(
     mut input: mpsc::Receiver<T>,
+    initial_value: Option<T>,
 ) -> mpsc::Receiver<(Option<T>, T)> {
     let (tx, rx) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
-        let mut old_value: Option<T> = None;
+        let mut old_value = initial_value;
         while let Some(v) = input.recv().await {
             let v_clone = v.clone();
             send_or_panic(&tx, (old_value, v_clone)).await;
