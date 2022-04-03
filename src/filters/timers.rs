@@ -41,6 +41,33 @@ pub fn delay_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::
     rx
 }
 
+pub fn delay_cancel(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
+    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+    spawn(async move {
+        let mut delay_until: Option<Instant> = None;
+
+        loop {
+            select! {
+                Some(v) = input.recv() => {
+                    if v && delay_until.is_none() {
+                        delay_until = Some(Instant::now() + duration);
+                    } else if !v {
+                        delay_until = None;
+                    }
+                    send_or_panic(&tx, v).await;
+                },
+                Some(()) = maybe_sleep_until(delay_until) => {
+                    delay_until = None;
+                    send_or_panic(&tx, false).await
+                },
+                else => { break; }
+            }
+        }
+    });
+
+    rx
+}
+
 async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
     if let Some(interval) = interval {
         interval.tick().await;

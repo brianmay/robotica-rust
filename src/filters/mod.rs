@@ -12,6 +12,7 @@ pub trait ChainDiff<T> {
 
 pub trait ChainChanged<T> {
     fn changed(self) -> Receiver<T>;
+    fn changed_or_unknown(self) -> Receiver<T>;
 }
 
 pub trait ChainDebug<T> {
@@ -36,6 +37,7 @@ pub trait ChainGeneric<T> {
 
 pub trait ChainTimer {
     fn delay_true(self, duration: Duration) -> Receiver<bool>;
+    fn delay_cancel(self, duration: Duration) -> Receiver<bool>;
     fn timer_true(self, duration: Duration) -> Receiver<bool>;
 }
 
@@ -52,6 +54,9 @@ impl<T: Send + Clone + 'static> ChainDiff<T> for Receiver<T> {
 impl<T: Send + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
     fn changed(self) -> Receiver<T> {
         generic::changed(self)
+    }
+    fn changed_or_unknown(self) -> Receiver<T> {
+        generic::changed_or_unknown(self)
     }
 }
 
@@ -93,6 +98,9 @@ impl<T: Send + 'static> ChainGeneric<T> for Receiver<T> {
 impl ChainTimer for Receiver<bool> {
     fn delay_true(self, duration: Duration) -> Receiver<bool> {
         timers::delay_true(self, duration)
+    }
+    fn delay_cancel(self, duration: Duration) -> Receiver<bool> {
+        timers::delay_cancel(self, duration)
     }
 
     fn timer_true(self, duration: Duration) -> Receiver<bool> {

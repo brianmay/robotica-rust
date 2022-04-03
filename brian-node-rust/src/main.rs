@@ -2,6 +2,7 @@ mod flows;
 mod http;
 
 use anyhow::Result;
+use flows::espresence;
 use flows::google;
 use flows::life360;
 use flows::tesla;
@@ -57,6 +58,7 @@ fn setup_pipes(mqtt: &mpsc::Sender<MqttMessage>) -> Subscriptions {
     tesla::start(&mut subscriptions, mqtt);
     life360::start(&mut subscriptions, mqtt);
     google::start(&mut subscriptions, mqtt);
+    espresence::start(&mut subscriptions, mqtt);
 
     // subscriptions
     //     .subscribe("state/Brian/Fan/power")

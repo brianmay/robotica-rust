@@ -54,19 +54,19 @@ struct GoogleCommand {
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct RoboticaColorOut {
-    hue: u16,
-    saturation: u16,
-    brightness: u16,
-    kelvin: u16,
+pub struct RoboticaColorOut {
+    pub hue: u16,
+    pub saturation: u16,
+    pub brightness: u16,
+    pub kelvin: u16,
 }
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RoboticaLightCommand {
-    action: Option<String>,
-    color: Option<RoboticaColorOut>,
-    scene: Option<String>,
+pub struct RoboticaLightCommand {
+    pub action: Option<String>,
+    pub color: Option<RoboticaColorOut>,
+    pub scene: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone)]
