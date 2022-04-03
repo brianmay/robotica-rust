@@ -26,14 +26,12 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
-#[serde(rename_all = "UPPERCASE")]
-enum Power {
-    On,
-    Off,
-    HardOff,
-    Error,
-}
+use super::robotica::string_to_power;
+use super::robotica::Power;
+use super::robotica::RoboticaAutoColor;
+use super::robotica::RoboticaColorOut;
+use super::robotica::RoboticaDeviceCommand;
+use super::robotica::RoboticaLightCommand;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -50,36 +48,6 @@ struct GoogleColor {
 struct GoogleCommand {
     on: bool,
     online: bool,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RoboticaColorOut {
-    pub hue: u16,
-    pub saturation: u16,
-    pub brightness: u16,
-    pub kelvin: u16,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct RoboticaLightCommand {
-    pub action: Option<String>,
-    pub color: Option<RoboticaColorOut>,
-    pub scene: Option<String>,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct RoboticaDeviceCommand {
-    action: Option<String>,
-}
-
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct RoboticaAutoColor {
-    power: Power,
-    color: RoboticaColorOut,
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
@@ -316,15 +284,6 @@ fn device(
             .map(string_to_power)
             .map(move |power| robotica_to_google(power, &location, &device))
             .publish(mqtt_out.clone());
-    }
-}
-
-fn string_to_power(value: String) -> Power {
-    match value.as_str() {
-        "OFF" => Power::Off,
-        "ON" => Power::On,
-        "HARD_OFF" => Power::HardOff,
-        _ => Power::Error,
     }
 }
 

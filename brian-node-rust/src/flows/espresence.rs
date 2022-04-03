@@ -9,7 +9,7 @@ use robotica_node_rust::{
 use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
 
-use super::google::RoboticaLightCommand;
+use super::robotica::RoboticaLightCommand;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
