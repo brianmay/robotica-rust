@@ -96,12 +96,10 @@ fn changed_to_message(changed: Changed) -> Option<String> {
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
-    let circles = life360::circles()
-        .map_with_state(HashMap::new(), member_diff)
-        .split();
+    let circles = life360::circles().map_with_state(HashMap::new(), member_diff);
+    let (circles1, circles2) = circles.split2();
 
-    circles
-        .receiver()
+    circles1
         .filter_map(member_changed)
         .map(|m| {
             let topic = format!("life360/{}", m.id);
@@ -110,8 +108,7 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) 
         })
         .publish(mqtt_out.clone());
 
-    circles
-        .receiver()
+    circles2
         .map(member_location_changed)
         .filter_map(changed_to_message)
         .message(subscriptions, mqtt_out);

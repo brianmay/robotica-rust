@@ -1,40 +1,21 @@
-use tokio::{sync::broadcast, sync::mpsc};
+use tokio::sync::mpsc;
 
 use crate::{send_or_panic, spawn, PIPE_SIZE};
 
-pub struct Split<T: Send + Clone + 'static> {
-    tx: broadcast::Sender<T>,
-}
-
-impl<T: Send + Clone + 'static> Split<T> {
-    pub fn receiver(&self) -> mpsc::Receiver<T> {
-        let (tx, rx) = mpsc::channel(PIPE_SIZE);
-
-        let mut brx = self.tx.subscribe();
-        spawn(async move {
-            while let Ok(v) = brx.recv().await {
-                send_or_panic(&tx, v).await;
-            }
-        });
-
-        rx
-    }
-}
-
-pub fn split<T: Send + Clone + 'static>(mut input: mpsc::Receiver<T>) -> Split<T> {
-    let (tx, rx) = broadcast::channel(PIPE_SIZE);
-    drop(rx);
-
-    let tx_clone = tx.clone();
+pub fn split2<T: Send + Clone + 'static>(
+    mut input: mpsc::Receiver<T>,
+) -> (mpsc::Receiver<T>, mpsc::Receiver<T>) {
+    let (tx1, rx1) = mpsc::channel(PIPE_SIZE);
+    let (tx2, rx2) = mpsc::channel(PIPE_SIZE);
     spawn(async move {
         while let Some(v) = input.recv().await {
-            tx_clone
-                .send(v)
-                .unwrap_or_else(|_| panic!("Cannot send value"));
+            let clone = v.clone();
+            send_or_panic(&tx1, clone).await;
+            send_or_panic(&tx2, v).await;
         }
     });
 
-    Split { tx }
+    (rx1, rx2)
 }
 
 #[cfg(test)]
@@ -44,9 +25,7 @@ mod tests {
     #[tokio::test]
     async fn test_split2() {
         let (tx, rx) = mpsc::channel(10);
-        let split = split(rx);
-        let mut rx1 = split.receiver();
-        let mut rx2 = split.receiver();
+        let (mut rx1, mut rx2) = split2(rx);
 
         tx.send(10).await.unwrap();
         let v = rx1.recv().await.unwrap();
