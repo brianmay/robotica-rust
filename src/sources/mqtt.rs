@@ -74,7 +74,7 @@ impl Mqtt {
         });
 
         // Main incoming MQTT queue.
-        let mqtt_in_rx = cli.get_stream(PIPE_SIZE);
+        let mqtt_in_rx = cli.get_stream(50);
 
         let rx = self.rx.take().unwrap();
         let b = spawn(async move {
