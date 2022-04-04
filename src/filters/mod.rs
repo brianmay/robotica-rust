@@ -1,6 +1,8 @@
 use std::{fmt::Debug, time::Duration};
 use tokio::sync::mpsc::Receiver;
 
+use self::split::Split;
+
 pub mod generic;
 pub mod split;
 pub mod teslamate;
@@ -43,7 +45,7 @@ pub trait ChainTimer {
 }
 
 pub trait ChainSplit<T: Send + Clone + 'static> {
-    fn split2(self) -> (Receiver<T>, Receiver<T>);
+    fn split(self) -> Split<T>;
 }
 
 impl<T: Send + Clone + 'static> ChainDiff<T> for Receiver<T> {
@@ -114,12 +116,7 @@ impl ChainTimer for Receiver<bool> {
 }
 
 impl<T: Send + Clone + 'static> ChainSplit<T> for Receiver<T> {
-    fn split2(
-        self,
-    ) -> (
-        tokio::sync::mpsc::Receiver<T>,
-        tokio::sync::mpsc::Receiver<T>,
-    ) {
-        split::split2(self)
+    fn split(self) -> Split<T> {
+        split::split(self)
     }
 }

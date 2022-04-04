@@ -158,7 +158,7 @@ Yes another rewrite. In Rust. Features:
 Limitations:
 
 * Lost the ability to automatically restart tasks. If one task fails, need to abort everything.
-* As implemented, pipes can only have 1 receiver. Need to use split function if more required. Currently only implemented split2. A splitn function would be good.
+* As implemented, pipes can only have 1 receiver. Need to use split function if more required.
 * Can only have one copy at a time. Or you will get duplicate outgoing events.
 
 Still to be implemented:
