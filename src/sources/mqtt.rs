@@ -16,7 +16,8 @@ use tokio::time::sleep;
 use tokio::time::timeout;
 use tokio::time::Instant;
 
-use crate::send_or_discard;
+use crate::recv;
+use crate::send_or_log;
 use crate::spawn;
 use crate::Pipe;
 use crate::RxPipe;
@@ -114,7 +115,7 @@ impl Mqtt {
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
                             if let Some(subscription) = subscriptions.get(topic) {
-                                send_or_discard(&subscription.tx, payload.clone());
+                                send_or_log(&subscription.tx, payload.clone());
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -173,7 +174,7 @@ impl Subscriptions {
     pub fn subscribe(&mut self, topic: &str) -> RxPipe<String> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
-            RxPipe(subscription.tx.clone(), None)
+            RxPipe::new_from_sender(subscription.tx.clone())
         } else {
             let output = Pipe::new();
 
@@ -236,7 +237,7 @@ async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
 pub fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
     let mqtt_out = (*mqtt_out).clone();
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let debug_mode: bool = match env::var("DEBUG_MODE") {
                 Ok(value) => value.to_lowercase() == "true",
                 Err(_) => false,

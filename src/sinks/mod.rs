@@ -1,10 +1,10 @@
 use tokio::sync::broadcast;
 
-use crate::{spawn, RxPipe};
+use crate::{recv, spawn, RxPipe};
 
 fn null<T: Send + Clone + 'static>(mut input: broadcast::Receiver<T>) {
     spawn(async move {
-        while (input.recv().await).is_ok() {
+        while (recv(&mut input).await).is_ok() {
             // do nothing
         }
     });

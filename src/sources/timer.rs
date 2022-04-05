@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::time;
 
-use crate::{send_or_discard, spawn, Pipe, RxPipe};
+use crate::{send_or_log, spawn, Pipe, RxPipe};
 
 pub fn timer(duration: Duration) -> RxPipe<bool> {
     let output = Pipe::new();
@@ -12,7 +12,7 @@ pub fn timer(duration: Duration) -> RxPipe<bool> {
         let mut interval = time::interval(duration);
 
         loop {
-            send_or_discard(&tx, true);
+            send_or_log(&tx, true);
             interval.tick().await;
         }
     });

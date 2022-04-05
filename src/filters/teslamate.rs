@@ -1,6 +1,6 @@
 use tokio::{select, sync::broadcast};
 
-use crate::{send_or_discard, spawn};
+use crate::{recv, send_or_log, spawn};
 
 pub fn requires_plugin(
     mut battery_level: broadcast::Receiver<usize>,
@@ -17,10 +17,10 @@ pub fn requires_plugin(
 
         loop {
             select! {
-                Ok(battery_level) = battery_level.recv() => { the_battery_level = Some(battery_level)},
-                Ok(plugged_in) = plugged_in.recv() => { the_plugged_in = Some(plugged_in)},
-                Ok(geofence) = geofence.recv() => { the_geofence = Some(geofence)},
-                Ok(reminder) = reminder.recv() => { the_reminder = Some(reminder)},
+                Ok(battery_level) = recv(&mut battery_level) => { the_battery_level = Some(battery_level)},
+                Ok(plugged_in) = recv(&mut plugged_in) => { the_plugged_in = Some(plugged_in)},
+                Ok(geofence) = recv(&mut geofence) => { the_geofence = Some(geofence)},
+                Ok(reminder) = recv(&mut reminder) => { the_reminder = Some(reminder)},
                 else => { break; }
             }
 
@@ -35,10 +35,10 @@ pub fn requires_plugin(
                 (_, _, None, _) => {}
                 (_, _, _, None) => {}
                 (Some(level), Some(false), Some("Home"), Some(true)) if level < 75 => {
-                    send_or_discard(&output, true);
+                    send_or_log(&output, true);
                 }
                 (_, _, _, _) => {
-                    send_or_discard(&output, false);
+                    send_or_log(&output, false);
                 }
             };
         }
@@ -56,8 +56,8 @@ pub fn is_insecure(
 
         loop {
             select! {
-                Ok(is_user_present) = is_user_present.recv() => { the_is_user_present = Some(is_user_present)},
-                Ok(locked) = locked.recv() => { the_locked = Some(locked)},
+                Ok(is_user_present) = recv(&mut is_user_present) => { the_is_user_present = Some(is_user_present)},
+                Ok(locked) = recv(&mut locked) => { the_locked = Some(locked)},
                 else => { break; }
             }
 
@@ -65,10 +65,10 @@ pub fn is_insecure(
                 (None, _) => {}
                 (_, None) => {}
                 (Some(false), Some(false)) => {
-                    send_or_discard(&output, false);
+                    send_or_log(&output, false);
                 }
                 (_, _) => {
-                    send_or_discard(&output, false);
+                    send_or_log(&output, false);
                 }
             };
         }

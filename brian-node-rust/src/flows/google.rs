@@ -6,7 +6,8 @@ use chrono_tz::Tz;
 
 use log::*;
 use paho_mqtt::Message;
-use robotica_node_rust::send_or_discard;
+use robotica_node_rust::recv;
+use robotica_node_rust::send_or_log;
 use robotica_node_rust::sources::mqtt::MqttOut;
 use robotica_node_rust::sources::mqtt::Subscriptions;
 use robotica_node_rust::sources::timer;
@@ -280,8 +281,8 @@ fn light_power(priorities: RxPipe<Vec<u16>>, power: RxPipe<String>) -> RxPipe<Po
 
         loop {
             select! {
-                Ok(priorities) = priorities.recv() => { the_priorities = Some(priorities)},
-                Ok(power) = power.recv() => { the_power = Some(power)},
+                Ok(priorities) = recv(&mut priorities) => { the_priorities = Some(priorities)},
+                Ok(power) = recv(&mut power) => { the_power = Some(power)},
                 else => { break; }
             }
 
@@ -302,7 +303,7 @@ fn light_power(priorities: RxPipe<Vec<u16>>, power: RxPipe<String>) -> RxPipe<Po
             };
 
             if let Some(value) = value {
-                send_or_discard(&tx, value);
+                send_or_log(&tx, value);
             }
         }
     });

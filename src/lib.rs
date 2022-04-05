@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use log::*;
 use std::future::Future;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::{sync::broadcast, task::JoinHandle};
 
 pub const PIPE_SIZE: usize = 10;
@@ -15,14 +16,29 @@ pub fn send<T>(tx: &broadcast::Sender<T>, data: T) -> Result<()> {
 
     match rc {
         Ok(_) => Ok(()),
-        Err(err) => Err(anyhow!("send operation failed: {err}")),
+        Err(err) => Err(anyhow!("send failed: {err}")),
     }
 }
 
-pub fn send_or_discard<T>(tx: &broadcast::Sender<T>, data: T) {
+pub fn send_or_log<T>(tx: &broadcast::Sender<T>, data: T) {
     send(tx, data).unwrap_or_else(|err| {
         error!("{}", err);
     });
+}
+
+pub async fn recv<T: Clone>(rx: &mut broadcast::Receiver<T>) -> Result<T, RecvError> {
+    loop {
+        match rx.recv().await {
+            Ok(v) => break Ok(v),
+            Err(err) => match err {
+                RecvError::Closed => {
+                    error!("The pipe was closed");
+                    break Err(RecvError::Closed);
+                }
+                RecvError::Lagged(_) => error!("recv failed: The pipe was lagged"),
+            },
+        }
+    }
 }
 
 pub fn spawn<T>(future: T) -> JoinHandle<T::Output>
@@ -61,31 +77,47 @@ impl<T: Clone> Pipe<T> {
         self.0.clone()
     }
 
-    // pub fn subscribe(&self) -> broadcast::Receiver<T> {
-    //     self.0.subscribe()
-    // }
-
-    pub fn to_rx_pipe(self) -> RxPipe<T> {
-        RxPipe(self.0, self.1)
+    pub fn to_rx_pipe(&self) -> RxPipe<T> {
+        RxPipe(self.0.clone(), self.0.subscribe())
     }
 
-    pub fn to_tx_pipe(self) -> TxPipe<T> {
+    pub fn to_tx_pipe(&self) -> TxPipe<T> {
         // self.1 is dropped here
-        TxPipe(self.0)
+        TxPipe(self.0.clone())
     }
 }
 
-pub struct RxPipe<T>(broadcast::Sender<T>, Option<broadcast::Receiver<T>>);
+pub struct RxPipe<T>(broadcast::Sender<T>, broadcast::Receiver<T>);
 
 impl<T: Clone> RxPipe<T> {
+    fn new_from_sender(sender: broadcast::Sender<T>) -> Self {
+        let rx = sender.subscribe();
+        Self(sender, rx)
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<T> {
         self.0.subscribe()
+    }
+
+    pub async fn recv(&mut self) -> Result<T, RecvError> {
+        loop {
+            match self.1.recv().await {
+                Ok(v) => break Ok(v),
+                Err(err) => match err {
+                    RecvError::Closed => {
+                        error!("The pipe was closed");
+                        break Err(RecvError::Closed);
+                    }
+                    RecvError::Lagged(_) => error!("recv failed: The pipe was lagged"),
+                },
+            }
+        }
     }
 }
 
 impl<T> Clone for RxPipe<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone(), Some(self.0.subscribe()))
+        Self(self.0.clone(), self.0.subscribe())
     }
 }
 

@@ -10,7 +10,7 @@ use tokio::time::MissedTickBehavior;
 
 use tokio::time;
 
-use crate::send_or_discard;
+use crate::send_or_log;
 use crate::spawn;
 use crate::Pipe;
 use crate::RxPipe;
@@ -226,7 +226,7 @@ async fn dispatch_circle_details(login: &Login, circles: &List, tx: &broadcast::
             Err(err) => error!("get_circle_details: {err}"),
             Ok(details) => {
                 for member in details.members {
-                    send_or_discard(tx, member);
+                    send_or_log(tx, member);
                 }
             }
         }

@@ -1,4 +1,4 @@
-use crate::{send_or_discard, spawn};
+use crate::{recv, send_or_log, spawn};
 use log::*;
 use tokio::{select, sync::broadcast};
 
@@ -7,14 +7,14 @@ pub fn changed<T: Send + Eq + Clone + 'static>(
     output: broadcast::Sender<T>,
 ) {
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let v = match v {
                 (None, _) => None,
                 (Some(old), new) if old == new => None,
                 (_, new) => Some(new),
             };
             if let Some(v) = v {
-                send_or_discard(&output, v);
+                send_or_log(&output, v);
             }
         }
     });
@@ -34,9 +34,9 @@ pub fn diff_with_initial_value<T: Send + Clone + 'static>(
 ) {
     spawn(async move {
         let mut old_value = initial_value;
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let v_clone = v.clone();
-            send_or_discard(&output, (old_value, v_clone));
+            send_or_log(&output, (old_value, v_clone));
             old_value = Some(v);
         }
     });
@@ -48,9 +48,9 @@ pub fn map<T: Send + Clone + 'static, U: Send + 'static>(
     callback: impl Send + 'static + Fn(T) -> U,
 ) {
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let v = callback(v);
-            send_or_discard(&output, v);
+            send_or_log(&output, v);
         }
     });
 }
@@ -63,9 +63,9 @@ pub fn map_with_state<T: Send + Clone + 'static, U: Send + 'static, V: Send + 's
 ) {
     let mut state: V = initial;
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let v = callback(&mut state, v);
-            send_or_discard(&output, v);
+            send_or_log(&output, v);
         }
     });
 }
@@ -77,9 +77,9 @@ pub fn debug<T: Send + Clone + core::fmt::Debug + 'static>(
 ) {
     let msg = msg.to_string();
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             debug!("debug {msg} {v:?}");
-            send_or_discard(&output, v);
+            send_or_log(&output, v);
         }
     });
 }
@@ -90,10 +90,10 @@ pub fn filter_map<T: Send + Clone + 'static, U: Send + 'static>(
     callback: impl Send + 'static + Fn(T) -> Option<U>,
 ) {
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let filter = callback(v);
             if let Some(v) = filter {
-                send_or_discard(&output, v);
+                send_or_log(&output, v);
             }
         }
     });
@@ -104,8 +104,8 @@ pub fn copy<T: Send + Clone + 'static>(
     output: broadcast::Sender<T>,
 ) {
     spawn(async move {
-        while let Ok(v) = input.recv().await {
-            send_or_discard(&output, v);
+        while let Ok(v) = recv(&mut input).await {
+            send_or_log(&output, v);
         }
     });
 }
@@ -116,10 +116,10 @@ pub fn filter<T: Send + Clone + 'static>(
     callback: impl Send + 'static + Fn(&T) -> bool,
 ) {
     spawn(async move {
-        while let Ok(v) = input.recv().await {
+        while let Ok(v) = recv(&mut input).await {
             let filter = callback(&v);
             if filter {
-                send_or_discard(&output, v);
+                send_or_log(&output, v);
             }
         }
     });
@@ -134,12 +134,12 @@ pub fn gate<T: Send + Clone + 'static>(
         let mut filter = true;
         loop {
             select! {
-                Ok(input) = input.recv() => {
+                Ok(input) = recv(&mut input) => {
                     if filter {
-                        send_or_discard(&output, input);
+                        send_or_log(&output, input);
                     }
                 }
-                Ok(gate) = gate.recv() => {
+                Ok(gate) = recv(&mut gate) => {
                     filter = gate;
                 }
                 else => { break; }

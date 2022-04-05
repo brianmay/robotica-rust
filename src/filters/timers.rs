@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::time::{self, sleep_until, Interval};
 use tokio::{select, sync::broadcast, time::Instant};
 
-use crate::{send_or_discard, spawn};
+use crate::{recv, send_or_log, spawn};
 
 async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     if let Some(instant) = instant {
@@ -24,17 +24,17 @@ pub fn delay_true(
 
         loop {
             select! {
-                Ok(v) = input.recv() => {
+                Ok(v) = recv(&mut input) => {
                     if v && delay_until.is_none() {
                         delay_until = Some(Instant::now() + duration);
                     } else if !v {
                         delay_until = None;
-                        send_or_discard(&output, v);
+                        send_or_log(&output, v);
                     }
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
-                    send_or_discard(&output, true)
+                    send_or_log(&output, true)
                 },
                 else => { break; }
             }
@@ -54,14 +54,14 @@ pub fn startup_delay<T: Send + Clone + 'static>(
 
         loop {
             select! {
-                Ok(v) = input.recv() => {
+                Ok(v) = recv(&mut input) => {
                     delay_until = None;
-                    send_or_discard(&output, v);
+                    send_or_log(&output, v);
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
                     if let Some(value) = value.take() {
-                        send_or_discard(&output, value);
+                        send_or_log(&output, value);
                     }
                 },
                 else => { break; }
@@ -80,17 +80,17 @@ pub fn delay_cancel(
 
         loop {
             select! {
-                Ok(v) = input.recv() => {
+                Ok(v) = recv(&mut input) => {
                     if v {
                         delay_until = Some(Instant::now() + duration);
                     } else {
                         delay_until = None;
                     }
-                    send_or_discard(&output, v);
+                    send_or_log(&output, v);
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
-                    send_or_discard(&output, false)
+                    send_or_log(&output, false)
                 },
                 else => { break; }
             }
@@ -117,16 +117,16 @@ pub fn timer_true(
 
         loop {
             select! {
-                Ok(v) = input.recv() => {
+                Ok(v) = recv(&mut input) => {
                     if v && interval.is_none() {
                         interval = Some(time::interval(duration));
                     } else if !v {
                         interval = None;
-                        send_or_discard(&output, v);
+                        send_or_log(&output, v);
                     }
                 },
                 Some(()) = maybe_tick(&mut interval) => {
-                    send_or_discard(&output, true)
+                    send_or_log(&output, true)
                 },
                 else => { break; }
             }
