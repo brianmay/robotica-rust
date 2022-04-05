@@ -44,7 +44,10 @@ where
     })
 }
 
-// #[derive(Clone)]
+// Note: For every Pipe and RxPipe we keep an open Subscription. This prevents senders from
+// getting closed errors during initialization. Such as from timers. But these early packets
+// might get dropped.
+
 pub struct Pipe<T>(broadcast::Sender<T>, Option<broadcast::Receiver<T>>);
 
 impl<T: Clone> Pipe<T> {
