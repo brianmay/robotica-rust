@@ -61,4 +61,30 @@ impl<T: Clone> Pipe<T> {
     pub fn subscribe(&self) -> broadcast::Receiver<T> {
         self.1.subscribe()
     }
+
+    pub fn to_rx_pipe(&self) -> RxPipe<T> {
+        RxPipe(self.1.clone())
+    }
+
+    pub fn to_tx_pipe(&self) -> TxPipe<T> {
+        TxPipe(self.1.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct RxPipe<T>(broadcast::Sender<T>);
+
+impl<T: Clone> RxPipe<T> {
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.0.subscribe()
+    }
+}
+
+#[derive(Clone)]
+pub struct TxPipe<T>(broadcast::Sender<T>);
+
+impl<T: Clone> TxPipe<T> {
+    pub fn get_tx(&self) -> broadcast::Sender<T> {
+        self.0.clone()
+    }
 }

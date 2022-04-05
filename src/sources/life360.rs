@@ -13,6 +13,7 @@ use tokio::time;
 use crate::send_or_discard;
 use crate::spawn;
 use crate::Pipe;
+use crate::RxPipe;
 
 #[derive(Deserialize)]
 struct Login {
@@ -135,7 +136,7 @@ struct Circle {
     members: Vec<Member>,
 }
 
-pub fn circles() -> Pipe<Member> {
+pub fn circles() -> RxPipe<Member> {
     let output = Pipe::new();
     let tx = output.get_tx();
 
@@ -167,7 +168,7 @@ pub fn circles() -> Pipe<Member> {
         }
     });
 
-    output
+    output.to_rx_pipe()
 }
 
 async fn retry_login(username: &str, password: &str) -> Login {

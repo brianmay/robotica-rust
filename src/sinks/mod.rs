@@ -1,25 +1,18 @@
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::broadcast;
 
-use crate::{spawn, PIPE_SIZE};
+use crate::{spawn, RxPipe};
 
-pub fn null<T: Send + 'static>(mut input: mpsc::Receiver<T>) -> mpsc::Receiver<T> {
-    let (_tx, rx) = mpsc::channel(PIPE_SIZE);
+fn null<T: Send + Clone + 'static>(mut input: broadcast::Receiver<T>) {
     spawn(async move {
-        while (input.recv().await).is_some() {
+        while (input.recv().await).is_ok() {
             // do nothing
         }
     });
-
-    rx
 }
 
-pub trait ChainNull<T: Send + Clone + 'static> {
-    fn null(self);
-}
-
-impl<T: Send + Clone + 'static> ChainNull<T> for Receiver<T> {
-    fn null(self) {
-        null(self);
+impl<T: Send + Clone + 'static> RxPipe<T> {
+    pub fn null(self) {
+        null(self.subscribe());
     }
 }
 
@@ -29,11 +22,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_null() {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = broadcast::channel(1);
         null(rx);
-        tx.send(10).await.unwrap();
-        tx.send(10).await.unwrap();
-        tx.send(10).await.unwrap();
-        tx.send(10).await.unwrap();
+        tx.send(10).unwrap();
+        tx.send(10).unwrap();
+        tx.send(10).unwrap();
+        tx.send(10).unwrap();
     }
 }

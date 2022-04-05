@@ -2,7 +2,7 @@ use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
     sources::mqtt::{MqttOut, Subscriptions},
-    Pipe,
+    RxPipe,
 };
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ pub trait CommonChain {
     fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut);
 }
 
-impl CommonChain for Pipe<String> {
+impl CommonChain for RxPipe<String> {
     fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         message(self, subscriptions, mqtt_out)
     }
@@ -60,7 +60,7 @@ fn string_to_message(str: String, topic: &str) -> Message {
 }
 
 pub fn message_location(
-    rx: Pipe<String>,
+    rx: RxPipe<String>,
     subscriptions: &mut Subscriptions,
     mqtt: &MqttOut,
     location: &str,
@@ -74,8 +74,18 @@ pub fn message_location(
         .publish(mqtt);
 }
 
-pub fn message(rx: &Pipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
+pub fn message(rx: &RxPipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
     let rx = rx.debug("outgoing message");
     message_location(rx.clone(), subscriptions, mqtt, "Brian");
     message_location(rx, subscriptions, mqtt, "Dining");
 }
+
+// pub fn message_sink(subscriptions: &mut Subscriptions, mqtt: &MqttOut) -> TxPipe<String> {
+//     let pipe_start = Pipe::new();
+
+//     let pipe = pipe_start.to_rx_pipe().debug("outgoing message");
+//     message_location(pipe.clone(), subscriptions, mqtt, "Brian");
+//     message_location(pipe, subscriptions, mqtt, "Dining");
+
+//     pipe_start.to_tx_pipe()
+// }

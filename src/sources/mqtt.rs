@@ -19,6 +19,7 @@ use tokio::time::Instant;
 use crate::send_or_discard;
 use crate::spawn;
 use crate::Pipe;
+use crate::RxPipe;
 
 #[derive(Debug)]
 enum MqttMessage {
@@ -169,10 +170,10 @@ impl Subscriptions {
         self.0.get(topic)
     }
 
-    pub fn subscribe(&mut self, topic: &str) -> Pipe<String> {
+    pub fn subscribe(&mut self, topic: &str) -> RxPipe<String> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
-            Pipe((), subscription.tx.clone())
+            RxPipe(subscription.tx.clone())
         } else {
             let output = Pipe::new();
 
@@ -182,7 +183,7 @@ impl Subscriptions {
             };
 
             self.0.insert(topic.to_string(), subscription);
-            output
+            output.to_rx_pipe()
         }
     }
 }

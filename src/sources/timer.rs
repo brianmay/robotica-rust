@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use tokio::time;
 
-use crate::{send_or_discard, spawn, Pipe};
+use crate::{send_or_discard, spawn, Pipe, RxPipe};
 
-pub fn timer(duration: Duration) -> Pipe<bool> {
+pub fn timer(duration: Duration) -> RxPipe<bool> {
     let output = Pipe::new();
     let tx = output.get_tx();
 
@@ -17,7 +17,7 @@ pub fn timer(duration: Duration) -> Pipe<bool> {
         }
     });
 
-    output
+    output.to_rx_pipe()
 }
 
 #[cfg(test)]

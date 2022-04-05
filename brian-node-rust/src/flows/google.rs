@@ -12,6 +12,7 @@ use robotica_node_rust::sources::mqtt::Subscriptions;
 use robotica_node_rust::sources::timer;
 use robotica_node_rust::spawn;
 use robotica_node_rust::Pipe;
+use robotica_node_rust::RxPipe;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::select;
@@ -267,7 +268,7 @@ fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_
     }
 }
 
-fn light_power(priorities: &Pipe<Vec<u16>>, power: &Pipe<String>) -> Pipe<Power> {
+fn light_power(priorities: &RxPipe<Vec<u16>>, power: &RxPipe<String>) -> RxPipe<Power> {
     let output = Pipe::new();
     let tx = output.get_tx();
     let mut priorities = priorities.subscribe();
@@ -306,5 +307,5 @@ fn light_power(priorities: &Pipe<Vec<u16>>, power: &Pipe<String>) -> Pipe<Power>
         }
     });
 
-    output
+    output.to_rx_pipe()
 }
