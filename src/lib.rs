@@ -71,6 +71,7 @@ impl<T: Clone> Pipe<T> {
     }
 
     pub fn to_tx_pipe(self) -> TxPipe<T> {
+        // self.1 is dropped here
         TxPipe(self.0)
     }
 }
@@ -89,7 +90,7 @@ impl<T: Clone> RxPipe<T> {
 
 impl<T> Clone for RxPipe<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone(), None)
+        Self(self.0.clone(), Some(self.0.subscribe()))
     }
 }
 
