@@ -44,39 +44,52 @@ where
     })
 }
 
-#[derive(Clone)]
-pub struct Pipe<T>((), broadcast::Sender<T>);
+// #[derive(Clone)]
+pub struct Pipe<T>(broadcast::Sender<T>, Option<broadcast::Receiver<T>>);
 
 impl<T: Clone> Pipe<T> {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let (out_tx, _out_rx) = broadcast::channel(PIPE_SIZE);
-        Self((), out_tx)
+        let (out_tx, out_rx) = broadcast::channel(PIPE_SIZE);
+        Self(out_tx, Some(out_rx))
     }
 
     pub fn get_tx(&self) -> broadcast::Sender<T> {
-        self.1.clone()
+        self.0.clone()
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<T> {
-        self.1.subscribe()
+    pub fn subscribe(&mut self) -> broadcast::Receiver<T> {
+        if let Some(rx) = self.1.take() {
+            rx
+        } else {
+            self.0.subscribe()
+        }
     }
 
-    pub fn to_rx_pipe(&self) -> RxPipe<T> {
-        RxPipe(self.1.clone())
+    pub fn to_rx_pipe(self) -> RxPipe<T> {
+        RxPipe(self.0, self.1)
     }
 
-    pub fn to_tx_pipe(&self) -> TxPipe<T> {
-        TxPipe(self.1.clone())
+    pub fn to_tx_pipe(self) -> TxPipe<T> {
+        TxPipe(self.0)
     }
 }
 
-#[derive(Clone)]
-pub struct RxPipe<T>(broadcast::Sender<T>);
+pub struct RxPipe<T>(broadcast::Sender<T>, Option<broadcast::Receiver<T>>);
 
 impl<T: Clone> RxPipe<T> {
-    pub fn subscribe(&self) -> broadcast::Receiver<T> {
-        self.0.subscribe()
+    pub fn subscribe(&mut self) -> broadcast::Receiver<T> {
+        if let Some(rx) = self.1.take() {
+            rx
+        } else {
+            self.0.subscribe()
+        }
+    }
+}
+
+impl<T> Clone for RxPipe<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), None)
     }
 }
 

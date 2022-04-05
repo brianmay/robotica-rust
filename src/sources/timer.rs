@@ -31,7 +31,7 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let input = timer(duration);
+        let mut input = timer(duration);
         let mut rx = input.subscribe();
 
         sleep(wait_duration).await;

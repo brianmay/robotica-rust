@@ -9,7 +9,7 @@ pub mod mqtt;
 pub mod timer;
 
 impl RxPipe<Message> {
-    pub fn publish(self, mqtt_out: &MqttOut) {
+    pub fn publish(&mut self, mqtt_out: &MqttOut) {
         mqtt::publish(self.subscribe(), mqtt_out)
     }
 }

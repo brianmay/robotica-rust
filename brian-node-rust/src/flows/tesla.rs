@@ -38,10 +38,10 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         .filter_map(string_to_integer);
 
     let topic = format!("teslamate/cars/{car_id}/plugged_in");
-    let plugged_in = subscriptions.subscribe(&topic).filter_map(string_to_bool);
+    let mut plugged_in = subscriptions.subscribe(&topic).filter_map(string_to_bool);
 
     let topic = format!("teslamate/cars/{car_id}/geofence");
-    let geofence = subscriptions.subscribe(&topic);
+    let mut geofence = subscriptions.subscribe(&topic);
 
     let topic = format!("teslamate/cars/{car_id}/is_user_present");
     let is_user_present = subscriptions.subscribe(&topic).filter_map(string_to_bool);

@@ -7,11 +7,11 @@ use robotica_node_rust::{
 use serde::{Deserialize, Serialize};
 
 pub trait CommonChain {
-    fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut);
+    fn message(&mut self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut);
 }
 
 impl CommonChain for RxPipe<String> {
-    fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+    fn message(&mut self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         message(self, subscriptions, mqtt_out)
     }
 }
@@ -60,7 +60,7 @@ fn string_to_message(str: String, topic: &str) -> Message {
 }
 
 pub fn message_location(
-    rx: RxPipe<String>,
+    mut rx: RxPipe<String>,
     subscriptions: &mut Subscriptions,
     mqtt: &MqttOut,
     location: &str,
@@ -74,7 +74,7 @@ pub fn message_location(
         .publish(mqtt);
 }
 
-pub fn message(rx: &RxPipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
+pub fn message(rx: &mut RxPipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
     let rx = rx.debug("outgoing message");
     message_location(rx.clone(), subscriptions, mqtt, "Brian");
     message_location(rx, subscriptions, mqtt, "Dining");

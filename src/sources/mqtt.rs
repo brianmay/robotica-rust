@@ -173,7 +173,7 @@ impl Subscriptions {
     pub fn subscribe(&mut self, topic: &str) -> RxPipe<String> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
-            RxPipe(subscription.tx.clone())
+            RxPipe(subscription.tx.clone(), None)
         } else {
             let output = Pipe::new();
 
