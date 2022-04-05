@@ -253,8 +253,17 @@ pub fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
 
             if !debug_mode {
                 let now = Instant::now();
-                // FIXME: add timeout?
-                mqtt_out.0.try_send(MqttMessage::MqttOut(v, now)).unwrap();
+                mqtt_out
+                    .0
+                    .try_send(MqttMessage::MqttOut(v, now))
+                    .or_else(|err| match err {
+                        mpsc::error::TrySendError::Full(_) => {
+                            error!("Discarding outgoing mqtt message as buffer full");
+                            Ok(())
+                        }
+                        err => Err(err),
+                    })
+                    .unwrap();
             }
         }
     });
