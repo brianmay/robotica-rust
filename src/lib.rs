@@ -58,12 +58,8 @@ impl<T: Clone> Pipe<T> {
         self.0.clone()
     }
 
-    // pub fn subscribe(&mut self) -> broadcast::Receiver<T> {
-    //     if let Some(rx) = self.1.take() {
-    //         rx
-    //     } else {
-    //         self.0.subscribe()
-    //     }
+    // pub fn subscribe(&self) -> broadcast::Receiver<T> {
+    //     self.0.subscribe()
     // }
 
     pub fn to_rx_pipe(self) -> RxPipe<T> {
@@ -79,12 +75,8 @@ impl<T: Clone> Pipe<T> {
 pub struct RxPipe<T>(broadcast::Sender<T>, Option<broadcast::Receiver<T>>);
 
 impl<T: Clone> RxPipe<T> {
-    pub fn subscribe(&mut self) -> broadcast::Receiver<T> {
-        if let Some(rx) = self.1.take() {
-            rx
-        } else {
-            self.0.subscribe()
-        }
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.0.subscribe()
     }
 }
 

@@ -60,7 +60,7 @@ fn string_to_message(str: String, topic: &str) -> Message {
 }
 
 pub fn message_location(
-    mut rx: RxPipe<String>,
+    rx: RxPipe<String>,
     subscriptions: &mut Subscriptions,
     mqtt: &MqttOut,
     location: &str,

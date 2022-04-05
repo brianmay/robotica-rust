@@ -91,7 +91,7 @@ fn changed_to_message(changed: Changed) -> Option<String> {
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
-    let mut circles = life360::circles().map_with_state(HashMap::new(), member_diff);
+    let circles = life360::circles().map_with_state(HashMap::new(), member_diff);
 
     circles
         .filter_map(member_changed)

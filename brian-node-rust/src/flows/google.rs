@@ -268,7 +268,7 @@ fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_
     }
 }
 
-fn light_power(mut priorities: RxPipe<Vec<u16>>, mut power: RxPipe<String>) -> RxPipe<Power> {
+fn light_power(priorities: RxPipe<Vec<u16>>, power: RxPipe<String>) -> RxPipe<Power> {
     let output = Pipe::new();
     let tx = output.get_tx();
     let mut priorities = priorities.subscribe();

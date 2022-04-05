@@ -11,7 +11,7 @@ fn null<T: Send + Clone + 'static>(mut input: broadcast::Receiver<T>) {
 }
 
 impl<T: Send + Clone + 'static> RxPipe<T> {
-    pub fn null(mut self) {
+    pub fn null(&self) {
         null(self.subscribe());
     }
 }
