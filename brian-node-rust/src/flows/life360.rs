@@ -1,17 +1,12 @@
 use std::collections::HashMap;
 
 use paho_mqtt::Message;
-use robotica_node_rust::{
-    filters::{ChainGeneric, ChainSplit},
-    sources::{
-        life360::{self, Member},
-        mqtt::{MqttMessage, Subscriptions},
-        ChainMqtt,
-    },
+use robotica_node_rust::sources::{
+    life360::{self, Member},
+    mqtt::{MqttOut, Subscriptions},
 };
-use tokio::sync::mpsc::Sender;
 
-use super::common::ChainMessage;
+use super::common::CommonChain;
 
 type MemberIndex = HashMap<String, Member>;
 
@@ -95,20 +90,19 @@ fn changed_to_message(changed: Changed) -> Option<String> {
     }
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     let circles = life360::circles().map_with_state(HashMap::new(), member_diff);
-    let (circles1, circles2) = circles.split2();
 
-    circles1
+    circles
         .filter_map(member_changed)
         .map(|m| {
             let topic = format!("life360/{}", m.id);
             let payload = serde_json::to_string(&m).unwrap();
             Message::new_retained(topic, payload, 0)
         })
-        .publish(mqtt_out.clone());
+        .publish(mqtt_out);
 
-    circles2
+    circles
         .map(member_location_changed)
         .filter_map(changed_to_message)
         .message(subscriptions, mqtt_out);

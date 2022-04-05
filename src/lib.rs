@@ -5,33 +5,24 @@ pub mod sources;
 use anyhow::anyhow;
 use anyhow::Result;
 use log::*;
-use std::{future::Future, time::Duration};
-use tokio::{sync::mpsc::Sender, task::JoinHandle, time::timeout};
+use std::future::Future;
+use tokio::{sync::broadcast, task::JoinHandle};
 
 pub const PIPE_SIZE: usize = 10;
 
-pub async fn send<T>(tx: &Sender<T>, duration: Duration, data: T) -> Result<()> {
-    let rc = timeout(duration, tx.send(data)).await;
+pub fn send<T>(tx: &broadcast::Sender<T>, data: T) -> Result<()> {
+    let rc = tx.send(data);
 
     match rc {
-        Ok(rc) => match rc {
-            Ok(_) => Ok(()),
-            Err(_) => Err(anyhow!("send operation failed: receiver closed connection")),
-        },
-        Err(_) => Err(anyhow!("send operation failed: timeout error")),
+        Ok(_) => Ok(()),
+        Err(err) => Err(anyhow!("send operation failed: {err}")),
     }
 }
 
-pub async fn send_or_panic<T>(tx: &Sender<T>, data: T) {
-    send(tx, Duration::from_secs(30), data).await.unwrap();
-}
-
-pub async fn send_or_discard<T>(tx: &Sender<T>, data: T) {
-    send(tx, Duration::from_secs(30), data)
-        .await
-        .unwrap_or_else(|err| {
-            error!("{}", err);
-        });
+pub fn send_or_discard<T>(tx: &broadcast::Sender<T>, data: T) {
+    send(tx, data).unwrap_or_else(|err| {
+        error!("{}", err);
+    });
 }
 
 pub fn spawn<T>(future: T) -> JoinHandle<T::Output>
@@ -51,4 +42,23 @@ where
 
         std::process::exit(1);
     })
+}
+
+#[derive(Clone)]
+pub struct Pipe<T>((), broadcast::Sender<T>);
+
+impl<T: Clone> Pipe<T> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let (out_tx, _out_rx) = broadcast::channel(PIPE_SIZE);
+        Self((), out_tx)
+    }
+
+    pub fn get_tx(&self) -> broadcast::Sender<T> {
+        self.1.clone()
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.1.subscribe()
+    }
 }

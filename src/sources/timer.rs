@@ -1,27 +1,28 @@
 use std::time::Duration;
 
-use tokio::sync::mpsc;
 use tokio::time;
 
-use crate::{send_or_panic, spawn, PIPE_SIZE};
+use crate::{send_or_discard, spawn, Pipe};
 
-pub fn timer(duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+pub fn timer(duration: Duration) -> Pipe<bool> {
+    let output = Pipe::new();
+    let tx = output.get_tx();
+
     spawn(async move {
         let mut interval = time::interval(duration);
 
         loop {
-            send_or_panic(&tx, true).await;
+            send_or_discard(&tx, true);
             interval.tick().await;
         }
     });
 
-    rx
+    output
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::time::timeout;
+    use tokio::time::sleep;
 
     use super::*;
 
@@ -30,11 +31,15 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let mut rx = timer(duration);
+        let input = timer(duration);
+        let mut rx = input.subscribe();
 
-        let v = timeout(wait_duration, rx.recv()).await;
-        assert!(matches!(v, Ok(Some(true))));
-        let v = timeout(wait_duration, rx.recv()).await;
-        assert!(matches!(v, Ok(Some(true))));
+        sleep(wait_duration).await;
+        let v = rx.try_recv().unwrap();
+        assert!(matches!(v, true));
+
+        sleep(wait_duration).await;
+        let v = rx.try_recv().unwrap();
+        assert!(matches!(v, true));
     }
 }

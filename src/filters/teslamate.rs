@@ -1,14 +1,14 @@
-use tokio::{select, sync::mpsc};
+use tokio::{select, sync::broadcast};
 
-use crate::{send_or_panic, spawn, PIPE_SIZE};
+use crate::{send_or_discard, spawn};
 
 pub fn requires_plugin(
-    mut battery_level: mpsc::Receiver<usize>,
-    mut plugged_in: mpsc::Receiver<bool>,
-    mut geofence: mpsc::Receiver<String>,
-    mut reminder: mpsc::Receiver<bool>,
-) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+    mut battery_level: broadcast::Receiver<usize>,
+    mut plugged_in: broadcast::Receiver<bool>,
+    mut geofence: broadcast::Receiver<String>,
+    mut reminder: broadcast::Receiver<bool>,
+    output: broadcast::Sender<bool>,
+) {
     spawn(async move {
         let mut the_battery_level: Option<usize> = None;
         let mut the_plugged_in: Option<bool> = None;
@@ -17,10 +17,10 @@ pub fn requires_plugin(
 
         loop {
             select! {
-                Some(battery_level) = battery_level.recv() => { the_battery_level = Some(battery_level)},
-                Some(plugged_in) = plugged_in.recv() => { the_plugged_in = Some(plugged_in)},
-                Some(geofence) = geofence.recv() => { the_geofence = Some(geofence)},
-                Some(reminder) = reminder.recv() => { the_reminder = Some(reminder)},
+                Ok(battery_level) = battery_level.recv() => { the_battery_level = Some(battery_level)},
+                Ok(plugged_in) = plugged_in.recv() => { the_plugged_in = Some(plugged_in)},
+                Ok(geofence) = geofence.recv() => { the_geofence = Some(geofence)},
+                Ok(reminder) = reminder.recv() => { the_reminder = Some(reminder)},
                 else => { break; }
             }
 
@@ -35,31 +35,29 @@ pub fn requires_plugin(
                 (_, _, None, _) => {}
                 (_, _, _, None) => {}
                 (Some(level), Some(false), Some("Home"), Some(true)) if level < 75 => {
-                    send_or_panic(&tx, true).await;
+                    send_or_discard(&output, true);
                 }
                 (_, _, _, _) => {
-                    send_or_panic(&tx, false).await;
+                    send_or_discard(&output, false);
                 }
             };
         }
     });
-
-    rx
 }
 
 pub fn is_insecure(
-    mut is_user_present: mpsc::Receiver<bool>,
-    mut locked: mpsc::Receiver<bool>,
-) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+    mut is_user_present: broadcast::Receiver<bool>,
+    mut locked: broadcast::Receiver<bool>,
+    output: broadcast::Sender<bool>,
+) {
     spawn(async move {
         let mut the_is_user_present: Option<bool> = None;
         let mut the_locked: Option<bool> = None;
 
         loop {
             select! {
-                Some(is_user_present) = is_user_present.recv() => { the_is_user_present = Some(is_user_present)},
-                Some(locked) = locked.recv() => { the_locked = Some(locked)},
+                Ok(is_user_present) = is_user_present.recv() => { the_is_user_present = Some(is_user_present)},
+                Ok(locked) = locked.recv() => { the_locked = Some(locked)},
                 else => { break; }
             }
 
@@ -67,14 +65,12 @@ pub fn is_insecure(
                 (None, _) => {}
                 (_, None) => {}
                 (Some(false), Some(false)) => {
-                    send_or_panic(&tx, false).await;
+                    send_or_discard(&output, false);
                 }
                 (_, _) => {
-                    send_or_panic(&tx, false).await;
+                    send_or_discard(&output, false);
                 }
             };
         }
     });
-
-    rx
 }

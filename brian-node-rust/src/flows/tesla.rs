@@ -1,15 +1,11 @@
 use std::time::Duration;
 
 use robotica_node_rust::{
-    filters::{
-        teslamate::{is_insecure, requires_plugin},
-        ChainChanged, ChainDebug, ChainDiff, ChainGeneric, ChainSplit, ChainTimer,
-    },
-    sources::mqtt::{MqttMessage, Subscriptions},
+    filters::{is_insecure, requires_plugin},
+    sources::mqtt::{MqttOut, Subscriptions},
 };
-use tokio::sync::mpsc::Sender;
 
-use super::common::{power_to_bool, string_to_bool, string_to_integer, ChainMessage};
+use super::common::{power_to_bool, string_to_bool, string_to_integer, CommonChain};
 
 fn geofence_to_message((old, new): (Option<String>, String)) -> Option<String> {
     match (old.as_deref(), new.as_str()) {
@@ -31,11 +27,11 @@ fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
     }
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     car(1, subscriptions, mqtt_out);
 }
 
-fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     let topic = format!("teslamate/cars/{car_id}/battery_level");
     let battery_level = subscriptions
         .subscribe(&topic)
@@ -56,16 +52,13 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
     let topic = String::from("state/Brian/TeslaReminder/power");
     let reminder = subscriptions.subscribe(&topic).map(power_to_bool);
 
-    let (plugged_in1, plugged_in2) = plugged_in.split2();
-    let (geofence1, geofence2) = geofence.split2();
-
-    geofence1
+    geofence
         .debug("geofence")
         .diff()
         .filter_map(geofence_to_message)
         .message(subscriptions, mqtt_out);
 
-    plugged_in1
+    plugged_in
         .debug("plugged_in")
         .diff()
         .filter_map(plugged_in_to_message)
@@ -86,7 +79,7 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttM
         })
         .message(subscriptions, mqtt_out);
 
-    requires_plugin(battery_level, plugged_in2, geofence2, reminder)
+    requires_plugin(battery_level, plugged_in, geofence, reminder)
         .debug("requires_plugin")
         .diff()
         .changed()

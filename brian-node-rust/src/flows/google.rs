@@ -6,25 +6,15 @@ use chrono_tz::Tz;
 
 use log::*;
 use paho_mqtt::Message;
+use robotica_node_rust::send_or_discard;
+use robotica_node_rust::sources::mqtt::MqttOut;
+use robotica_node_rust::sources::mqtt::Subscriptions;
+use robotica_node_rust::sources::timer;
 use robotica_node_rust::spawn;
-use robotica_node_rust::PIPE_SIZE;
-use robotica_node_rust::{
-    filters::ChainChanged,
-    filters::ChainDiff,
-    filters::ChainGeneric,
-    send_or_panic,
-    sources::{
-        mqtt::{MqttMessage, Subscriptions},
-        timer::timer,
-        ChainMqtt,
-    },
-};
+use robotica_node_rust::Pipe;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tokio::{
-    select,
-    sync::mpsc::{self, Receiver, Sender},
-};
+use tokio::select;
 
 use super::robotica::string_to_power;
 use super::robotica::Power;
@@ -50,7 +40,7 @@ struct GoogleCommand {
     online: bool,
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     light("Brian", "Light", subscriptions, mqtt_out);
     light("Dining", "Light", subscriptions, mqtt_out);
     light("Passage", "Light", subscriptions, mqtt_out);
@@ -210,12 +200,7 @@ fn color_to_message(color: RoboticaAutoColor, location: &str, device: &str) -> M
     Message::new_retained(topic, payload, 0)
 }
 
-fn light(
-    location: &str,
-    device: &str,
-    subscriptions: &mut Subscriptions,
-    mqtt_out: &Sender<MqttMessage>,
-) {
+fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     {
         let location = location.to_string();
         let device = device.to_string();
@@ -223,7 +208,7 @@ fn light(
         subscriptions
             .subscribe(&topic)
             .filter_map(move |payload| light_google_to_robotica(payload, &location, &device))
-            .publish(mqtt_out.clone());
+            .publish(mqtt_out);
     }
 
     {
@@ -238,9 +223,9 @@ fn light(
 
         let location = location.to_string();
         let device = device.to_string();
-        light_power(priorities, power_str)
+        light_power(&priorities, &power_str)
             .map(move |power| robotica_to_google(power, &location, &device))
-            .publish(mqtt_out.clone());
+            .publish(mqtt_out);
     }
 
     {
@@ -248,21 +233,16 @@ fn light(
         let device1 = device.to_string();
         let location2 = location.to_string();
         let device2 = device.to_string();
-        timer(Duration::from_secs(60))
+        timer::timer(Duration::from_secs(60))
             .map(move |_| timer_to_color(&location1, &device1))
             .diff()
             .changed()
             .map(move |c| color_to_message(c, &location2, &device2))
-            .publish(mqtt_out.clone());
+            .publish(mqtt_out);
     }
 }
 
-fn device(
-    location: &str,
-    device: &str,
-    subscriptions: &mut Subscriptions,
-    mqtt_out: &Sender<MqttMessage>,
-) {
+fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     {
         let location = location.to_string();
         let device = device.to_string();
@@ -271,7 +251,7 @@ fn device(
         subscriptions
             .subscribe(&topic)
             .filter_map(move |payload| device_google_to_robotica(payload, &location, &device))
-            .publish(mqtt_out.clone());
+            .publish(mqtt_out);
     }
 
     {
@@ -283,23 +263,24 @@ fn device(
             .subscribe(&topic)
             .map(string_to_power)
             .map(move |power| robotica_to_google(power, &location, &device))
-            .publish(mqtt_out.clone());
+            .publish(mqtt_out);
     }
 }
 
-fn light_power(
-    mut priorities: mpsc::Receiver<Vec<u16>>,
-    mut power: mpsc::Receiver<String>,
-) -> Receiver<Power> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+fn light_power(priorities: &Pipe<Vec<u16>>, power: &Pipe<String>) -> Pipe<Power> {
+    let output = Pipe::new();
+    let tx = output.get_tx();
+    let mut priorities = priorities.subscribe();
+    let mut power = power.subscribe();
+
     spawn(async move {
         let mut the_priorities: Option<Vec<u16>> = None;
         let mut the_power: Option<String> = None;
 
         loop {
             select! {
-                Some(priorities) = priorities.recv() => { the_priorities = Some(priorities)},
-                Some(power) = power.recv() => { the_power = Some(power)},
+                Ok(priorities) = priorities.recv() => { the_priorities = Some(priorities)},
+                Ok(power) = power.recv() => { the_power = Some(power)},
                 else => { break; }
             }
 
@@ -320,10 +301,10 @@ fn light_power(
             };
 
             if let Some(value) = value {
-                send_or_panic(&tx, value).await;
+                send_or_discard(&tx, value);
             }
         }
     });
 
-    rx
+    output
 }

@@ -1,13 +1,8 @@
 use std::time::Duration;
 
 use paho_mqtt::Message;
-use robotica_node_rust::{
-    filters::{ChainChanged, ChainDebug, ChainDiff, ChainGeneric, ChainTimer},
-    sources::mqtt::{MqttMessage, Subscriptions},
-    sources::ChainMqtt,
-};
+use robotica_node_rust::sources::mqtt::{MqttOut, Subscriptions};
 use serde::Deserialize;
-use tokio::sync::mpsc::Sender;
 
 use super::robotica::RoboticaLightCommand;
 
@@ -25,7 +20,7 @@ struct Beacon {
     interval: u32,
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) {
+pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     subscriptions
         .subscribe("espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian")
         .map(|s| {
@@ -57,5 +52,5 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>) 
             let payload = serde_json::to_string(&command).unwrap();
             Message::new(topic, payload, 0)
         })
-        .publish(mqtt_out.clone());
+        .publish(mqtt_out);
 }

@@ -1,18 +1,15 @@
 use paho_mqtt::Message;
-use tokio::sync::mpsc::{Receiver, Sender};
 
-use self::mqtt::MqttMessage;
+use crate::Pipe;
+
+use self::mqtt::MqttOut;
 
 pub mod life360;
 pub mod mqtt;
 pub mod timer;
 
-pub trait ChainMqtt {
-    fn publish(self, mqtt_out: Sender<MqttMessage>);
-}
-
-impl ChainMqtt for Receiver<Message> {
-    fn publish(self, mqtt_out: tokio::sync::mpsc::Sender<MqttMessage>) {
-        mqtt::publish(self, mqtt_out)
+impl Pipe<Message> {
+    pub fn publish(self, mqtt_out: &MqttOut) {
+        mqtt::publish(self.subscribe(), mqtt_out)
     }
 }

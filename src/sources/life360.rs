@@ -5,17 +5,14 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::min;
 use std::{env, time::Duration};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::broadcast;
 use tokio::time::MissedTickBehavior;
 
-use tokio::{
-    sync::mpsc,
-    time::{self},
-};
+use tokio::time;
 
-use crate::send_or_panic;
+use crate::send_or_discard;
 use crate::spawn;
-use crate::PIPE_SIZE;
+use crate::Pipe;
 
 #[derive(Deserialize)]
 struct Login {
@@ -138,8 +135,10 @@ struct Circle {
     members: Vec<Member>,
 }
 
-pub fn circles() -> mpsc::Receiver<Member> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+pub fn circles() -> Pipe<Member> {
+    let output = Pipe::new();
+    let tx = output.get_tx();
+
     spawn(async move {
         let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
         let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
@@ -167,7 +166,8 @@ pub fn circles() -> mpsc::Receiver<Member> {
             }
         }
     });
-    rx
+
+    output
 }
 
 async fn retry_login(username: &str, password: &str) -> Login {
@@ -219,13 +219,13 @@ async fn get_circles_or_none(login: &Login) -> Option<List> {
     }
 }
 
-async fn dispatch_circle_details(login: &Login, circles: &List, tx: &Sender<Member>) {
+async fn dispatch_circle_details(login: &Login, circles: &List, tx: &broadcast::Sender<Member>) {
     for circle in &circles.circles {
         match get_circle_details(login, circle).await {
             Err(err) => error!("get_circle_details: {err}"),
             Ok(details) => {
                 for member in details.members {
-                    send_or_panic(tx, member).await;
+                    send_or_discard(tx, member);
                 }
             }
         }

@@ -1,125 +1,134 @@
 use std::{fmt::Debug, time::Duration};
-use tokio::sync::mpsc::Receiver;
 
-pub mod generic;
-pub mod split;
-pub mod teslamate;
-pub mod timers;
+use crate::Pipe;
 
-pub trait ChainDiff<T> {
-    fn diff(self) -> Receiver<(Option<T>, T)>;
-    fn diff_with_initial_value(self, initial_value: Option<T>) -> Receiver<(Option<T>, T)>;
+mod generic;
+mod teslamate;
+mod timers;
+
+impl<T: Send + Clone + 'static> Pipe<T> {
+    pub fn diff(&self) -> Pipe<(Option<T>, T)> {
+        let output = Pipe::new();
+        generic::diff(self.subscribe(), output.get_tx());
+        output
+    }
+    pub fn diff_with_initial_value(&self, initial_value: Option<T>) -> Pipe<(Option<T>, T)> {
+        let output = Pipe::new();
+        generic::diff_with_initial_value(self.subscribe(), output.get_tx(), initial_value);
+        output
+    }
 }
 
-pub trait ChainChanged<T> {
-    fn changed(self) -> Receiver<T>;
+impl<T: Send + Eq + Clone + 'static> Pipe<(Option<T>, T)> {
+    pub fn changed(&self) -> Pipe<T> {
+        let output = Pipe::new();
+        generic::changed(self.subscribe(), output.get_tx());
+        output
+    }
 }
 
-pub trait ChainDebug<T> {
-    fn debug(self, msg: &str) -> Receiver<T>;
+impl<T: Send + Debug + Clone + 'static> Pipe<T> {
+    pub fn debug(&self, msg: &str) -> Pipe<T> {
+        let output = Pipe::new();
+        generic::debug(self.subscribe(), output.get_tx(), msg);
+        output
+    }
 }
 
-pub trait ChainGeneric<T> {
-    fn map<U: Send + 'static>(self, callback: impl Send + 'static + Fn(T) -> U) -> Receiver<U>;
-    fn map_with_state<U: Send + 'static, V: Send + 'static>(
-        self,
+impl<T: Send + Clone + 'static> Pipe<T> {
+    pub fn map<U: Send + Clone + 'static>(
+        &self,
+        callback: impl Send + 'static + Fn(T) -> U,
+    ) -> Pipe<U> {
+        let output = Pipe::new();
+        generic::map(self.subscribe(), output.get_tx(), callback);
+        output
+    }
+
+    pub fn map_with_state<U: Send + Clone + 'static, V: Send + 'static>(
+        &self,
         initial: V,
         callback: impl Send + 'static + Fn(&mut V, T) -> U,
-    ) -> Receiver<U>;
+    ) -> Pipe<U> {
+        let output = Pipe::new();
+        generic::map_with_state(self.subscribe(), output.get_tx(), initial, callback);
+        output
+    }
 
-    fn filter_map<U: Send + 'static>(
-        self,
+    pub fn filter_map<U: Send + Clone + 'static>(
+        &self,
         callback: impl Send + 'static + Fn(T) -> Option<U>,
-    ) -> Receiver<U>;
-    fn filter(self, callback: impl Send + 'static + Fn(&T) -> bool) -> Receiver<T>;
-    fn gate(self, gate: Receiver<bool>) -> Receiver<T>;
-    fn startup_delay(self, duration: Duration, value: T) -> Receiver<T>;
-}
-
-pub trait ChainTimer {
-    fn delay_true(self, duration: Duration) -> Receiver<bool>;
-    fn delay_cancel(self, duration: Duration) -> Receiver<bool>;
-    fn timer_true(self, duration: Duration) -> Receiver<bool>;
-}
-
-pub trait ChainSplit<T: Send + Clone + 'static> {
-    fn split2(self) -> (Receiver<T>, Receiver<T>);
-}
-
-impl<T: Send + Clone + 'static> ChainDiff<T> for Receiver<T> {
-    fn diff(self) -> Receiver<(Option<T>, T)> {
-        generic::diff(self)
+    ) -> Pipe<U> {
+        let output = Pipe::new();
+        generic::filter_map(self.subscribe(), output.get_tx(), callback);
+        output
     }
-    fn diff_with_initial_value(self, initial_value: Option<T>) -> Receiver<(Option<T>, T)> {
-        generic::diff_with_initial_value(self, initial_value)
-    }
-}
 
-impl<T: Send + Eq + 'static> ChainChanged<T> for Receiver<(Option<T>, T)> {
-    fn changed(self) -> Receiver<T> {
-        generic::changed(self)
+    pub fn filter(&self, callback: impl Send + 'static + Fn(&T) -> bool) -> Pipe<T> {
+        let output = Pipe::new();
+        generic::filter(self.subscribe(), output.get_tx(), callback);
+        output
+    }
+
+    pub fn gate(&self, gate: Pipe<bool>) -> Pipe<T> {
+        let output = Pipe::new();
+        generic::gate(self.subscribe(), gate.subscribe(), output.get_tx());
+        output
+    }
+
+    pub fn startup_delay(&self, duration: Duration, value: T) -> Pipe<T> {
+        let output = Pipe::new();
+        timers::startup_delay(self.subscribe(), output.get_tx(), duration, value);
+        output
+    }
+
+    pub fn copy_to(&self, output: Pipe<T>) {
+        generic::copy(self.subscribe(), output.get_tx());
     }
 }
 
-impl<T: Send + Debug + 'static> ChainDebug<T> for Receiver<T> {
-    fn debug(self, msg: &str) -> Receiver<T> {
-        generic::debug(self, msg)
+impl Pipe<bool> {
+    pub fn delay_true(&self, duration: Duration) -> Pipe<bool> {
+        let output = Pipe::new();
+        timers::delay_true(self.subscribe(), output.get_tx(), duration);
+        output
+    }
+    pub fn delay_cancel(&self, duration: Duration) -> Pipe<bool> {
+        let output = Pipe::new();
+        timers::delay_cancel(self.subscribe(), output.get_tx(), duration);
+        output
+    }
+
+    pub fn timer_true(&self, duration: Duration) -> Pipe<bool> {
+        let output = Pipe::new();
+        timers::timer_true(self.subscribe(), output.get_tx(), duration);
+        output
     }
 }
 
-impl<T: Send + 'static> ChainGeneric<T> for Receiver<T> {
-    fn map<U: Send + 'static>(self, callback: impl Send + 'static + Fn(T) -> U) -> Receiver<U> {
-        generic::map(self, callback)
-    }
-
-    fn map_with_state<U: Send + 'static, V: Send + 'static>(
-        self,
-        initial: V,
-        callback: impl Send + 'static + Fn(&mut V, T) -> U,
-    ) -> Receiver<U> {
-        generic::map_with_state(self, initial, callback)
-    }
-
-    fn filter_map<U: Send + 'static>(
-        self,
-        callback: impl Send + 'static + Fn(T) -> Option<U>,
-    ) -> Receiver<U> {
-        generic::filter_map(self, callback)
-    }
-
-    fn filter(self, callback: impl Send + 'static + Fn(&T) -> bool) -> Receiver<T> {
-        generic::filter(self, callback)
-    }
-
-    fn gate(self, gate: Receiver<bool>) -> Receiver<T> {
-        generic::gate(self, gate)
-    }
-
-    fn startup_delay(self, duration: Duration, value: T) -> Receiver<T> {
-        timers::startup_delay(self, duration, value)
-    }
+pub fn requires_plugin(
+    battery_level: Pipe<usize>,
+    plugged_in: Pipe<bool>,
+    geofence: Pipe<String>,
+    reminder: Pipe<bool>,
+) -> Pipe<bool> {
+    let output = Pipe::new();
+    teslamate::requires_plugin(
+        battery_level.subscribe(),
+        plugged_in.subscribe(),
+        geofence.subscribe(),
+        reminder.subscribe(),
+        output.get_tx(),
+    );
+    output
 }
 
-impl ChainTimer for Receiver<bool> {
-    fn delay_true(self, duration: Duration) -> Receiver<bool> {
-        timers::delay_true(self, duration)
-    }
-    fn delay_cancel(self, duration: Duration) -> Receiver<bool> {
-        timers::delay_cancel(self, duration)
-    }
-
-    fn timer_true(self, duration: Duration) -> Receiver<bool> {
-        timers::timer_true(self, duration)
-    }
-}
-
-impl<T: Send + Clone + 'static> ChainSplit<T> for Receiver<T> {
-    fn split2(
-        self,
-    ) -> (
-        tokio::sync::mpsc::Receiver<T>,
-        tokio::sync::mpsc::Receiver<T>,
-    ) {
-        split::split2(self)
-    }
+pub fn is_insecure(is_user_present: Pipe<bool>, locked: Pipe<bool>) -> Pipe<bool> {
+    let output = Pipe::new();
+    teslamate::is_insecure(
+        is_user_present.subscribe(),
+        locked.subscribe(),
+        output.get_tx(),
+    );
+    output
 }

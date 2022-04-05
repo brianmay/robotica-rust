@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use tokio::time::{self, sleep_until, Interval};
-use tokio::{select, sync::mpsc, time::Instant};
+use tokio::{select, sync::broadcast, time::Instant};
 
-use crate::{send_or_panic, spawn, PIPE_SIZE};
+use crate::{send_or_discard, spawn};
 
 async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     if let Some(instant) = instant {
@@ -14,88 +14,88 @@ async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     }
 }
 
-pub fn delay_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+pub fn delay_true(
+    mut input: broadcast::Receiver<bool>,
+    output: broadcast::Sender<bool>,
+    duration: Duration,
+) {
     spawn(async move {
         let mut delay_until: Option<Instant> = None;
 
         loop {
             select! {
-                Some(v) = input.recv() => {
+                Ok(v) = input.recv() => {
                     if v && delay_until.is_none() {
                         delay_until = Some(Instant::now() + duration);
                     } else if !v {
                         delay_until = None;
-                        send_or_panic(&tx, v).await;
+                        send_or_discard(&output, v);
                     }
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
-                    send_or_panic(&tx, true).await
+                    send_or_discard(&output, true)
                 },
                 else => { break; }
             }
         }
     });
-
-    rx
 }
 
-pub fn startup_delay<T: Send + 'static>(
-    mut input: mpsc::Receiver<T>,
+pub fn startup_delay<T: Send + Clone + 'static>(
+    mut input: broadcast::Receiver<T>,
+    output: broadcast::Sender<T>,
     duration: Duration,
     value: T,
-) -> mpsc::Receiver<T> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+) {
     spawn(async move {
         let mut delay_until: Option<Instant> = Some(Instant::now() + duration);
         let mut value = Some(value);
 
         loop {
             select! {
-                Some(v) = input.recv() => {
+                Ok(v) = input.recv() => {
                     delay_until = None;
-                    send_or_panic(&tx, v).await;
+                    send_or_discard(&output, v);
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
                     if let Some(value) = value.take() {
-                        send_or_panic(&tx, value).await;
+                        send_or_discard(&output, value);
                     }
                 },
                 else => { break; }
             }
         }
     });
-
-    rx
 }
 
-pub fn delay_cancel(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+pub fn delay_cancel(
+    mut input: broadcast::Receiver<bool>,
+    output: broadcast::Sender<bool>,
+    duration: Duration,
+) {
     spawn(async move {
         let mut delay_until: Option<Instant> = None;
 
         loop {
             select! {
-                Some(v) = input.recv() => {
+                Ok(v) = input.recv() => {
                     if v {
                         delay_until = Some(Instant::now() + duration);
                     } else {
                         delay_until = None;
                     }
-                    send_or_panic(&tx, v).await;
+                    send_or_discard(&output, v);
                 },
                 Some(()) = maybe_sleep_until(delay_until) => {
                     delay_until = None;
-                    send_or_panic(&tx, false).await
+                    send_or_discard(&output, false)
                 },
                 else => { break; }
             }
         }
     });
-
-    rx
 }
 
 async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
@@ -107,35 +107,36 @@ async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
     }
 }
 
-pub fn timer_true(mut input: mpsc::Receiver<bool>, duration: Duration) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+pub fn timer_true(
+    mut input: broadcast::Receiver<bool>,
+    output: broadcast::Sender<bool>,
+    duration: Duration,
+) {
     spawn(async move {
         let mut interval: Option<Interval> = None;
 
         loop {
             select! {
-                Some(v) = input.recv() => {
+                Ok(v) = input.recv() => {
                     if v && interval.is_none() {
                         interval = Some(time::interval(duration));
                     } else if !v {
                         interval = None;
-                        send_or_panic(&tx, v).await;
+                        send_or_discard(&output, v);
                     }
                 },
                 Some(()) = maybe_tick(&mut interval) => {
-                    send_or_panic(&tx, true).await
+                    send_or_discard(&output, true)
                 },
                 else => { break; }
             }
         }
     });
-
-    rx
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::time::timeout;
+    use tokio::time::sleep;
 
     use super::*;
 
@@ -144,21 +145,23 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let (tx, rx) = mpsc::channel(PIPE_SIZE);
-        let mut rx = delay_true(rx, duration);
+        let (tx, in_rx) = broadcast::channel(10);
+        let (out_tx, mut rx) = broadcast::channel(10);
+        delay_true(in_rx, out_tx, duration);
 
-        tx.send(false).await.unwrap();
+        tx.send(false).unwrap();
         let v = rx.recv().await.unwrap();
         assert!(!v);
 
-        tx.send(true).await.unwrap();
-        tx.send(false).await.unwrap();
+        tx.send(true).unwrap();
+        tx.send(false).unwrap();
         let v = rx.recv().await.unwrap();
         assert!(!v);
 
-        tx.send(true).await.unwrap();
-        let v = timeout(wait_duration, rx.recv()).await;
-        assert!(matches!(v, Ok(Some(true))));
+        tx.send(true).unwrap();
+        sleep(wait_duration).await;
+        let v = rx.try_recv().unwrap();
+        assert!(matches!(v, true));
     }
 
     #[tokio::test]
@@ -166,23 +169,27 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let (tx, rx) = mpsc::channel(PIPE_SIZE);
-        let mut rx = timer_true(rx, duration);
+        let (tx, in_rx) = broadcast::channel(10);
+        let (out_tx, mut rx) = broadcast::channel(10);
+        timer_true(in_rx, out_tx, duration);
 
-        tx.send(false).await.unwrap();
+        tx.send(false).unwrap();
         let v = rx.recv().await.unwrap();
         assert!(!v);
 
-        tx.send(true).await.unwrap();
-        tx.send(false).await.unwrap();
-        // Note: Possible race condition, one true value could get sent before timer gets cancelled.
+        tx.send(true).unwrap();
+        tx.send(false).unwrap();
+        // FIXME: Possible race condition, one true value could get sent before timer gets cancelled.
         let v = rx.recv().await.unwrap();
         assert!(!v);
 
-        tx.send(true).await.unwrap();
-        let v = timeout(wait_duration, rx.recv()).await;
-        assert!(matches!(v, Ok(Some(true))));
-        let v = timeout(wait_duration, rx.recv()).await;
-        assert!(matches!(v, Ok(Some(true))));
+        tx.send(true).unwrap();
+        sleep(wait_duration).await;
+        let v = rx.try_recv().unwrap();
+        assert!(matches!(v, true));
+
+        sleep(wait_duration).await;
+        let v = rx.try_recv().unwrap();
+        assert!(matches!(v, true));
     }
 }

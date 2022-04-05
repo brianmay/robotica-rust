@@ -1,25 +1,17 @@
 use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
-    filters::{split::split2, ChainDebug, ChainGeneric},
-    sources::{
-        mqtt::{MqttMessage, Subscriptions},
-        ChainMqtt,
-    },
+    sources::mqtt::{MqttOut, Subscriptions},
+    Pipe,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{Receiver, Sender};
 
-pub trait ChainMessage {
-    fn message(self, subscriptions: &mut Subscriptions, mqtt_out: &Sender<MqttMessage>);
+pub trait CommonChain {
+    fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut);
 }
 
-impl ChainMessage for Receiver<String> {
-    fn message(
-        self,
-        subscriptions: &mut Subscriptions,
-        mqtt_out: &tokio::sync::mpsc::Sender<MqttMessage>,
-    ) {
+impl CommonChain for Pipe<String> {
+    fn message(&self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         message(self, subscriptions, mqtt_out)
     }
 }
@@ -68,28 +60,22 @@ fn string_to_message(str: String, topic: &str) -> Message {
 }
 
 pub fn message_location(
-    rx: Receiver<String>,
+    rx: Pipe<String>,
     subscriptions: &mut Subscriptions,
-    mqtt: &Sender<MqttMessage>,
+    mqtt: &MqttOut,
     location: &str,
 ) {
     let gate_topic = format!("state/{}/Messages/power", location);
     let command_topic = format!("command/{}/Robotica", location);
-
     let do_gate = subscriptions.subscribe(&gate_topic).map(power_to_bool);
 
     rx.gate(do_gate)
         .map(move |v| string_to_message(v, &command_topic))
-        .publish(mqtt.clone());
+        .publish(mqtt);
 }
 
-pub fn message(
-    rx: Receiver<String>,
-    subscriptions: &mut Subscriptions,
-    mqtt: &Sender<MqttMessage>,
-) {
+pub fn message(rx: &Pipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
     let rx = rx.debug("outgoing message");
-    let (rx1, rx2) = split2(rx);
-    message_location(rx1, subscriptions, mqtt, "Brian");
-    message_location(rx2, subscriptions, mqtt, "Dining");
+    message_location(rx.clone(), subscriptions, mqtt, "Brian");
+    message_location(rx, subscriptions, mqtt, "Dining");
 }

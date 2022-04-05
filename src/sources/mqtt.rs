@@ -1,4 +1,3 @@
-use anyhow::Result;
 use log::*;
 use paho_mqtt::AsyncClient;
 use paho_mqtt::ConnectOptionsBuilder;
@@ -10,6 +9,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::{env, str};
 use tokio::select;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -17,20 +17,22 @@ use tokio::time::timeout;
 use tokio::time::Instant;
 
 use crate::send_or_discard;
-use crate::send_or_panic;
 use crate::spawn;
-use crate::PIPE_SIZE;
+use crate::Pipe;
 
 #[derive(Debug)]
-pub enum MqttMessage {
+enum MqttMessage {
     MqttOut(Message, Instant),
 }
 
 pub struct Mqtt {
     b: Option<JoinHandle<()>>,
     rx: Option<mpsc::Receiver<MqttMessage>>,
-    tx: Option<mpsc::Sender<MqttMessage>>,
+    tx: mpsc::Sender<MqttMessage>,
 }
+
+#[derive(Clone)]
+pub struct MqttOut(mpsc::Sender<MqttMessage>);
 
 impl Mqtt {
     pub async fn new() -> Self {
@@ -40,14 +42,12 @@ impl Mqtt {
         Mqtt {
             b: None,
             rx: Some(main_rx),
-            tx: Some(main_tx),
+            tx: main_tx,
         }
     }
 
-    pub fn take_tx(&mut self) -> Result<mpsc::Sender<MqttMessage>> {
-        self.tx
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("tx value taken"))
+    pub fn get_mqtt_out(&mut self) -> MqttOut {
+        MqttOut(self.tx.clone())
     }
 
     pub fn connect(&mut self, subscriptions: Subscriptions) {
@@ -112,8 +112,8 @@ impl Mqtt {
                             let payload = msg.payload();
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
-                            for subscription in subscriptions.get(topic) {
-                                send_or_panic(&subscription.tx, payload.clone()).await;
+                            if let Some(subscription) = subscriptions.get(topic) {
+                                send_or_discard(&subscription.tx, payload.clone());
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -155,36 +155,35 @@ impl Mqtt {
 struct Subscription {
     #[allow(dead_code)]
     topic: String,
-    tx: mpsc::Sender<String>,
+    tx: broadcast::Sender<String>,
 }
 
-pub struct Subscriptions(HashMap<String, Vec<Subscription>>);
+pub struct Subscriptions(HashMap<String, Subscription>);
 
 impl Subscriptions {
     pub fn new() -> Self {
         Subscriptions(HashMap::new())
     }
 
-    fn get(&self, topic: &str) -> Vec<Subscription> {
-        match self.0.get(topic) {
-            Some(list) => (*list).clone(),
-            None => vec![],
-        }
+    fn get(&self, topic: &str) -> Option<&Subscription> {
+        self.0.get(topic)
     }
 
-    pub fn subscribe(&mut self, topic: &str) -> mpsc::Receiver<String> {
+    pub fn subscribe(&mut self, topic: &str) -> Pipe<String> {
         // Per subscription incoming MQTT queue.
-        let (tx, rx) = mpsc::channel(PIPE_SIZE);
-        let subscription = Subscription {
-            topic: topic.to_string(),
-            tx,
-        };
-        if let Some(list) = self.0.get_mut(topic) {
-            list.push(subscription);
+        if let Some(subscription) = self.0.get(topic) {
+            Pipe((), subscription.tx.clone())
         } else {
-            self.0.insert(topic.to_string(), vec![subscription]);
+            let output = Pipe::new();
+
+            let subscription = Subscription {
+                topic: topic.to_string(),
+                tx: output.get_tx(),
+            };
+
+            self.0.insert(topic.to_string(), subscription);
+            output
         }
-        rx
     }
 }
 
@@ -233,9 +232,10 @@ async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
     }
 }
 
-pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMessage>) {
+pub fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
+    let mqtt_out = (*mqtt_out).clone();
     spawn(async move {
-        while let Some(v) = input.recv().await {
+        while let Ok(v) = input.recv().await {
             let debug_mode: bool = match env::var("DEBUG_MODE") {
                 Ok(value) => value.to_lowercase() == "true",
                 Err(_) => false,
@@ -251,7 +251,8 @@ pub fn publish(mut input: mpsc::Receiver<Message>, mqtt_out: mpsc::Sender<MqttMe
 
             if !debug_mode {
                 let now = Instant::now();
-                send_or_discard(&mqtt_out, MqttMessage::MqttOut(v, now)).await;
+                // FIXME: add timeout?
+                mqtt_out.0.try_send(MqttMessage::MqttOut(v, now)).unwrap();
             }
         }
     });
