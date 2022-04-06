@@ -115,7 +115,7 @@ impl Mqtt {
                             let payload = str::from_utf8(payload).unwrap().to_string();
                             debug!("incoming mqtt {topic} {payload}");
                             if let Some(subscription) = subscriptions.get(topic) {
-                                send_or_log(&subscription.tx, payload.clone());
+                                send_or_log(&subscription.tx, msg);
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -129,7 +129,21 @@ impl Mqtt {
                             MqttMessage::MqttOut(_, instant) if message_expired(&now, &instant) => {
                                 warn!("Discarding outgoing message as too old");
                             },
-                            MqttMessage::MqttOut(msg, _) => cli.publish(msg).await.unwrap(),
+                            MqttMessage::MqttOut(msg, _) => {
+                                let debug_mode: bool = is_debug_mode();
+
+                                info!(
+                                    "outgoing mqtt {} {} {} {}",
+                                    if debug_mode { "nop" } else { "live" },
+                                    msg.retained(),
+                                    msg.topic(),
+                                    str::from_utf8(msg.payload()).unwrap().to_string()
+                                );
+
+                                if !debug_mode {
+                                    cli.publish(msg).await.unwrap()
+                                }
+                            },
                         }
                     }
                     else => { break; }
@@ -157,7 +171,11 @@ impl Mqtt {
 struct Subscription {
     #[allow(dead_code)]
     topic: String,
-    tx: broadcast::Sender<String>,
+    tx: broadcast::Sender<Message>,
+}
+
+fn message_to_string(msg: Message) -> String {
+    str::from_utf8(msg.payload()).unwrap().to_string()
 }
 
 pub struct Subscriptions(HashMap<String, Subscription>);
@@ -171,7 +189,7 @@ impl Subscriptions {
         self.0.get(topic)
     }
 
-    pub fn subscribe(&mut self, topic: &str) -> RxPipe<String> {
+    pub fn subscribe(&mut self, topic: &str) -> RxPipe<Message> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
             RxPipe::new_from_sender(subscription.tx.clone())
@@ -186,6 +204,10 @@ impl Subscriptions {
             self.0.insert(topic.to_string(), subscription);
             output.to_rx_pipe()
         }
+    }
+
+    pub fn subscribe_to_string(&mut self, topic: &str) -> RxPipe<String> {
+        self.subscribe(topic).map(message_to_string)
     }
 }
 
@@ -230,7 +252,7 @@ async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
     let qos: Vec<_> = subscriptions.0.iter().map(|_| 0).collect();
 
     if let Err(e) = cli.subscribe_many(&topics, &qos).await {
-        error!("Error subscribes topics: {:?}", e);
+        error!("Error subscribing to topics: {:?}", e);
     }
 }
 
@@ -238,33 +260,25 @@ pub fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
     let mqtt_out = (*mqtt_out).clone();
     spawn(async move {
         while let Ok(v) = recv(&mut input).await {
-            let debug_mode: bool = match env::var("DEBUG_MODE") {
-                Ok(value) => value.to_lowercase() == "true",
-                Err(_) => false,
-            };
-
-            info!(
-                "outgoing mqtt {} {} {} {}",
-                if debug_mode { "nop" } else { "live" },
-                v.retained(),
-                v.topic(),
-                str::from_utf8(v.payload()).unwrap().to_string()
-            );
-
-            if !debug_mode {
-                let now = Instant::now();
-                mqtt_out
-                    .0
-                    .try_send(MqttMessage::MqttOut(v, now))
-                    .or_else(|err| match err {
-                        mpsc::error::TrySendError::Full(_) => {
-                            error!("Discarding outgoing mqtt message as buffer full");
-                            Ok(())
-                        }
-                        err => Err(err),
-                    })
-                    .unwrap();
-            }
+            let now = Instant::now();
+            mqtt_out
+                .0
+                .try_send(MqttMessage::MqttOut(v, now))
+                .or_else(|err| match err {
+                    mpsc::error::TrySendError::Full(_) => {
+                        warn!("Discarding outgoing mqtt message as buffer full");
+                        Ok(())
+                    }
+                    err => Err(err),
+                })
+                .unwrap();
         }
     });
+}
+
+fn is_debug_mode() -> bool {
+    match env::var("DEBUG_MODE") {
+        Ok(value) => value.to_lowercase() == "true",
+        Err(_) => false,
+    }
 }

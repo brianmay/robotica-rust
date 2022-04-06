@@ -22,7 +22,9 @@ struct Beacon {
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     subscriptions
-        .subscribe("espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian")
+        .subscribe_to_string(
+            "espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian",
+        )
         .map(|s| {
             let b: Beacon = serde_json::from_str(&s).unwrap();
             b

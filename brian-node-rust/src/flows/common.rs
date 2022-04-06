@@ -67,7 +67,9 @@ pub fn message_location(
 ) {
     let gate_topic = format!("state/{}/Messages/power", location);
     let command_topic = format!("command/{}/Robotica", location);
-    let do_gate = subscriptions.subscribe(&gate_topic).map(power_to_bool);
+    let do_gate = subscriptions
+        .subscribe_to_string(&gate_topic)
+        .map(power_to_bool);
 
     rx.gate(do_gate)
         .map(move |v| string_to_message(v, &command_topic))

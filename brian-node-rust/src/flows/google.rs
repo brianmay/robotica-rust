@@ -208,17 +208,17 @@ fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_o
         let device = device.to_string();
         let topic = format!("google/{location}/{device}/out");
         subscriptions
-            .subscribe(&topic)
+            .subscribe_to_string(&topic)
             .filter_map(move |payload| light_google_to_robotica(payload, &location, &device))
             .publish(mqtt_out);
     }
 
     {
         let topic = format!("state/{location}/{device}/power");
-        let power_str = subscriptions.subscribe(&topic);
+        let power_str = subscriptions.subscribe_to_string(&topic);
 
         let topic = format!("state/{location}/{device}/priorities");
-        let priorities = subscriptions.subscribe(&topic).map(|payload| {
+        let priorities = subscriptions.subscribe_to_string(&topic).map(|payload| {
             let list: Vec<u16> = serde_json::from_str(&payload).unwrap();
             list
         });
@@ -251,7 +251,7 @@ fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_
         let topic = format!("google/{location}/{device}/out");
 
         subscriptions
-            .subscribe(&topic)
+            .subscribe_to_string(&topic)
             .filter_map(move |payload| device_google_to_robotica(payload, &location, &device))
             .publish(mqtt_out);
     }
@@ -262,7 +262,7 @@ fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_
         let topic = format!("state/{location}/{device}/power");
 
         subscriptions
-            .subscribe(&topic)
+            .subscribe_to_string(&topic)
             .map(string_to_power)
             .map(move |power| robotica_to_google(power, &location, &device))
             .publish(mqtt_out);

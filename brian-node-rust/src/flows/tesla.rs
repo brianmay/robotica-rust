@@ -34,23 +34,29 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
 fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     let topic = format!("teslamate/cars/{car_id}/battery_level");
     let battery_level = subscriptions
-        .subscribe(&topic)
+        .subscribe_to_string(&topic)
         .filter_map(string_to_integer);
 
     let topic = format!("teslamate/cars/{car_id}/plugged_in");
-    let plugged_in = subscriptions.subscribe(&topic).filter_map(string_to_bool);
+    let plugged_in = subscriptions
+        .subscribe_to_string(&topic)
+        .filter_map(string_to_bool);
 
     let topic = format!("teslamate/cars/{car_id}/geofence");
-    let geofence = subscriptions.subscribe(&topic);
+    let geofence = subscriptions.subscribe_to_string(&topic);
 
     let topic = format!("teslamate/cars/{car_id}/is_user_present");
-    let is_user_present = subscriptions.subscribe(&topic).filter_map(string_to_bool);
+    let is_user_present = subscriptions
+        .subscribe_to_string(&topic)
+        .filter_map(string_to_bool);
 
     let topic = format!("teslamate/cars/{car_id}/locked");
-    let locked = subscriptions.subscribe(&topic).filter_map(string_to_bool);
+    let locked = subscriptions
+        .subscribe_to_string(&topic)
+        .filter_map(string_to_bool);
 
     let topic = String::from("state/Brian/TeslaReminder/power");
-    let reminder = subscriptions.subscribe(&topic).map(power_to_bool);
+    let reminder = subscriptions.subscribe_to_string(&topic).map(power_to_bool);
 
     geofence
         .debug("geofence")
