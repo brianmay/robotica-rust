@@ -1,3 +1,4 @@
+//! Sinks take one/more inputs and produce now outputs.
 use tokio::sync::broadcast;
 
 use crate::{recv, spawn, RxPipe};
@@ -11,6 +12,7 @@ fn null<T: Send + Clone + 'static>(mut input: broadcast::Receiver<T>) {
 }
 
 impl<T: Send + Clone + 'static> RxPipe<T> {
+    /// Send the data to a black hole.
     pub fn null(&self) {
         null(self.subscribe());
     }

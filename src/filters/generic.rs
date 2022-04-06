@@ -1,3 +1,4 @@
+//! Generic filter functions
 use crate::{recv, send_or_log, spawn, Pipe, RxPipe, TxPipe};
 use log::*;
 use std::fmt::Debug;
@@ -150,11 +151,18 @@ fn gate<T: Send + Clone + 'static>(
 }
 
 impl<T: Send + Clone + 'static> RxPipe<T> {
+    /// Add previous value to the input stream.
+    ///
+    /// If there was no previous value, then add None.
     pub fn diff(&mut self) -> RxPipe<(Option<T>, T)> {
         let output = Pipe::new();
         diff(self.subscribe(), output.get_tx());
         output.to_rx_pipe()
     }
+
+    /// Add previous value to the input stream.
+    ///
+    /// If there was no previous value, then add the initial value.
     pub fn diff_with_initial_value(&mut self, initial_value: Option<T>) -> RxPipe<(Option<T>, T)> {
         let output = Pipe::new();
         diff_with_initial_value(self.subscribe(), output.get_tx(), initial_value);
@@ -163,6 +171,7 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
 }
 
 impl<T: Send + Eq + Clone + 'static> RxPipe<(Option<T>, T)> {
+    /// Has the stream from [Self::diff] or [Self::diff_with_initial_value] changed?
     pub fn changed(&self) -> RxPipe<T> {
         let output = Pipe::new();
         changed(self.subscribe(), output.get_tx());
@@ -171,6 +180,7 @@ impl<T: Send + Eq + Clone + 'static> RxPipe<(Option<T>, T)> {
 }
 
 impl<T: Send + Debug + Clone + 'static> RxPipe<T> {
+    /// Log the value and pass through unchanged.
     pub fn debug(&self, msg: &str) -> RxPipe<T> {
         let output = Pipe::new();
         debug(self.subscribe(), output.get_tx(), msg);
@@ -179,6 +189,7 @@ impl<T: Send + Debug + Clone + 'static> RxPipe<T> {
 }
 
 impl<T: Send + Clone + 'static> RxPipe<T> {
+    /// Map value through function and (optionally) change its type.
     pub fn map<U: Send + Clone + 'static>(
         &self,
         callback: impl Send + 'static + Fn(T) -> U,
@@ -188,6 +199,10 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
         output.to_rx_pipe()
     }
 
+    /// Map value through function and optionally change its type and keep track of state.
+    ///
+    /// Unlike with [Self::map], the function passes a mutable state variable, which is
+    /// preserved between calls. The initial value of the state is passed as a parameter.
     pub fn map_with_state<U: Send + Clone + 'static, V: Send + 'static>(
         &self,
         initial: V,
@@ -198,6 +213,9 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
         output.to_rx_pipe()
     }
 
+    /// Map value through function and optionally discard
+    ///
+    /// Unlike with [Self::map], if the function returns None, the value is dropped.
     pub fn filter_map<U: Send + Clone + 'static>(
         &self,
         callback: impl Send + 'static + Fn(T) -> Option<U>,
@@ -207,18 +225,26 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
         output.to_rx_pipe()
     }
 
+    /// Filter value through function and optionally discard
+    ///
+    /// This function always returns the same data. If the function returns True the value is transmitted,
+    /// otherwise the value is dropped.
     pub fn filter(&self, callback: impl Send + 'static + Fn(&T) -> bool) -> RxPipe<T> {
         let output = Pipe::new();
         filter(self.subscribe(), output.get_tx(), callback);
         output.to_rx_pipe()
     }
 
+    /// Filter value and optionally discard
+    ///
+    /// Similar to [Self::filter], but the allow value comes from an RxPipe.
     pub fn gate(&self, allow: RxPipe<bool>) -> RxPipe<T> {
         let output = Pipe::new();
         gate(self.subscribe(), allow.subscribe(), output.get_tx());
         output.to_rx_pipe()
     }
 
+    /// Pass all values on to a [TxPipe].
     pub fn copy_to(&self, output: TxPipe<T>) {
         copy(self.subscribe(), output.get_tx());
     }

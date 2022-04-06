@@ -1,3 +1,4 @@
+//! Filter functions specific to teslamate.
 use tokio::{select, sync::broadcast};
 
 use crate::{recv, send_or_log, spawn, Pipe, RxPipe};
@@ -75,6 +76,7 @@ fn _is_insecure(
     });
 }
 
+/// Try to determine if the car requires a plugin.
 pub fn requires_plugin(
     battery_level: RxPipe<usize>,
     plugged_in: RxPipe<bool>,
@@ -92,6 +94,7 @@ pub fn requires_plugin(
     output.to_rx_pipe()
 }
 
+/// Try to determine if car is insecure.
 pub fn is_insecure(is_user_present: RxPipe<bool>, locked: RxPipe<bool>) -> RxPipe<bool> {
     let output = Pipe::new();
     _is_insecure(

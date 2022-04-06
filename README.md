@@ -159,8 +159,11 @@ Limitations:
 
 * Lost the ability to automatically restart tasks. If one task fails, need to abort everything.
 * Can only have one copy running at a time. Or you will get duplicate outgoing events.
+* This should still be considered alpha status. As in the APIs are still being developed and could change without notice.
 
 Still to be implemented:
+
+* Split between binary crate and library still needs more work. Ideally binary crate should only contain stuff that is specific to my setup, but probably contains more then that.
 
 * Logging still needs more work. Not sure how to approach this yet.
 

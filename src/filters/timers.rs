@@ -1,3 +1,4 @@
+//! Filter functions for timers
 use std::time::Duration;
 
 use tokio::time::{self, sleep_until, Interval};
@@ -135,6 +136,10 @@ fn timer_true(
 }
 
 impl<T: Send + Clone + 'static> RxPipe<T> {
+    /// Used to provide initial values on startup.
+    ///
+    /// On startup it isn't always clear if we are going to received an initial value or not.
+    /// If we don't receive an initial value with in time then we will send the provided value on startup.
     pub fn startup_delay(&self, duration: Duration, value: T) -> RxPipe<T> {
         let output = Pipe::new();
         startup_delay(self.subscribe(), output.get_tx(), duration, value);
@@ -143,17 +148,22 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
 }
 
 impl RxPipe<bool> {
+    /// If we receive a true value, wait until passing it on to the next pipe.
+    ///
+    /// If we receive a false value, immediately pass it on to the next pipe and cancel the true value.
     pub fn delay_true(&self, duration: Duration) -> RxPipe<bool> {
         let output = Pipe::new();
         delay_true(self.subscribe(), output.get_tx(), duration);
         output.to_rx_pipe()
     }
+    /// If we receive a true value then wait before automatically sending false value.
     pub fn delay_cancel(&self, duration: Duration) -> RxPipe<bool> {
         let output = Pipe::new();
         delay_cancel(self.subscribe(), output.get_tx(), duration);
         output.to_rx_pipe()
     }
 
+    /// If we receive true value, start timer until we receive false value.
     pub fn timer_true(&self, duration: Duration) -> RxPipe<bool> {
         let output = Pipe::new();
         timer_true(self.subscribe(), output.get_tx(), duration);

@@ -8,14 +8,14 @@ use flows::life360;
 use flows::tesla;
 use robotica_node_rust::sources::mqtt::MqttOut;
 
-use robotica_node_rust::sources::mqtt::{Mqtt, Subscriptions};
+use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
     http::start().await;
 
-    let mut mqtt = Mqtt::new().await;
+    let mut mqtt = MqttClient::new().await;
     let tx = mqtt.get_mqtt_out();
 
     let subscriptions: Subscriptions = setup_pipes(&tx);

@@ -1,3 +1,4 @@
+//! Source (and sink) for MQTT data.
 use log::*;
 use paho_mqtt::AsyncClient;
 use paho_mqtt::ConnectOptionsBuilder;
@@ -27,31 +28,36 @@ enum MqttMessage {
     MqttOut(Message, Instant),
 }
 
-pub struct Mqtt {
+/// Client struct used to connect to MQTT.
+pub struct MqttClient {
     b: Option<JoinHandle<()>>,
     rx: Option<mpsc::Receiver<MqttMessage>>,
     tx: mpsc::Sender<MqttMessage>,
 }
 
+/// Struct used to send outgoing MQTT messages.
 #[derive(Clone)]
 pub struct MqttOut(mpsc::Sender<MqttMessage>);
 
-impl Mqtt {
+impl MqttClient {
+    /// Create a new MQTT client.
     pub async fn new() -> Self {
         // Outgoing MQTT queue.
         let (main_tx, main_rx) = mpsc::channel(50);
 
-        Mqtt {
+        MqttClient {
             b: None,
             rx: Some(main_rx),
             tx: main_tx,
         }
     }
 
+    /// Get the [MqttOut] struct for sending outgoing messages.
     pub fn get_mqtt_out(&mut self) -> MqttOut {
         MqttOut(self.tx.clone())
     }
 
+    /// Connect to the MQTT broker.
     pub fn connect(&mut self, subscriptions: Subscriptions) {
         // Define the set of options for the create.
         // Use an ID for a persistent session.
@@ -153,18 +159,17 @@ impl Mqtt {
 
         self.b = Some(b);
     }
-}
 
-fn message_expired(now: &Instant, sent: &Instant) -> bool {
-    (*now - *sent) > Duration::from_secs(300)
-}
-
-impl Mqtt {
+    /// Wait for the client to finish.
     pub async fn wait(&mut self) {
         if let Some(b) = self.b.take() {
             b.await.unwrap();
         }
     }
+}
+
+fn message_expired(now: &Instant, sent: &Instant) -> bool {
+    (*now - *sent) > Duration::from_secs(300)
 }
 
 #[derive(Clone)]
@@ -178,9 +183,11 @@ fn message_to_string(msg: Message) -> String {
     str::from_utf8(msg.payload()).unwrap().to_string()
 }
 
+/// List of all required subscriptions.
 pub struct Subscriptions(HashMap<String, Subscription>);
 
 impl Subscriptions {
+    /// Create a new set of subscriptions.
     pub fn new() -> Self {
         Subscriptions(HashMap::new())
     }
@@ -189,6 +196,7 @@ impl Subscriptions {
         self.0.get(topic)
     }
 
+    /// Add a new subscription.
     pub fn subscribe(&mut self, topic: &str) -> RxPipe<Message> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
@@ -206,6 +214,7 @@ impl Subscriptions {
         }
     }
 
+    /// Add a new subscription that returns only the payload as a String.
     pub fn subscribe_to_string(&mut self, topic: &str) -> RxPipe<String> {
         self.subscribe(topic).map(message_to_string)
     }
@@ -256,7 +265,7 @@ async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
     }
 }
 
-pub fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
+fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
     let mqtt_out = (*mqtt_out).clone();
     spawn(async move {
         while let Ok(v) = recv(&mut input).await {
@@ -284,6 +293,7 @@ fn is_debug_mode() -> bool {
 }
 
 impl RxPipe<Message> {
+    /// Publish an outgoing message.
     pub fn publish(&mut self, mqtt_out: &MqttOut) {
         publish(self.subscribe(), mqtt_out)
     }

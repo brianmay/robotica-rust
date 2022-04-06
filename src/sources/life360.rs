@@ -1,3 +1,4 @@
+//! Source for life360 based data
 use anyhow::anyhow;
 use anyhow::Result;
 use log::*;
@@ -42,6 +43,8 @@ struct List {
     circles: Vec<ListItem>,
 }
 
+/// Life360 location struct
+#[allow(missing_docs)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
@@ -71,6 +74,8 @@ pub struct Location {
     pub user_activity: Option<String>,
 }
 
+/// Life360 communication struct
+#[allow(missing_docs)]
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Communication {
@@ -80,8 +85,10 @@ pub struct Communication {
     pub circle_type: Option<String>,
 }
 
+/// Life360 member struct
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[allow(missing_docs)]
 pub struct Member {
     // features
     // issues
@@ -102,6 +109,10 @@ pub struct Member {
 }
 
 impl Member {
+    /// Quickly check if two members are the same.
+    ///
+    /// Note there is no guarantee that two members are exactly the same.
+    /// For example, we only check the timestamp on the location field.
     pub fn same_values(&self, other: &Self) -> bool {
         self.location.timestamp == other.location.timestamp
             && self.communications == other.communications
@@ -136,6 +147,7 @@ struct Circle {
     members: Vec<Member>,
 }
 
+/// Source of life360 member information.
 pub fn circles() -> RxPipe<Member> {
     let output = Pipe::new();
     let tx = output.get_tx();
