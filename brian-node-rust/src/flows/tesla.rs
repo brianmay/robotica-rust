@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use robotica_node_rust::{
-    filters::{is_insecure, requires_plugin},
+    filters::teslamate::{is_insecure, requires_plugin},
     sources::mqtt::{MqttOut, Subscriptions},
 };
 

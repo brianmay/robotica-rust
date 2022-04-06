@@ -1,8 +1,8 @@
 use tokio::{select, sync::broadcast};
 
-use crate::{recv, send_or_log, spawn};
+use crate::{recv, send_or_log, spawn, Pipe, RxPipe};
 
-pub fn requires_plugin(
+fn _requires_plugin(
     mut battery_level: broadcast::Receiver<usize>,
     mut plugged_in: broadcast::Receiver<bool>,
     mut geofence: broadcast::Receiver<String>,
@@ -45,7 +45,7 @@ pub fn requires_plugin(
     });
 }
 
-pub fn is_insecure(
+fn _is_insecure(
     mut is_user_present: broadcast::Receiver<bool>,
     mut locked: broadcast::Receiver<bool>,
     output: broadcast::Sender<bool>,
@@ -73,4 +73,31 @@ pub fn is_insecure(
             };
         }
     });
+}
+
+pub fn requires_plugin(
+    battery_level: RxPipe<usize>,
+    plugged_in: RxPipe<bool>,
+    geofence: RxPipe<String>,
+    reminder: RxPipe<bool>,
+) -> RxPipe<bool> {
+    let output = Pipe::new();
+    _requires_plugin(
+        battery_level.subscribe(),
+        plugged_in.subscribe(),
+        geofence.subscribe(),
+        reminder.subscribe(),
+        output.get_tx(),
+    );
+    output.to_rx_pipe()
+}
+
+pub fn is_insecure(is_user_present: RxPipe<bool>, locked: RxPipe<bool>) -> RxPipe<bool> {
+    let output = Pipe::new();
+    _is_insecure(
+        is_user_present.subscribe(),
+        locked.subscribe(),
+        output.get_tx(),
+    );
+    output.to_rx_pipe()
 }

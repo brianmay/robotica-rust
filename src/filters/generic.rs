@@ -1,8 +1,9 @@
-use crate::{recv, send_or_log, spawn};
+use crate::{recv, send_or_log, spawn, Pipe, RxPipe, TxPipe};
 use log::*;
+use std::fmt::Debug;
 use tokio::{select, sync::broadcast};
 
-pub fn changed<T: Send + Eq + Clone + 'static>(
+fn changed<T: Send + Eq + Clone + 'static>(
     mut input: broadcast::Receiver<(Option<T>, T)>,
     output: broadcast::Sender<T>,
 ) {
@@ -20,14 +21,14 @@ pub fn changed<T: Send + Eq + Clone + 'static>(
     });
 }
 
-pub fn diff<T: Send + Clone + 'static>(
+fn diff<T: Send + Clone + 'static>(
     input: broadcast::Receiver<T>,
     output: broadcast::Sender<(Option<T>, T)>,
 ) {
     diff_with_initial_value(input, output, None)
 }
 
-pub fn diff_with_initial_value<T: Send + Clone + 'static>(
+fn diff_with_initial_value<T: Send + Clone + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<(Option<T>, T)>,
     initial_value: Option<T>,
@@ -42,7 +43,7 @@ pub fn diff_with_initial_value<T: Send + Clone + 'static>(
     });
 }
 
-pub fn map<T: Send + Clone + 'static, U: Send + 'static>(
+fn map<T: Send + Clone + 'static, U: Send + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<U>,
     callback: impl Send + 'static + Fn(T) -> U,
@@ -55,7 +56,7 @@ pub fn map<T: Send + Clone + 'static, U: Send + 'static>(
     });
 }
 
-pub fn map_with_state<T: Send + Clone + 'static, U: Send + 'static, V: Send + 'static>(
+fn map_with_state<T: Send + Clone + 'static, U: Send + 'static, V: Send + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<U>,
     initial: V,
@@ -70,7 +71,7 @@ pub fn map_with_state<T: Send + Clone + 'static, U: Send + 'static, V: Send + 's
     });
 }
 
-pub fn debug<T: Send + Clone + core::fmt::Debug + 'static>(
+fn debug<T: Send + Clone + core::fmt::Debug + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<T>,
     msg: &str,
@@ -84,7 +85,7 @@ pub fn debug<T: Send + Clone + core::fmt::Debug + 'static>(
     });
 }
 
-pub fn filter_map<T: Send + Clone + 'static, U: Send + 'static>(
+fn filter_map<T: Send + Clone + 'static, U: Send + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<U>,
     callback: impl Send + 'static + Fn(T) -> Option<U>,
@@ -99,7 +100,7 @@ pub fn filter_map<T: Send + Clone + 'static, U: Send + 'static>(
     });
 }
 
-pub fn copy<T: Send + Clone + 'static>(
+fn copy<T: Send + Clone + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<T>,
 ) {
@@ -110,7 +111,7 @@ pub fn copy<T: Send + Clone + 'static>(
     });
 }
 
-pub fn filter<T: Send + Clone + 'static>(
+fn filter<T: Send + Clone + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<T>,
     callback: impl Send + 'static + Fn(&T) -> bool,
@@ -125,7 +126,7 @@ pub fn filter<T: Send + Clone + 'static>(
     });
 }
 
-pub fn gate<T: Send + Clone + 'static>(
+fn gate<T: Send + Clone + 'static>(
     mut input: broadcast::Receiver<T>,
     mut gate: broadcast::Receiver<bool>,
     output: broadcast::Sender<T>,
@@ -146,6 +147,81 @@ pub fn gate<T: Send + Clone + 'static>(
             }
         }
     });
+}
+
+impl<T: Send + Clone + 'static> RxPipe<T> {
+    pub fn diff(&mut self) -> RxPipe<(Option<T>, T)> {
+        let output = Pipe::new();
+        diff(self.subscribe(), output.get_tx());
+        output.to_rx_pipe()
+    }
+    pub fn diff_with_initial_value(&mut self, initial_value: Option<T>) -> RxPipe<(Option<T>, T)> {
+        let output = Pipe::new();
+        diff_with_initial_value(self.subscribe(), output.get_tx(), initial_value);
+        output.to_rx_pipe()
+    }
+}
+
+impl<T: Send + Eq + Clone + 'static> RxPipe<(Option<T>, T)> {
+    pub fn changed(&self) -> RxPipe<T> {
+        let output = Pipe::new();
+        changed(self.subscribe(), output.get_tx());
+        output.to_rx_pipe()
+    }
+}
+
+impl<T: Send + Debug + Clone + 'static> RxPipe<T> {
+    pub fn debug(&self, msg: &str) -> RxPipe<T> {
+        let output = Pipe::new();
+        debug(self.subscribe(), output.get_tx(), msg);
+        output.to_rx_pipe()
+    }
+}
+
+impl<T: Send + Clone + 'static> RxPipe<T> {
+    pub fn map<U: Send + Clone + 'static>(
+        &self,
+        callback: impl Send + 'static + Fn(T) -> U,
+    ) -> RxPipe<U> {
+        let output = Pipe::new();
+        map(self.subscribe(), output.get_tx(), callback);
+        output.to_rx_pipe()
+    }
+
+    pub fn map_with_state<U: Send + Clone + 'static, V: Send + 'static>(
+        &self,
+        initial: V,
+        callback: impl Send + 'static + Fn(&mut V, T) -> U,
+    ) -> RxPipe<U> {
+        let output = Pipe::new();
+        map_with_state(self.subscribe(), output.get_tx(), initial, callback);
+        output.to_rx_pipe()
+    }
+
+    pub fn filter_map<U: Send + Clone + 'static>(
+        &self,
+        callback: impl Send + 'static + Fn(T) -> Option<U>,
+    ) -> RxPipe<U> {
+        let output = Pipe::new();
+        filter_map(self.subscribe(), output.get_tx(), callback);
+        output.to_rx_pipe()
+    }
+
+    pub fn filter(&self, callback: impl Send + 'static + Fn(&T) -> bool) -> RxPipe<T> {
+        let output = Pipe::new();
+        filter(self.subscribe(), output.get_tx(), callback);
+        output.to_rx_pipe()
+    }
+
+    pub fn gate(&self, allow: RxPipe<bool>) -> RxPipe<T> {
+        let output = Pipe::new();
+        gate(self.subscribe(), allow.subscribe(), output.get_tx());
+        output.to_rx_pipe()
+    }
+
+    pub fn copy_to(&self, output: TxPipe<T>) {
+        copy(self.subscribe(), output.get_tx());
+    }
 }
 
 #[cfg(test)]

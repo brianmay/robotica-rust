@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::time::{self, sleep_until, Interval};
 use tokio::{select, sync::broadcast, time::Instant};
 
-use crate::{recv, send_or_log, spawn};
+use crate::{recv, send_or_log, spawn, Pipe, RxPipe};
 
 async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     if let Some(instant) = instant {
@@ -14,7 +14,7 @@ async fn maybe_sleep_until(instant: Option<Instant>) -> Option<()> {
     }
 }
 
-pub fn delay_true(
+fn delay_true(
     mut input: broadcast::Receiver<bool>,
     output: broadcast::Sender<bool>,
     duration: Duration,
@@ -42,7 +42,7 @@ pub fn delay_true(
     });
 }
 
-pub fn startup_delay<T: Send + Clone + 'static>(
+fn startup_delay<T: Send + Clone + 'static>(
     mut input: broadcast::Receiver<T>,
     output: broadcast::Sender<T>,
     duration: Duration,
@@ -70,7 +70,7 @@ pub fn startup_delay<T: Send + Clone + 'static>(
     });
 }
 
-pub fn delay_cancel(
+fn delay_cancel(
     mut input: broadcast::Receiver<bool>,
     output: broadcast::Sender<bool>,
     duration: Duration,
@@ -107,7 +107,7 @@ async fn maybe_tick(interval: &mut Option<Interval>) -> Option<()> {
     }
 }
 
-pub fn timer_true(
+fn timer_true(
     mut input: broadcast::Receiver<bool>,
     output: broadcast::Sender<bool>,
     duration: Duration,
@@ -132,6 +132,33 @@ pub fn timer_true(
             }
         }
     });
+}
+
+impl<T: Send + Clone + 'static> RxPipe<T> {
+    pub fn startup_delay(&self, duration: Duration, value: T) -> RxPipe<T> {
+        let output = Pipe::new();
+        startup_delay(self.subscribe(), output.get_tx(), duration, value);
+        output.to_rx_pipe()
+    }
+}
+
+impl RxPipe<bool> {
+    pub fn delay_true(&self, duration: Duration) -> RxPipe<bool> {
+        let output = Pipe::new();
+        delay_true(self.subscribe(), output.get_tx(), duration);
+        output.to_rx_pipe()
+    }
+    pub fn delay_cancel(&self, duration: Duration) -> RxPipe<bool> {
+        let output = Pipe::new();
+        delay_cancel(self.subscribe(), output.get_tx(), duration);
+        output.to_rx_pipe()
+    }
+
+    pub fn timer_true(&self, duration: Duration) -> RxPipe<bool> {
+        let output = Pipe::new();
+        timer_true(self.subscribe(), output.get_tx(), duration);
+        output.to_rx_pipe()
+    }
 }
 
 #[cfg(test)]

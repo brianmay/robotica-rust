@@ -282,3 +282,9 @@ fn is_debug_mode() -> bool {
         Err(_) => false,
     }
 }
+
+impl RxPipe<Message> {
+    pub fn publish(&mut self, mqtt_out: &MqttOut) {
+        publish(self.subscribe(), mqtt_out)
+    }
+}
