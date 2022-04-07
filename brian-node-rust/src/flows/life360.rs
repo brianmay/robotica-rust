@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use paho_mqtt::Message;
-use robotica_node_rust::sources::{
-    life360::{self, Member},
-    mqtt::{MqttOut, Subscriptions},
+use robotica_node_rust::{
+    sources::{
+        life360::{self, Member},
+        mqtt::MqttOut,
+    },
+    TxPipe,
 };
-
-use super::common::CommonChain;
 
 type MemberIndex = HashMap<String, Member>;
 
@@ -90,7 +91,7 @@ fn changed_to_message(changed: Changed) -> Option<String> {
     }
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+pub fn start(mqtt_out: &MqttOut, message_sink: &TxPipe<String>) {
     let circles = life360::circles().map_with_state(HashMap::new(), member_diff);
 
     circles
@@ -105,5 +106,5 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     circles
         .map(member_location_changed)
         .filter_map(changed_to_message)
-        .message(subscriptions, mqtt_out);
+        .copy_to(message_sink);
 }

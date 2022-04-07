@@ -2,10 +2,11 @@ use std::time::Duration;
 
 use robotica_node_rust::{
     filters::teslamate::{is_insecure, requires_plugin},
-    sources::mqtt::{MqttOut, Subscriptions},
+    sources::mqtt::Subscriptions,
+    TxPipe,
 };
 
-use super::common::{power_to_bool, string_to_bool, string_to_integer, CommonChain};
+use super::common::{power_to_bool, string_to_bool, string_to_integer};
 
 fn geofence_to_message((old, new): (Option<String>, String)) -> Option<String> {
     match (old.as_deref(), new.as_str()) {
@@ -27,11 +28,11 @@ fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
     }
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
-    car(1, subscriptions, mqtt_out);
+pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>) {
+    car(1, subscriptions, message_sink);
 }
 
-fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>) {
     let topic = format!("teslamate/cars/{car_id}/battery_level");
     let battery_level = subscriptions
         .subscribe_to_string(&topic)
@@ -62,13 +63,13 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         .debug("geofence")
         .diff()
         .filter_map(geofence_to_message)
-        .message(subscriptions, mqtt_out);
+        .copy_to(message_sink);
 
     plugged_in
         .debug("plugged_in")
         .diff()
         .filter_map(plugged_in_to_message)
-        .message(subscriptions, mqtt_out);
+        .copy_to(message_sink);
 
     is_insecure(is_user_present, locked)
         .debug("is_insecure")
@@ -83,7 +84,7 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
                 "The tesla is secure and has many friends".to_string()
             }
         })
-        .message(subscriptions, mqtt_out);
+        .copy_to(message_sink);
 
     requires_plugin(battery_level, plugged_in, geofence, reminder)
         .debug("requires_plugin")
@@ -97,5 +98,5 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
                 "The tesla no longer requires plugging in".to_string()
             }
         })
-        .message(subscriptions, mqtt_out);
+        .copy_to(message_sink);
 }

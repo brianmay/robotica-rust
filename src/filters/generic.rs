@@ -245,7 +245,7 @@ impl<T: Send + Clone + 'static> RxPipe<T> {
     }
 
     /// Pass all values on to a [TxPipe].
-    pub fn copy_to(&self, output: TxPipe<T>) {
+    pub fn copy_to(&self, output: &TxPipe<T>) {
         copy(self.subscribe(), output.get_tx());
     }
 }

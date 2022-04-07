@@ -2,19 +2,9 @@ use log::*;
 use paho_mqtt::Message;
 use robotica_node_rust::{
     sources::mqtt::{MqttOut, Subscriptions},
-    RxPipe,
+    Pipe, RxPipe, TxPipe,
 };
 use serde::{Deserialize, Serialize};
-
-pub trait CommonChain {
-    fn message(&mut self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut);
-}
-
-impl CommonChain for RxPipe<String> {
-    fn message(&mut self, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
-        message(self, subscriptions, mqtt_out)
-    }
-}
 
 pub fn power_to_bool(value: String) -> bool {
     value == "ON"
@@ -76,18 +66,12 @@ pub fn message_location(
         .publish(mqtt);
 }
 
-pub fn message(rx: &mut RxPipe<String>, subscriptions: &mut Subscriptions, mqtt: &MqttOut) {
-    let rx = rx.debug("outgoing message");
-    message_location(rx.clone(), subscriptions, mqtt, "Brian");
-    message_location(rx, subscriptions, mqtt, "Dining");
+pub fn message_sink(subscriptions: &mut Subscriptions, mqtt: &MqttOut) -> TxPipe<String> {
+    let pipe_start = Pipe::new();
+
+    let pipe = pipe_start.to_rx_pipe().debug("outgoing message");
+    message_location(pipe.clone(), subscriptions, mqtt, "Brian");
+    message_location(pipe, subscriptions, mqtt, "Dining");
+
+    pipe_start.to_tx_pipe()
 }
-
-// pub fn message_sink(subscriptions: &mut Subscriptions, mqtt: &MqttOut) -> TxPipe<String> {
-//     let pipe_start = Pipe::new();
-
-//     let pipe = pipe_start.to_rx_pipe().debug("outgoing message");
-//     message_location(pipe.clone(), subscriptions, mqtt, "Brian");
-//     message_location(pipe, subscriptions, mqtt, "Dining");
-
-//     pipe_start.to_tx_pipe()
-// }

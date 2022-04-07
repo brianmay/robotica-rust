@@ -2,6 +2,7 @@ mod flows;
 mod http;
 
 use anyhow::Result;
+use flows::common::message_sink;
 use flows::espresence;
 use flows::google;
 use flows::life360;
@@ -27,9 +28,10 @@ async fn main() -> Result<()> {
 
 fn setup_pipes(mqtt: &MqttOut) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
+    let message_sink = message_sink(&mut subscriptions, mqtt);
 
-    tesla::start(&mut subscriptions, mqtt);
-    life360::start(&mut subscriptions, mqtt);
+    tesla::start(&mut subscriptions, &message_sink);
+    life360::start(mqtt, &message_sink);
     google::start(&mut subscriptions, mqtt);
     espresence::start(&mut subscriptions, mqtt);
 
