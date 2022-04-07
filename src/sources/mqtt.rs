@@ -11,7 +11,6 @@ use std::time::Duration;
 use std::{env, str};
 use tokio::select;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::timeout;
@@ -22,8 +21,9 @@ use crate::send_or_log;
 use crate::spawn;
 use crate::Pipe;
 use crate::RxPipe;
+use crate::TxPipe;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum MqttMessage {
     MqttOut(Message, Instant),
 }
@@ -31,30 +31,24 @@ enum MqttMessage {
 /// Client struct used to connect to MQTT.
 pub struct MqttClient {
     b: Option<JoinHandle<()>>,
-    rx: Option<mpsc::Receiver<MqttMessage>>,
-    tx: mpsc::Sender<MqttMessage>,
+    pipe: Pipe<MqttMessage>,
 }
 
 /// Struct used to send outgoing MQTT messages.
-#[derive(Clone)]
-pub struct MqttOut(mpsc::Sender<MqttMessage>);
+pub struct MqttOut(TxPipe<MqttMessage>);
 
 impl MqttClient {
     /// Create a new MQTT client.
     pub async fn new() -> Self {
         // Outgoing MQTT queue.
-        let (main_tx, main_rx) = mpsc::channel(50);
+        let pipe = Pipe::new_with_size(50);
 
-        MqttClient {
-            b: None,
-            rx: Some(main_rx),
-            tx: main_tx,
-        }
+        MqttClient { b: None, pipe }
     }
 
     /// Get the [MqttOut] struct for sending outgoing messages.
     pub fn get_mqtt_out(&mut self) -> MqttOut {
-        MqttOut(self.tx.clone())
+        MqttOut(self.pipe.to_tx_pipe())
     }
 
     /// Connect to the MQTT broker.
@@ -84,7 +78,7 @@ impl MqttClient {
         // Main incoming MQTT queue.
         let mqtt_in_rx = cli.get_stream(50);
 
-        let rx = self.rx.take().unwrap();
+        let rx = self.pipe.to_rx_pipe().subscribe();
         let b = spawn(async move {
             let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
@@ -129,7 +123,7 @@ impl MqttClient {
                             subscribe_topics(&cli, &subscriptions).await;
                         }
                     },
-                    Some(msg) = rx.recv() => {
+                    Ok(msg) = recv(&mut rx) => {
                         let now = Instant::now();
                         match msg {
                             MqttMessage::MqttOut(_, instant) if message_expired(&now, &instant) => {
@@ -265,26 +259,6 @@ async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
     }
 }
 
-fn publish(mut input: broadcast::Receiver<Message>, mqtt_out: &MqttOut) {
-    let mqtt_out = (*mqtt_out).clone();
-    spawn(async move {
-        while let Ok(v) = recv(&mut input).await {
-            let now = Instant::now();
-            mqtt_out
-                .0
-                .try_send(MqttMessage::MqttOut(v, now))
-                .or_else(|err| match err {
-                    mpsc::error::TrySendError::Full(_) => {
-                        warn!("Discarding outgoing mqtt message as buffer full");
-                        Ok(())
-                    }
-                    err => Err(err),
-                })
-                .unwrap();
-        }
-    });
-}
-
 fn is_debug_mode() -> bool {
     match env::var("DEBUG_MODE") {
         Ok(value) => value.to_lowercase() == "true",
@@ -295,6 +269,10 @@ fn is_debug_mode() -> bool {
 impl RxPipe<Message> {
     /// Publish an outgoing message.
     pub fn publish(&mut self, mqtt_out: &MqttOut) {
-        publish(self.subscribe(), mqtt_out)
+        self.map(|msg| {
+            let now = Instant::now();
+            MqttMessage::MqttOut(msg, now)
+        })
+        .copy_to(&mqtt_out.0);
     }
 }

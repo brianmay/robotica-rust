@@ -78,6 +78,12 @@ impl<T: Clone> Pipe<T> {
         Self(out_tx, Some(out_rx))
     }
 
+    /// Create a new pipe with non-default size.
+    pub fn new_with_size(capacity: usize) -> Self {
+        let (out_tx, out_rx) = broadcast::channel(capacity);
+        Self(out_tx, Some(out_rx))
+    }
+
     /// Get the underlying sender for the pipe.
     pub fn get_tx(&self) -> broadcast::Sender<T> {
         self.0.clone()
