@@ -19,7 +19,7 @@ subscriptions.subscribe(&topic)
     .diff()
     .filter_map(plugged_in_to_string)
     .map(string_to_message)
-    .publish(subscriptions, mqtt_out);
+    .publish(mqtt_out);
 ```
 
 This will do the following:
