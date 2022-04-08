@@ -6,6 +6,8 @@ use serde::Deserialize;
 
 use super::robotica::RoboticaLightCommand;
 
+use log::*;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
@@ -25,8 +27,13 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         .subscribe_to_string(
             "espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian",
         )
-        .map(|s| {
-            let b: Beacon = serde_json::from_str(&s).unwrap();
+        .filter_map(|s| {
+            let b: Option<Beacon> = serde_json::from_str(&s)
+                .map_err(|err| {
+                    error!("Got invalid espresense message: {}", err);
+                    err
+                })
+                .ok();
             b
         })
         .map(|b| b.distance < 20.0)
