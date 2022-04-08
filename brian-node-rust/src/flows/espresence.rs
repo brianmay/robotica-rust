@@ -17,7 +17,7 @@ struct Beacon {
     distance: f32,
     speed: f32,
     mac: String,
-    interval: u32,
+    interval: Option<u32>,
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
