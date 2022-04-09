@@ -11,6 +11,7 @@ use std::time::Duration;
 use std::{env, str};
 use tokio::select;
 use tokio::sync::broadcast;
+use tokio::sync::broadcast::Receiver;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::timeout;
@@ -32,6 +33,7 @@ enum MqttMessage {
 pub struct MqttClient {
     b: Option<JoinHandle<()>>,
     pipe: Pipe<MqttMessage>,
+    rx: Option<Receiver<MqttMessage>>,
 }
 
 /// Struct used to send outgoing MQTT messages.
@@ -43,7 +45,10 @@ impl MqttClient {
         // Outgoing MQTT queue.
         let pipe = Pipe::new_with_size(50);
 
-        MqttClient { b: None, pipe }
+        // Subscribe now so we don't miss any out
+        let rx = Some(pipe.to_rx_pipe().subscribe());
+
+        MqttClient { b: None, pipe, rx }
     }
 
     /// Get the [MqttOut] struct for sending outgoing messages.
@@ -78,7 +83,7 @@ impl MqttClient {
         // Main incoming MQTT queue.
         let mqtt_in_rx = cli.get_stream(50);
 
-        let rx = self.pipe.to_rx_pipe().subscribe();
+        let rx = self.rx.take().unwrap();
         let b = spawn(async move {
             let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 

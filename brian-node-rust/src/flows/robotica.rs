@@ -32,11 +32,21 @@ pub struct RoboticaDeviceCommand {
     pub action: Option<String>,
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoboticaAutoColorOut {
+    pub hue: Option<u16>,
+    pub saturation: Option<u16>,
+    pub brightness: Option<u16>,
+    pub kelvin: Option<u16>,
+    pub alpha: Option<u16>,
+}
+
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RoboticaAutoColor {
     pub power: Power,
-    pub color: RoboticaColorOut,
+    pub color: RoboticaAutoColorOut,
 }
 
 pub fn string_to_power(value: String) -> Power {

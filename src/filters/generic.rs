@@ -22,6 +22,24 @@ fn changed<T: Send + Eq + Clone + 'static>(
     });
 }
 
+fn changed_or_unknown<T: Send + Eq + Clone + 'static>(
+    mut input: broadcast::Receiver<(Option<T>, T)>,
+    output: broadcast::Sender<T>,
+) {
+    spawn(async move {
+        while let Ok(v) = recv(&mut input).await {
+            let v = match v {
+                (None, new) => Some(new),
+                (Some(old), new) if old == new => None,
+                (_, new) => Some(new),
+            };
+            if let Some(v) = v {
+                send_or_log(&output, v);
+            }
+        }
+    });
+}
+
 fn diff<T: Send + Clone + 'static>(
     input: broadcast::Receiver<T>,
     output: broadcast::Sender<(Option<T>, T)>,
@@ -177,6 +195,13 @@ impl<T: Send + Eq + Clone + 'static> RxPipe<(Option<T>, T)> {
         changed(self.subscribe(), output.get_tx());
         output.to_rx_pipe()
     }
+
+    /// Has the stream from [Self::diff] or [Self::diff_with_initial_value] changed or was previous value unknown?
+    pub fn changed_or_unknown(&self) -> RxPipe<T> {
+        let output = Pipe::new();
+        changed_or_unknown(self.subscribe(), output.get_tx());
+        output.to_rx_pipe()
+    }
 }
 
 impl<T: Send + Debug + Clone + 'static> RxPipe<T> {
@@ -255,7 +280,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_has_changed() {
+    async fn test_diff() {
         let (tx, in_rx) = broadcast::channel(10);
         let (out_tx, mut rx) = broadcast::channel(10);
         diff(in_rx, out_tx);
@@ -271,6 +296,46 @@ mod tests {
         tx.send(20).unwrap();
         let v = rx.recv().await.unwrap();
         assert_eq!(v, (Some(10), 20));
+    }
+
+    #[tokio::test]
+    async fn test_changed() {
+        let (tx, in_rx) = broadcast::channel(10);
+        let (out_tx, mut rx) = broadcast::channel(10);
+        changed(in_rx, out_tx);
+
+        tx.send((None, 10)).unwrap();
+
+        tx.send((Some(10), 20)).unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 20);
+
+        tx.send((Some(20), 20)).unwrap();
+
+        tx.send((Some(20), 30)).unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 30);
+    }
+
+    #[tokio::test]
+    async fn test_changed_or_unknown() {
+        let (tx, in_rx) = broadcast::channel(10);
+        let (out_tx, mut rx) = broadcast::channel(10);
+        changed_or_unknown(in_rx, out_tx);
+
+        tx.send((None, 10)).unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 10);
+
+        tx.send((Some(10), 20)).unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 20);
+
+        tx.send((Some(20), 20)).unwrap();
+
+        tx.send((Some(20), 30)).unwrap();
+        let v = rx.recv().await.unwrap();
+        assert_eq!(v, 30);
     }
 
     #[tokio::test]

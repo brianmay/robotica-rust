@@ -21,6 +21,7 @@ use tokio::select;
 use super::robotica::string_to_power;
 use super::robotica::Power;
 use super::robotica::RoboticaAutoColor;
+use super::robotica::RoboticaAutoColorOut;
 use super::robotica::RoboticaColorOut;
 use super::robotica::RoboticaDeviceCommand;
 use super::robotica::RoboticaLightCommand;
@@ -187,11 +188,12 @@ fn timer_to_color(location: &str, _device: &str) -> RoboticaAutoColor {
 
     RoboticaAutoColor {
         power: Power::On,
-        color: RoboticaColorOut {
-            hue: 0,
-            saturation: 0,
-            brightness,
-            kelvin,
+        color: RoboticaAutoColorOut {
+            hue: Some(0),
+            saturation: Some(0),
+            brightness: Some(brightness),
+            kelvin: Some(kelvin),
+            alpha: Some(100),
         },
     }
 }
@@ -238,7 +240,7 @@ fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_o
         timer::timer(Duration::from_secs(60))
             .map(move |_| timer_to_color(&location1, &device1))
             .diff()
-            .changed()
+            .changed_or_unknown()
             .map(move |c| color_to_message(c, &location2, &device2))
             .publish(mqtt_out);
     }
