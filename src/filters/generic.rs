@@ -154,13 +154,15 @@ fn gate<T: Send + Clone + 'static>(
         let mut filter = true;
         loop {
             select! {
+                biased;
+
+                Ok(gate) = recv(&mut gate) => {
+                    filter = gate;
+                }
                 Ok(input) = recv(&mut input) => {
                     if filter {
                         send_or_log(&output, input);
                     }
-                }
-                Ok(gate) = recv(&mut gate) => {
-                    filter = gate;
                 }
                 else => { break; }
             }
