@@ -1,4 +1,4 @@
-FROM rust:1.60-bullseye as builder
+FROM docker.io/library/rust:1.60-bullseye as builder
 WORKDIR /brian-node-rust
 
 RUN apt-get update \
