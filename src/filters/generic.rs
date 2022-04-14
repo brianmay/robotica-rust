@@ -170,6 +170,58 @@ fn gate<T: Send + Clone + 'static>(
     });
 }
 
+fn _if_else<T: Send + Clone + 'static>(
+    mut if_true: broadcast::Receiver<T>,
+    mut if_false: broadcast::Receiver<T>,
+    mut gate: broadcast::Receiver<bool>,
+    output: broadcast::Sender<T>,
+) {
+    spawn(async move {
+        let mut filter: Option<bool> = None;
+        let mut true_value: Option<T> = None;
+        let mut false_value: Option<T> = None;
+
+        loop {
+            select! {
+                Ok(gate) = recv(&mut gate) => {
+                    filter = Some(gate);
+                }
+                Ok(input) = recv(&mut if_true) => {
+                    true_value = Some(input);
+                }
+                Ok(input) = recv(&mut if_false) => {
+                    false_value = Some(input);
+                }
+                else => { break; }
+            }
+            let value = match filter {
+                Some(true) => &true_value,
+                Some(false) => &false_value,
+                None => &None,
+            };
+            if let Some(v) = value {
+                send_or_log(&output, v.clone());
+            }
+        }
+    });
+}
+
+/// Pass through if_true if gate value is true, otherwise pass through if_false
+pub fn if_else<T: Send + Clone + 'static>(
+    if_true: RxPipe<T>,
+    if_false: RxPipe<T>,
+    gate: RxPipe<bool>,
+) -> RxPipe<T> {
+    let output = Pipe::new();
+    _if_else(
+        if_true.subscribe(),
+        if_false.subscribe(),
+        gate.subscribe(),
+        output.get_tx(),
+    );
+    output.to_rx_pipe()
+}
+
 impl<T: Send + Clone + 'static> RxPipe<T> {
     /// Add previous value to the input stream.
     ///

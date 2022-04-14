@@ -1,10 +1,7 @@
 use std::time::Duration;
 
-use paho_mqtt::Message;
-use robotica_node_rust::sources::mqtt::{MqttOut, Subscriptions};
+use robotica_node_rust::sources::mqtt::Subscriptions;
 use serde::Deserialize;
-
-use super::robotica::RoboticaLightCommand;
 
 use log::*;
 
@@ -22,7 +19,7 @@ struct Beacon {
     interval: Option<u32>,
 }
 
-pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+pub fn brian_in_bedroom(subscriptions: &mut Subscriptions) -> robotica_node_rust::RxPipe<bool> {
     subscriptions
         .subscribe_to_string(
             "espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian",
@@ -41,25 +38,4 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         .startup_delay(Duration::from_secs(10), false)
         .delay_cancel(Duration::from_secs(10))
         .debug("Brian is in bedroom (delayed)")
-        .diff()
-        .changed()
-        .debug("Brian is in bedroom (changed)")
-        .map(|v| {
-            let action = if v {
-                None
-            } else {
-                Some("turn_off".to_string())
-            };
-            let command = RoboticaLightCommand {
-                action,
-                color: None,
-                scene: Some("auto".to_string()),
-            };
-            let location = "Brian";
-            let device = "Light";
-            let topic = format!("command/{location}/{device}");
-            let payload = serde_json::to_string(&command).unwrap();
-            Message::new(topic, payload, 0)
-        })
-        .publish(mqtt_out);
 }

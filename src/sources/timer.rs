@@ -6,8 +6,7 @@ use tokio::time;
 use crate::{send_or_log, spawn, Pipe, RxPipe};
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
-// FIXME: probably should be able to accept any type of message.
-pub fn timer(duration: Duration) -> RxPipe<bool> {
+pub fn timer<T: Clone + Send + 'static>(duration: Duration, value: T) -> RxPipe<T> {
     let output = Pipe::new();
     let tx = output.get_tx();
 
@@ -15,7 +14,7 @@ pub fn timer(duration: Duration) -> RxPipe<bool> {
         let mut interval = time::interval(duration);
 
         loop {
-            send_or_log(&tx, true);
+            send_or_log(&tx, value.clone());
             interval.tick().await;
         }
     });
@@ -34,7 +33,7 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let input = timer(duration);
+        let input = timer(duration, true);
         let mut rx = input.subscribe();
 
         sleep(wait_duration).await;

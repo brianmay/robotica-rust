@@ -45,7 +45,7 @@ pub struct RoboticaAutoColorOut {
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RoboticaAutoColor {
-    pub power: Power,
+    pub power: Option<Power>,
     pub color: RoboticaAutoColorOut,
 }
 

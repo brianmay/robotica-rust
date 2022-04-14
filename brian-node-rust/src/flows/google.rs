@@ -6,6 +6,7 @@ use chrono_tz::Tz;
 
 use log::*;
 use paho_mqtt::Message;
+use robotica_node_rust::filters::generic::if_else;
 use robotica_node_rust::recv;
 use robotica_node_rust::send_or_log;
 use robotica_node_rust::sources::mqtt::MqttOut;
@@ -18,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::select;
 
+use super::espresence;
 use super::robotica::string_to_power;
 use super::robotica::Power;
 use super::robotica::RoboticaAutoColor;
@@ -187,7 +189,7 @@ fn timer_to_color(location: &str, _device: &str) -> RoboticaAutoColor {
     };
 
     RoboticaAutoColor {
-        power: Power::On,
+        power: Some(Power::On),
         color: RoboticaAutoColorOut {
             hue: Some(0),
             saturation: Some(0),
@@ -232,13 +234,34 @@ fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_o
             .publish(mqtt_out);
     }
 
+    let gate = match location {
+        "Brian" => espresence::brian_in_bedroom(subscriptions),
+        _ => timer::timer(Duration::from_secs(60), true),
+    };
+
     {
+        let off_color = timer::timer(
+            Duration::from_secs(60),
+            RoboticaAutoColor {
+                power: None,
+                color: RoboticaAutoColorOut {
+                    hue: Some(0),
+                    saturation: Some(0),
+                    brightness: Some(0),
+                    kelvin: Some(3500),
+                    alpha: Some(0),
+                },
+            },
+        );
+
         let location1 = location.to_string();
         let device1 = device.to_string();
         let location2 = location.to_string();
         let device2 = device.to_string();
-        timer::timer(Duration::from_secs(60))
-            .map(move |_| timer_to_color(&location1, &device1))
+        let on_color = timer::timer(Duration::from_secs(60), true)
+            .map(move |_| timer_to_color(&location1, &device1));
+
+        if_else(on_color, off_color, gate)
             .diff()
             .changed_or_unknown()
             .map(move |c| color_to_message(c, &location2, &device2))
