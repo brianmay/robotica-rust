@@ -36,6 +36,6 @@ pub fn brian_in_bedroom(subscriptions: &mut Subscriptions) -> robotica_node_rust
         .map(|b| b.distance < 20.0)
         .debug("Brian is in bedroom")
         .startup_delay(Duration::from_secs(10), false)
-        .delay_cancel(Duration::from_secs(10))
+        .delay_cancel(Duration::from_secs(15))
         .debug("Brian is in bedroom (delayed)")
 }
