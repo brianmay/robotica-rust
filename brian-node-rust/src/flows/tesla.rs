@@ -21,8 +21,8 @@ fn geofence_to_message((old, new): (Option<String>, String)) -> Option<String> {
 fn plugged_in_to_message((old, new): (Option<bool>, bool)) -> Option<String> {
     match (old, new) {
         (None, _) => None,
-        (Some(false), true) => Some("The tesla has been plugged in".to_string()),
-        (Some(true), false) => Some("The tesla has been disconnected".to_string()),
+        (Some(false), true) => Some("The tesla has been leashed".to_string()),
+        (Some(true), false) => Some("The tesla has been unleashed".to_string()),
         (Some(true), true) => None,
         (Some(false), false) => None,
     }
@@ -93,9 +93,9 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
         .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
             if v {
-                "The tesla requires plugging in".to_string()
+                "The tesla requires leashing".to_string()
             } else {
-                "The tesla no longer requires plugging in".to_string()
+                "The tesla no longer requires leashing".to_string()
             }
         })
         .copy_to(message_sink);
