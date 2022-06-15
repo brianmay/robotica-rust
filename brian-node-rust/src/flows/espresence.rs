@@ -19,11 +19,14 @@ struct Beacon {
     interval: Option<u32>,
 }
 
-pub fn brian_in_bedroom(subscriptions: &mut Subscriptions) -> robotica_node_rust::RxPipe<bool> {
+pub fn brian_in_room(
+    room: &str,
+    subscriptions: &mut Subscriptions,
+) -> robotica_node_rust::RxPipe<bool> {
+    let topic =
+        &format!("espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/{room}");
     subscriptions
-        .subscribe_to_string(
-            "espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/brian",
-        )
+        .subscribe_to_string(topic)
         .filter_map(|s| {
             let b: Option<Beacon> = serde_json::from_str(&s)
                 .map_err(|err| {
@@ -34,8 +37,8 @@ pub fn brian_in_bedroom(subscriptions: &mut Subscriptions) -> robotica_node_rust
             b
         })
         .map(|b| b.distance < 20.0)
-        .debug("Brian is in bedroom")
+        .debug(&format!("Brian is in {room}"))
         .startup_delay(Duration::from_secs(10), false)
         .delay_cancel(Duration::from_secs(15))
-        .debug("Brian is in bedroom (delayed)")
+        .debug(&format!("Brian is in {room} (delayed)"))
 }

@@ -235,7 +235,8 @@ fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_o
     }
 
     let gate = match location {
-        "Brian" => espresence::brian_in_bedroom(subscriptions),
+        "Brian" => espresence::brian_in_room("brian", subscriptions),
+        "Passage" => espresence::brian_in_room("passage", subscriptions),
         _ => timer::timer(Duration::from_secs(60), true),
     };
 
