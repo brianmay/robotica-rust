@@ -73,7 +73,7 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
 
     is_insecure(is_user_present, locked)
         .debug("is_insecure")
-        .diff()
+        .diff_with_initial_value(Some(false))
         .changed()
         .delay_true(Duration::from_secs(60 * 2))
         .timer_true(Duration::from_secs(60 * 10))
@@ -88,7 +88,7 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
 
     requires_plugin(battery_level, plugged_in, geofence, reminder)
         .debug("requires_plugin")
-        .diff()
+        .diff_with_initial_value(Some(false))
         .changed()
         .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {

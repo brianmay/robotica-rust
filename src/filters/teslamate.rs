@@ -66,7 +66,7 @@ fn _is_insecure(
                 (None, _) => {}
                 (_, None) => {}
                 (Some(false), Some(false)) => {
-                    send_or_log(&output, false);
+                    send_or_log(&output, true);
                 }
                 (_, _) => {
                     send_or_log(&output, false);
