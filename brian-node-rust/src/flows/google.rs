@@ -51,7 +51,6 @@ pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     light("Passage", "Light", subscriptions, mqtt_out);
     light("Twins", "Light", subscriptions, mqtt_out);
     light("Akira", "Light", subscriptions, mqtt_out);
-    light("Passage", "Light", subscriptions, mqtt_out);
 
     device("Brian", "Fan", subscriptions, mqtt_out);
     device("Dining", "TvSwitch", subscriptions, mqtt_out);
