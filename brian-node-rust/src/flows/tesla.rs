@@ -73,9 +73,11 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
 
     is_insecure(is_user_present, locked)
         .debug("is_insecure")
+        .delay_true(Duration::from_secs(60 * 2))
+        .debug("is_insecure delayed")
         .diff_with_initial_value(Some(false))
         .changed()
-        .delay_true(Duration::from_secs(60 * 2))
+        .debug("is_insecure changed")
         .timer_true(Duration::from_secs(60 * 10))
         .map(|v| {
             if v {
