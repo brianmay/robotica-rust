@@ -22,6 +22,7 @@ struct Beacon {
 pub fn brian_in_room(
     room: &str,
     subscriptions: &mut Subscriptions,
+    threshold: f32,
 ) -> robotica_node_rust::RxPipe<bool> {
     let topic =
         &format!("espresense/devices/iBeacon:63a1368d-552b-4ea3-aed5-b5fefb2adf09-99-86/{room}");
@@ -36,7 +37,7 @@ pub fn brian_in_room(
                 .ok();
             b
         })
-        .map(|b| b.distance < 20.0)
+        .map(move |b| b.distance <= threshold)
         .debug(&format!("Brian is in {room}"))
         .startup_delay(Duration::from_secs(10), false)
         .delay_cancel(Duration::from_secs(15))
