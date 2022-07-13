@@ -1,5 +1,35 @@
 use serde::Serialize;
 
+#[derive(Clone)]
+pub struct Id {
+    pub location: String,
+    pub device: String,
+}
+
+impl Id {
+    pub fn new(location: &str, device: &str) -> Id {
+        Id {
+            location: location.to_string(),
+            device: device.to_string(),
+        }
+    }
+    pub fn get_state_topic(&self, component: &str) -> String {
+        format!("state/{}/{}/{}", self.location, self.device, component)
+    }
+    pub fn get_google_out_topic(&self) -> String {
+        format!("google/{}/{}/out", self.location, self.device)
+    }
+    pub fn get_google_in_topic(&self) -> String {
+        format!("google/{}/{}/in", self.location, self.device)
+    }
+    pub fn get_command_topic(&self, params: &[&str]) -> String {
+        match params.join("/").as_str() {
+            "" => format!("command/{}/{}", self.location, self.device),
+            params => format!("command/{}/{}/{}", self.location, self.device, params),
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Power {

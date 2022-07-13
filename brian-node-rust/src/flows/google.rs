@@ -21,6 +21,7 @@ use tokio::select;
 
 use super::espresence;
 use super::robotica::string_to_power;
+use super::robotica::Id;
 use super::robotica::Power;
 use super::robotica::RoboticaAutoColor;
 use super::robotica::RoboticaAutoColorOut;
@@ -46,17 +47,17 @@ struct GoogleCommand {
 }
 
 pub fn start(subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
-    light("Brian", "Light", subscriptions, mqtt_out);
-    light("Dining", "Light", subscriptions, mqtt_out);
-    light("Passage", "Light", subscriptions, mqtt_out);
-    light("Twins", "Light", subscriptions, mqtt_out);
-    light("Akira", "Light", subscriptions, mqtt_out);
+    light(&Id::new("Brian", "Light"), subscriptions, mqtt_out);
+    light(&Id::new("Dining", "Light"), subscriptions, mqtt_out);
+    light(&Id::new("Passage", "Light"), subscriptions, mqtt_out);
+    light(&Id::new("Twins", "Light"), subscriptions, mqtt_out);
+    light(&Id::new("Akira", "Light"), subscriptions, mqtt_out);
 
-    device("Brian", "Fan", subscriptions, mqtt_out);
-    device("Dining", "TvSwitch", subscriptions, mqtt_out);
+    device(&Id::new("Brian", "Fan"), subscriptions, mqtt_out);
+    device(&Id::new("Dining", "TvSwitch"), subscriptions, mqtt_out);
 }
 
-fn light_google_to_robotica(payload: String, location: &str, device: &str) -> Option<Message> {
+fn light_google_to_robotica(payload: String, id: &Id) -> Option<Message> {
     let mut color = RoboticaColorOut {
         hue: 0,
         saturation: 0,
@@ -96,7 +97,7 @@ fn light_google_to_robotica(payload: String, location: &str, device: &str) -> Op
         Some("turn_off".to_string())
     };
 
-    let scene = match (location, device) {
+    let scene = match (id.location.as_str(), id.device.as_str()) {
         ("Brian", "Light") => "auto".to_string(),
         (_, _) => "default".to_string(),
     };
@@ -107,12 +108,12 @@ fn light_google_to_robotica(payload: String, location: &str, device: &str) -> Op
         scene: Some(scene),
     };
 
-    let topic = format!("command/{location}/{device}");
+    let topic = id.get_command_topic(&[]);
     let payload = serde_json::to_string(&command).unwrap();
     Some(Message::new(topic, payload, 0))
 }
 
-fn device_google_to_robotica(payload: String, location: &str, device: &str) -> Option<Message> {
+fn device_google_to_robotica(payload: String, id: &Id) -> Option<Message> {
     let d = &mut serde_json::Deserializer::from_str(&payload);
     let gc: Result<GoogleCommand, _> = serde_path_to_error::deserialize(d);
 
@@ -129,12 +130,12 @@ fn device_google_to_robotica(payload: String, location: &str, device: &str) -> O
     };
 
     let command = RoboticaDeviceCommand { action };
-    let topic = format!("command/{location}/{device}");
+    let topic = id.get_command_topic(&[]);
     let payload = serde_json::to_string(&command).unwrap();
     Some(Message::new(topic, payload, 0))
 }
 
-fn robotica_to_google(power: Power, location: &str, device: &str) -> Message {
+fn robotica_to_google(power: Power, id: &Id) -> Message {
     let command = match power {
         Power::On => GoogleCommand {
             on: true,
@@ -154,18 +155,18 @@ fn robotica_to_google(power: Power, location: &str, device: &str) -> Message {
         },
     };
 
-    let topic = format!("google/{location}/{device}/in");
+    let topic = id.get_google_in_topic();
     let payload = serde_json::to_string(&command).unwrap();
     Message::new(topic, payload, 0)
 }
 
-fn timer_to_color(location: &str, _device: &str) -> RoboticaAutoColor {
+fn timer_to_color(id: &Id) -> RoboticaAutoColor {
     let now: DateTime<Utc> = Utc::now();
     let tz: Tz = "Australia/Melbourne".parse().unwrap();
     let local_now = now.with_timezone(&tz);
     let hour = local_now.hour();
 
-    let brightness = if location == "Brian" {
+    let brightness = if id.location == "Brian" {
         match hour {
             h if !(5..22).contains(&h) => 5,
             h if !(6..21).contains(&h) => 15,
@@ -199,41 +200,39 @@ fn timer_to_color(location: &str, _device: &str) -> RoboticaAutoColor {
     }
 }
 
-fn color_to_message(color: RoboticaAutoColor, location: &str, device: &str) -> Message {
-    let topic = format!("command/{location}/{device}/scene/auto");
+fn color_to_message(color: RoboticaAutoColor, id: &Id) -> Message {
+    let topic = id.get_command_topic(&["scene", "auto"]);
     let payload = serde_json::to_string(&color).unwrap();
     Message::new_retained(topic, payload, 0)
 }
 
-fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+fn light(id: &Id, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     {
-        let location = location.to_string();
-        let device = device.to_string();
-        let topic = format!("google/{location}/{device}/out");
+        let id = (*id).clone();
+        let topic = id.get_google_out_topic();
         subscriptions
             .subscribe_to_string(&topic)
-            .filter_map(move |payload| light_google_to_robotica(payload, &location, &device))
+            .filter_map(move |payload| light_google_to_robotica(payload, &id))
             .publish(mqtt_out);
     }
 
     {
-        let topic = format!("state/{location}/{device}/power");
+        let topic = id.get_state_topic("power");
         let power_str = subscriptions.subscribe_to_string(&topic);
 
-        let topic = format!("state/{location}/{device}/priorities");
+        let topic = id.get_state_topic("priorities");
         let priorities = subscriptions.subscribe_to_string(&topic).map(|payload| {
             let list: Vec<u16> = serde_json::from_str(&payload).unwrap();
             list
         });
 
-        let location = location.to_string();
-        let device = device.to_string();
+        let id = (*id).clone();
         light_power(priorities, power_str)
-            .map(move |power| robotica_to_google(power, &location, &device))
+            .map(move |power| robotica_to_google(power, &id))
             .publish(mqtt_out);
     }
 
-    let gate = match location {
+    let gate = match id.location.as_str() {
         "Brian" => espresence::brian_in_room("brian", subscriptions, 20.0),
         "Passage" => espresence::brian_in_room("passage", subscriptions, 1.5),
         _ => timer::timer(Duration::from_secs(60), true),
@@ -254,42 +253,38 @@ fn light(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_o
             },
         );
 
-        let location1 = location.to_string();
-        let device1 = device.to_string();
-        let location2 = location.to_string();
-        let device2 = device.to_string();
-        let on_color = timer::timer(Duration::from_secs(60), true)
-            .map(move |_| timer_to_color(&location1, &device1));
+        let id1 = (*id).clone();
+        let on_color =
+            timer::timer(Duration::from_secs(60), true).map(move |_| timer_to_color(&id1));
 
+        let id2 = (*id).clone();
         if_else(on_color, off_color, gate)
             .diff()
             .changed_or_unknown()
-            .map(move |c| color_to_message(c, &location2, &device2))
+            .map(move |c| color_to_message(c, &id2))
             .publish(mqtt_out);
     }
 }
 
-fn device(location: &str, device: &str, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
+fn device(id: &Id, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     {
-        let location = location.to_string();
-        let device = device.to_string();
-        let topic = format!("google/{location}/{device}/out");
+        let id = (*id).clone();
+        let topic = id.get_google_out_topic();
 
         subscriptions
             .subscribe_to_string(&topic)
-            .filter_map(move |payload| device_google_to_robotica(payload, &location, &device))
+            .filter_map(move |payload| device_google_to_robotica(payload, &id))
             .publish(mqtt_out);
     }
 
     {
-        let location = location.to_string();
-        let device = device.to_string();
-        let topic = format!("state/{location}/{device}/power");
+        let id = (*id).clone();
+        let topic = id.get_state_topic("power");
 
         subscriptions
             .subscribe_to_string(&topic)
             .map(string_to_power)
-            .map(move |power| robotica_to_google(power, &location, &device))
+            .map(move |power| robotica_to_google(power, &id))
             .publish(mqtt_out);
     }
 }
