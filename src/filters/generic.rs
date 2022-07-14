@@ -171,9 +171,9 @@ fn gate<T: Send + Clone + 'static>(
 }
 
 fn _if_else<T: Send + Clone + 'static>(
+    mut gate: broadcast::Receiver<bool>,
     mut if_true: broadcast::Receiver<T>,
     mut if_false: broadcast::Receiver<T>,
-    mut gate: broadcast::Receiver<bool>,
     output: broadcast::Sender<T>,
 ) {
     spawn(async move {
@@ -208,15 +208,15 @@ fn _if_else<T: Send + Clone + 'static>(
 
 /// Pass through if_true if gate value is true, otherwise pass through if_false
 pub fn if_else<T: Send + Clone + 'static>(
+    gate: RxPipe<bool>,
     if_true: RxPipe<T>,
     if_false: RxPipe<T>,
-    gate: RxPipe<bool>,
 ) -> RxPipe<T> {
     let output = Pipe::new();
     _if_else(
+        gate.subscribe(),
         if_true.subscribe(),
         if_false.subscribe(),
-        gate.subscribe(),
         output.get_tx(),
     );
     output.to_rx_pipe()

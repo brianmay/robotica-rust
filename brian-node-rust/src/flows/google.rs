@@ -258,7 +258,7 @@ fn light(id: &Id, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
             timer::timer(Duration::from_secs(60), true).map(move |_| timer_to_color(&id1));
 
         let id2 = (*id).clone();
-        if_else(on_color, off_color, gate)
+        if_else(gate, on_color, off_color)
             .diff()
             .changed_or_unknown()
             .map(move |c| color_to_message(c, &id2))
