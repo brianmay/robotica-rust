@@ -6,6 +6,7 @@ use flows::common::message_sink;
 use flows::google;
 use flows::life360;
 use flows::tesla;
+use flows::zigbee;
 use robotica_node_rust::sources::mqtt::MqttOut;
 
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
@@ -31,6 +32,7 @@ fn setup_pipes(mqtt: &MqttOut) -> Subscriptions {
 
     tesla::start(&mut subscriptions, &message_sink);
     life360::start(mqtt, &message_sink);
+    zigbee::start(&mut subscriptions, &message_sink);
     google::start(&mut subscriptions, mqtt);
 
     subscriptions
