@@ -30,7 +30,7 @@ pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>) {
     subscriptions
         .subscribe_to_string("zigbee2mqtt/Dining/door")
         .filter_map(third_reality_door_sensor)
-        .map(|door_sensor| door_sensor.contact)
+        .map(|door_sensor| !door_sensor.contact)
         .diff()
         .changed()
         .delay_true(Duration::from_secs(30))
