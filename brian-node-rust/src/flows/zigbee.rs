@@ -66,7 +66,7 @@ pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>, m
             },
         })
         .map(|command| {
-            let id = Id::new("Bathroom", "Light");
+            let id = Id::new("Passage", "Light");
             let topic = id.get_command_topic(&[]);
             let payload = serde_json::to_string(&command).unwrap();
             Message::new(topic, payload, 0)
