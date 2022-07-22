@@ -32,7 +32,7 @@ fn setup_pipes(mqtt: &MqttOut) -> Subscriptions {
 
     tesla::start(&mut subscriptions, &message_sink);
     life360::start(mqtt, &message_sink);
-    zigbee::start(&mut subscriptions, &message_sink);
+    zigbee::start(&mut subscriptions, &message_sink, mqtt);
     google::start(&mut subscriptions, mqtt);
 
     subscriptions
