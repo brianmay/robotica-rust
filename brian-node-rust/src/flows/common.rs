@@ -6,6 +6,8 @@ use robotica_node_rust::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::robotica::Id;
+
 pub fn power_to_bool(value: String) -> bool {
     value == "ON"
 }
@@ -41,7 +43,7 @@ struct AudioMessage {
     message: MessageText,
 }
 
-fn string_to_message(str: String, topic: &str) -> Message {
+pub fn string_to_message(str: String, topic: &str) -> Message {
     let msg = AudioMessage {
         message: MessageText { text: str },
     };
@@ -55,8 +57,11 @@ pub fn message_location(
     mqtt: &MqttOut,
     location: &str,
 ) {
-    let gate_topic = format!("state/{}/Messages/power", location);
-    let command_topic = format!("command/{}/Robotica", location);
+    let gate_id = Id::new(location, "Messages");
+    let gate_topic = gate_id.get_state_topic("power");
+    let command_id = Id::new(location, "Robotica");
+    let command_topic = command_id.get_command_topic(&[]);
+
     let do_gate = subscriptions
         .subscribe_to_string(&gate_topic)
         .map(power_to_bool);
