@@ -8,8 +8,8 @@ use robotica_node_rust::{
 use serde::Deserialize;
 
 use super::{
-    common::{power_to_bool, string_to_message},
-    robotica::{Action, Id, RoboticaDeviceCommand, RoboticaLightCommand},
+    common::power_to_bool,
+    robotica::{string_to_message, Action, Id, RoboticaDeviceCommand, RoboticaLightCommand},
 };
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]

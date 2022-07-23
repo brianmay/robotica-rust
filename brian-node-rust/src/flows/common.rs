@@ -1,12 +1,10 @@
 use log::*;
-use paho_mqtt::Message;
 use robotica_node_rust::{
     sources::mqtt::{MqttOut, Subscriptions},
     Pipe, RxPipe, TxPipe,
 };
-use serde::{Deserialize, Serialize};
 
-use super::robotica::Id;
+use super::robotica::{string_to_message, Id};
 
 pub fn power_to_bool(value: String) -> bool {
     value == "ON"
@@ -31,24 +29,6 @@ pub fn string_to_bool(str: String) -> Option<bool> {
             None
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct MessageText {
-    text: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct AudioMessage {
-    message: MessageText,
-}
-
-pub fn string_to_message(str: String, topic: &str) -> Message {
-    let msg = AudioMessage {
-        message: MessageText { text: str },
-    };
-    let payload = serde_json::to_string(&msg).unwrap();
-    Message::new(topic, payload, 0)
 }
 
 pub fn message_location(
