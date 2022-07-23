@@ -48,10 +48,17 @@ pub struct RoboticaColorOut {
     pub kelvin: u16,
 }
 
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    TurnOn,
+    TurnOff,
+}
+
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RoboticaLightCommand {
-    pub action: Option<String>,
+    pub action: Option<Action>,
     pub color: Option<RoboticaColorOut>,
     pub scene: Option<String>,
 }
@@ -59,7 +66,7 @@ pub struct RoboticaLightCommand {
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RoboticaDeviceCommand {
-    pub action: Option<String>,
+    pub action: Option<Action>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]

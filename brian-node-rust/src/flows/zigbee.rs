@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use super::{
     common::{power_to_bool, string_to_message},
-    robotica::{Id, RoboticaDeviceCommand, RoboticaLightCommand},
+    robotica::{Action, Id, RoboticaDeviceCommand, RoboticaLightCommand},
 };
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -56,7 +56,7 @@ pub fn bathroom_location(
     gate_result
         .filter(move |msg| *msg)
         .map(|_| RoboticaDeviceCommand {
-            action: Some("turn_off".to_string()),
+            action: Some(Action::TurnOff),
         })
         .map(move |command| {
             let payload = serde_json::to_string(&command).unwrap();
@@ -102,7 +102,7 @@ pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>, m
         .map(|contact| match contact {
             // Door is open
             true => RoboticaLightCommand {
-                action: Some("turn_off".to_string()),
+                action: Some(Action::TurnOff),
                 color: None,
                 scene: Some("alert_bathroom".to_string()),
             },

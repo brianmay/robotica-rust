@@ -21,6 +21,7 @@ use tokio::select;
 
 use super::espresence;
 use super::robotica::string_to_power;
+use super::robotica::Action;
 use super::robotica::Id;
 use super::robotica::Power;
 use super::robotica::RoboticaAutoColor;
@@ -91,11 +92,7 @@ fn light_google_to_robotica(payload: String, id: &Id) -> Option<Message> {
         color.kelvin = temperature;
     }
 
-    let action = if gc.on {
-        None
-    } else {
-        Some("turn_off".to_string())
-    };
+    let action = if gc.on { None } else { Some(Action::TurnOff) };
 
     let scene = match (id.location.as_str(), id.device.as_str()) {
         ("Brian", "Light") => "auto".to_string(),
@@ -124,9 +121,9 @@ fn device_google_to_robotica(payload: String, id: &Id) -> Option<Message> {
 
     let gc = gc.unwrap();
     let action = if gc.on {
-        Some("turn_on".to_string())
+        Some(Action::TurnOn)
     } else {
-        Some("turn_off".to_string())
+        Some(Action::TurnOff)
     };
 
     let command = RoboticaDeviceCommand { action };
