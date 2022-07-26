@@ -65,23 +65,6 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
         .filter_map(plugged_in_to_message)
         .copy_to(message_sink);
 
-    is_insecure(is_user_present, locked)
-        .debug("is_insecure")
-        .delay_true(Duration::from_secs(60 * 2))
-        .debug("is_insecure delayed")
-        .diff_with_initial_value(Some(false))
-        .changed()
-        .debug("is_insecure changed")
-        .timer_true(Duration::from_secs(60 * 10))
-        .map(|v| {
-            if v {
-                "The tesla is lonely and insecure".to_string()
-            } else {
-                "The tesla is secure and has many friends".to_string()
-            }
-        })
-        .copy_to(message_sink);
-
     requires_plugin(battery_level, plugged_in, geofence, reminder)
         .debug("requires_plugin")
         .diff_with_initial_value(Some(false))
