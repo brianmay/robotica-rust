@@ -83,7 +83,7 @@ pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>, m
         .delay_true(Duration::from_secs(30))
         .diff_with_initial_value(Some(false))
         .changed()
-        .timer_true(Duration::from_secs(60))
+        .timer_true(Duration::from_secs(120))
         .map(|state| match state {
             true => "Please close the front door".to_string(),
             false => "Thank-you for closing the front door".to_string(),
