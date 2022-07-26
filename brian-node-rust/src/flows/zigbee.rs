@@ -75,21 +75,11 @@ pub fn bathroom_location(
         .publish(mqtt);
 }
 
-pub fn start(subscriptions: &mut Subscriptions, message_sink: &TxPipe<String>, mqtt_out: &MqttOut) {
-    subscriptions
-        .subscribe_to_string("zigbee2mqtt/Dining/door")
-        .filter_map(third_reality_door_sensor)
-        .map(|door_sensor| !door_sensor.contact)
-        .delay_true(Duration::from_secs(30))
-        .diff_with_initial_value(Some(false))
-        .changed()
-        .timer_true(Duration::from_secs(120))
-        .map(|state| match state {
-            true => "Please close the front door".to_string(),
-            false => "Thank-you for closing the front door".to_string(),
-        })
-        .copy_to(message_sink);
-
+pub fn start(
+    subscriptions: &mut Subscriptions,
+    _message_sink: &TxPipe<String>,
+    mqtt_out: &MqttOut,
+) {
     let bathroom = subscriptions
         .subscribe_to_string("zigbee2mqtt/Bathroom/door")
         .filter_map(third_reality_door_sensor)
