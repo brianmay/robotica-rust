@@ -59,12 +59,6 @@ fn car(car_id: usize, subscriptions: &mut Subscriptions, message_sink: &TxPipe<S
     let topic = String::from("state/Brian/TeslaReminder/power");
     let reminder = subscriptions.subscribe_to_string(&topic).map(power_to_bool);
 
-    geofence
-        .debug("geofence")
-        .diff()
-        .filter_map(geofence_to_message)
-        .copy_to(message_sink);
-
     plugged_in
         .debug("plugged_in")
         .diff()
