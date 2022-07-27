@@ -4,7 +4,6 @@ mod http;
 use anyhow::Result;
 use flows::common::message_sink;
 use flows::google;
-use flows::zigbee;
 use robotica_node_rust::sources::mqtt::MqttOut;
 
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
@@ -26,9 +25,8 @@ async fn main() -> Result<()> {
 
 fn setup_pipes(mqtt: &MqttOut) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
-    let message_sink = message_sink(&mut subscriptions, mqtt);
+    let _message_sink = message_sink(&mut subscriptions, mqtt);
 
-    zigbee::start(&mut subscriptions, &message_sink, mqtt);
     google::start(&mut subscriptions, mqtt);
 
     subscriptions
