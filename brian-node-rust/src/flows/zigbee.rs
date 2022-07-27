@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use paho_mqtt::Message;
 use robotica_node_rust::{
     sources::mqtt::{MqttOut, Subscriptions},

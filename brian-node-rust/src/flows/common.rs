@@ -10,6 +10,7 @@ pub fn power_to_bool(value: String) -> bool {
     value == "ON"
 }
 
+#[allow(dead_code)]
 pub fn string_to_integer(str: String) -> Option<usize> {
     match str.parse::<usize>() {
         Ok(value) => Some(value),
@@ -20,6 +21,7 @@ pub fn string_to_integer(str: String) -> Option<usize> {
     }
 }
 
+#[allow(dead_code)]
 pub fn string_to_bool(str: String) -> Option<bool> {
     match str.as_str() {
         "true" => Some(true),
