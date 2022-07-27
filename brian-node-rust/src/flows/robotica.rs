@@ -106,6 +106,7 @@ struct AudioMessage {
     message: MessageText,
 }
 
+#[allow(dead_code)]
 pub fn string_to_message(str: String, topic: &str) -> Message {
     let msg = AudioMessage {
         message: MessageText { text: str },

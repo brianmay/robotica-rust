@@ -6,6 +6,7 @@ use robotica_node_rust::{
 
 use super::robotica::{string_to_message, Id};
 
+#[allow(dead_code)]
 pub fn power_to_bool(value: String) -> bool {
     value == "ON"
 }
@@ -33,6 +34,7 @@ pub fn string_to_bool(str: String) -> Option<bool> {
     }
 }
 
+#[allow(dead_code)]
 pub fn message_location(
     rx: RxPipe<String>,
     subscriptions: &mut Subscriptions,
@@ -53,6 +55,7 @@ pub fn message_location(
         .publish(mqtt);
 }
 
+#[allow(dead_code)]
 pub fn message_sink(subscriptions: &mut Subscriptions, mqtt: &MqttOut) -> TxPipe<String> {
     let pipe_start = Pipe::new();
 
