@@ -1,31 +1,21 @@
 use anyhow::Result;
-use chrono::DateTime;
-use chrono::Timelike;
-use chrono::Utc;
-use chrono_tz::Tz;
 
 use log::*;
 use paho_mqtt::Message;
-use robotica_node_rust::filters::generic::if_else;
 use robotica_node_rust::recv;
 use robotica_node_rust::send_or_log;
 use robotica_node_rust::sources::mqtt::MqttOut;
 use robotica_node_rust::sources::mqtt::Subscriptions;
-use robotica_node_rust::sources::timer;
 use robotica_node_rust::spawn;
 use robotica_node_rust::Pipe;
 use robotica_node_rust::RxPipe;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::select;
 
-use super::espresence;
 use super::robotica::string_to_power;
 use super::robotica::Action;
 use super::robotica::Id;
 use super::robotica::Power;
-use super::robotica::RoboticaAutoColor;
-use super::robotica::RoboticaAutoColorOut;
 use super::robotica::RoboticaColorOut;
 use super::robotica::RoboticaDeviceCommand;
 use super::robotica::RoboticaLightCommand;
@@ -157,52 +147,6 @@ fn robotica_to_google(power: Power, id: &Id) -> Message {
     Message::new(topic, payload, 0)
 }
 
-fn timer_to_color(id: &Id) -> RoboticaAutoColor {
-    let now: DateTime<Utc> = Utc::now();
-    let tz: Tz = "Australia/Melbourne".parse().unwrap();
-    let local_now = now.with_timezone(&tz);
-    let hour = local_now.hour();
-
-    let brightness = if id.location == "Brian" {
-        match hour {
-            h if !(5..22).contains(&h) => 5,
-            h if !(6..21).contains(&h) => 15,
-            h if !(7..20).contains(&h) => 25,
-            h if !(8..19).contains(&h) => 50,
-            h if !(9..18).contains(&h) => 100,
-            _ => 100,
-        }
-    } else {
-        100
-    };
-
-    let kelvin = match hour {
-        h if !(5..22).contains(&h) => 1000,
-        h if !(6..21).contains(&h) => 1500,
-        h if !(7..20).contains(&h) => 2000,
-        h if !(8..19).contains(&h) => 2500,
-        h if !(9..18).contains(&h) => 3000,
-        _ => 3500,
-    };
-
-    RoboticaAutoColor {
-        power: Some(Power::On),
-        color: RoboticaAutoColorOut {
-            hue: Some(0),
-            saturation: Some(0),
-            brightness: Some(brightness),
-            kelvin: Some(kelvin),
-            alpha: Some(100),
-        },
-    }
-}
-
-fn color_to_message(color: RoboticaAutoColor, id: &Id) -> Message {
-    let topic = id.get_command_topic(&["scene", "auto"]);
-    let payload = serde_json::to_string(&color).unwrap();
-    Message::new_retained(topic, payload, 0)
-}
-
 fn light(id: &Id, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
     {
         let id = (*id).clone();
@@ -226,39 +170,6 @@ fn light(id: &Id, subscriptions: &mut Subscriptions, mqtt_out: &MqttOut) {
         let id = (*id).clone();
         light_power(priorities, power_str)
             .map(move |power| robotica_to_google(power, &id))
-            .publish(mqtt_out);
-    }
-
-    let gate = match id.location.as_str() {
-        "Brian" => espresence::brian_in_room("brian", subscriptions, 20.0),
-        "Passage" => espresence::brian_in_room("passage", subscriptions, 1.5),
-        _ => timer::timer(Duration::from_secs(60), true),
-    };
-
-    {
-        let off_color = timer::timer(
-            Duration::from_secs(60),
-            RoboticaAutoColor {
-                power: None,
-                color: RoboticaAutoColorOut {
-                    hue: Some(0),
-                    saturation: Some(0),
-                    brightness: Some(0),
-                    kelvin: Some(3500),
-                    alpha: Some(0),
-                },
-            },
-        );
-
-        let id1 = (*id).clone();
-        let on_color =
-            timer::timer(Duration::from_secs(60), true).map(move |_| timer_to_color(&id1));
-
-        let id2 = (*id).clone();
-        if_else(gate, on_color, off_color)
-            .diff()
-            .changed_or_unknown()
-            .map(move |c| color_to_message(c, &id2))
             .publish(mqtt_out);
     }
 }
