@@ -186,7 +186,7 @@ pub fn circles() -> RxPipe<Member> {
 async fn retry_login(username: &str, password: &str) -> Login {
     let mut attempt: u32 = 0;
 
-    let login = loop {
+    loop {
         let sleep_time = 1000 * 2u64.checked_pow(attempt).unwrap();
         let sleep_time = min(60_000, sleep_time);
 
@@ -217,9 +217,7 @@ async fn retry_login(username: &str, password: &str) -> Login {
         }
 
         attempt = attempt.saturating_add(1);
-    };
-
-    login
+    }
 }
 
 async fn get_circles_or_none(login: &Login) -> Option<List> {
