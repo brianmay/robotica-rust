@@ -1,5 +1,8 @@
-use paho_mqtt::Message;
+use std::fmt::Display;
+
+use robotica_node_rust::sources::mqtt::Message;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Id {
@@ -17,12 +20,6 @@ impl Id {
     pub fn get_state_topic(&self, component: &str) -> String {
         format!("state/{}/{}/{}", self.location, self.device, component)
     }
-    pub fn get_google_out_topic(&self) -> String {
-        format!("google/{}/{}/out", self.location, self.device)
-    }
-    pub fn get_google_in_topic(&self) -> String {
-        format!("google/{}/{}/in", self.location, self.device)
-    }
     pub fn get_command_topic(&self, params: &[&str]) -> String {
         match params.join("/").as_str() {
             "" => format!("command/{}/{}", self.location, self.device),
@@ -31,13 +28,45 @@ impl Id {
     }
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Error, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Power {
     On,
     Off,
     HardOff,
-    Error,
+}
+
+impl Display for Power {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Power::On => write!(f, "on"),
+            Power::Off => write!(f, "off"),
+            Power::HardOff => write!(f, "hard off"),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum PowerErr {
+    #[error("Invalid power state: {0}")]
+    InvalidPowerState(String),
+
+    #[error("Invalid UTF8")]
+    Utf8Error(#[from] std::str::Utf8Error),
+}
+
+impl TryFrom<Message> for Power {
+    type Error = PowerErr;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let payload: String = msg.try_into()?;
+        match payload.as_str() {
+            "ON" => Ok(Power::On),
+            "OFF" => Ok(Power::Off),
+            "HARDOFF" => Ok(Power::HardOff),
+            _ => Err(PowerErr::InvalidPowerState(payload)),
+        }
+    }
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
@@ -49,6 +78,7 @@ pub struct RoboticaColorOut {
     pub kelvin: u16,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
@@ -87,30 +117,21 @@ pub struct RoboticaAutoColor {
     pub color: RoboticaAutoColorOut,
 }
 
-pub fn string_to_power(value: String) -> Power {
-    match value.as_str() {
-        "OFF" => Power::Off,
-        "ON" => Power::On,
-        "HARD_OFF" => Power::HardOff,
-        _ => Power::Error,
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct MessageText {
-    text: String,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 struct AudioMessage {
-    message: MessageText,
+    #[serde(rename = "type")]
+    msg_type: String,
+    message: String,
 }
 
 #[allow(dead_code)]
-pub fn string_to_message(str: String, topic: &str) -> Message {
+pub fn string_to_message(str: &str, location: &str) -> Message {
+    let id = Id::new(location, "Robotica");
+
     let msg = AudioMessage {
-        message: MessageText { text: str },
+        msg_type: "audio".to_string(),
+        message: str.to_string(),
     };
     let payload = serde_json::to_string(&msg).unwrap();
-    Message::new(topic, payload, 0)
+    Message::from_string(&id.get_command_topic(&[]), &payload, false, 0)
 }

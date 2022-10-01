@@ -3,57 +3,139 @@ use log::*;
 use paho_mqtt::AsyncClient;
 use paho_mqtt::ConnectOptionsBuilder;
 use paho_mqtt::CreateOptionsBuilder;
-use paho_mqtt::Message;
 use paho_mqtt::SslOptionsBuilder;
 use std::cmp::min;
 use std::collections::HashMap;
+use std::str::Utf8Error;
 use std::time::Duration;
 use std::{env, str};
 use tokio::select;
-use tokio::sync::broadcast;
-use tokio::sync::broadcast::Receiver;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::timeout;
 use tokio::time::Instant;
 
-use crate::recv;
-use crate::send_or_log;
+use crate::entities;
+// use crate::entities::FromTranslate;
 use crate::spawn;
-use crate::Pipe;
-use crate::RxPipe;
-use crate::TxPipe;
+
+/// A received/sent MQTT message
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Message {
+    /// The topic of the message
+    pub topic: String,
+
+    /// The raw unparsed payload of the message
+    pub payload: Vec<u8>,
+
+    /// Was/Is this message retained?
+    pub retain: bool,
+
+    /// What is the QoS of this message?
+    qos: i32,
+
+    /// What was the instant this message was created?
+    instant: Instant,
+}
+
+impl Message {
+    /// Create a new message.
+    pub fn new(topic: &str, payload: Vec<u8>, retain: bool, qos: i32) -> Self {
+        Self {
+            topic: topic.to_string(),
+            payload,
+            retain,
+            qos,
+            instant: Instant::now(),
+        }
+    }
+
+    /// Create a message from a string.
+    pub fn from_string(topic: &str, payload: &str, retain: bool, qos: i32) -> Message {
+        Message {
+            topic: topic.to_string(),
+            payload: payload.as_bytes().to_vec(),
+            retain,
+            qos,
+            instant: Instant::now(),
+        }
+    }
+}
+
+impl From<paho_mqtt::Message> for Message {
+    fn from(msg: paho_mqtt::Message) -> Self {
+        let topic = msg.topic().to_string();
+        Self {
+            topic,
+            payload: msg.payload().to_vec(),
+            retain: msg.retained(),
+            qos: msg.qos(),
+            instant: Instant::now(),
+        }
+    }
+}
+
+impl From<Message> for paho_mqtt::Message {
+    fn from(msg: Message) -> Self {
+        if msg.retain {
+            Self::new_retained(msg.topic, msg.payload, msg.qos)
+        } else {
+            Self::new(msg.topic, msg.payload, msg.qos)
+        }
+    }
+}
+
+impl TryFrom<Message> for String {
+    type Error = Utf8Error;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        Ok(str::from_utf8(&msg.payload)?.to_string())
+    }
+}
 
 #[derive(Debug, Clone)]
 enum MqttMessage {
-    MqttOut(Message, Instant),
+    MqttOut(Message),
 }
 
 /// Client struct used to connect to MQTT.
 pub struct MqttClient {
     b: Option<JoinHandle<()>>,
-    pipe: Pipe<MqttMessage>,
-    rx: Option<Receiver<MqttMessage>>,
+    tx: Option<mpsc::Sender<MqttMessage>>,
+    rx: Option<mpsc::Receiver<MqttMessage>>,
 }
 
 /// Struct used to send outgoing MQTT messages.
-pub struct MqttOut(TxPipe<MqttMessage>);
+#[derive(Clone)]
+pub struct MqttOut(mpsc::Sender<MqttMessage>);
+
+impl MqttOut {
+    /// Send a message to the MQTT broker.
+    pub async fn send(&self, msg: Message) {
+        self.0
+            .send(MqttMessage::MqttOut(msg))
+            .await
+            .expect("Failed to send message");
+    }
+}
 
 impl MqttClient {
     /// Create a new MQTT client.
     pub async fn new() -> Self {
         // Outgoing MQTT queue.
-        let pipe = Pipe::new_with_size(50);
+        let (tx, rx) = mpsc::channel(50);
 
-        // Subscribe now so we don't miss any out
-        let rx = Some(pipe.to_rx_pipe().subscribe());
-
-        MqttClient { b: None, pipe, rx }
+        MqttClient {
+            b: None,
+            tx: Some(tx),
+            rx: Some(rx),
+        }
     }
 
     /// Get the [MqttOut] struct for sending outgoing messages.
     pub fn get_mqtt_out(&mut self) -> MqttOut {
-        MqttOut(self.pipe.to_tx_pipe())
+        MqttOut(self.tx.take().unwrap())
     }
 
     /// Connect to the MQTT broker.
@@ -115,12 +197,12 @@ impl MqttClient {
                 select! {
                     Ok(msg_or_none) = mqtt_in_rx.recv() => {
                         if let Some(msg) = msg_or_none {
-                            let topic = msg.topic();
-                            let payload = msg.payload();
-                            let payload = str::from_utf8(payload).unwrap().to_string();
-                            debug!("incoming mqtt {topic} {payload}");
+                            let msg: Message = msg.into();
+                            let topic = &msg.topic;
+                            // let payload = msg.payload;
+                            debug!("incoming mqtt {topic}");
                             if let Some(subscription) = subscriptions.get(topic) {
-                                send_or_log(&subscription.tx, msg);
+                                subscription.tx.send(msg).await;
                             }
                         } else if !cli.is_connected() {
                             try_reconnect(&cli).await;
@@ -128,25 +210,25 @@ impl MqttClient {
                             subscribe_topics(&cli, &subscriptions).await;
                         }
                     },
-                    Ok(msg) = recv(&mut rx) => {
+                    Some(msg) = rx.recv() => {
                         let now = Instant::now();
                         match msg {
-                            MqttMessage::MqttOut(_, instant) if message_expired(&now, &instant) => {
+                            MqttMessage::MqttOut(msg) if message_expired(&now, &msg.instant) => {
                                 warn!("Discarding outgoing message as too old");
                             },
-                            MqttMessage::MqttOut(msg, _) => {
+                            MqttMessage::MqttOut(msg) => {
                                 let debug_mode: bool = is_debug_mode();
 
                                 info!(
-                                    "outgoing mqtt {} {} {} {}",
+                                    "outgoing mqtt {} {} {}",
                                     if debug_mode { "nop" } else { "live" },
-                                    msg.retained(),
-                                    msg.topic(),
-                                    str::from_utf8(msg.payload()).unwrap().to_string()
+                                    msg.retain,
+                                    msg.topic
                                 );
 
                                 if !debug_mode {
-                                    cli.publish(msg).await.unwrap()
+                                    cli.publish(msg.into
+                                        ()).await.unwrap()
                                 }
                             },
                         }
@@ -171,15 +253,11 @@ fn message_expired(now: &Instant, sent: &Instant) -> bool {
     (*now - *sent) > Duration::from_secs(300)
 }
 
-#[derive(Clone)]
 struct Subscription {
     #[allow(dead_code)]
     topic: String,
-    tx: broadcast::Sender<Message>,
-}
-
-fn message_to_string(msg: Message) -> String {
-    str::from_utf8(msg.payload()).unwrap().to_string()
+    tx: entities::Sender<Message>,
+    rx: entities::Receiver<Message>,
 }
 
 /// List of all required subscriptions.
@@ -196,26 +274,31 @@ impl Subscriptions {
     }
 
     /// Add a new subscription.
-    pub fn subscribe(&mut self, topic: &str) -> RxPipe<Message> {
+    pub fn subscribe(&mut self, topic: &str) -> entities::Receiver<Message> {
         // Per subscription incoming MQTT queue.
         if let Some(subscription) = self.0.get(topic) {
-            RxPipe::new_from_sender(subscription.tx.clone())
+            subscription.rx.clone()
         } else {
-            let output = Pipe::new();
+            let (tx, rx) = entities::create_entity(topic);
 
             let subscription = Subscription {
                 topic: topic.to_string(),
-                tx: output.get_tx(),
+                tx,
+                rx: rx.clone(),
             };
 
             self.0.insert(topic.to_string(), subscription);
-            output.to_rx_pipe()
+            rx
         }
     }
 
-    /// Add a new subscription that returns only the payload as a String.
-    pub fn subscribe_to_string(&mut self, topic: &str) -> RxPipe<String> {
-        self.subscribe(topic).map(message_to_string)
+    /// Add new subscription and parse incoming data as type T
+    pub fn subscribe_into<T>(&mut self, topic: &str) -> entities::Receiver<T>
+    where
+        T: TryFrom<Message> + Clone + Eq + Send + 'static,
+        <T as TryFrom<Message>>::Error: Send + std::error::Error,
+    {
+        self.subscribe(topic).translate_into::<T>()
     }
 }
 
@@ -271,13 +354,30 @@ fn is_debug_mode() -> bool {
     }
 }
 
-impl RxPipe<Message> {
-    /// Publish an outgoing message.
-    pub fn publish(&mut self, mqtt_out: &MqttOut) {
-        self.map(|msg| {
-            let now = Instant::now();
-            MqttMessage::MqttOut(msg, now)
-        })
-        .copy_to(&mqtt_out.0);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_message_to_string() {
+        let msg = Message {
+            topic: "test".to_string(),
+            payload: "test".as_bytes().to_vec(),
+            qos: 0,
+            retain: false,
+            instant: Instant::now(),
+        };
+
+        let data: String = msg.try_into().unwrap();
+        assert_eq!(data, "test");
+    }
+
+    #[tokio::test]
+    async fn test_string_to_message() {
+        let msg = Message::from_string("test", "test", false, 0);
+        assert_eq!(msg.topic, "test");
+        assert_eq!(msg.payload, "test".as_bytes());
+        assert_eq!(msg.qos, 0);
+        assert!(!msg.retain);
     }
 }

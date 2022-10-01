@@ -98,6 +98,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
+ "thiserror",
  "tokio",
  "warp",
 ]
@@ -1136,6 +1137,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
+ "thiserror",
  "tokio",
 ]
 

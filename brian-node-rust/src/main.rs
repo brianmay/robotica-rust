@@ -1,10 +1,17 @@
-mod flows;
 mod http;
+mod robotica;
+
+use std::fmt::Display;
 
 use anyhow::Result;
-use flows::google;
-use robotica_node_rust::sources::mqtt::MqttOut;
+use robotica::Id;
+use robotica_node_rust::entities::create_entity;
+use thiserror::Error;
+use tokio::select;
+use tokio::sync::mpsc;
 
+use robotica::Power;
+use robotica_node_rust::sources::mqtt::{Message, MqttOut};
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
@@ -13,19 +20,242 @@ async fn main() -> Result<()> {
     http::start().await;
 
     let mut mqtt = MqttClient::new().await;
-    let tx = mqtt.get_mqtt_out();
+    let mqtt_out = mqtt.get_mqtt_out();
 
-    let subscriptions: Subscriptions = setup_pipes(&tx);
+    let subscriptions: Subscriptions = setup_pipes(mqtt_out).await;
     mqtt.connect(subscriptions);
     mqtt.wait().await;
 
     Ok(())
 }
 
-fn setup_pipes(mqtt: &MqttOut) -> Subscriptions {
+struct State {
+    subscriptions: Subscriptions,
+    #[allow(dead_code)]
+    mqtt_out: MqttOut,
+    message_sink: mpsc::Sender<String>,
+}
+
+async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
-    google::start(&mut subscriptions, mqtt);
+    let message_sink = create_message_sink(&mut subscriptions, mqtt_out.clone());
 
-    subscriptions
+    let mut state = State {
+        subscriptions,
+        mqtt_out,
+        message_sink,
+    };
+
+    monitor_tesla_doors(&mut state, 1);
+
+    // let rx = subscriptions.subscribe_parse::<Power>("state/Brian/Light/power");
+    // tokio::spawn(async move {
+    //     let mut s = rx.subscribe().await;
+    //     loop {
+    //         let msg = s.recv().await;
+    //         if let Ok((prev, current)) = msg {
+    //             if let Some(prev) = &prev {
+    //                 println!("Light power changed from {} to {}", prev, current);
+    //             } else {
+    //                 println!("Light power changed to {}", current);
+    //             }
+    //         }
+    //         if let Some(msg) = rx.get().await {
+    //             println!("get: {:?}", msg);
+    //         }
+
+    //         let msg = "ON".to_string();
+    //         let msg = msg.to_message("test/Brian/Light/power", false);
+    //         mqtt_out.send(msg).await;
+
+    //         if let Err(err) = message_sink.send("Hello".to_string()).await {
+    //             println!("Error sending message: {}", err);
+    //         }
+    //     }
+    // });
+
+    state.subscriptions
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TeslaDoorState {
+    Open,
+    Closed,
+}
+
+impl Display for TeslaDoorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeslaDoorState::Open => write!(f, "open"),
+            TeslaDoorState::Closed => write!(f, "closed"),
+        }
+    }
+}
+
+impl TryFrom<Message> for TeslaDoorState {
+    type Error = TeslaStateErr;
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let payload: String = msg.try_into()?;
+        match payload.as_str() {
+            "true" => Ok(TeslaDoorState::Open),
+            "false" => Ok(TeslaDoorState::Closed),
+            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TeslaUserIsPresent {
+    UserPresent,
+    UserNotPresent,
+}
+
+impl Display for TeslaUserIsPresent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeslaUserIsPresent::UserPresent => write!(f, "user is present"),
+            TeslaUserIsPresent::UserNotPresent => write!(f, "user is not present"),
+        }
+    }
+}
+
+impl TryFrom<Message> for TeslaUserIsPresent {
+    type Error = TeslaStateErr;
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let payload: String = msg.try_into()?;
+        match payload.as_str() {
+            "true" => Ok(TeslaUserIsPresent::UserPresent),
+            "false" => Ok(TeslaUserIsPresent::UserNotPresent),
+            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+enum TeslaStateErr {
+    #[error("Invalid door state: {0}")]
+    InvalidDoorState(String),
+
+    #[error("Invalid UTF8")]
+    Utf8Error(#[from] std::str::Utf8Error),
+}
+
+fn monitor_tesla_doors(state: &mut State, car_number: usize) {
+    let fo_rx = state
+        .subscriptions
+        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/frunk_open"));
+    let to_rx = state
+        .subscriptions
+        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/trunk_open"));
+    let do_rx = state
+        .subscriptions
+        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/doors_open"));
+    let wo_rx = state
+        .subscriptions
+        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/windows_open"));
+    let up_rx = state
+        .subscriptions
+        .subscribe_into::<TeslaUserIsPresent>(&format!(
+            "teslamate/cars/{car_number}/is_user_present"
+        ));
+
+    let message_sink = state.message_sink.clone();
+
+    let (tx, rx) = create_entity("tesla_doors");
+
+    tokio::spawn(async move {
+        let mut fo_s = fo_rx.subscribe().await;
+        let mut to_s = to_rx.subscribe().await;
+        let mut do_s = do_rx.subscribe().await;
+        let mut wo_s = wo_rx.subscribe().await;
+        let mut up_s = up_rx.subscribe().await;
+
+        loop {
+            select! {
+                Ok((_, _)) = fo_s.recv() => {},
+                Ok((_, _)) = to_s.recv() => {},
+                Ok((_, _)) = do_s.recv() => {},
+                Ok((_, _)) = wo_s.recv() => {},
+                Ok((_, _)) = up_s.recv() => {},
+                else => break,
+            };
+
+            let maybe_fo = fo_rx.get().await;
+            let maybe_to = to_rx.get().await;
+            let maybe_do = do_rx.get().await;
+            let maybe_wo = wo_rx.get().await;
+            let maybe_up = up_rx.get().await;
+
+            let mut open: Vec<&str> = vec![];
+
+            if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
+                if let Some(TeslaDoorState::Open) = maybe_fo {
+                    open.push("frunk")
+                }
+
+                if let Some(TeslaDoorState::Open) = maybe_to {
+                    open.push("trunk")
+                }
+
+                if let Some(TeslaDoorState::Open) = maybe_do {
+                    open.push("doors")
+                }
+
+                if let Some(TeslaDoorState::Open) = maybe_wo {
+                    open.push("windows")
+                }
+            }
+
+            println!("open: {:?}", open);
+            tx.send(open).await;
+        }
+    });
+
+    tokio::spawn(async move {
+        let mut s = rx.subscribe().await;
+        while let Ok((prev, open)) = s.recv().await {
+            if prev.is_none() {
+                continue;
+            }
+            let msg = if open.is_empty() {
+                "The Tesla is secure".to_string()
+            } else {
+                format!("The {} are open", open.join(", "))
+            };
+            if let Err(err) = message_sink.send(msg).await {
+                println!("Error sending message: {}", err);
+            }
+        }
+    });
+}
+
+fn create_message_sink(
+    subscriptions: &mut Subscriptions,
+    mqtt_out: MqttOut,
+) -> mpsc::Sender<String> {
+    let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
+    let gate_in = subscriptions.subscribe(&gate_topic);
+
+    let (tx, mut rx) = mpsc::channel::<String>(100);
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            println!("{}", msg);
+
+            let gate_msg = gate_in.get().await;
+
+            let gate_value = if let Some(gate_msg) = gate_msg {
+                let gate_value = gate_msg.try_into();
+                matches!(gate_value, Ok(Power::On))
+            } else {
+                false
+            };
+
+            if gate_value {
+                let msg = robotica::string_to_message(&msg, "Brian");
+                mqtt_out.send(msg).await;
+            }
+        }
+    });
+    tx
 }
