@@ -1,25 +1,26 @@
 //! Sources that use timers to produce async data.
 use std::time::Duration;
-
 use tokio::time;
+use tokio::time::Instant;
 
-use crate::{send_or_log, spawn, Pipe, RxPipe};
+use crate::entities;
+use crate::spawn;
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
-pub fn timer<T: Clone + Send + 'static>(duration: Duration, value: T) -> RxPipe<T> {
-    let output = Pipe::new();
-    let tx = output.get_tx();
+pub fn timer(duration: Duration, name: &str) -> entities::Receiver<Instant> {
+    let (tx, rx) = entities::create_entity(name);
 
     spawn(async move {
         let mut interval = time::interval(duration);
 
         loop {
-            send_or_log(&tx, value.clone());
+            let clone = Instant::now();
+            tx.send(clone).await;
             interval.tick().await;
         }
     });
 
-    output.to_rx_pipe()
+    rx
 }
 
 #[cfg(test)]
@@ -33,15 +34,15 @@ mod tests {
         let duration = Duration::from_millis(100);
         let wait_duration = Duration::from_millis(200);
 
-        let input = timer(duration, true);
-        let mut rx = input.subscribe();
+        let input = timer(duration, "test");
+        let mut rx = input.subscribe().await;
 
         sleep(wait_duration).await;
-        let v = rx.try_recv().unwrap();
-        assert!(matches!(v, true));
+        let _v = rx.try_recv().await.unwrap();
+        // assert!(matches!(v, true));
 
         sleep(wait_duration).await;
-        let v = rx.try_recv().unwrap();
-        assert!(matches!(v, true));
+        let _v = rx.try_recv().await.unwrap();
+        // assert!(matches!(v, true));
     }
 }

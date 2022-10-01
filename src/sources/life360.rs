@@ -6,15 +6,12 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::min;
 use std::{env, time::Duration};
-use tokio::sync::broadcast;
 use tokio::time::MissedTickBehavior;
 
 use tokio::time;
 
-use crate::send_or_log;
+use crate::entities;
 use crate::spawn;
-use crate::Pipe;
-use crate::RxPipe;
 
 #[derive(Deserialize)]
 struct Login {
@@ -108,12 +105,8 @@ pub struct Member {
     pub login_phone: String,
 }
 
-impl Member {
-    /// Quickly check if two members are the same.
-    ///
-    /// Note there is no guarantee that two members are exactly the same.
-    /// For example, we only check the timestamp on the location field.
-    pub fn same_values(&self, other: &Self) -> bool {
+impl PartialEq for Member {
+    fn eq(&self, other: &Self) -> bool {
         self.location.timestamp == other.location.timestamp
             && self.communications == other.communications
             && self.medical == other.medical
@@ -130,6 +123,8 @@ impl Member {
             && self.login_phone == other.login_phone
     }
 }
+
+impl Eq for Member {}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -148,9 +143,8 @@ struct Circle {
 }
 
 /// Source of life360 member information.
-pub fn circles() -> RxPipe<Member> {
-    let output = Pipe::new();
-    let tx = output.get_tx();
+pub fn circles(name: &str) -> entities::Receiver<Vec<Member>> {
+    let (tx, rx) = entities::create_entity(name);
 
     spawn(async move {
         let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
@@ -180,7 +174,7 @@ pub fn circles() -> RxPipe<Member> {
         }
     });
 
-    output.to_rx_pipe()
+    rx
 }
 
 async fn retry_login(username: &str, password: &str) -> Login {
@@ -230,14 +224,16 @@ async fn get_circles_or_none(login: &Login) -> Option<List> {
     }
 }
 
-async fn dispatch_circle_details(login: &Login, circles: &List, tx: &broadcast::Sender<Member>) {
+async fn dispatch_circle_details(
+    login: &Login,
+    circles: &List,
+    tx: &entities::Sender<Vec<Member>>,
+) {
     for circle in &circles.circles {
         match get_circle_details(login, circle).await {
             Err(err) => error!("get_circle_details: {err}"),
             Ok(details) => {
-                for member in details.members {
-                    send_or_log(tx, member);
-                }
+                tx.send(details.members).await;
             }
         }
     }
