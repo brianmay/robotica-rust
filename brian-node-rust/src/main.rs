@@ -2,10 +2,12 @@ mod http;
 mod robotica;
 
 use std::fmt::Display;
+use std::time::Duration;
 
 use anyhow::Result;
 use robotica::Id;
 use robotica_node_rust::entities::create_entity;
+use robotica_node_rust::spawn;
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc;
@@ -13,6 +15,7 @@ use tokio::sync::mpsc;
 use robotica::Power;
 use robotica_node_rust::sources::mqtt::{Message, MqttOut};
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
+use tokio::time::{sleep_until, Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -164,7 +167,7 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
     let (tx, rx) = create_entity("tesla_doors");
 
-    tokio::spawn(async move {
+    spawn(async move {
         let mut fo_s = fo_rx.subscribe().await;
         let mut to_s = to_rx.subscribe().await;
         let mut do_s = do_rx.subscribe().await;
@@ -212,9 +215,49 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         }
     });
 
-    tokio::spawn(async move {
+    let (tx2, rx2) = create_entity("tesla_doors_delayed");
+    spawn(async move {
+        let mut state = DelayState::Idle;
+        let duration = Duration::from_secs(60);
         let mut s = rx.subscribe().await;
+
+        loop {
+            select! {
+                Ok((_, v)) = s.recv() => {
+                    println!("delay received: {:?}", v);
+                    let active_value = !v.is_empty();
+                    match (active_value, &state) {
+                        (true, DelayState::Idle) => {
+                            state = DelayState::Delaying(Instant::now() + duration, v);
+                        },
+                        (false, DelayState::Idle) => {
+                            tx2.send(v).await;
+                        },
+                        (_, DelayState::Delaying(instant, _)) => {
+                            state = DelayState::Delaying(*instant, v);
+                        },
+                        (_, DelayState::NoDelay) => {
+                            tx2.send(v).await;
+                        },
+                    }
+
+                },
+                Some(()) = maybe_sleep_until(&state) => {
+                    println!("delay timer");
+                    if let DelayState::Delaying(_, v) = state {
+                        tx2.send(v).await;
+                    }
+                    state = DelayState::NoDelay;
+                },
+                else => { break; }
+            }
+        }
+    });
+
+    spawn(async move {
+        let mut s = rx2.subscribe().await;
         while let Ok((prev, open)) = s.recv().await {
+            println!("out received: {:?} {:?}", prev, open);
             if prev.is_none() {
                 continue;
             }
@@ -258,4 +301,19 @@ fn create_message_sink(
         }
     });
     tx
+}
+
+enum DelayState<T> {
+    Idle,
+    Delaying(Instant, T),
+    NoDelay,
+}
+
+async fn maybe_sleep_until<T>(state: &DelayState<T>) -> Option<()> {
+    if let DelayState::Delaying(instant, _) = state {
+        sleep_until(*instant).await;
+        Some(())
+    } else {
+        None
+    }
 }
