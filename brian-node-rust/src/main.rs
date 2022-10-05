@@ -184,15 +184,20 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 else => break,
             };
 
-            let maybe_fo = fo_rx.get().await;
-            let maybe_to = to_rx.get().await;
-            let maybe_do = do_rx.get().await;
-            let maybe_wo = wo_rx.get().await;
-            let maybe_up = up_rx.get().await;
-
             let mut open: Vec<&str> = vec![];
 
+            let maybe_up = up_rx.get().await;
             if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
+                let maybe_fo = fo_rx.get().await;
+                let maybe_to = to_rx.get().await;
+                let maybe_do = do_rx.get().await;
+                let maybe_wo = wo_rx.get().await;
+
+                println!(
+                    "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
+                    maybe_fo, maybe_to, maybe_do, maybe_wo, maybe_up
+                );
+
                 if let Some(TeslaDoorState::Open) = maybe_fo {
                     open.push("frunk")
                 }
@@ -208,6 +213,8 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 if let Some(TeslaDoorState::Open) = maybe_wo {
                     open.push("windows")
                 }
+            } else {
+                println!("up: {:?}", maybe_up);
             }
 
             println!("open: {:?}", open);
@@ -227,16 +234,17 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                     println!("delay received: {:?}", v);
                     let active_value = !v.is_empty();
                     match (active_value, &state) {
+                        (false, _) => {
+                            state = DelayState::Idle;
+                            tx2.send(v).await;
+                        },
                         (true, DelayState::Idle) => {
                             state = DelayState::Delaying(Instant::now() + duration, v);
                         },
-                        (false, DelayState::Idle) => {
-                            tx2.send(v).await;
-                        },
-                        (_, DelayState::Delaying(instant, _)) => {
+                        (true, DelayState::Delaying(instant, _)) => {
                             state = DelayState::Delaying(*instant, v);
                         },
-                        (_, DelayState::NoDelay) => {
+                        (true, DelayState::NoDelay) => {
                             tx2.send(v).await;
                         },
                     }
@@ -264,7 +272,7 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             let msg = if open.is_empty() {
                 "The Tesla is secure".to_string()
             } else {
-                format!("The {} are open", open.join(", "))
+                format!("The Tesla {} are open", open.join(", "))
             };
             if let Err(err) = message_sink.send(msg).await {
                 println!("Error sending message: {}", err);
