@@ -18,6 +18,7 @@
         "gethostname",
         "HARDOFF",
         "mqtt",
+        "mqttbytes",
         "noncommercially",
         "oneshot",
         "paho",

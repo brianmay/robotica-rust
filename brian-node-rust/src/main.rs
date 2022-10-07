@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
 
     http::start().await;
 
-    let mut mqtt = MqttClient::new().await;
+    let mut mqtt = MqttClient::new();
     let mqtt_out = mqtt.get_mqtt_out();
 
     let subscriptions: Subscriptions = setup_pipes(mqtt_out).await;
