@@ -2,6 +2,7 @@
 use bytes::Bytes;
 use log::*;
 use rumqttc::tokio_rustls::rustls::ClientConfig;
+use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish};
 use rumqttc::v5::{AsyncClient, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
@@ -65,16 +66,18 @@ impl Message {
     }
 }
 
-impl From<Publish> for Message {
-    fn from(msg: Publish) -> Self {
-        let topic = str::from_utf8(&msg.topic).unwrap().to_string();
-        Self {
+impl TryFrom<Publish> for Message {
+    type Error = Utf8Error;
+
+    fn try_from(msg: Publish) -> Result<Self, Self::Error> {
+        let topic = str::from_utf8(&msg.topic)?.to_string();
+        Ok(Self {
             topic,
             payload: msg.payload,
             retain: msg.retain,
             qos: msg.qos,
             instant: Instant::now(),
-        }
+        })
     }
 }
 
@@ -198,28 +201,14 @@ impl MqttClient {
             let mut rx = rx;
 
             // Subscribe topics.
-            subscribe_topics(&client, &subscriptions).await;
+            subscribe_topics(&client, &subscriptions);
 
             loop {
                 select! {
                     event = event_loop.poll() => {
                         match event {
                             Ok(Event::Incoming(i)) => {
-                                match *i {
-                                    Incoming::Publish(p, _) => {
-                                        let msg: Message = p.into();
-                                        let topic = &msg.topic;
-                                        debug!("Incoming mqtt {topic}.");
-                                        if let Some(subscription) = subscriptions.get(topic) {
-                                            subscription.tx.try_send(msg);
-                                        }
-                                    },
-                                    Incoming::ConnAck(_) => {
-                                        debug!("Resubscribe topics.");
-                                        subscribe_topics(&client, &subscriptions).await;
-                                    },
-                                    _ => {}
-                                }
+                                incoming_event(&client, *i, &subscriptions);
                             },
                             Ok(Event::Outgoing(o)) => {
                                 if let Outgoing::Publish(p) = o {
@@ -274,6 +263,27 @@ impl MqttClient {
 
 fn message_expired(now: &Instant, sent: &Instant) -> bool {
     (*now - *sent) > Duration::from_secs(300)
+}
+
+fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptions) {
+    match pkt {
+        Incoming::Publish(p, _) => match p.try_into() {
+            Ok(msg) => {
+                let msg: Message = msg;
+                let topic = &msg.topic;
+                debug!("Incoming mqtt {topic}.");
+                if let Some(subscription) = subscriptions.get(topic) {
+                    subscription.tx.try_send(msg);
+                }
+            }
+            Err(err) => error!("Invalid message received: {err}"),
+        },
+        Incoming::ConnAck(_) => {
+            debug!("Resubscribe topics.");
+            subscribe_topics(client, subscriptions);
+        }
+        _ => {}
+    }
 }
 
 struct Subscription {
@@ -331,14 +341,14 @@ impl Default for Subscriptions {
     }
 }
 
-async fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
+fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
     let topics = subscriptions.0.iter().map(|(topic, _)| Filter {
         path: topic.clone(),
         qos: QoS::ExactlyOnce,
         ..Default::default()
     });
 
-    if let Err(e) = client.subscribe_many(topics).await {
+    if let Err(e) = client.try_subscribe_many(topics) {
         error!("Error subscribing to topics: {:?}", e);
     }
 }
@@ -375,5 +385,19 @@ mod tests {
         assert_eq!(msg.payload, "test".as_bytes());
         assert_eq!(msg.qos, QoS::AtLeastOnce);
         assert!(!msg.retain);
+    }
+
+    #[tokio::test]
+    async fn test_message_to_bool() {
+        let msg = Message {
+            topic: "test".to_string(),
+            payload: "true".into(),
+            qos: QoS::AtLeastOnce,
+            retain: false,
+            instant: Instant::now(),
+        };
+
+        let data: bool = msg.try_into().unwrap();
+        assert!(data);
     }
 }
