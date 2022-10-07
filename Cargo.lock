@@ -1197,6 +1197,7 @@ dependencies = [
 [[package]]
 name = "rumqttc"
 version = "0.17.0"
+source = "git+https://github.com/bytebeamio/rumqtt?branch=hotfix-v5-fields#57da1da82c78c54613ac676ac2d6a43ce48cdb2f"
 dependencies = [
  "bytes",
  "flume",
