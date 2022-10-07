@@ -283,23 +283,14 @@ fn create_message_sink(
     mqtt_out: MqttOut,
 ) -> mpsc::Sender<String> {
     let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
-    let gate_in = subscriptions.subscribe(&gate_topic);
+    let gate_in = subscriptions.subscribe_into::<Power>(&gate_topic);
 
     let (tx, mut rx) = mpsc::channel::<String>(100);
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             println!("{}", msg);
 
-            let gate_msg = gate_in.get().await;
-
-            let gate_value = if let Some(gate_msg) = gate_msg {
-                let gate_value = gate_msg.try_into();
-                matches!(gate_value, Ok(Power::On))
-            } else {
-                false
-            };
-
-            if gate_value {
+            if let Some(Power::On) = gate_in.get().await {
                 let msg = robotica::string_to_message(&msg, "Brian");
                 mqtt_out.send(msg).await;
             }
