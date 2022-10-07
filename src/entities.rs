@@ -176,19 +176,19 @@ impl<T: Send + Clone> Subscription<T> {
     /// # Errors
     ///
     /// Returns `RecvError::Closed` if the entity is closed.
-    pub fn try_recv(&mut self) -> Option<Result<Data<T>, RecvError>> {
+    pub fn try_recv(&mut self) -> Result<Option<Data<T>>, RecvError> {
         let initial = self.initial.take();
         if let Some(initial) = initial {
-            return Some(Ok((None, initial)));
+            return Ok(Some((None, initial)));
         }
         loop {
             match self.rx.try_recv() {
-                Ok(v) => return Some(Ok(v)),
+                Ok(v) => return Ok(Some(v)),
                 Err(err) => match err {
                     broadcast::error::TryRecvError::Closed => {
-                        return Some(Err(RecvError::Closed));
+                        return Err(RecvError::Closed);
                     }
-                    broadcast::error::TryRecvError::Empty => return None,
+                    broadcast::error::TryRecvError::Empty => return Ok(None),
                     broadcast::error::TryRecvError::Lagged(_) => {
                         error!("try_recv failed: The pipe was lagged");
                     }
@@ -276,7 +276,7 @@ mod tests {
         let result = rx.get().await;
         assert_eq!(Some("goodbye".to_string()), result);
 
-        let result = s.try_recv();
+        let result = s.try_recv().unwrap();
         assert!(result.is_none());
 
         let result = rx.get().await;
