@@ -19,7 +19,9 @@ use tokio::time::{sleep_until, Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
+    pretty_env_logger::init();
+    color_backtrace::install();
+
     http::start().await;
 
     let mut mqtt = MqttClient::new().await;
@@ -52,31 +54,26 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
 
     monitor_tesla_doors(&mut state, 1);
 
-    // let rx = subscriptions.subscribe_parse::<Power>("state/Brian/Light/power");
-    // tokio::spawn(async move {
-    //     let mut s = rx.subscribe().await;
-    //     loop {
-    //         let msg = s.recv().await;
-    //         if let Ok((prev, current)) = msg {
-    //             if let Some(prev) = &prev {
-    //                 println!("Light power changed from {} to {}", prev, current);
-    //             } else {
-    //                 println!("Light power changed to {}", current);
-    //             }
-    //         }
-    //         if let Some(msg) = rx.get().await {
-    //             println!("get: {:?}", msg);
-    //         }
+    let message_sink_temp = state.message_sink.clone();
+    let rx = state
+        .subscriptions
+        .subscribe_into::<Power>("state/Brian/Light/power");
+    tokio::spawn(async move {
+        let mut s = rx.subscribe().await;
+        loop {
+            let msg = s.recv().await;
+            if let Ok((Some(prev), current)) = msg {
+                let announce = format!("Light power changed from {} to {}", prev, current);
 
-    //         let msg = "ON".to_string();
-    //         let msg = msg.to_message("test/Brian/Light/power", false);
-    //         mqtt_out.send(msg).await;
-
-    //         if let Err(err) = message_sink.send("Hello".to_string()).await {
-    //             println!("Error sending message: {}", err);
-    //         }
-    //     }
-    // });
+                if let Err(err) = message_sink_temp.send(announce).await {
+                    println!("Error sending message: {}", err);
+                }
+            }
+            if let Some(msg) = rx.get().await {
+                println!("get: {:?}", msg);
+            }
+        }
+    });
 
     state.subscriptions
 }
