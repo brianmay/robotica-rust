@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::time::Duration;
 use std::{env, str};
+use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -77,34 +78,36 @@ impl From<Publish> for Message {
     }
 }
 
-// impl From<paho_mqtt::Message> for Message {
-//     fn from(msg: paho_mqtt::Message) -> Self {
-//         let topic = msg.topic().to_string();
-//         Self {
-//             topic,
-//             payload: msg.payload().to_vec(),
-//             retain: msg.retained(),
-//             qos: msg.qos(),
-//             instant: Instant::now(),
-//         }
-//     }
-// }
-
-// impl From<Message> for paho_mqtt::Message {
-//     fn from(msg: Message) -> Self {
-//         if msg.retain {
-//             Self::new_retained(msg.topic, msg.payload, msg.qos)
-//         } else {
-//             Self::new(msg.topic, msg.payload, msg.qos)
-//         }
-//     }
-// }
-
 impl TryFrom<Message> for String {
     type Error = Utf8Error;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
         Ok(str::from_utf8(&msg.payload)?.to_string())
+    }
+}
+
+/// An error when translating a message into a boolean.
+#[derive(Error, Debug)]
+pub enum BoolError {
+    /// The payload was not a valid boolean string.
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
+
+    /// The payload was not valid UTF8.
+    #[error("Invalid UTF8")]
+    Utf8Error(#[from] std::str::Utf8Error),
+}
+
+impl TryFrom<Message> for bool {
+    type Error = BoolError;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let payload: String = msg.try_into()?;
+        match payload.as_str() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            value => Err(BoolError::InvalidValue(value.to_string())),
+        }
     }
 }
 
