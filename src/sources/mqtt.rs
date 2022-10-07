@@ -1,6 +1,6 @@
 //! Source (and sink) for MQTT data.
 use bytes::Bytes;
-use log::*;
+use log::{debug, error, info, warn};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish};
@@ -20,7 +20,7 @@ use crate::entities;
 // use crate::entities::FromTranslate;
 use crate::spawn;
 
-/// QoS for MQTT messages.
+/// `QoS` for MQTT messages.
 pub type QoS = rumqttc::v5::mqttbytes::QoS;
 
 /// A received/sent MQTT message
@@ -55,6 +55,7 @@ impl Message {
     }
 
     /// Create a message from a string.
+    #[must_use]
     pub fn from_string(topic: &str, payload: &str, retain: bool, qos: QoS) -> Message {
         Message {
             topic: topic.to_string(),
@@ -142,7 +143,8 @@ impl MqttOut {
 
 impl MqttClient {
     /// Create a new MQTT client.
-    pub async fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         // Outgoing MQTT queue.
         let (tx, rx) = mpsc::channel(50);
 
@@ -153,12 +155,20 @@ impl MqttClient {
         }
     }
 
-    /// Get the [MqttOut] struct for sending outgoing messages.
+    /// Get the `MqttOut` struct for sending outgoing messages.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the this has already been called since the last call to `new`.
     pub fn get_mqtt_out(&mut self) -> MqttOut {
         MqttOut(self.tx.take().unwrap())
     }
 
     /// Connect to the MQTT broker.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the environment variables are not set.
     pub fn connect(&mut self, subscriptions: Subscriptions) {
         let mqtt_host = env::var("MQTT_HOST").expect("MQTT_HOST should be set");
         let mqtt_port = env::var("MQTT_PORT")
@@ -254,10 +264,20 @@ impl MqttClient {
     }
 
     /// Wait for the client to finish.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the server exits with an error.
     pub async fn wait(&mut self) {
         if let Some(b) = self.b.take() {
             b.await.unwrap();
         }
+    }
+}
+
+impl Default for MqttClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -298,6 +318,7 @@ pub struct Subscriptions(HashMap<String, Subscription>);
 
 impl Subscriptions {
     /// Create a new set of subscriptions.
+    #[must_use]
     pub fn new() -> Self {
         Subscriptions(HashMap::new())
     }
@@ -382,7 +403,7 @@ mod tests {
     async fn test_string_to_message() {
         let msg = Message::from_string("test", "test", false, QoS::AtLeastOnce);
         assert_eq!(msg.topic, "test");
-        assert_eq!(msg.payload, "test".as_bytes());
+        assert_eq!(msg.payload, b"test"[..]);
         assert_eq!(msg.qos, QoS::AtLeastOnce);
         assert!(!msg.retain);
     }

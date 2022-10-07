@@ -1,7 +1,7 @@
 //! Source for life360 based data
 use anyhow::anyhow;
 use anyhow::Result;
-use log::*;
+use log::{error, log, Level};
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::min;
@@ -143,12 +143,13 @@ struct Circle {
 }
 
 /// Source of life360 member information.
+#[must_use]
 pub fn circles(name: &str) -> entities::Receiver<Vec<Member>> {
     let (tx, rx) = entities::create_entity(name);
+    let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
+    let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
 
     spawn(async move {
-        let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
-        let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
         let login = retry_login(&username, &password).await;
         let mut interval = time::interval(Duration::from_secs(15));
         let mut refresh_interval = time::interval(Duration::from_secs(60 * 5));

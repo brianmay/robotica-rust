@@ -1,11 +1,17 @@
 #![warn(missing_docs)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::nursery)]
+// #![deny(clippy::unwrap_used)]
+// #![deny(clippy::expect_used)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::use_self)]
 //! Provide functionality to process asynchronous streams of data for IOT devices.
 
 pub mod entities;
 pub mod sinks;
 pub mod sources;
 
-use log::*;
+use log::error;
 use std::future::Future;
 use tokio::task::JoinHandle;
 

@@ -7,6 +7,7 @@ use crate::entities;
 use crate::spawn;
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
+#[must_use]
 pub fn timer(duration: Duration, name: &str) -> entities::Receiver<Instant> {
     let (tx, rx) = entities::create_entity(name);
 
@@ -25,6 +26,7 @@ pub fn timer(duration: Duration, name: &str) -> entities::Receiver<Instant> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use tokio::time::sleep;
 
     use super::*;
@@ -38,11 +40,11 @@ mod tests {
         let mut rx = input.subscribe().await;
 
         sleep(wait_duration).await;
-        let _v = rx.try_recv().await.unwrap();
+        let _v = rx.try_recv().unwrap();
         // assert!(matches!(v, true));
 
         sleep(wait_duration).await;
-        let _v = rx.try_recv().await.unwrap();
+        let _v = rx.try_recv().unwrap();
         // assert!(matches!(v, true));
     }
 }

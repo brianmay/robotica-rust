@@ -27,7 +27,7 @@ pub struct Sender<T> {
     tx: mpsc::Sender<Message<T>>,
 }
 
-impl<T> Sender<T> {
+impl<T: Send> Sender<T> {
     /// Send data to the entity.
     pub async fn send(&self, data: T) {
         let msg = Message::Set(data);
@@ -52,8 +52,12 @@ pub struct Receiver<T> {
     tx: mpsc::Sender<Message<T>>,
 }
 
-impl<T: Clone> Receiver<T> {
+impl<T: Send + Clone> Receiver<T> {
     /// Retrieve the most recent value from the entity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the receiver is disconnected.
     pub async fn get(&self) -> Option<T> {
         let (tx, rx) = oneshot::channel();
         let msg = Message::Get(tx);
@@ -70,6 +74,10 @@ impl<T: Clone> Receiver<T> {
     }
 
     /// Subscribe to this entity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the receiver is disconnected.
     pub async fn subscribe(&self) -> Subscription<T> {
         let (tx, rx) = oneshot::channel();
         let msg = Message::Subscribe(tx);
@@ -96,6 +104,7 @@ impl<T: Clone> Receiver<T> {
     // }
 
     /// Translate this receiver into a another type.
+    #[must_use]
     pub fn translate_into<U>(self) -> Receiver<U>
     where
         T: Send + 'static,
@@ -138,8 +147,12 @@ pub struct Subscription<T> {
     initial: Option<T>,
 }
 
-impl<T: Clone> Subscription<T> {
+impl<T: Send + Clone> Subscription<T> {
     /// Wait for the next value from the entity.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RecvError::Closed` if the entity is closed.
     pub async fn recv(&mut self) -> Result<Data<T>, RecvError> {
         let initial = self.initial.take();
         if let Some(initial) = initial {
@@ -158,8 +171,12 @@ impl<T: Clone> Subscription<T> {
         }
     }
 
-    /// Get the next value but don't wait for it.
-    pub async fn try_recv(&mut self) -> Option<Result<Data<T>, RecvError>> {
+    /// Get the next value but don't wait for it. Returns `None` if there is no value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RecvError::Closed` if the entity is closed.
+    pub fn try_recv(&mut self) -> Option<Result<Data<T>, RecvError>> {
         let initial = self.initial.take();
         if let Some(initial) = initial {
             return Some(Ok((None, initial)));
@@ -182,6 +199,7 @@ impl<T: Clone> Subscription<T> {
 }
 
 /// Create an entity.
+#[must_use]
 pub fn create_entity<T: Clone + Eq + Send + 'static>(name: &str) -> (Sender<T>, Receiver<T>) {
     let (in_tx, mut in_rx) = mpsc::channel::<Message<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<Data<T>>(PIPE_SIZE);
@@ -258,7 +276,7 @@ mod tests {
         let result = rx.get().await;
         assert_eq!(Some("goodbye".to_string()), result);
 
-        let result = s.try_recv().await;
+        let result = s.try_recv();
         assert!(result.is_none());
 
         let result = rx.get().await;
