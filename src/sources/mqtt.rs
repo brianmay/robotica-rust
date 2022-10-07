@@ -169,6 +169,8 @@ impl MqttClient {
     /// # Panics
     ///
     /// Panics if the environment variables are not set.
+    ///
+    /// FIXME: We should return error without panic.
     pub fn connect(&mut self, subscriptions: Subscriptions) {
         let mqtt_host = env::var("MQTT_HOST").expect("MQTT_HOST should be set");
         let mqtt_port = env::var("MQTT_PORT")
