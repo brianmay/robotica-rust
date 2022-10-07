@@ -35,6 +35,14 @@ impl<T> Sender<T> {
             error!("send failed: {}", err);
         }
     }
+
+    /// Send data to the entity or fail if buffer is full.
+    pub fn try_send(&self, data: T) {
+        let msg = Message::Set(data);
+        if let Err(err) = self.tx.try_send(msg) {
+            error!("send failed: {}", err);
+        }
+    }
 }
 
 /// Receive a value from an entity.

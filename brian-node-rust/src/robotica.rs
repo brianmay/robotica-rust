@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use robotica_node_rust::sources::mqtt::Message;
+use robotica_node_rust::sources::mqtt::QoS;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -63,7 +64,7 @@ impl TryFrom<Message> for Power {
         match payload.as_str() {
             "ON" => Ok(Power::On),
             "OFF" => Ok(Power::Off),
-            "HARDOFF" => Ok(Power::HardOff),
+            "HARD_OFF" => Ok(Power::HardOff),
             _ => Err(PowerErr::InvalidPowerState(payload)),
         }
     }
@@ -133,5 +134,10 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
         message: str.to_string(),
     };
     let payload = serde_json::to_string(&msg).unwrap();
-    Message::from_string(&id.get_command_topic(&[]), &payload, false, 0)
+    Message::from_string(
+        &id.get_command_topic(&[]),
+        &payload,
+        false,
+        QoS::ExactlyOnce,
+    )
 }

@@ -1,10 +1,10 @@
 //! Source (and sink) for MQTT data.
+use bytes::Bytes;
 use log::*;
-use paho_mqtt::AsyncClient;
-use paho_mqtt::ConnectOptionsBuilder;
-use paho_mqtt::CreateOptionsBuilder;
-use paho_mqtt::SslOptionsBuilder;
-use std::cmp::min;
+use rumqttc::tokio_rustls::rustls::ClientConfig;
+use rumqttc::v5::mqttbytes::{Filter, Publish};
+use rumqttc::v5::{AsyncClient, Event, Incoming, MqttOptions};
+use rumqttc::{Outgoing, Transport};
 use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::time::Duration;
@@ -12,13 +12,14 @@ use std::{env, str};
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
-use tokio::time::timeout;
-use tokio::time::Instant;
+use tokio::time::{sleep, Instant};
 
 use crate::entities;
 // use crate::entities::FromTranslate;
 use crate::spawn;
+
+/// QoS for MQTT messages.
+pub type QoS = rumqttc::v5::mqttbytes::QoS;
 
 /// A received/sent MQTT message
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,13 +28,13 @@ pub struct Message {
     pub topic: String,
 
     /// The raw unparsed payload of the message
-    pub payload: Vec<u8>,
+    pub payload: Bytes,
 
     /// Was/Is this message retained?
     pub retain: bool,
 
     /// What is the QoS of this message?
-    qos: i32,
+    qos: QoS,
 
     /// What was the instant this message was created?
     instant: Instant,
@@ -41,7 +42,7 @@ pub struct Message {
 
 impl Message {
     /// Create a new message.
-    pub fn new(topic: &str, payload: Vec<u8>, retain: bool, qos: i32) -> Self {
+    pub fn new(topic: &str, payload: Bytes, retain: bool, qos: QoS) -> Self {
         Self {
             topic: topic.to_string(),
             payload,
@@ -52,10 +53,10 @@ impl Message {
     }
 
     /// Create a message from a string.
-    pub fn from_string(topic: &str, payload: &str, retain: bool, qos: i32) -> Message {
+    pub fn from_string(topic: &str, payload: &str, retain: bool, qos: QoS) -> Message {
         Message {
             topic: topic.to_string(),
-            payload: payload.as_bytes().to_vec(),
+            payload: payload.to_string().into(),
             retain,
             qos,
             instant: Instant::now(),
@@ -63,28 +64,41 @@ impl Message {
     }
 }
 
-impl From<paho_mqtt::Message> for Message {
-    fn from(msg: paho_mqtt::Message) -> Self {
-        let topic = msg.topic().to_string();
+impl From<Publish> for Message {
+    fn from(msg: Publish) -> Self {
+        let topic = str::from_utf8(&msg.topic).unwrap().to_string();
         Self {
             topic,
-            payload: msg.payload().to_vec(),
-            retain: msg.retained(),
-            qos: msg.qos(),
+            payload: msg.payload,
+            retain: msg.retain,
+            qos: msg.qos,
             instant: Instant::now(),
         }
     }
 }
 
-impl From<Message> for paho_mqtt::Message {
-    fn from(msg: Message) -> Self {
-        if msg.retain {
-            Self::new_retained(msg.topic, msg.payload, msg.qos)
-        } else {
-            Self::new(msg.topic, msg.payload, msg.qos)
-        }
-    }
-}
+// impl From<paho_mqtt::Message> for Message {
+//     fn from(msg: paho_mqtt::Message) -> Self {
+//         let topic = msg.topic().to_string();
+//         Self {
+//             topic,
+//             payload: msg.payload().to_vec(),
+//             retain: msg.retained(),
+//             qos: msg.qos(),
+//             instant: Instant::now(),
+//         }
+//     }
+// }
+
+// impl From<Message> for paho_mqtt::Message {
+//     fn from(msg: Message) -> Self {
+//         if msg.retain {
+//             Self::new_retained(msg.topic, msg.payload, msg.qos)
+//         } else {
+//             Self::new(msg.topic, msg.payload, msg.qos)
+//         }
+//     }
+// }
 
 impl TryFrom<Message> for String {
     type Error = Utf8Error;
@@ -140,95 +154,101 @@ impl MqttClient {
 
     /// Connect to the MQTT broker.
     pub fn connect(&mut self, subscriptions: Subscriptions) {
-        // Define the set of options for the create.
-        // Use an ID for a persistent session.
-        let uri = format!(
-            "ssl://{}:{}",
-            env::var("MQTT_HOST").expect("MQTT_HOST should be set"),
-            env::var("MQTT_PORT").expect("MQTT_PORT should be set")
-        );
+        let mqtt_host = env::var("MQTT_HOST").expect("MQTT_HOST should be set");
+        let mqtt_port = env::var("MQTT_PORT")
+            .expect("MQTT_PORT should be set")
+            .parse()
+            .unwrap();
+        let username = env::var("MQTT_USERNAME").expect("MQTT_USERNAME should be set");
+        let password = env::var("MQTT_PASSWORD").expect("MQTT_PASSWORD should be set");
+        // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
         let hostname = gethostname::gethostname();
         let hostname = hostname.to_str().unwrap();
         let client_id = format!("robotica-node-rust-{hostname}");
 
-        let create_opts = CreateOptionsBuilder::new()
-            .server_uri(&uri)
-            .client_id(client_id)
-            .finalize();
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
+        let client_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
-        // Create a client.
-        let mut cli = AsyncClient::new(create_opts).unwrap_or_else(|err| {
-            panic!("Error creating the client to {uri}: {:?}", err);
-        });
-
-        // Main incoming MQTT queue.
-        let mqtt_in_rx = cli.get_stream(50);
+        let mut mqtt_options = MqttOptions::new(client_id, mqtt_host, mqtt_port);
+        mqtt_options.set_keep_alive(Duration::from_secs(30));
+        mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
+        mqtt_options.set_credentials(username, password);
+        // mqtt_options.set_clean_session(false);
 
         let rx = self.rx.take().unwrap();
         let b = spawn(async move {
-            let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+            let (client, mut event_loop) = AsyncClient::new(mqtt_options, 10);
 
-            let ssl_opts = SslOptionsBuilder::new()
-                .trust_store(trust_store)
-                .unwrap()
-                .finalize();
-
-            // Define the set of options for the connection.
-            let conn_opts = ConnectOptionsBuilder::new()
-                .ssl_options(ssl_opts)
-                .keep_alive_interval(Duration::from_secs(30))
-                .clean_session(true)
-                .user_name(env::var("MQTT_USERNAME").expect("MQTT_USERNAME should be set"))
-                .password(env::var("MQTT_PASSWORD").expect("MQTT_PASSWORD should be set"))
-                .finalize();
-
-            // Connect and wait for it to complete or fail.
-            if let Err(e) = cli.connect(conn_opts).await {
-                panic!("Unable to connect to {uri}:\n\t{:?}", e);
-            }
+            // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
             let mut rx = rx;
 
             // Subscribe topics.
-            subscribe_topics(&cli, &subscriptions).await;
+            subscribe_topics(&client, &subscriptions).await;
 
             loop {
                 select! {
-                    Ok(msg_or_none) = mqtt_in_rx.recv() => {
-                        if let Some(msg) = msg_or_none {
-                            let msg: Message = msg.into();
-                            let topic = &msg.topic;
-                            // let payload = msg.payload;
-                            debug!("incoming mqtt {topic}");
-                            if let Some(subscription) = subscriptions.get(topic) {
-                                subscription.tx.send(msg).await;
+                    event = event_loop.poll() => {
+                        match event {
+                            Ok(Event::Incoming(i)) => {
+                                match *i {
+                                    Incoming::Publish(p, _) => {
+                                        let msg: Message = p.into();
+                                        let topic = &msg.topic;
+                                        debug!("Incoming mqtt {topic}.");
+                                        if let Some(subscription) = subscriptions.get(topic) {
+                                            subscription.tx.try_send(msg);
+                                        }
+                                    },
+                                    Incoming::ConnAck(_) => {
+                                        debug!("Resubscribe topics.");
+                                        subscribe_topics(&client, &subscriptions).await;
+                                    },
+                                    _ => {}
+                                }
+                            },
+                            Ok(Event::Outgoing(o)) => {
+                                if let Outgoing::Publish(p) = o {
+                                        println!("Published message: {:?}.", p);
+                                }
+                            },
+                            Err(err) => {
+                                error!("MQTT Error: {:?}", err);
+                                sleep(Duration::from_secs(10)).await;
                             }
-                        } else if !cli.is_connected() {
-                            try_reconnect(&cli).await;
-                            debug!("Resubscribe topics...");
-                            subscribe_topics(&cli, &subscriptions).await;
                         }
                     },
                     Some(msg) = rx.recv() => {
                         let now = Instant::now();
                         match msg {
                             MqttMessage::MqttOut(msg) if message_expired(&now, &msg.instant) => {
-                                warn!("Discarding outgoing message as too old");
+                                warn!("Discarding outgoing message as too old.");
                             },
                             MqttMessage::MqttOut(msg) => {
                                 let debug_mode: bool = is_debug_mode();
 
                                 info!(
-                                    "outgoing mqtt {} {} {}",
+                                    "outgoing mqtt {} {} {}.",
                                     if debug_mode { "nop" } else { "live" },
                                     msg.retain,
                                     msg.topic
                                 );
 
                                 if !debug_mode {
-                                    cli.publish(msg.into
-                                        ()).await.unwrap()
+                                    if let Err(err) = client.try_publish(msg.topic, msg.qos, msg.retain, msg.payload) {
+                                        error!("Failed to publish message: {:?}.", err);
+                                    }
                                 }
                             },
                         }
@@ -308,41 +328,14 @@ impl Default for Subscriptions {
     }
 }
 
-async fn try_reconnect(cli: &AsyncClient) {
-    let mut attempt: u32 = 0;
-    loop {
-        let sleep_time = 1000 * 2u64.checked_pow(attempt).unwrap();
-        let sleep_time = min(60_000, sleep_time);
+async fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
+    let topics = subscriptions.0.iter().map(|(topic, _)| Filter {
+        path: topic.clone(),
+        qos: QoS::ExactlyOnce,
+        ..Default::default()
+    });
 
-        warn!("Connection lost to mqtt. Waiting {sleep_time} ms to retry connection attempt {attempt}.");
-        sleep(Duration::from_millis(sleep_time)).await;
-
-        warn!("Trying to connect to mqtt");
-        match timeout(Duration::from_secs(10), cli.reconnect()).await {
-            Ok(result) => {
-                if result.is_ok() {
-                    warn!("Successfully reconnected to mqtt");
-                    break;
-                } else {
-                    error!("Reconnect failed");
-                }
-            }
-            Err(timeout) => error!("Timeout trying to reconnect {timeout}"),
-        }
-
-        attempt = attempt.saturating_add(1);
-    }
-}
-
-async fn subscribe_topics(cli: &AsyncClient, subscriptions: &Subscriptions) {
-    let topics: Vec<_> = subscriptions
-        .0
-        .iter()
-        .map(|(topic, _)| topic.clone())
-        .collect();
-    let qos: Vec<_> = subscriptions.0.iter().map(|_| 0).collect();
-
-    if let Err(e) = cli.subscribe_many(&topics, &qos).await {
+    if let Err(e) = client.subscribe_many(topics).await {
         error!("Error subscribing to topics: {:?}", e);
     }
 }
@@ -362,8 +355,8 @@ mod tests {
     async fn test_message_to_string() {
         let msg = Message {
             topic: "test".to_string(),
-            payload: "test".as_bytes().to_vec(),
-            qos: 0,
+            payload: "test".into(),
+            qos: QoS::AtLeastOnce,
             retain: false,
             instant: Instant::now(),
         };
@@ -374,10 +367,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_to_message() {
-        let msg = Message::from_string("test", "test", false, 0);
+        let msg = Message::from_string("test", "test", false, QoS::AtLeastOnce);
         assert_eq!(msg.topic, "test");
         assert_eq!(msg.payload, "test".as_bytes());
-        assert_eq!(msg.qos, 0);
+        assert_eq!(msg.qos, QoS::AtLeastOnce);
         assert!(!msg.retain);
     }
 }
