@@ -1,0 +1,64 @@
+- add:
+  - "weekday"
+  week_day: true
+
+- week_day: true
+
+- add:
+  - "not_weekday"
+  week_day: false
+
+- day_of_week: Saturday
+  add:
+  - "saturday"
+
+- if:
+  - "day_of_week == 'sunday' or 'random' in classifications"
+  add:
+  - "sunday"
+
+- date: "2018-12-25"
+  add:
+  - "christmas"
+
+- if_not_set:
+  - "christmas"
+  add:
+  - "bad_day"
+
+- start: "2018-12-25"
+  add:
+  - "after_christmas"
+
+- stop: "2018-12-25"
+  add:
+  - "before_christmas"
+
+- if_set:
+  - "christmas"
+  - "saturday"
+  - "sunday"
+  add:
+  - "good_day"
+
+- date: "2018-12-25"
+  add:
+  - "special_christmas"
+
+- delete:
+  - "special_christmas"
+  if:
+  - "'special_christmas' in classifications"
+  add:
+  - "evil_christmas"
+
+- delete:
+  - "special_christmas"
+  if_set:
+  - "special_christmas"
+  add:
+  - "good_christmas"
+
+- date: "2018-12-26"
+  add:
+  - "boxing"

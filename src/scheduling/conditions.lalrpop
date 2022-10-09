@@ -1,0 +1,103 @@
+use std::str::FromStr;
+use std::collections::HashSet;
+use crate::scheduling::ast::{Expr, Opcode, Condition, ConditionOpcode, Boolean, Fields, TypeError, ConditionsError, Reference};
+use field_ref::FieldRef;
+use lalrpop_util::ParseError;
+
+grammar<T>(fields: &Fields<T>);
+
+extern {
+    type Error = ConditionsError;
+}
+
+
+pub Boolean: Boolean<T> = {
+    "not" <Condition> => Boolean::<T>::Not(<>),
+    <left:Boolean> "and" <right:Condition> => Boolean::<T>::And(Box::new(left), right),
+    <left:Boolean> "or" <right:Condition> => Boolean::<T>::Or(Box::new(left), right),
+    <Condition> => Boolean::<T>::Cond(<>),
+}
+
+Condition: Condition<T> = {
+    "(" <Boolean> ")" => Condition::<T>::Boolean(Box::new(<>)),
+    <l:Expr> <op:ConditionOpcode> <r:Expr> =>? {
+        let f = || -> Result<Condition<T>, ConditionsError> {
+            let l_type = l.type_of()?;
+            let r_type = r.type_of()?;
+
+            if l_type == r_type {
+                Ok(Condition::<T>::Op(l, op, r))
+            } else {
+                Err(TypeError::TypeMismatch(l_type, r_type).into())
+            }
+        };
+        let result = f();
+        result.map_err(|e| e.into())
+    },
+    "'" <ConstantString> "'" "in" <SetVariable> => Condition::<T>::In(<>),
+    "\"" <ConstantString> "\"" "in" <SetVariable>  => Condition::<T>::In(<>),
+    "'" <ConstantString> "'" "not in" <SetVariable> => Condition::<T>::NotIn(<>),
+    "\"" <ConstantString> "\"" "not in" <SetVariable> => Condition::<T>::NotIn(<>),
+};
+
+ConditionOpcode: ConditionOpcode = {
+    "==" => ConditionOpcode::Eq,
+    "!=" => ConditionOpcode::NotEq,
+    "<" => ConditionOpcode::Lt,
+    "<=" => ConditionOpcode::Lte,
+    ">" => ConditionOpcode::Gt,
+    ">=" => ConditionOpcode::Gte,
+};
+
+Expr: Box<Expr<T>> = {
+    Expr ExprOp Factor => Box::new(Expr::<T>::Op(<>)),
+    Factor,
+};
+
+ExprOp: Opcode = {
+    "+" => Opcode::Add,
+    "-" => Opcode::Sub,
+};
+
+Factor: Box<Expr<T>> = {
+    Factor FactorOp Term => Box::new(Expr::<T>::Op(<>)),
+    Term,
+};
+
+FactorOp: Opcode = {
+    "*" => Opcode::Mul,
+    "/" => Opcode::Div,
+    "%" => Opcode::Remainder,
+};
+
+Term: Box<Expr<T>> = {
+    Num => Box::new(Expr::<T>::Number(<>)),
+    "'" <ConstantString> "'" => Box::new(Expr::<T>::String(<>)),
+    "\"" <ConstantString> "\"" => Box::new(Expr::<T>::String(<>)),
+    <Variable> => Box::new(Expr::<T>::Variable(<>)),
+    "(" <Expr> ")"
+};
+
+Num: i32 = {
+    r"[0-9]+" => i32::from_str(<>).unwrap()
+};
+
+ConstantString: String = {
+    r"[a-zA-Z_][a-zA-Z0-9_]*" => String::from(<>),
+};
+
+Variable: Reference<T> = {
+    <r:r"[a-zA-Z_][a-zA-Z0-9_]*"> =>?
+        match fields.any.get(r) {
+            Some(v) => Ok((*v).clone()),
+            None => Err(ParseError::User{error: ConditionsError::FieldNotFound(r.to_string())}),
+        },
+};
+
+SetVariable: FieldRef<T, HashSet<String>> = {
+    <r:r"[a-zA-Z_][a-zA-Z0-9_]*"> =>?
+        match fields.sets.get(r) {
+            Some(v) => Ok(*v),
+            None => Err(ParseError::User{error: ConditionsError::FieldNotFound(r.to_string())}),
+        },
+};

@@ -14,11 +14,19 @@ webpki-roots = "0.22.0"
 tokio = { version = "1.21.2", features = ["full"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
+serde_yaml = "0.9.13"
 anyhow = "1.0.65"
 reqwest = "0.11.12"
 serde_path_to_error = "0.1.8"
 gethostname = "0.2.3"
 thiserror = "1.0.30"
+chrono = "0.4.19"
+lalrpop-util = { version = "0.19.7", features = ["lexer"] }
+regex = "1.5.4"
+field-ref = "0.2.1"
+
+[build-dependencies]
+lalrpop = "0.19.3"
 
 [workspace]
 members = ["brian-node-rust"]

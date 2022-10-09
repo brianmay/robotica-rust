@@ -7,7 +7,13 @@
 #![allow(clippy::use_self)]
 //! Provide functionality to process asynchronous streams of data for IOT devices.
 
+#[macro_use]
+extern crate lalrpop_util;
+
+// extern crate robotica_node_rust_macros;
+
 pub mod entities;
+pub mod scheduling;
 pub mod sinks;
 pub mod sources;
 

@@ -1,0 +1,16 @@
+  - sequences:
+      "wake_up":
+        time: "08:30:00"
+      "sleep":
+        time: "20:30:00"
+
+  - today: ["christmas"]
+    sequences:
+      "presents":
+        time: "08:00:00"
+
+  - if:
+    - "'boxing' in today"
+    sequences:
+      "wake_up":
+        time: "12:30:00"
