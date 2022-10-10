@@ -146,11 +146,11 @@ pub struct MqttOut(mpsc::Sender<MqttMessage>);
 
 impl MqttOut {
     /// Send a message to the MQTT broker.
-    pub async fn send(&self, msg: Message) {
-        self.0
-            .send(MqttMessage::MqttOut(msg))
-            .await
-            .expect("Failed to send message");
+    pub fn send(&self, msg: Message) {
+        let _ = self
+            .0
+            .try_send(MqttMessage::MqttOut(msg))
+            .map_err(|e| error!("MQTT send error: {}", e));
     }
 }
 
@@ -264,11 +264,16 @@ impl MqttClient {
                                 let debug_mode: bool = is_debug_mode();
 
                                 info!(
-                                    "outgoing mqtt {} {} {}.",
+                                    "Outgoing mqtt {} {} {}.",
                                     if debug_mode { "nop" } else { "live" },
                                     msg.retain,
                                     msg.topic
                                 );
+
+                                if let Some(subscription) = subscriptions.get(&msg.topic) {
+                                    debug!("Looping message: {:?}", msg);
+                                    subscription.tx.try_send(msg.clone());
+                                }
 
                                 if !debug_mode {
                                     if let Err(err) = client.try_publish(msg.topic, msg.qos, msg.retain, msg.payload) {
@@ -390,6 +395,7 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
     let topics = subscriptions.0.iter().map(|(topic, _)| Filter {
         path: topic.clone(),
         qos: QoS::ExactlyOnce,
+        nolocal: true,
         ..Default::default()
     });
 

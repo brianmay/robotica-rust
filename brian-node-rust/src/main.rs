@@ -292,7 +292,7 @@ fn create_message_sink(
 
             if let Some(Power::On) = gate_in.get().await {
                 let msg = robotica::string_to_message(&msg, "Brian");
-                mqtt_out.send(msg).await;
+                mqtt_out.send(msg);
             }
         }
     });
