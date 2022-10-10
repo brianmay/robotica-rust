@@ -1,4 +1,4 @@
-//! Scheduler events to happen at a specific time.
+//! Schedule events to happen at a specific time.
 
 lalrpop_mod!(
     #[allow(clippy::needless_lifetimes)]
