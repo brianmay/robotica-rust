@@ -14,6 +14,7 @@ RUN mkdir src \
     && cargo build --release \
     && rm -rf src brian-node-rust/src
 
+ADD build.rs ./
 ADD src ./src
 RUN mkdir brian-node-rust/src \
     && touch brian-node-rust/src/lib.rs \
