@@ -7,6 +7,7 @@ use rumqttc::v5::mqttbytes::{Filter, Publish};
 use rumqttc::v5::{AsyncClient, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
 use std::collections::HashMap;
+use std::num::ParseIntError;
 use std::str::Utf8Error;
 use std::time::Duration;
 use std::{env, str};
@@ -120,6 +121,18 @@ enum MqttMessage {
     MqttOut(Message),
 }
 
+/// An error loading the Config.
+#[derive(Error, Debug)]
+pub enum MqttError {
+    /// Environment variable not set.
+    #[error("Environment variable missing {0}")]
+    VarError(String),
+
+    /// Environment variable set but invalid.
+    #[error("Environment variable {0} invalid {1}")]
+    VarInvalid(String, String, ParseIntError),
+}
+
 /// Client struct used to connect to MQTT.
 pub struct MqttClient {
     b: Option<JoinHandle<()>>,
@@ -141,6 +154,12 @@ impl MqttOut {
     }
 }
 
+fn get_env(name: &str) -> Result<String, MqttError> {
+    match env::var(name) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(MqttError::VarError(name.to_string())),
+    }
+}
 impl MqttClient {
     /// Create a new MQTT client.
     #[must_use]
@@ -166,19 +185,21 @@ impl MqttClient {
 
     /// Connect to the MQTT broker.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the MQTT broker is not available.
+    ///
     /// # Panics
     ///
-    /// Panics if the environment variables are not set.
-    ///
-    /// FIXME: We should return error without panic.
-    pub fn connect(&mut self, subscriptions: Subscriptions) {
-        let mqtt_host = env::var("MQTT_HOST").expect("MQTT_HOST should be set");
-        let mqtt_port = env::var("MQTT_PORT")
-            .expect("MQTT_PORT should be set")
+    /// Panics if this has already been called since the last call to `new`.
+    pub fn connect(&mut self, subscriptions: Subscriptions) -> Result<(), MqttError> {
+        let mqtt_host = get_env("MQTT_HOST")?;
+        let mqtt_port = get_env("MQTT_PORT")?;
+        let mqtt_port = mqtt_port
             .parse()
-            .unwrap();
-        let username = env::var("MQTT_USERNAME").expect("MQTT_USERNAME should be set");
-        let password = env::var("MQTT_PASSWORD").expect("MQTT_PASSWORD should be set");
+            .map_err(|e| MqttError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
+        let username = get_env("MQTT_USERNAME")?;
+        let password = get_env("MQTT_PASSWORD")?;
         // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
         let hostname = gethostname::gethostname();
@@ -263,6 +284,7 @@ impl MqttClient {
         });
 
         self.b = Some(b);
+        Ok(())
     }
 
     /// Wait for the client to finish.

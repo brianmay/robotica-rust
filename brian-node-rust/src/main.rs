@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let mqtt_out = mqtt.get_mqtt_out();
 
     let subscriptions: Subscriptions = setup_pipes(mqtt_out).await;
-    mqtt.connect(subscriptions);
+    mqtt.connect(subscriptions)?;
     mqtt.wait().await;
 
     Ok(())
