@@ -22,7 +22,7 @@ gethostname = "0.2.3"
 thiserror = "1.0.30"
 chrono = "0.4.19"
 lalrpop-util = { version = "0.19.7", features = ["lexer"] }
-regex = "1.5.4"
+regex = "1.6.0"
 field-ref = "0.2.1"
 
 [build-dependencies]
