@@ -14,12 +14,9 @@ use std::{env, str};
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Instant};
 
 use crate::entities;
-// use crate::entities::FromTranslate;
-use crate::spawn;
 
 /// `QoS` for MQTT messages.
 pub type QoS = rumqttc::v5::mqttbytes::QoS;
@@ -135,9 +132,7 @@ pub enum MqttError {
 
 /// Client struct used to connect to MQTT.
 pub struct MqttClient {
-    b: Option<JoinHandle<()>>,
-    tx: Option<mpsc::Sender<MqttMessage>>,
-    rx: Option<mpsc::Receiver<MqttMessage>>,
+    rx: mpsc::Receiver<MqttMessage>,
 }
 
 /// Struct used to send outgoing MQTT messages.
@@ -163,36 +158,21 @@ fn get_env(name: &str) -> Result<String, MqttError> {
 impl MqttClient {
     /// Create a new MQTT client.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new() -> (Self, MqttOut) {
         // Outgoing MQTT queue.
         let (tx, rx) = mpsc::channel(50);
 
-        MqttClient {
-            b: None,
-            tx: Some(tx),
-            rx: Some(rx),
-        }
+        (MqttClient { rx }, MqttOut(tx))
     }
 
-    /// Get the `MqttOut` struct for sending outgoing messages.
+    /// Connect to the MQTT broker and send/receive messages.
     ///
-    /// # Panics
-    ///
-    /// Panics if the this has already been called since the last call to `new`.
-    pub fn get_mqtt_out(&mut self) -> MqttOut {
-        MqttOut(self.tx.take().unwrap())
-    }
-
-    /// Connect to the MQTT broker.
+    /// Doesn't return.
     ///
     /// # Errors
     ///
-    /// Returns an error if the MQTT broker is not available.
-    ///
-    /// # Panics
-    ///
-    /// Panics if this has already been called since the last call to `new`.
-    pub fn connect(&mut self, subscriptions: Subscriptions) -> Result<(), MqttError> {
+    /// Returns an error if there is a problem with the configuration.
+    pub async fn do_loop(self, subscriptions: Subscriptions) -> Result<(), MqttError> {
         let mqtt_host = get_env("MQTT_HOST")?;
         let mqtt_port = get_env("MQTT_PORT")?;
         let mqtt_port = mqtt_port
@@ -203,7 +183,7 @@ impl MqttClient {
         // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
         let hostname = gethostname::gethostname();
-        let hostname = hostname.to_str().unwrap();
+        let hostname = hostname.to_str().unwrap_or("unknown");
         let client_id = format!("robotica-node-rust-{hostname}");
 
         let mut root_store = rustls::RootCertStore::empty();
@@ -225,88 +205,66 @@ impl MqttClient {
         mqtt_options.set_credentials(username, password);
         // mqtt_options.set_clean_session(false);
 
-        let rx = self.rx.take().unwrap();
-        let b = spawn(async move {
-            let (client, mut event_loop) = AsyncClient::new(mqtt_options, 10);
+        let (client, mut event_loop) = AsyncClient::new(mqtt_options, 10);
 
-            // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+        // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
-            let mut rx = rx;
+        let mut rx = self.rx;
 
-            // Subscribe topics.
-            subscribe_topics(&client, &subscriptions);
+        // Subscribe topics.
+        subscribe_topics(&client, &subscriptions);
 
-            loop {
-                select! {
-                    event = event_loop.poll() => {
-                        match event {
-                            Ok(Event::Incoming(i)) => {
-                                incoming_event(&client, *i, &subscriptions);
-                            },
-                            Ok(Event::Outgoing(o)) => {
-                                if let Outgoing::Publish(p) = o {
-                                        println!("Published message: {:?}.", p);
-                                }
-                            },
-                            Err(err) => {
-                                error!("MQTT Error: {:?}", err);
-                                sleep(Duration::from_secs(10)).await;
+        loop {
+            select! {
+                event = event_loop.poll() => {
+                    match event {
+                        Ok(Event::Incoming(i)) => {
+                            incoming_event(&client, *i, &subscriptions);
+                        },
+                        Ok(Event::Outgoing(o)) => {
+                            if let Outgoing::Publish(p) = o {
+                                    println!("Published message: {:?}.", p);
                             }
-                        }
-                    },
-                    Some(msg) = rx.recv() => {
-                        let now = Instant::now();
-                        match msg {
-                            MqttMessage::MqttOut(msg) if message_expired(&now, &msg.instant) => {
-                                warn!("Discarding outgoing message as too old.");
-                            },
-                            MqttMessage::MqttOut(msg) => {
-                                let debug_mode: bool = is_debug_mode();
-
-                                info!(
-                                    "Outgoing mqtt {} {} {}.",
-                                    if debug_mode { "nop" } else { "live" },
-                                    msg.retain,
-                                    msg.topic
-                                );
-
-                                if let Some(subscription) = subscriptions.get(&msg.topic) {
-                                    debug!("Looping message: {:?}", msg);
-                                    subscription.tx.try_send(msg.clone());
-                                }
-
-                                if !debug_mode {
-                                    if let Err(err) = client.try_publish(msg.topic, msg.qos, msg.retain, msg.payload) {
-                                        error!("Failed to publish message: {:?}.", err);
-                                    }
-                                }
-                            },
+                        },
+                        Err(err) => {
+                            error!("MQTT Error: {:?}", err);
+                            sleep(Duration::from_secs(10)).await;
                         }
                     }
-                    else => { break; }
-                };
-            }
-        });
+                },
+                Some(msg) = rx.recv() => {
+                    let now = Instant::now();
+                    match msg {
+                        MqttMessage::MqttOut(msg) if message_expired(&now, &msg.instant) => {
+                            warn!("Discarding outgoing message as too old.");
+                        },
+                        MqttMessage::MqttOut(msg) => {
+                            let debug_mode: bool = is_debug_mode();
 
-        self.b = Some(b);
-        Ok(())
-    }
+                            info!(
+                                "Outgoing mqtt {} {} {}.",
+                                if debug_mode { "nop" } else { "live" },
+                                msg.retain,
+                                msg.topic
+                            );
 
-    /// Wait for the client to finish.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the server exits with an error.
-    pub async fn wait(&mut self) {
-        if let Some(b) = self.b.take() {
-            b.await.unwrap();
+                            if let Some(subscription) = subscriptions.get(&msg.topic) {
+                                debug!("Looping message: {:?}", msg);
+                                subscription.tx.try_send(msg.clone());
+                            }
+
+                            if !debug_mode {
+                                if let Err(err) = client.try_publish(msg.topic, msg.qos, msg.retain, msg.payload) {
+                                    error!("Failed to publish message: {:?}.", err);
+                                }
+                            }
+                        },
+                    }
+                }
+                else => { break; }
+            };
         }
-    }
-}
-
-impl Default for MqttClient {
-    fn default() -> Self {
-        Self::new()
+        Ok(())
     }
 }
 

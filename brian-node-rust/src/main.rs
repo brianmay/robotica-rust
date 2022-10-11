@@ -24,12 +24,10 @@ async fn main() -> Result<()> {
 
     http::start().await;
 
-    let mut mqtt = MqttClient::new();
-    let mqtt_out = mqtt.get_mqtt_out();
+    let (mqtt, mqtt_out) = MqttClient::new();
 
     let subscriptions: Subscriptions = setup_pipes(mqtt_out).await;
-    mqtt.connect(subscriptions)?;
-    mqtt.wait().await;
+    mqtt.do_loop(subscriptions).await?;
 
     Ok(())
 }
