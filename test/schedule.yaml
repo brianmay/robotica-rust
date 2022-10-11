@@ -14,3 +14,5 @@
     sequences:
       "wake_up":
         time: "12:30:00"
+        options:
+          - "late_wake_up"

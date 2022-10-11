@@ -17,6 +17,8 @@ lalrpop_mod!(
 
 mod ast;
 pub mod classifier;
+pub mod scheduler;
+pub mod types;
 
 #[cfg(test)]
 mod test;

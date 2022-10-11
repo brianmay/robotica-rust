@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "accum",
         "asyncio",
         "Behavior",
         "brianmay",
@@ -8,6 +9,7 @@
         "color",
         "conn",
         "Datelike",
+        "datetime",
         "defenses",
         "deps",
         "Dwarnings",

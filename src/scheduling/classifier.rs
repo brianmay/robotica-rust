@@ -2,18 +2,19 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fmt::{Display, Formatter},
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use crate::scheduling::conditions;
-use chrono::Datelike;
+// use chrono::{Datelike, Weekday};
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use super::ast::{Boolean, Fields, Reference};
+use super::{
+    ast::{Boolean, Fields, Reference},
+    types::{Date, Weekday},
+};
 
 #[derive(Debug)]
 struct Context {
@@ -42,85 +43,6 @@ fn get_fields() -> Fields<Context> {
     fields
 }
 
-/// A Serializable Date
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Date(chrono::NaiveDate);
-
-impl Date {
-    #[cfg(test)]
-    fn from_ymd(year: i32, month: u32, day: u32) -> Self {
-        Self(chrono::NaiveDate::from_ymd(year, month, day))
-    }
-
-    fn week_day(self) -> Weekday {
-        Weekday(self.0.weekday())
-    }
-}
-
-impl FromStr for Date {
-    type Err = chrono::ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")?;
-        Ok(Self(date))
-    }
-}
-
-impl Display for Date {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.format("%Y-%m-%d"))
-    }
-}
-
-impl<'de> Deserialize<'de> for Date {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        let d = Date::from_str(&s).map_err(serde::de::Error::custom)?;
-        Ok(d)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Weekday(chrono::Weekday);
-
-impl ToString for Weekday {
-    fn to_string(&self) -> String {
-        match self.0 {
-            chrono::Weekday::Mon => "Monday",
-            chrono::Weekday::Tue => "Tuesday",
-            chrono::Weekday::Wed => "Wednesday",
-            chrono::Weekday::Thu => "Thursday",
-            chrono::Weekday::Fri => "Friday",
-            chrono::Weekday::Sat => "Saturday",
-            chrono::Weekday::Sun => "Sunday",
-        }
-        .to_string()
-    }
-}
-
-impl<'de> Deserialize<'de> for Weekday {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-
-        match s.to_lowercase().as_str() {
-            "monday" => Ok(Weekday(chrono::Weekday::Mon)),
-            "tuesday" => Ok(Weekday(chrono::Weekday::Tue)),
-            "wednesday" => Ok(Weekday(chrono::Weekday::Wed)),
-            "thursday" => Ok(Weekday(chrono::Weekday::Thu)),
-            "friday" => Ok(Weekday(chrono::Weekday::Fri)),
-            "saturday" => Ok(Weekday(chrono::Weekday::Sat)),
-            "sunday" => Ok(Weekday(chrono::Weekday::Sun)),
-            _ => Err(serde::de::Error::custom(format!("Invalid weekday {s}"))),
-        }
-    }
-}
-
 impl<'de> Deserialize<'de> for Boolean<Context> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -137,7 +59,7 @@ impl<'de> Deserialize<'de> for Boolean<Context> {
     }
 }
 
-/// Classifier config.
+/// Classify a date into tags.
 #[derive(Deserialize, Debug)]
 pub struct Config {
     date: Option<Date>,
@@ -212,32 +134,32 @@ pub fn classify_date_with_config(date: Date, config: &Vec<Config>) -> HashSet<St
             }
         }
         if let Some(start) = c.start {
-            if date.0 < start.0 {
+            if date < start {
                 continue;
             }
         }
         if let Some(stop) = c.stop {
-            if date.0 > stop.0 {
+            if date > stop {
                 continue;
             }
         }
         if let Some(week_day) = c.week_day {
-            if week_day && date.0.weekday() == chrono::Weekday::Sat
-                || date.0.weekday() == chrono::Weekday::Sun
+            if week_day && date.weekday() == chrono::Weekday::Sat.into()
+                || date.weekday() == chrono::Weekday::Sun.into()
             {
                 continue;
             }
         }
         if let Some(day_of_week) = c.day_of_week {
-            if date.0.weekday() != day_of_week.0 {
+            if date.weekday() != day_of_week {
                 continue;
             }
         }
         if let Some(if_cond) = &c.if_cond {
             let context = Context {
-                days_since_epoch: date.0.num_days_from_ce(),
+                days_since_epoch: date.num_days_from_ce(),
                 classifications: tags.clone(),
-                day_of_week: date.week_day().to_string().to_lowercase(),
+                day_of_week: date.weekday().to_string().to_lowercase(),
             };
             if !if_cond.iter().any(|c| c.eval(&context)) {
                 continue;
@@ -278,6 +200,8 @@ pub fn classify_date(date: Date) -> Result<HashSet<String>, ConfigError> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
+    use std::str::FromStr;
+
     use crate::scheduling::ast::{Condition, ConditionOpcode, Expr};
 
     use super::*;
@@ -369,7 +293,7 @@ mod tests {
                 start: Some(Date::from_ymd(2020, 1, 1)),
                 stop: Some(Date::from_ymd(2020, 12, 31)),
                 week_day: None,
-                day_of_week: Some(Weekday(chrono::Weekday::Mon)),
+                day_of_week: Some(chrono::Weekday::Mon.into()),
                 if_cond: None,
                 if_set: None,
                 if_not_set: None,
