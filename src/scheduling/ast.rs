@@ -84,6 +84,17 @@ pub enum Expr<T> {
     Op(Box<Expr<T>>, Opcode, Box<Expr<T>>),
 }
 
+impl<T: Clone> Clone for Expr<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Number(arg0) => Self::Number(*arg0),
+            Self::String(arg0) => Self::String(arg0.clone()),
+            Self::Variable(arg0) => Self::Variable(arg0.clone()),
+            Self::Op(arg0, arg1, arg2) => Self::Op(arg0.clone(), *arg1, arg2.clone()),
+        }
+    }
+}
+
 impl<T> Expr<T> {
     fn eval(&self, context: &T) -> Value {
         match self {
@@ -118,7 +129,7 @@ impl<T> Expr<T> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Opcode {
     Mul,
     Div,
@@ -128,7 +139,7 @@ pub enum Opcode {
 }
 
 impl Opcode {
-    fn eval(&self, l: &Value, r: &Value) -> Value {
+    fn eval(self, l: &Value, r: &Value) -> Value {
         let l = match l {
             Value::Int(i) => i,
             Value::String(_) => panic!("Invalid left operand"),
@@ -159,6 +170,17 @@ pub enum Condition<T> {
     NotIn(String, field_ref::FieldRef<T, HashSet<String>>),
 }
 
+impl<T: Clone> Clone for Condition<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Boolean(b) => Self::Boolean(b.clone()),
+            Self::Op(l, op, r) => Self::Op(l.clone(), *op, r.clone()),
+            Self::In(s, r) => Self::In(s.clone(), *r),
+            Self::NotIn(s, r) => Self::NotIn(s.clone(), *r),
+        }
+    }
+}
+
 impl<T> Condition<T> {
     fn eval(&self, context: &T) -> bool {
         match self {
@@ -178,7 +200,7 @@ impl<T> Condition<T> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum ConditionOpcode {
     Eq,
     NotEq,
@@ -189,7 +211,7 @@ pub enum ConditionOpcode {
 }
 
 impl ConditionOpcode {
-    const fn eval_int(&self, l: i32, r: i32) -> bool {
+    const fn eval_int(self, l: i32, r: i32) -> bool {
         match self {
             ConditionOpcode::Eq => l == r,
             ConditionOpcode::NotEq => l != r,
@@ -200,7 +222,7 @@ impl ConditionOpcode {
         }
     }
 
-    fn eval_string(&self, l: &str, r: &str) -> bool {
+    fn eval_string(self, l: &str, r: &str) -> bool {
         match self {
             ConditionOpcode::Eq => l == r,
             ConditionOpcode::NotEq => l != r,
@@ -218,6 +240,17 @@ pub enum Boolean<T> {
     And(Box<Boolean<T>>, Condition<T>),
     Or(Box<Boolean<T>>, Condition<T>),
     Cond(Condition<T>),
+}
+
+impl<T: Clone> Clone for Boolean<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Boolean::Not(c) => Boolean::Not(c.clone()),
+            Boolean::And(l, r) => Boolean::And(l.clone(), r.clone()),
+            Boolean::Or(l, r) => Boolean::Or(l.clone(), r.clone()),
+            Boolean::Cond(c) => Boolean::Cond(c.clone()),
+        }
+    }
 }
 
 impl<T> Boolean<T> {

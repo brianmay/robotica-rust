@@ -23,6 +23,7 @@
         "LALRPOP",
         "mqtt",
         "mqttbytes",
+        "nolocal",
         "noncommercially",
         "oneshot",
         "paho",

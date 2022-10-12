@@ -3,7 +3,7 @@
 use super::{
     ast::{Boolean, Fields},
     conditions,
-    types::{convert_date_time_to_utc, Date, DateTimeError, Time},
+    types::{convert_date_time_to_utc, Date, DateTime, DateTimeError, Time},
 };
 use chrono::TimeZone;
 use field_ref::field_ref_of;
@@ -19,9 +19,14 @@ use thiserror::Error;
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Schedule {
-    datetime: chrono::DateTime<chrono::Utc>,
-    name: String,
-    options: HashSet<String>,
+    /// The date and time of the schedule.
+    pub datetime: DateTime<chrono::Utc>,
+
+    /// The name of the sequence to run.
+    pub name: String,
+
+    /// The options to use when running the sequence.
+    pub options: HashSet<String>,
 }
 
 /// A sequence from the Config.
@@ -35,7 +40,7 @@ pub struct Sequence {
 #[derive(Deserialize, Debug)]
 pub struct Config {
     #[serde(rename = "if")]
-    s_if: Option<Vec<Boolean<Context>>>,
+    if_cond: Option<Vec<Boolean<Context>>>,
     today: Option<Vec<String>>,
     tomorrow: Option<Vec<String>>,
     sequences: HashMap<String, Sequence>,
@@ -109,11 +114,11 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
     Ok(config)
 }
 
-/// Load the classification config from the environment variable `CLASSIFICATIONS_FILE`.
+/// Load the classification config from the environment variable `SCHEDULE_FILE`.
 ///
 /// # Errors
 ///
-/// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
+/// Returns an error if the environment variable `SCHEDULE_FILE` is not set or if the file cannot be read.
 pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
     let env_name = "SCHEDULE_FILE";
     let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
@@ -121,7 +126,7 @@ pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
 }
 
 fn is_condition_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<String>) -> bool {
-    config.s_if.as_ref().map_or(true, |s_if| {
+    config.if_cond.as_ref().map_or(true, |s_if| {
         s_if.iter().any(|s_if| {
             let context = Context {
                 today: today.clone(),
@@ -191,7 +196,7 @@ pub fn get_schedule_with_config<T: TimeZone>(
 
     sequences.map(|s| {
         let mut s = s;
-        s.sort_by_key(|s| s.datetime);
+        s.sort_by_key(|s| s.datetime.clone());
         s
     })
 }
@@ -231,6 +236,8 @@ mod tests {
 
     use chrono::FixedOffset;
 
+    use crate::scheduling::conditions::BooleanParser;
+
     use super::*;
 
     struct ExpectedResult {
@@ -240,8 +247,66 @@ mod tests {
     }
 
     #[test]
-    fn test_every_day() {
+    fn test_load_config() {
         let config_list = load_config(Path::new("test/schedule.yaml")).unwrap();
+        assert_eq!(config_list.len(), 3);
+    }
+
+    fn config() -> Vec<Config> {
+        vec![
+            Config {
+                if_cond: None,
+                today: None,
+                tomorrow: None,
+                sequences: HashMap::from([
+                    (
+                        "wake_up".to_string(),
+                        Sequence {
+                            time: "08:30:00".parse().unwrap(),
+                            options: None,
+                        },
+                    ),
+                    (
+                        "sleep".to_string(),
+                        Sequence {
+                            time: "20:30:00".parse().unwrap(),
+                            options: None,
+                        },
+                    ),
+                ]),
+            },
+            Config {
+                if_cond: None,
+                today: Some(vec!["christmas".to_string()]),
+                tomorrow: None,
+                sequences: HashMap::from([(
+                    "presents".to_string(),
+                    Sequence {
+                        time: "08:00:00".parse().unwrap(),
+                        options: None,
+                    },
+                )]),
+            },
+            Config {
+                if_cond: Some(vec![BooleanParser::new()
+                    .parse(&get_fields(), "'boxing' in today")
+                    .unwrap()]),
+                today: None,
+                tomorrow: None,
+                sequences: HashMap::from([(
+                    "wake_up".to_string(),
+                    Sequence {
+                        time: "12:30:00".parse().unwrap(),
+                        options: Some(vec!["late_wake_up".to_string()]),
+                    },
+                )]),
+            },
+        ]
+    }
+
+    #[test]
+    fn test_every_day() {
+        let config_list = config();
 
         let date = Date::from_ymd(2018, 12, 24);
         let today = vec!["today"];
@@ -271,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_christmas() {
-        let config_list = load_config(Path::new("test/schedule.yaml")).unwrap();
+        let config_list = config();
 
         let date = Date::from_ymd(2018, 12, 25);
         let today = vec!["christmas"];
@@ -306,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_boxing() {
-        let config_list = load_config(Path::new("test/schedule.yaml")).unwrap();
+        let config_list = config();
 
         let date = Date::from_ymd(2018, 12, 26);
         let today = vec!["boxing"];

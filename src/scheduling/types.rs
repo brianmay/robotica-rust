@@ -1,10 +1,12 @@
 //! Serializable types.
 use std::{
+    cmp::Ordering,
     fmt::{Display, Formatter},
+    ops::Add,
     str::FromStr,
 };
 
-use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone};
+use chrono::{Datelike, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
@@ -139,6 +141,150 @@ pub enum DateTimeError<T: TimeZone> {
     AmbiguousDateTime(NaiveDateTime, DateTime<T>, DateTime<T>),
 }
 
+/// A Serializable `DateTime`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DateTime<Tz: TimeZone>(chrono::DateTime<Tz>);
+
+impl<T: TimeZone> DateTime<T> {
+    /// Get the date of the date time.
+    #[must_use]
+    pub fn date(self) -> Date {
+        Date(self.0.date().naive_local())
+    }
+
+    /// Get the time of the date time.
+    #[must_use]
+    pub fn time(self) -> Time {
+        Time(self.0.time())
+    }
+}
+
+impl<T: TimeZone> From<chrono::DateTime<T>> for DateTime<T> {
+    fn from(dt: chrono::DateTime<T>) -> Self {
+        Self(dt)
+    }
+}
+
+impl Ord for DateTime<Utc> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+impl PartialOrd<DateTime<Utc>> for DateTime<Utc> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl Add<Duration> for DateTime<Utc> {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+/// A Serializable Duration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Duration(chrono::Duration);
+
+impl Duration {
+    /// Create a new Duration.
+    #[must_use]
+    pub fn new(hours: i64, minutes: i64, seconds: i64) -> Self {
+        Self(
+            chrono::Duration::hours(hours)
+                + chrono::Duration::minutes(minutes)
+                + chrono::Duration::seconds(seconds),
+        )
+    }
+
+    /// Get the number of hours in the duration.
+    #[must_use]
+    pub fn num_hours(self) -> i64 {
+        self.0.num_hours()
+    }
+
+    /// Get the number of minutes in the duration.
+    #[must_use]
+    pub fn num_minutes(self) -> i64 {
+        self.0.num_minutes()
+    }
+
+    /// Get the number of seconds in the duration.
+    #[must_use]
+    pub fn num_seconds(self) -> i64 {
+        self.0.num_seconds()
+    }
+
+    /// Create a duration from a number of seconds.
+    #[must_use]
+    pub fn seconds(seconds: i64) -> Self {
+        Self(chrono::Duration::seconds(seconds))
+    }
+
+    /// Create a duration from a number of minutes.
+    #[must_use]
+    pub fn minutes(minutes: i64) -> Self {
+        Self(chrono::Duration::minutes(minutes))
+    }
+}
+
+impl From<chrono::Duration> for Duration {
+    fn from(d: chrono::Duration) -> Self {
+        Self(d)
+    }
+}
+
+/// A Serializable Duration.
+#[derive(Error, Debug)]
+pub enum DurationParseError {
+    /// The duration is invalid.
+    #[error("Invalid duration {0}")]
+    InvalidDuration(String),
+}
+
+impl FromStr for Duration {
+    type Err = DurationParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let splits = s.split(':').collect::<Vec<&str>>();
+        if splits.len() == 2 {
+            let hours = splits[0]
+                .parse::<i64>()
+                .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
+            let minutes = splits[1]
+                .parse::<i64>()
+                .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
+            Ok(Duration::new(hours, minutes, 0))
+        } else if splits.len() == 3 {
+            let hours = splits[0]
+                .parse::<i64>()
+                .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
+            let minutes = splits[1]
+                .parse::<i64>()
+                .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
+            let seconds = splits[2]
+                .parse::<i64>()
+                .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
+            Ok(Duration::new(hours, minutes, seconds))
+        } else {
+            Err(DurationParseError::InvalidDuration(s.to_string()))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Duration {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let d = Duration::from_str(&s).map_err(serde::de::Error::custom)?;
+        Ok(d)
+    }
+}
+
 /// Convert a Date and a Time to a Utc `DateTime`.
 ///
 /// # Errors
@@ -148,18 +294,20 @@ pub fn convert_date_time_to_utc<T: TimeZone>(
     date: Date,
     time: Time,
     timezone: &T,
-) -> Result<chrono::DateTime<chrono::Utc>, DateTimeError<T>> {
+) -> Result<DateTime<chrono::Utc>, DateTimeError<T>> {
     let date = date.0;
     let time = time.0;
     let datetime = chrono::NaiveDateTime::new(date, time);
     let datetime = match timezone.from_local_datetime(&datetime) {
         chrono::LocalResult::None => Err(DateTimeError::CantConvertDateTime(datetime)),
         chrono::LocalResult::Single(datetime) => Ok(datetime),
-        chrono::LocalResult::Ambiguous(x, y) => {
-            Err(DateTimeError::AmbiguousDateTime(datetime, x, y))
-        }
+        chrono::LocalResult::Ambiguous(x, y) => Err(DateTimeError::AmbiguousDateTime(
+            datetime,
+            x.into(),
+            y.into(),
+        )),
     }?;
-    Ok(datetime.with_timezone(&chrono::Utc))
+    Ok(datetime.with_timezone(&chrono::Utc).into())
 }
 
 #[cfg(test)]
@@ -176,6 +324,40 @@ mod tests {
         let time = Time::from_str("10:00:00").unwrap();
         let timezone = FixedOffset::east(60 * 60 * 10);
         let datetime = convert_date_time_to_utc(date, time, &timezone).unwrap();
-        assert_eq!(datetime, chrono::Utc.ymd(2020, 1, 1).and_hms(00, 0, 0));
+        assert_eq!(
+            datetime,
+            chrono::Utc.ymd(2020, 1, 1).and_hms(00, 0, 0).into()
+        );
+    }
+
+    #[test]
+    fn test_duration() {
+        let duration = Duration::from_str("1:2").unwrap();
+        assert_eq!(duration.num_hours(), 1);
+        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.num_seconds(), (60 + 2) * 60);
+
+        let duration = Duration::from_str("1:2:3").unwrap();
+        assert_eq!(duration.num_hours(), 1);
+        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+
+        let duration = Duration::from_str("1:2:3:4");
+        assert!(matches!(
+            duration,
+            Err(DurationParseError::InvalidDuration(_))
+        ));
+
+        let duration = Duration::from_str("1");
+        assert!(matches!(
+            duration,
+            Err(DurationParseError::InvalidDuration(_))
+        ));
+
+        let duration = Duration::from_str("1:a:3:4");
+        assert!(matches!(
+            duration,
+            Err(DurationParseError::InvalidDuration(_))
+        ));
     }
 }

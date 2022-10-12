@@ -6,7 +6,6 @@ use std::{
 };
 
 use crate::scheduling::conditions;
-// use chrono::{Datelike, Weekday};
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
@@ -110,7 +109,7 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
 ///
 /// # Errors
 ///
-/// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
+/// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file cannot be read.
 pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
     let env_name = "CLASSIFICATIONS_FILE";
     let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;

@@ -1,0 +1,701 @@
+//! Assemble schedule into sequences
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    path::{Path, PathBuf},
+};
+
+use chrono::Utc;
+use field_ref::field_ref_of;
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
+use thiserror::Error;
+
+use super::{
+    ast::{Boolean, Fields},
+    conditions, scheduler,
+    types::{DateTime, Duration},
+};
+
+/// Payload in a task.
+#[derive(Deserialize, Debug, Clone)]
+pub enum Payload {
+    /// A string payload.
+    #[serde(rename = "payload_str")]
+    String(String),
+
+    /// A JSON payload.
+    #[serde(rename = "payload_json")]
+    Json(Value),
+}
+
+/// A task in a config sequence.
+#[derive(Deserialize, Debug, Clone)]
+pub struct ConfigTask {
+    /// The id of the task.
+    pub id: Option<String>,
+
+    /// The description of the task.
+    pub description: Option<String>,
+
+    /// The payload of the task.
+    #[serde(flatten)]
+    pub payload: Payload,
+
+    /// The qos to be used when sending the message.
+    qos: Option<u8>,
+
+    /// The locations this task acts on.
+    locations: Vec<String>,
+
+    /// The devices this task acts on.
+    devices: Vec<String>,
+
+    /// The topics this task will send to.
+    ///
+    /// If this is not specified, the topic will be generated from the locations and devices.
+    topics: Option<Vec<String>>,
+}
+
+/// The source schedule loaded from the config file.
+#[derive(Deserialize, Debug, Clone)]
+pub struct Config {
+    /// The conditions that must be true before this is scheduled.
+    #[serde(rename = "if")]
+    if_cond: Option<Vec<Boolean<Context>>>,
+
+    /// The required classifications for this step.
+    classifications: Option<HashSet<String>>,
+
+    // The required options for this step.
+    options: Option<HashSet<String>>,
+
+    /// If true this is considered the "zero time" for this sequence.
+    zero_time: Option<bool>,
+
+    /// The total duration of this step.
+    required_time: Duration,
+
+    /// The latest time this step can be completed.
+    latest_time: Option<Duration>,
+
+    /// How frequently this step should be repeated.
+    repeat_time: Option<Duration>,
+
+    /// How many times this step should be repeated.
+    repeat_count: Option<u8>,
+
+    /// The tasks to execute.
+    tasks: Vec<ConfigTask>,
+}
+
+/// The configuration for a sequence.
+type ConfigMap = HashMap<String, Vec<Config>>;
+
+/// A task with all values completed.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct Task {
+    /// The id of the task.
+    pub id: String,
+
+    /// The description of the task.
+    pub description: Option<String>,
+
+    /// The payload of the task.
+    pub payload: Payload,
+
+    /// The qos to be used when sending the message.
+    qos: u8,
+
+    /// The locations this task acts on.
+    locations: Vec<String>,
+
+    /// The devices this task acts on.
+    devices: Vec<String>,
+
+    /// The topics this task will send to.
+    ///
+    /// If this is not specified, the topic will be generated from the locations and devices.
+    topics: Vec<String>,
+}
+
+/// The schedule with all values completed.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct Sequence {
+    /// The conditions that must be true before this is scheduled.
+    if_cond: Option<Vec<Boolean<Context>>>,
+
+    /// The required classifications for this step.
+    classifications: Option<HashSet<String>>,
+
+    // The required options for this step.
+    options: Option<HashSet<String>>,
+
+    /// If true this is considered the "zero time" for this sequence.
+    zero_time: bool,
+
+    /// The total duration of this step.
+    required_time: DateTime<Utc>,
+
+    /// The latest time this step can be completed.
+    latest_time: DateTime<Utc>,
+
+    /// The number of the repeat.
+    repeat_number: u8,
+
+    /// The tasks to execute.
+    tasks: Vec<Task>,
+}
+
+/// A Map of Sequences.
+pub type SequenceMap = HashMap<String, Vec<Sequence>>;
+
+#[derive(Debug, Clone)]
+struct Context {
+    today: HashSet<String>,
+    tomorrow: HashSet<String>,
+    options: HashSet<String>,
+}
+
+fn get_fields() -> Fields<Context> {
+    let mut fields: Fields<Context> = Fields {
+        any: HashMap::new(),
+        sets: HashMap::new(),
+    };
+
+    fields
+        .sets
+        .insert("today".to_string(), field_ref_of!(Context => today));
+    fields
+        .sets
+        .insert("tomorrow".to_string(), field_ref_of!(Context => tomorrow));
+    fields
+        .sets
+        .insert("options".to_string(), field_ref_of!(Context => options));
+    fields
+}
+
+impl<'de> Deserialize<'de> for Boolean<Context> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let fields = get_fields();
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let expr = conditions::BooleanParser::new()
+            .parse(&fields, &s)
+            .map_err(|e| {
+                serde::de::Error::custom(format!("Error parsing classifier config: {e}"))
+            })?;
+        Ok(expr)
+    }
+}
+
+/// An error loading the Config
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    /// Environment variable not set
+    #[error("Environment variable missing: {0}")]
+    VarError(String),
+
+    /// Error reading the file
+    #[error("Error reading file {0}: {1}")]
+    FileError(PathBuf, std::io::Error),
+
+    /// Error reading the file
+    #[error("Error parsing file {0}: {1}")]
+    YamlError(PathBuf, serde_yaml::Error),
+}
+
+/// Load the scheduler config from the given path.
+///
+/// # Errors
+///
+/// If the file cannot be read or parsed.
+///
+/// # Panics
+///
+/// Never (FIXME: check this).
+pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
+    let f = std::fs::File::open(&filename)
+        .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
+
+    let config: ConfigMap = serde_yaml::from_reader(f)
+        .map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
+
+    Ok(config)
+}
+
+/// Load the classification config from the environment variable `SEQUENCES_FILE`.
+///
+/// # Errors
+///
+/// Returns an error if the environment variable `SEQUENCES_FILE` is not set or if the file cannot be read.
+pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
+    let env_name = "SEQUENCES_FILE";
+    let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
+    load_config(Path::new(&filename))
+}
+
+/// Something went wrong trying to get a sequence.
+#[derive(Error, Debug)]
+pub enum SequenceError {
+    /// The sequence is could not be found.
+    #[error("No sequence found for {0}")]
+    NoSequence(String),
+}
+
+fn config_to_sequence(
+    name: &str,
+    config: Config,
+    start_time: &DateTime<Utc>,
+    sequence_number: usize,
+    repeat_number: u8,
+) -> Sequence {
+    let mut tasks = Vec::with_capacity(config.tasks.len());
+    config.tasks.into_iter().enumerate().for_each(|(n, t)| {
+        let id =
+            t.id.map_or_else(|| format!("{}-{}-{}", name, sequence_number, n), |id| id);
+
+        let topics = if let Some(topics) = t.topics {
+            topics
+        } else {
+            let mut topics = Vec::with_capacity(t.locations.len() * t.devices.len());
+            t.locations.iter().for_each(|l| {
+                t.devices
+                    .iter()
+                    .for_each(|d| topics.push(format!("command/{}/{}", l, d)));
+            });
+            topics
+        };
+
+        let task = Task {
+            id,
+            description: t.description,
+            payload: t.payload,
+            qos: t.qos.unwrap_or(2),
+            locations: t.locations,
+            devices: t.devices,
+            topics,
+        };
+
+        tasks.push(task);
+    });
+
+    let default_latest_time = Duration::minutes(5);
+    let latest_time = start_time.clone() + config.latest_time.unwrap_or(default_latest_time);
+
+    Sequence {
+        if_cond: config.if_cond,
+        classifications: config.classifications,
+        options: config.options,
+        zero_time: config.zero_time.unwrap(),
+        required_time: start_time.clone(),
+        latest_time,
+        repeat_number,
+        tasks,
+    }
+}
+
+/// Get the sequence for the given classification.
+///
+/// # Errors
+///
+/// Returns an error if the sequence is not found.
+#[allow(clippy::implicit_hasher)]
+pub fn get_sequence(
+    config: &ConfigMap,
+    name: &str,
+    today: &HashSet<String>,
+    tomorrow: &HashSet<String>,
+    options: &HashSet<String>,
+    start_time: &DateTime<Utc>,
+) -> Result<Vec<Sequence>, SequenceError> {
+    let mut start_time = start_time.clone();
+    let default_repeat_time = Duration::seconds(0);
+
+    let sequence = config
+        .get(name)
+        .ok_or_else(|| SequenceError::NoSequence(name.to_string()))?;
+
+    let context = Context {
+        today: today.clone(),
+        tomorrow: tomorrow.clone(),
+        options: options.clone(),
+    };
+
+    let mut sequences = Vec::with_capacity(sequence.len());
+
+    for (sequence_number, config) in sequence.iter().enumerate() {
+        let mut ok = true;
+
+        if let Some(classifications) = &config.classifications {
+            if today.intersection(classifications).next().is_none() {
+                ok = false;
+            }
+        }
+
+        if let Some(test_options) = &config.options {
+            if options.intersection(test_options).next().is_none() {
+                ok = false;
+            }
+        }
+
+        if let Some(if_cond) = &config.if_cond {
+            if !if_cond.iter().any(|c| c.eval(&context)) {
+                ok = false;
+            }
+        }
+
+        if ok {
+            let mut repeat_time = start_time.clone();
+            let repeat_count = config.repeat_count.unwrap_or(1);
+            for repeat in 0..repeat_count {
+                let sequence =
+                    config_to_sequence(name, config.clone(), &repeat_time, sequence_number, repeat);
+                repeat_time = repeat_time + config.repeat_time.unwrap_or(default_repeat_time);
+                sequences.push(sequence);
+            }
+            start_time = start_time + config.required_time;
+        }
+    }
+
+    Ok(sequences)
+}
+
+/// Get the sequence for the given schedule.
+///
+/// # Errors
+///
+/// Returns an error if the sequence is not found.
+#[allow(clippy::implicit_hasher)]
+pub fn schedule_list_to_sequence(
+    config_map: &ConfigMap,
+    schedule_list: &Vec<scheduler::Schedule>,
+    today: &HashSet<String>,
+    tomorrow: &HashSet<String>,
+) -> Result<Vec<Sequence>, SequenceError> {
+    let mut sequences = Vec::new();
+
+    for schedule in schedule_list {
+        let mut sequence = get_sequence(
+            config_map,
+            &schedule.name,
+            today,
+            tomorrow,
+            &schedule.options,
+            &schedule.datetime,
+        )?;
+        sequences.append(&mut sequence);
+    }
+
+    // Sort the sequences by the required time.
+    sequences.sort_by(|a, b| a.required_time.cmp(&b.required_time));
+
+    Ok(sequences)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use chrono::TimeZone;
+
+    use crate::scheduling::scheduler;
+
+    use super::*;
+
+    #[test]
+    fn test_load_test_file() {
+        let config = load_config(Path::new("test/sequences.yaml")).unwrap();
+        assert!(config.contains_key("open_presents"));
+    }
+
+    #[test]
+    fn test_get_sequence() {
+        let config = vec![
+            Config {
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let config_map = ConfigMap::from([("test".to_string(), config)]);
+        let sequence = get_sequence(
+            &config_map,
+            "test",
+            &HashSet::from(["christmas".to_string()]),
+            &HashSet::new(),
+            &HashSet::from(["boxing".to_string()]),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+        )
+        .unwrap();
+
+        assert_eq!(sequence.len(), 2);
+        assert_eq!(
+            sequence[0].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+        );
+        assert_eq!(
+            sequence[0].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+        );
+        assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
+
+        assert_eq!(
+            sequence[1].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+        );
+        assert_eq!(
+            sequence[1].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+        );
+        assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].id, "test-1-0");
+    }
+
+    #[test]
+    fn test_get_sequence_repeat() {
+        let config = vec![Config {
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(true),
+            required_time: Duration::minutes(30),
+            latest_time: None,
+            repeat_count: Some(2),
+            repeat_time: Some(Duration::minutes(10)),
+            tasks: vec![ConfigTask {
+                id: None,
+                description: None,
+                payload: Payload::String("".to_string()),
+                qos: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        }];
+
+        let config_map = ConfigMap::from([("test".to_string(), config)]);
+        let sequence = get_sequence(
+            &config_map,
+            "test",
+            &HashSet::from(["christmas".to_string()]),
+            &HashSet::new(),
+            &HashSet::from(["boxing".to_string()]),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+        )
+        .unwrap();
+
+        assert_eq!(sequence.len(), 2);
+        assert_eq!(
+            sequence[0].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+        );
+        assert_eq!(
+            sequence[0].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+        );
+        assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
+
+        assert_eq!(
+            sequence[1].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into()
+        );
+        assert_eq!(
+            sequence[1].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
+        );
+        assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].id, "test-0-0");
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[test]
+    fn test_schedule_to_sequence() {
+        let schedule = vec![
+            scheduler::Schedule {
+                name: "test".to_string(),
+                options: HashSet::new(),
+                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+            },
+            scheduler::Schedule {
+                name: "christmas".to_string(),
+                options: HashSet::new(),
+                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into(),
+            },
+        ];
+
+        let config_test = vec![
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let config_christmas = vec![
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let config_map = ConfigMap::from([
+            ("test".to_string(), config_test),
+            ("christmas".to_string(), config_christmas),
+        ]);
+        let sequence =
+            schedule_list_to_sequence(&config_map, &schedule, &HashSet::new(), &HashSet::new())
+                .unwrap();
+
+        assert_eq!(sequence.len(), 4);
+        assert_eq!(
+            sequence[0].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+        );
+        assert_eq!(
+            sequence[0].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+        );
+        assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
+
+        assert_eq!(
+            sequence[1].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into()
+        );
+        assert_eq!(
+            sequence[1].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
+        );
+        assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].id, "christmas-0-0");
+
+        assert_eq!(
+            sequence[2].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+        );
+        assert_eq!(
+            sequence[2].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+        );
+        assert_eq!(sequence[2].tasks.len(), 1);
+        assert_eq!(sequence[2].tasks[0].id, "test-1-0");
+
+        assert_eq!(
+            sequence[3].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 40, 0).into()
+        );
+        assert_eq!(
+            sequence[3].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 45, 0).into()
+        );
+        assert_eq!(sequence[3].tasks.len(), 1);
+        assert_eq!(sequence[3].tasks[0].id, "christmas-1-0");
+    }
+}
