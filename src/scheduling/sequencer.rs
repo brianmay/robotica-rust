@@ -89,6 +89,12 @@ pub struct Config {
     tasks: Vec<ConfigTask>,
 }
 
+impl Config {
+    fn repeat_count(&self) -> u8 {
+        self.repeat_count.unwrap_or(1)
+    }
+}
+
 /// The configuration for a sequence.
 type ConfigMap = HashMap<String, Vec<Config>>;
 
@@ -136,8 +142,11 @@ pub struct Sequence {
     /// If true this is considered the "zero time" for this sequence.
     zero_time: bool,
 
-    /// The total duration of this step.
+    /// The start time of this step.
     required_time: DateTime<Utc>,
+
+    /// The required duration of this step.
+    required_duration: Duration,
 
     /// The latest time this step can be completed.
     latest_time: DateTime<Utc>,
@@ -293,6 +302,7 @@ fn config_to_sequence(
         options: config.options,
         zero_time: config.zero_time.unwrap(),
         required_time: start_time.clone(),
+        required_duration: config.required_time,
         latest_time,
         repeat_number,
         tasks,
@@ -313,10 +323,10 @@ pub fn get_sequence(
     options: &HashSet<String>,
     start_time: &DateTime<Utc>,
 ) -> Result<Vec<Sequence>, SequenceError> {
-    let mut start_time = start_time.clone();
+    let start_time = start_time.clone();
     let default_repeat_time = Duration::seconds(0);
 
-    let sequence = config
+    let src_sequences = config
         .get(name)
         .ok_or_else(|| SequenceError::NoSequence(name.to_string()))?;
 
@@ -326,9 +336,10 @@ pub fn get_sequence(
         options: options.clone(),
     };
 
-    let mut sequences = Vec::with_capacity(sequence.len());
+    let mut start_time = get_corrected_start_time(start_time, src_sequences);
+    let mut sequences = Vec::with_capacity(src_sequences.len());
 
-    for (sequence_number, config) in sequence.iter().enumerate() {
+    for (sequence_number, config) in src_sequences.iter().enumerate() {
         let mut ok = true;
 
         if let Some(classifications) = &config.classifications {
@@ -351,7 +362,7 @@ pub fn get_sequence(
 
         if ok {
             let mut repeat_time = start_time.clone();
-            let repeat_count = config.repeat_count.unwrap_or(1);
+            let repeat_count = config.repeat_count();
             for repeat in 0..repeat_count {
                 let sequence =
                     config_to_sequence(name, config.clone(), &repeat_time, sequence_number, repeat);
@@ -395,6 +406,24 @@ pub fn schedule_list_to_sequence(
     sequences.sort_by(|a, b| a.required_time.cmp(&b.required_time));
 
     Ok(sequences)
+}
+
+fn get_corrected_start_time(start_time: DateTime<Utc>, config: &Vec<Config>) -> DateTime<Utc> {
+    let mut updated_start_time = start_time.clone();
+
+    for sequence in config {
+        if sequence.zero_time == Some(true) {
+            return updated_start_time;
+        }
+
+        // Note: original robotica code had a bug here, it was not taking into account repeats.
+        for _ in 0..sequence.repeat_count() {
+            updated_start_time = updated_start_time - sequence.required_time;
+        }
+    }
+
+    // If we didn't find any zero time sequences, then just return the start time.
+    start_time
 }
 
 #[cfg(test)]
@@ -463,6 +492,239 @@ mod tests {
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
             &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+        )
+        .unwrap();
+
+        assert_eq!(sequence.len(), 2);
+        assert_eq!(
+            sequence[0].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+        );
+        assert_eq!(
+            sequence[0].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+        );
+        assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
+
+        assert_eq!(
+            sequence[1].required_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+        );
+        assert_eq!(
+            sequence[1].latest_time,
+            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+        );
+        assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].id, "test-1-0");
+    }
+
+    #[test]
+    fn test_get_corrected_start_time_0() {
+        let config = vec![
+            Config {
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let corrected_datetime = get_corrected_start_time(datetime, &config);
+
+        assert_eq!(
+            corrected_datetime,
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+        );
+    }
+
+    #[test]
+    fn test_get_corrected_start_time_1() {
+        let config = vec![
+            Config {
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let corrected_datetime = get_corrected_start_time(datetime, &config);
+
+        assert_eq!(
+            corrected_datetime,
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+        );
+    }
+
+    #[test]
+    fn test_get_corrected_start_time_2() {
+        let config = vec![
+            Config {
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(2),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let corrected_datetime = get_corrected_start_time(datetime, &config);
+
+        assert_eq!(
+            corrected_datetime,
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+        );
+    }
+
+    #[test]
+    fn test_get_sequence_zero_time() {
+        let config = vec![
+            Config {
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(true),
+                required_time: Duration::minutes(30),
+                latest_time: None,
+                repeat_count: None,
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    id: None,
+                    description: None,
+                    payload: Payload::String("".to_string()),
+                    qos: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let config_map = ConfigMap::from([("test".to_string(), config)]);
+        let sequence = get_sequence(
+            &config_map,
+            "test",
+            &HashSet::from(["christmas".to_string()]),
+            &HashSet::new(),
+            &HashSet::from(["boxing".to_string()]),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into(),
         )
         .unwrap();
 

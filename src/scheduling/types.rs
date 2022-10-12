@@ -2,7 +2,7 @@
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
-    ops::Add,
+    ops::{Add, Sub},
     str::FromStr,
 };
 
@@ -181,6 +181,14 @@ impl Add<Duration> for DateTime<Utc> {
 
     fn add(self, rhs: Duration) -> Self::Output {
         Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Duration> for DateTime<Utc> {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Self(self.0 - rhs.0)
     }
 }
 
