@@ -12,6 +12,7 @@
         "datetime",
         "defenses",
         "deps",
+        "Deque",
         "Dwarnings",
         "espresence",
         "espresense",

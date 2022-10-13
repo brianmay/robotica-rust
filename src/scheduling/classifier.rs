@@ -123,22 +123,22 @@ pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
 /// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
 /// cannot be read or parsed.
 #[must_use]
-pub fn classify_date_with_config(date: Date, config: &Vec<Config>) -> HashSet<String> {
+pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<String> {
     let mut tags = HashSet::new();
 
     for c in config {
         if let Some(c_date) = c.date {
-            if c_date != date {
+            if c_date != *date {
                 continue;
             }
         }
         if let Some(start) = c.start {
-            if date < start {
+            if *date < start {
                 continue;
             }
         }
         if let Some(stop) = c.stop {
-            if date > stop {
+            if *date > stop {
                 continue;
             }
         }
@@ -191,7 +191,7 @@ pub fn classify_date_with_config(date: Date, config: &Vec<Config>) -> HashSet<St
 ///
 /// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
 /// cannot be read or parsed.
-pub fn classify_date(date: Date) -> Result<HashSet<String>, ConfigError> {
+pub fn classify_date(date: &Date) -> Result<HashSet<String>, ConfigError> {
     let config = load_config_from_default_file()?;
     Ok(classify_date_with_config(date, &config))
 }
@@ -254,7 +254,7 @@ mod tests {
         ];
 
         for test in tests {
-            let tags = classify_date_with_config(test.date, &config);
+            let tags = classify_date_with_config(&test.date, &config);
             for include in test.includes {
                 assert!(
                     tags.contains(include),
@@ -302,26 +302,26 @@ mod tests {
         ];
 
         let date = Date::from_ymd(2019, 1, 7);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
 
         let date = Date::from_ymd(2020, 1, 1);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from(["weekday".to_string()]));
 
         let date = Date::from_ymd(2020, 1, 4);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
 
         let date = Date::from_ymd(2020, 1, 6);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(
             tags,
             HashSet::from(["weekday".to_string(), "monday".to_string()])
         );
 
         let date = Date::from_ymd(2021, 1, 4);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
     }
 
@@ -353,7 +353,7 @@ mod tests {
         }];
 
         let date = Date::from_ymd(2020, 1, 1);
-        let tags = classify_date_with_config(date, &config);
+        let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
     }
 }

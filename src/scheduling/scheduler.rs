@@ -23,7 +23,7 @@ pub struct Schedule {
     pub datetime: DateTime<chrono::Utc>,
 
     /// The name of the sequence to run.
-    pub name: String,
+    pub sequence_name: String,
 
     /// The options to use when running the sequence.
     pub options: HashSet<String>,
@@ -164,7 +164,7 @@ pub enum ScheduleError<T: TimeZone> {
 /// Returns an error if a date time cannot be converted to UTC.
 #[allow(clippy::implicit_hasher)]
 pub fn get_schedule_with_config<T: TimeZone>(
-    date: Date,
+    date: &Date,
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
     config_list: &[Config],
@@ -186,8 +186,8 @@ pub fn get_schedule_with_config<T: TimeZone>(
                 .as_ref()
                 .map_or(HashSet::new(), |o| o.iter().cloned().collect());
             let schedule = Schedule {
-                datetime: convert_date_time_to_utc(date, seq.time, timezone)?,
-                name,
+                datetime: convert_date_time_to_utc(*date, seq.time, timezone)?,
+                sequence_name: name,
                 options,
             };
             Ok(schedule)
@@ -226,7 +226,7 @@ pub fn get_schedule<T: TimeZone>(
     timezone: &T,
 ) -> Result<Vec<Schedule>, GetScheduleError<T>> {
     let config_list = load_config_from_default_file()?;
-    let schedule = get_schedule_with_config(date, today, tomorrow, &config_list, timezone)?;
+    let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
     Ok(schedule)
 }
 
@@ -316,7 +316,7 @@ mod tests {
         let timezone = FixedOffset::east(60 * 60 * 10);
 
         let schedule =
-            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -346,7 +346,7 @@ mod tests {
         let timezone = FixedOffset::east(60 * 60 * 10);
 
         let schedule =
-            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -381,7 +381,7 @@ mod tests {
         let timezone = FixedOffset::east(60 * 60 * 10);
 
         let schedule =
-            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -425,7 +425,13 @@ mod tests {
                 .map(std::string::ToString::to_string)
                 .collect();
 
-            assert!(s.name == e.name, "{:?} != {:?} in {:?}", s.name, e.name, s);
+            assert!(
+                s.sequence_name == e.name,
+                "{:?} != {:?} in {:?}",
+                s.sequence_name,
+                e.name,
+                s
+            );
             assert!(
                 s.datetime == expected_datetime,
                 "{:?} != {:?} in {:?}",

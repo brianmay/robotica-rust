@@ -11,10 +11,12 @@ use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::sources::mqtt;
+
 use super::{
     ast::{Boolean, Fields},
     conditions, scheduler,
-    types::{DateTime, Duration},
+    types::{DateTime, Duration, Mark},
 };
 
 /// Payload in a task.
@@ -32,9 +34,6 @@ pub enum Payload {
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
 pub struct ConfigTask {
-    /// The id of the task.
-    pub id: Option<String>,
-
     /// The description of the task.
     pub description: Option<String>,
 
@@ -44,6 +43,9 @@ pub struct ConfigTask {
 
     /// The qos to be used when sending the message.
     qos: Option<u8>,
+
+    /// The retain flag to be used when sending the message.
+    retain: Option<bool>,
 
     /// The locations this task acts on.
     locations: Vec<String>,
@@ -60,6 +62,9 @@ pub struct ConfigTask {
 /// The source schedule loaded from the config file.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    /// The id of the step.
+    pub id: Option<String>,
+
     /// The conditions that must be true before this is scheduled.
     #[serde(rename = "if")]
     if_cond: Option<Vec<Boolean<Context>>>,
@@ -96,15 +101,12 @@ impl Config {
 }
 
 /// The configuration for a sequence.
-type ConfigMap = HashMap<String, Vec<Config>>;
+pub type ConfigMap = HashMap<String, Vec<Config>>;
 
 /// A task with all values completed.
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Task {
-    /// The id of the task.
-    pub id: String,
-
     /// The description of the task.
     pub description: Option<String>,
 
@@ -112,7 +114,10 @@ pub struct Task {
     pub payload: Payload,
 
     /// The qos to be used when sending the message.
-    qos: u8,
+    qos: mqtt::QoS,
+
+    /// The retain value to be used when sending the message.
+    retain: bool,
 
     /// The locations this task acts on.
     locations: Vec<String>,
@@ -126,10 +131,33 @@ pub struct Task {
     topics: Vec<String>,
 }
 
+impl Task {
+    /// Get the MQTT message for this task.
+    #[must_use]
+    pub fn get_messages(&self) -> Vec<mqtt::Message> {
+        let mut messages = Vec::with_capacity(self.topics.len());
+        for topic in &self.topics {
+            let payload = match &self.payload {
+                Payload::String(s) => s.to_string(),
+                Payload::Json(v) => v.to_string(),
+            };
+            let message = mqtt::Message::from_string(topic, &payload, self.retain, self.qos);
+            messages.push(message);
+        }
+        messages
+    }
+}
+
 /// The schedule with all values completed.
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Sequence {
+    /// The id of the step.
+    pub id: String,
+
+    /// The name of this sequence.
+    pub sequence_name: String,
+
     /// The conditions that must be true before this is scheduled.
     if_cond: Option<Vec<Boolean<Context>>>,
 
@@ -143,23 +171,45 @@ pub struct Sequence {
     zero_time: bool,
 
     /// The start time of this step.
-    required_time: DateTime<Utc>,
+    pub required_time: DateTime<Utc>,
 
     /// The required duration of this step.
     required_duration: Duration,
 
     /// The latest time this step can be completed.
-    latest_time: DateTime<Utc>,
+    pub latest_time: DateTime<Utc>,
 
     /// The number of the repeat.
     repeat_number: u8,
 
     /// The tasks to execute.
-    tasks: Vec<Task>,
+    pub tasks: Vec<Task>,
+
+    /// The mark for this task - for use by executor.
+    pub mark: Option<Mark>,
 }
 
 /// A Map of Sequences.
 pub type SequenceMap = HashMap<String, Vec<Sequence>>;
+
+impl Ord for Sequence {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.required_time.cmp(&other.required_time)
+    }
+}
+
+impl PartialOrd for Sequence {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.required_time.partial_cmp(&other.required_time)
+    }
+}
+impl Eq for Sequence {}
+
+impl PartialEq for Sequence {
+    fn eq(&self, other: &Self) -> bool {
+        self.required_time == other.required_time
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Context {
@@ -256,24 +306,31 @@ pub enum SequenceError {
     NoSequence(String),
 }
 
+const fn map_qos(qos: Option<u8>) -> mqtt::QoS {
+    match qos {
+        Some(0) => mqtt::QoS::AtMostOnce,
+        Some(1) => mqtt::QoS::AtLeastOnce,
+        // Some(2) => mqtt::QoS::ExactlyOnce,
+        _ => mqtt::QoS::ExactlyOnce,
+    }
+}
+
 fn config_to_sequence(
-    name: &str,
+    sequence_name: &str,
     config: Config,
     start_time: &DateTime<Utc>,
-    sequence_number: usize,
+    id: String,
     repeat_number: u8,
 ) -> Sequence {
     let mut tasks = Vec::with_capacity(config.tasks.len());
-    config.tasks.into_iter().enumerate().for_each(|(n, t)| {
-        let id =
-            t.id.map_or_else(|| format!("{}-{}-{}", name, sequence_number, n), |id| id);
-
-        let topics = if let Some(topics) = t.topics {
+    config.tasks.into_iter().for_each(|src_task| {
+        let topics = if let Some(topics) = src_task.topics {
             topics
         } else {
-            let mut topics = Vec::with_capacity(t.locations.len() * t.devices.len());
-            t.locations.iter().for_each(|l| {
-                t.devices
+            let mut topics = Vec::with_capacity(src_task.locations.len() * src_task.devices.len());
+            src_task.locations.iter().for_each(|l| {
+                src_task
+                    .devices
                     .iter()
                     .for_each(|d| topics.push(format!("command/{}/{}", l, d)));
             });
@@ -281,12 +338,12 @@ fn config_to_sequence(
         };
 
         let task = Task {
-            id,
-            description: t.description,
-            payload: t.payload,
-            qos: t.qos.unwrap_or(2),
-            locations: t.locations,
-            devices: t.devices,
+            description: src_task.description,
+            payload: src_task.payload,
+            qos: map_qos(src_task.qos),
+            retain: src_task.retain.unwrap_or(false),
+            locations: src_task.locations,
+            devices: src_task.devices,
             topics,
         };
 
@@ -297,6 +354,8 @@ fn config_to_sequence(
     let latest_time = start_time.clone() + config.latest_time.unwrap_or(default_latest_time);
 
     Sequence {
+        id,
+        sequence_name: sequence_name.to_string(),
         if_cond: config.if_cond,
         classifications: config.classifications,
         options: config.options,
@@ -306,6 +365,7 @@ fn config_to_sequence(
         latest_time,
         repeat_number,
         tasks,
+        mark: None,
     }
 }
 
@@ -315,9 +375,9 @@ fn config_to_sequence(
 ///
 /// Returns an error if the sequence is not found.
 #[allow(clippy::implicit_hasher)]
-pub fn get_sequence(
+pub fn get_sequence_with_config(
     config: &ConfigMap,
-    name: &str,
+    sequence_name: &str,
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
     options: &HashSet<String>,
@@ -327,8 +387,8 @@ pub fn get_sequence(
     let default_repeat_time = Duration::seconds(0);
 
     let src_sequences = config
-        .get(name)
-        .ok_or_else(|| SequenceError::NoSequence(name.to_string()))?;
+        .get(sequence_name)
+        .ok_or_else(|| SequenceError::NoSequence(sequence_name.to_string()))?;
 
     let context = Context {
         today: today.clone(),
@@ -363,9 +423,18 @@ pub fn get_sequence(
         if ok {
             let mut repeat_time = start_time.clone();
             let repeat_count = config.repeat_count();
+            let id = match &config.id {
+                Some(id) => id.clone(),
+                None => format!("{}-{}", sequence_name, sequence_number),
+            };
             for repeat in 0..repeat_count {
-                let sequence =
-                    config_to_sequence(name, config.clone(), &repeat_time, sequence_number, repeat);
+                let sequence = config_to_sequence(
+                    sequence_name,
+                    config.clone(),
+                    &repeat_time,
+                    id.clone(),
+                    repeat,
+                );
                 repeat_time = repeat_time + config.repeat_time.unwrap_or(default_repeat_time);
                 sequences.push(sequence);
             }
@@ -391,9 +460,9 @@ pub fn schedule_list_to_sequence(
     let mut sequences = Vec::new();
 
     for schedule in schedule_list {
-        let mut sequence = get_sequence(
+        let mut sequence = get_sequence_with_config(
             config_map,
-            &schedule.name,
+            &schedule.sequence_name,
             today,
             tomorrow,
             &schedule.options,
@@ -403,7 +472,7 @@ pub fn schedule_list_to_sequence(
     }
 
     // Sort the sequences by the required time.
-    sequences.sort_by(|a, b| a.required_time.cmp(&b.required_time));
+    sequences.sort();
 
     Ok(sequences)
 }
@@ -445,6 +514,7 @@ mod tests {
     fn test_get_sequence() {
         let config = vec![
             Config {
+                id: None,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -454,16 +524,17 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -473,10 +544,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -485,7 +556,7 @@ mod tests {
         ];
 
         let config_map = ConfigMap::from([("test".to_string(), config)]);
-        let sequence = get_sequence(
+        let sequence = get_sequence_with_config(
             &config_map,
             "test",
             &HashSet::from(["christmas".to_string()]),
@@ -504,8 +575,8 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
+        assert_eq!(sequence[0].id, "test-0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
 
         assert_eq!(
             sequence[1].required_time,
@@ -515,14 +586,15 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
+        assert_eq!(sequence[1].id, "test-1");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].id, "test-1-0");
     }
 
     #[test]
     fn test_get_corrected_start_time_0() {
         let config = vec![
             Config {
+                id: None,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -532,16 +604,17 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -551,10 +624,10 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -575,6 +648,7 @@ mod tests {
     fn test_get_corrected_start_time_1() {
         let config = vec![
             Config {
+                id: None,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -584,16 +658,17 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -603,10 +678,10 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -627,6 +702,7 @@ mod tests {
     fn test_get_corrected_start_time_2() {
         let config = vec![
             Config {
+                id: None,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -636,16 +712,17 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -655,10 +732,10 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -678,6 +755,7 @@ mod tests {
     fn test_get_sequence_zero_time() {
         let config = vec![
             Config {
+                id: None,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -687,16 +765,17 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -706,10 +785,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -718,7 +797,7 @@ mod tests {
         ];
 
         let config_map = ConfigMap::from([("test".to_string(), config)]);
-        let sequence = get_sequence(
+        let sequence = get_sequence_with_config(
             &config_map,
             "test",
             &HashSet::from(["christmas".to_string()]),
@@ -737,8 +816,8 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
+        assert_eq!(sequence[0].id, "test-0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
 
         assert_eq!(
             sequence[1].required_time,
@@ -748,13 +827,14 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
+        assert_eq!(sequence[1].id, "test-1");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].id, "test-1-0");
     }
 
     #[test]
     fn test_get_sequence_repeat() {
         let config = vec![Config {
+            id: None,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -764,10 +844,10 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: Some(Duration::minutes(10)),
             tasks: vec![ConfigTask {
-                id: None,
                 description: None,
                 payload: Payload::String("".to_string()),
                 qos: None,
+                retain: None,
                 locations: vec!["test".to_string()],
                 devices: vec!["test".to_string()],
                 topics: None,
@@ -775,7 +855,7 @@ mod tests {
         }];
 
         let config_map = ConfigMap::from([("test".to_string(), config)]);
-        let sequence = get_sequence(
+        let sequence = get_sequence_with_config(
             &config_map,
             "test",
             &HashSet::from(["christmas".to_string()]),
@@ -794,8 +874,8 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
+        assert_eq!(sequence[0].id, "test-0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
 
         assert_eq!(
             sequence[1].required_time,
@@ -805,8 +885,8 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
         );
+        assert_eq!(sequence[1].id, "test-0");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].id, "test-0-0");
     }
 
     #[allow(clippy::too_many_lines)]
@@ -814,12 +894,12 @@ mod tests {
     fn test_schedule_to_sequence() {
         let schedule = vec![
             scheduler::Schedule {
-                name: "test".to_string(),
+                sequence_name: "test".to_string(),
                 options: HashSet::new(),
                 datetime: Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
             },
             scheduler::Schedule {
-                name: "christmas".to_string(),
+                sequence_name: "christmas".to_string(),
                 options: HashSet::new(),
                 datetime: Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into(),
             },
@@ -827,6 +907,7 @@ mod tests {
 
         let config_test = vec![
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -836,16 +917,17 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -855,10 +937,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -868,6 +950,7 @@ mod tests {
 
         let config_christmas = vec![
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -877,16 +960,17 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
                 }],
             },
             Config {
+                id: None,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -896,10 +980,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    id: None,
                     description: None,
                     payload: Payload::String("".to_string()),
                     qos: None,
+                    retain: None,
                     locations: vec!["test".to_string()],
                     devices: vec!["test".to_string()],
                     topics: None,
@@ -924,8 +1008,8 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
+        assert_eq!(sequence[0].id, "test-0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].id, "test-0-0");
 
         assert_eq!(
             sequence[1].required_time,
@@ -935,8 +1019,8 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
         );
+        assert_eq!(sequence[1].id, "christmas-0");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].id, "christmas-0-0");
 
         assert_eq!(
             sequence[2].required_time,
@@ -946,8 +1030,8 @@ mod tests {
             sequence[2].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
+        assert_eq!(sequence[2].id, "test-1");
         assert_eq!(sequence[2].tasks.len(), 1);
-        assert_eq!(sequence[2].tasks[0].id, "test-1-0");
 
         assert_eq!(
             sequence[3].required_time,
@@ -957,7 +1041,7 @@ mod tests {
             sequence[3].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 45, 0).into()
         );
+        assert_eq!(sequence[3].id, "christmas-1");
         assert_eq!(sequence[3].tasks.len(), 1);
-        assert_eq!(sequence[3].tasks[0].id, "christmas-1-0");
     }
 }

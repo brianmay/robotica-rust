@@ -17,6 +17,7 @@ lalrpop_mod!(
 
 mod ast;
 pub mod classifier;
+pub mod executor;
 pub mod scheduler;
 pub mod sequencer;
 pub mod types;

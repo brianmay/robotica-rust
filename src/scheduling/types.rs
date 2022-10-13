@@ -10,6 +10,8 @@ use chrono::{Datelike, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
+use crate::sources::mqtt::Message;
+
 /// A Serializable Date.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Date(chrono::NaiveDate);
@@ -31,6 +33,22 @@ impl Date {
     #[must_use]
     pub fn num_days_from_ce(self) -> i32 {
         self.0.num_days_from_ce()
+    }
+}
+
+impl Add<Duration> for Date {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Duration> for Date {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Self(self.0 - rhs.0)
     }
 }
 
@@ -159,9 +177,26 @@ impl<T: TimeZone> DateTime<T> {
     }
 }
 
+impl DateTime<Utc> {
+    /// Convert the date time to a local date time.
+    pub fn with_timezone<T: TimeZone>(&self, tz: &T) -> DateTime<T> {
+        DateTime(self.0.with_timezone(tz))
+    }
+}
+
 impl<T: TimeZone> From<chrono::DateTime<T>> for DateTime<T> {
     fn from(dt: chrono::DateTime<T>) -> Self {
         Self(dt)
+    }
+}
+
+impl FromStr for DateTime<Utc> {
+    type Err = chrono::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let datetime = chrono::DateTime::parse_from_rfc3339(s)?;
+        let datetime = datetime.with_timezone(&Utc);
+        Ok(datetime.into())
     }
 }
 
@@ -170,6 +205,7 @@ impl Ord for DateTime<Utc> {
         self.0.cmp(&other.0)
     }
 }
+
 impl PartialOrd<DateTime<Utc>> for DateTime<Utc> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
@@ -192,8 +228,37 @@ impl Sub<Duration> for DateTime<Utc> {
     }
 }
 
+impl Sub<DateTime<Utc>> for DateTime<Utc> {
+    type Output = Duration;
+
+    fn sub(self, rhs: DateTime<Utc>) -> Self::Output {
+        Duration(self.0 - rhs.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTime<Utc> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let d = DateTime::from_str(&s).map_err(serde::de::Error::custom)?;
+        Ok(d)
+    }
+}
+
+/// The value was out of range.
+#[derive(Error, Debug)]
+pub struct OutOfRangeError {}
+
+impl Display for OutOfRangeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Out of range")
+    }
+}
+
 /// A Serializable Duration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Duration(chrono::Duration);
 
 impl Duration {
@@ -225,6 +290,12 @@ impl Duration {
         self.0.num_seconds()
     }
 
+    /// Create a duration from a number of days.
+    #[must_use]
+    pub fn days(days: i64) -> Self {
+        Self(chrono::Duration::days(days))
+    }
+
     /// Create a duration from a number of seconds.
     #[must_use]
     pub fn seconds(seconds: i64) -> Self {
@@ -235,6 +306,15 @@ impl Duration {
     #[must_use]
     pub fn minutes(minutes: i64) -> Self {
         Self(chrono::Duration::minutes(minutes))
+    }
+
+    /// Convert the duration to a std duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is negative.
+    pub fn to_std(&self) -> Result<std::time::Duration, OutOfRangeError> {
+        self.0.to_std().map_err(|_| OutOfRangeError {})
     }
 }
 
@@ -316,6 +396,54 @@ pub fn convert_date_time_to_utc<T: TimeZone>(
         )),
     }?;
     Ok(datetime.with_timezone(&chrono::Utc).into())
+}
+
+/// The status of the Mark.
+#[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum MarkStatus {
+    /// The tasks are to be cancelled.
+    Cancelled,
+
+    /// The tasks are already done.
+    Done,
+}
+
+/// A mark on a step.
+#[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct Mark {
+    /// The id of the step.
+    pub id: String,
+
+    /// The status of the Mark.
+    pub status: MarkStatus,
+
+    /// The start time of the Mark.
+    pub start_time: DateTime<Utc>,
+
+    /// The end time of the Mark.
+    pub stop_time: DateTime<Utc>,
+}
+
+/// An error that can occur when parsing a mark.
+#[derive(Error, Debug)]
+pub enum MarkError {
+    /// The Mark is invalid.
+    #[error("Invalid mark {0}")]
+    ParseError(#[from] serde_json::Error),
+
+    /// UTF-8 error in Mark.
+    #[error("Invalid UTF8")]
+    Utf8Error(#[from] std::str::Utf8Error),
+}
+
+impl TryFrom<Message> for Mark {
+    type Error = MarkError;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let payload: String = msg.try_into()?;
+        let mark: Mark = serde_json::from_str(&payload)?;
+        Ok(mark)
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,296 @@
+//! Run tasks based on schedule.
+use std::collections::{HashMap, VecDeque};
+use std::fmt::Debug;
+
+use chrono::{Local, TimeZone, Utc};
+use log::{debug, error};
+use thiserror::Error;
+use tokio::select;
+use tokio::time::Instant;
+
+use crate::sources::mqtt::{MqttOut, Subscriptions};
+use crate::spawn;
+
+use super::sequencer::Sequence;
+use super::types::{Date, DateTime, Duration, Mark};
+use super::{classifier, scheduler, sequencer};
+
+struct Config {
+    classifier: Vec<classifier::Config>,
+    scheduler: Vec<scheduler::Config>,
+    sequencer: sequencer::ConfigMap,
+}
+
+struct State<T: TimeZone> {
+    date: Date,
+    timer: Instant,
+    sequences: VecDeque<Sequence>,
+    marks: HashMap<String, Mark>,
+    timezone: T,
+    config: Config,
+}
+
+impl<T: TimeZone + Debug> State<T> {
+    pub fn finalize(&mut self, now: &DateTime<Utc>) {
+        self.check_time_travel(now);
+        self.set_timer(now);
+        self.publish_steps();
+    }
+
+    #[allow(clippy::unused_self)]
+    const fn publish_steps(&self) {}
+
+    fn set_timer(&mut self, now: &DateTime<Utc>) {
+        let next = self.sequences.front();
+        if let Some(next) = next {
+            let next = next.required_time.clone();
+            let mut next = next - now.clone();
+            if next > Duration::minutes(120) {
+                next = Duration::minutes(120);
+            }
+            let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
+            self.timer = Instant::now() + next;
+        } else {
+            self.timer = Instant::now() + tokio::time::Duration::from_secs(60);
+        }
+    }
+
+    fn get_steps_for_date(&self, date: Date) -> Vec<Sequence> {
+        let tomorrow = date + Duration::days(1);
+        let c_date = classifier::classify_date_with_config(&date, &self.config.classifier);
+        let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.config.classifier);
+
+        let schedule = scheduler::get_schedule_with_config(
+            &date,
+            &c_date,
+            &c_tomorrow,
+            &self.config.scheduler,
+            &self.timezone,
+        )
+        .unwrap_or_else(|e| {
+            error!("Error getting schedule for {date}: {e}");
+            Vec::new()
+        });
+
+        sequencer::schedule_list_to_sequence(
+            &self.config.sequencer,
+            &schedule,
+            &c_date,
+            &c_tomorrow,
+        )
+        .unwrap_or_else(|e| {
+            error!("Error getting sequences for {date}: {e}");
+            Vec::new()
+        })
+    }
+
+    fn get_entire_schedule(&self, date: Date) -> VecDeque<Sequence> {
+        let date = date - Duration::days(1);
+        let yesterday = self.get_steps_for_date(date);
+
+        let date = date + Duration::days(1);
+        let today = self.get_steps_for_date(date);
+
+        let date = date + Duration::days(1);
+        let tomorrow = self.get_steps_for_date(date);
+
+        // Allocate result vector.
+        let mut sequences = VecDeque::with_capacity(yesterday.len() + today.len() + tomorrow.len());
+
+        // Add schedule for yesterday, today, and tomorrow.
+        sequences.extend(yesterday);
+        sequences.extend(today);
+        sequences.extend(tomorrow);
+
+        // Sort by time.
+        sequences.make_contiguous().sort();
+
+        // Set marks.
+        set_all_marks(&mut sequences, &self.marks);
+
+        // Return.
+        sequences
+    }
+
+    fn add_next_day(&mut self, date: Date) -> VecDeque<Sequence> {
+        let date = date + Duration::days(1);
+        let new_schedule = self.get_steps_for_date(date);
+
+        // Allocate result vector.
+        let mut sequences = VecDeque::with_capacity(self.sequences.len() + new_schedule.len());
+
+        // Add existing schedule.
+        sequences.extend(self.sequences.clone().into_iter());
+
+        // Add schedule for tomorrow.
+        sequences.extend(new_schedule.into_iter());
+
+        // Sort by time.
+        sequences.make_contiguous().sort();
+
+        // Set marks.
+        set_all_marks(&mut sequences, &self.marks);
+
+        // return.
+        sequences
+    }
+
+    fn check_time_travel(&mut self, now: &DateTime<Utc>) {
+        let today = now.with_timezone::<T>(&self.timezone).date();
+        let yesterday = today - Duration::days(1);
+
+        #[allow(clippy::if_same_then_else)]
+        if today < self.date {
+            // If we have travelled back in time, we should drop the list entirely
+            // to avoid duplicating future events.
+            self.sequences = self.get_entire_schedule(self.date);
+        } else if yesterday == self.date {
+            // If we have travelled forward in time by one day, we only need to
+            // add events for tomorrow.
+            // let mut steps = self.sequence.chain(self.get_steps_for_date(&tomorrow));
+            // self.sequence = Box::new(steps);
+            self.sequences = self.add_next_day(self.date);
+        } else if today > self.date {
+            // If we have travelled forward in time more then one day, regenerate
+            // entire events list.
+            self.sequences = self.get_entire_schedule(self.date);
+        } else {
+            // No change in date.
+        };
+
+        self.date = today;
+    }
+}
+
+fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
+    for sequence in &mut *sequences {
+        let mark = if let Some(mark) = marks.get(&sequence.id) {
+            if sequence.required_time <= mark.start_time && sequence.required_time >= mark.stop_time
+            {
+                Some(mark.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        sequence.mark = mark;
+    }
+}
+
+fn expire_marks(marks: &mut HashMap<String, Mark>, now: &DateTime<Utc>) {
+    marks.retain(|_, mark| mark.stop_time > *now);
+}
+
+/// An error occurred in the executor.
+#[derive(Error, Debug)]
+pub enum ExecutorError {
+    /// A classifier config error occurred.
+    #[error("Classifier Config Error {0}")]
+    ClassifierConfigError(#[from] classifier::ConfigError),
+
+    /// A Scheduler config error occurred.
+    #[error("Scheduler Config Error {0}")]
+    SchedulerConfigError(#[from] scheduler::ConfigError),
+
+    /// A Sequencer config error occurred.
+    #[error("Sequencer Config Error {0}")]
+    SequencerConfigError(#[from] sequencer::ConfigError),
+}
+
+/// Create a timer that sends outgoing messages at regularly spaced intervals.
+///
+/// # Errors
+///
+/// This function will return an error if the `config` is invalid.
+pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<(), ExecutorError> {
+    let now = DateTime::from(Utc::now());
+    let state = {
+        let config = {
+            let classifier = classifier::load_config_from_default_file()?;
+            let scheduler = scheduler::load_config_from_default_file()?;
+            let sequencer = sequencer::load_config_from_default_file()?;
+            Config {
+                classifier,
+                scheduler,
+                sequencer,
+            }
+        };
+
+        let timezone = Local;
+        let date = now.with_timezone::<Local>(&timezone).date();
+        let timer = Instant::now();
+        let sequence = VecDeque::new();
+        let marks = HashMap::new();
+
+        State {
+            date,
+            timer,
+            sequences: sequence,
+            marks,
+            timezone,
+            config,
+        }
+    };
+
+    let sequences = state.get_entire_schedule(state.date);
+    let mut state = State { sequences, ..state };
+
+    state.finalize(&now);
+
+    let mark_rx = subscriptions.subscribe_into::<Mark>("mark");
+
+    spawn(async move {
+        let mut mark_s = mark_rx.subscribe().await;
+        let mqtt_out = mqtt_out;
+
+        loop {
+            debug!(
+                "{:?}: Next task {:?}, timer at {:?}",
+                Utc::now(),
+                state.sequences.front(),
+                state.timer
+            );
+
+            select! {
+                _ = tokio::time::sleep_until(state.timer) => {
+                    let now = DateTime::from(Utc::now());
+
+                    while let Some(sequence) = state.sequences.front() {
+                        if now < sequence.required_time {
+                            // Too early, wait for next timer.
+                            debug!("{now:?}: Too early for {sequence:?}");
+                            break;
+                        } else if sequence.mark.is_some() {
+                            debug!("{now:?}: Ignoring step with mark {:?}", sequence.mark);
+                            state.sequences.pop_front();
+                        } else if now < sequence.latest_time {
+                            // Send message.
+                            debug!("{now:?}: Processing step {sequence:?}");
+                            for task in &sequence.tasks {
+                                for message in task.get_messages() {
+                                    debug!("{now:?}: Sending task {message:?}");
+                                    mqtt_out.send(message.clone());
+                                }
+                            }
+                            state.sequences.pop_front();
+                        } else {
+                            // Too late, drop event.
+                            debug!("{now:?}: Too late for {sequence:?}");
+                            state.sequences.pop_front();
+                        }
+                    }
+                    state.finalize(&now);
+                    expire_marks(&mut state.marks, &now);
+                },
+                Ok((_, mark)) = mark_s.recv() => {
+                    state.marks.insert(mark.id.clone(), mark);
+                    set_all_marks(&mut state.sequences, &state.marks);
+                },
+            }
+        }
+    });
+
+    Ok(())
+}
