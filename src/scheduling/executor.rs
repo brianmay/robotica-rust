@@ -1,9 +1,10 @@
 //! Run tasks based on schedule.
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
 use log::{debug, error};
+use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
@@ -22,6 +23,23 @@ struct Config {
     sequencer: sequencer::ConfigMap,
 }
 
+#[derive(Error, Debug, Serialize)]
+struct Tags {
+    yesterday: HashSet<String>,
+    today: HashSet<String>,
+    tomorrow: HashSet<String>,
+}
+
+impl std::fmt::Display for Tags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "yesterday: {:?}, today: {:?}, tomorrow: {:?}",
+            self.yesterday, self.today, self.tomorrow
+        )
+    }
+}
+
 struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
@@ -35,35 +53,39 @@ struct State<T: TimeZone> {
 impl<T: TimeZone + Debug> State<T> {
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
         self.check_time_travel(now);
-        self.set_timer(now);
-        self.publish_steps();
+        self.timer = self.get_next_timer(now);
     }
 
-    #[allow(clippy::missing_const_for_fn)]
-    #[allow(clippy::unused_self)]
-    fn publish_steps(&self) {
-        let message = serde_json::to_string(&self.sequences).unwrap();
-        let message = Message::from_string("test", &message, false, QoS::exactly_once());
+    fn publish_tags(&self, tags: &Tags) {
+        let message = serde_json::to_string(&tags).unwrap();
+        let message = Message::from_string("test/tags", &message, false, QoS::exactly_once());
         self.mqtt_out.send(message);
     }
 
-    fn set_timer(&mut self, now: &DateTime<Utc>) {
-        let next = self.sequences.front();
-        if let Some(next) = next {
-            let next = next.required_time.clone();
-            let mut next = next - now.clone();
-            // We poll at least every two minutes just in case system time changes.
-            if next > Duration::minutes(2) {
-                next = Duration::minutes(2);
-            }
-            let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
-            self.timer = Instant::now() + next;
-        } else {
-            self.timer = Instant::now() + tokio::time::Duration::from_secs(60);
-        }
+    fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
+        let message = serde_json::to_string(&sequences).unwrap();
+        let message = Message::from_string("test/sequences", &message, false, QoS::exactly_once());
+        self.mqtt_out.send(message);
     }
 
-    fn get_steps_for_date(&self, date: Date) -> Vec<Sequence> {
+    fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
+        let next = self.sequences.front();
+        next.map_or_else(
+            || Instant::now() + tokio::time::Duration::from_secs(60),
+            |next| {
+                let next = next.required_time.clone();
+                let mut next = next - now.clone();
+                // We poll at least every two minutes just in case system time changes.
+                if next > Duration::minutes(2) {
+                    next = Duration::minutes(2);
+                }
+                let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
+                Instant::now() + next
+            },
+        )
+    }
+
+    fn get_sequences_for_date(&self, date: Date) -> Vec<Sequence> {
         let tomorrow = date + Duration::days(1);
         let c_date = classifier::classify_date_with_config(&date, &self.config.classifier);
         let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.config.classifier);
@@ -92,15 +114,26 @@ impl<T: TimeZone + Debug> State<T> {
         })
     }
 
+    fn get_tags(&self, today: Date) -> Tags {
+        let yesterday = today - Duration::days(1);
+        let tomorrow = today + Duration::days(1);
+
+        Tags {
+            yesterday: classifier::classify_date_with_config(&yesterday, &self.config.classifier),
+            today: classifier::classify_date_with_config(&today, &self.config.classifier),
+            tomorrow: classifier::classify_date_with_config(&tomorrow, &self.config.classifier),
+        }
+    }
+
     fn get_entire_schedule(&self, date: Date) -> VecDeque<Sequence> {
         let date = date - Duration::days(1);
-        let yesterday = self.get_steps_for_date(date);
+        let yesterday = self.get_sequences_for_date(date);
 
         let date = date + Duration::days(1);
-        let today = self.get_steps_for_date(date);
+        let today = self.get_sequences_for_date(date);
 
         let date = date + Duration::days(1);
-        let tomorrow = self.get_steps_for_date(date);
+        let tomorrow = self.get_sequences_for_date(date);
 
         // Allocate result vector.
         let mut sequences = VecDeque::with_capacity(yesterday.len() + today.len() + tomorrow.len());
@@ -122,7 +155,7 @@ impl<T: TimeZone + Debug> State<T> {
 
     fn add_next_day(&mut self, date: Date) -> VecDeque<Sequence> {
         let date = date + Duration::days(1);
-        let new_schedule = self.get_steps_for_date(date);
+        let new_schedule = self.get_sequences_for_date(date);
 
         // Allocate result vector.
         let mut sequences = VecDeque::with_capacity(self.sequences.len() + new_schedule.len());
@@ -151,22 +184,29 @@ impl<T: TimeZone + Debug> State<T> {
         if today < self.date {
             // If we have travelled back in time, we should drop the list entirely
             // to avoid duplicating future events.
-            self.sequences = self.get_entire_schedule(self.date);
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            self.sequences = self.get_entire_schedule(today);
         } else if yesterday == self.date {
             // If we have travelled forward in time by one day, we only need to
             // add events for tomorrow.
             // let mut steps = self.sequence.chain(self.get_steps_for_date(&tomorrow));
             // self.sequence = Box::new(steps);
-            self.sequences = self.add_next_day(self.date);
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            self.sequences = self.add_next_day(today);
         } else if today > self.date {
             // If we have travelled forward in time more then one day, regenerate
             // entire events list.
-            self.sequences = self.get_entire_schedule(self.date);
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            self.sequences = self.get_entire_schedule(today);
         } else {
             // No change in date.
         };
 
         self.date = today;
+        self.publish_sequences(&self.sequences);
     }
 }
 
@@ -274,7 +314,10 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
 }
 
 fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
+    let timezone = Local;
     let now = DateTime::from(Utc::now());
+    let date = now.with_timezone::<Local>(&timezone).date();
+
     let state = {
         let config = {
             let classifier = classifier::load_config_from_default_file()?;
@@ -287,8 +330,6 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
             }
         };
 
-        let timezone = Local;
-        let date = now.with_timezone::<Local>(&timezone).date();
         let timer = Instant::now();
         let sequence = VecDeque::new();
         let marks = HashMap::new();
@@ -306,7 +347,13 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
     let sequences = state.get_entire_schedule(state.date);
     let mut state = State { sequences, ..state };
 
+    {
+        let tags = state.get_tags(state.date);
+        state.publish_tags(&tags);
+    }
+
     state.finalize(&now);
+
     debug!(
         "{:?}: Starting executor, Next task {:?}, timer at {:?}",
         Utc::now(),
