@@ -9,7 +9,7 @@ use tokio::select;
 use tokio::time::Instant;
 
 use crate::scheduling::types::utc_now;
-use crate::sources::mqtt::{MqttOut, Subscriptions};
+use crate::sources::mqtt::{Message, MqttOut, QoS, Subscriptions};
 use crate::spawn;
 
 use super::sequencer::Sequence;
@@ -29,6 +29,7 @@ struct State<T: TimeZone> {
     marks: HashMap<String, Mark>,
     timezone: T,
     config: Config,
+    mqtt_out: MqttOut,
 }
 
 impl<T: TimeZone + Debug> State<T> {
@@ -40,7 +41,11 @@ impl<T: TimeZone + Debug> State<T> {
 
     #[allow(clippy::missing_const_for_fn)]
     #[allow(clippy::unused_self)]
-    fn publish_steps(&self) {}
+    fn publish_steps(&self) {
+        let message = serde_json::to_string(&self.sequences).unwrap();
+        let message = Message::from_string("test", &message, false, QoS::exactly_once());
+        self.mqtt_out.send(message);
+    }
 
     fn set_timer(&mut self, now: &DateTime<Utc>) {
         let next = self.sequences.front();
@@ -208,12 +213,11 @@ pub enum ExecutorError {
 ///
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<(), ExecutorError> {
-    let mut state = get_initial_state()?;
+    let mut state = get_initial_state(mqtt_out)?;
     let mark_rx = subscriptions.subscribe_into::<Mark>("mark");
 
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;
-        let mqtt_out = mqtt_out;
 
         loop {
             debug!(
@@ -242,7 +246,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                             for task in &sequence.tasks {
                                 for message in task.get_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
-                                    mqtt_out.send(message.clone());
+                                    state.mqtt_out.send(message.clone());
                                 }
                             }
                             state.sequences.pop_front();
@@ -269,7 +273,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
     Ok(())
 }
 
-fn get_initial_state() -> Result<State<Local>, ExecutorError> {
+fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
     let now = DateTime::from(Utc::now());
     let state = {
         let config = {
@@ -296,6 +300,7 @@ fn get_initial_state() -> Result<State<Local>, ExecutorError> {
             marks,
             timezone,
             config,
+            mqtt_out,
         }
     };
     let sequences = state.get_entire_schedule(state.date);

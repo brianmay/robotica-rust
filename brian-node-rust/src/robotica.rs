@@ -138,6 +138,6 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
         &id.get_command_topic(&[]),
         &payload,
         false,
-        QoS::ExactlyOnce,
+        QoS::exactly_once(),
     )
 }

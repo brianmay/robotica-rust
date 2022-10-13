@@ -7,7 +7,7 @@ use std::{
 };
 
 use chrono::{Datelike, Local, NaiveDateTime, TimeZone, Utc};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::sources::mqtt::Message;
@@ -267,6 +267,16 @@ impl<'de> Deserialize<'de> for DateTime<Utc> {
     }
 }
 
+impl Serialize for DateTime<Utc> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.0.to_rfc3339();
+        serializer.serialize_str(&s)
+    }
+}
+
 /// The value was out of range.
 #[derive(Error, Debug)]
 pub struct OutOfRangeError {}
@@ -341,6 +351,16 @@ impl Duration {
 impl From<chrono::Duration> for Duration {
     fn from(d: chrono::Duration) -> Self {
         Self(d)
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.0.to_std().map_err(serde::ser::Error::custom)?;
+        serializer.serialize_u64(s.as_secs())
     }
 }
 
@@ -419,7 +439,7 @@ pub fn convert_date_time_to_utc<T: TimeZone>(
 }
 
 /// The status of the Mark.
-#[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
 pub enum MarkStatus {
     /// The tasks are to be cancelled.
     #[serde(rename = "cancelled")]
@@ -431,7 +451,7 @@ pub enum MarkStatus {
 }
 
 /// A mark on a step.
-#[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
 pub struct Mark {
     /// The id of the step.
     pub id: String,

@@ -7,7 +7,7 @@ use std::{
 
 use chrono::Utc;
 use field_ref::field_ref_of;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -20,7 +20,7 @@ use super::{
 };
 
 /// Payload in a task.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Payload {
     /// A string payload.
     #[serde(rename = "payload_str")]
@@ -105,7 +105,7 @@ pub type ConfigMap = HashMap<String, Vec<Config>>;
 
 /// A task with all values completed.
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Task {
     /// The description of the task.
     pub description: Option<String>,
@@ -150,7 +150,7 @@ impl Task {
 
 /// The schedule with all values completed.
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Sequence {
     /// The id of the step.
     pub id: String,
@@ -159,6 +159,7 @@ pub struct Sequence {
     pub sequence_name: String,
 
     /// The conditions that must be true before this is scheduled.
+    #[serde(skip)]
     if_cond: Option<Vec<Boolean<Context>>>,
 
     /// The required classifications for this step.
@@ -308,10 +309,10 @@ pub enum SequenceError {
 
 const fn map_qos(qos: Option<u8>) -> mqtt::QoS {
     match qos {
-        Some(0) => mqtt::QoS::AtMostOnce,
-        Some(1) => mqtt::QoS::AtLeastOnce,
-        // Some(2) => mqtt::QoS::ExactlyOnce,
-        _ => mqtt::QoS::ExactlyOnce,
+        Some(0) => mqtt::QoS::at_most_once(),
+        Some(1) => mqtt::QoS::at_least_once(),
+        // Some(2) => mqtt::QoS::ExactlyOnce(),
+        _ => mqtt::QoS::exactly_once(),
     }
 }
 

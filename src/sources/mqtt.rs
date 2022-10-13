@@ -6,6 +6,7 @@ use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish};
 use rumqttc::v5::{AsyncClient, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str::Utf8Error;
@@ -19,7 +20,53 @@ use tokio::time::{sleep, Instant};
 use crate::entities;
 
 /// `QoS` for MQTT messages.
-pub type QoS = rumqttc::v5::mqttbytes::QoS;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QoS(rumqttc::v5::mqttbytes::QoS);
+
+impl QoS {
+    /// QOS==0 (at most once)
+    #[must_use]
+    pub const fn at_least_once() -> QoS {
+        QoS(rumqttc::v5::mqttbytes::QoS::AtLeastOnce)
+    }
+
+    /// QOS==1 (at least once)
+    #[must_use]
+    pub const fn at_most_once() -> QoS {
+        QoS(rumqttc::v5::mqttbytes::QoS::AtMostOnce)
+    }
+
+    /// QOS==2 (exactly once)
+    #[must_use]
+    pub const fn exactly_once() -> QoS {
+        QoS(rumqttc::v5::mqttbytes::QoS::ExactlyOnce)
+    }
+}
+
+impl Serialize for QoS {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(match self.0 {
+            rumqttc::v5::mqttbytes::QoS::AtLeastOnce => "AtLeastOnce",
+            rumqttc::v5::mqttbytes::QoS::AtMostOnce => "AtMostOnce",
+            rumqttc::v5::mqttbytes::QoS::ExactlyOnce => "ExactlyOnce",
+        })
+    }
+}
+
+impl From<rumqttc::v5::mqttbytes::QoS> for QoS {
+    fn from(qos: rumqttc::v5::mqttbytes::QoS) -> Self {
+        QoS(qos)
+    }
+}
+
+impl From<QoS> for rumqttc::v5::mqttbytes::QoS {
+    fn from(qos: QoS) -> Self {
+        qos.0
+    }
+}
 
 /// A received/sent MQTT message
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,7 +121,7 @@ impl TryFrom<Publish> for Message {
             topic,
             payload: msg.payload,
             retain: msg.retain,
-            qos: msg.qos,
+            qos: msg.qos.into(),
             instant: Instant::now(),
         })
     }
@@ -254,7 +301,7 @@ impl MqttClient {
                             }
 
                             if !debug_mode {
-                                if let Err(err) = client.try_publish(msg.topic, msg.qos, msg.retain, msg.payload) {
+                                if let Err(err) = client.try_publish(msg.topic, msg.qos.into(), msg.retain, msg.payload) {
                                     error!("Failed to publish message: {:?}.", err);
                                 }
                             }
@@ -352,7 +399,7 @@ impl Default for Subscriptions {
 fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
     let topics = subscriptions.0.iter().map(|(topic, _)| Filter {
         path: topic.clone(),
-        qos: QoS::ExactlyOnce,
+        qos: rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
         nolocal: true,
         ..Default::default()
     });
@@ -378,7 +425,7 @@ mod tests {
         let msg = Message {
             topic: "test".to_string(),
             payload: "test".into(),
-            qos: QoS::AtLeastOnce,
+            qos: QoS::at_least_once(),
             retain: false,
             instant: Instant::now(),
         };
@@ -389,10 +436,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_to_message() {
-        let msg = Message::from_string("test", "test", false, QoS::AtLeastOnce);
+        let msg = Message::from_string("test", "test", false, QoS::at_least_once());
         assert_eq!(msg.topic, "test");
         assert_eq!(msg.payload, b"test"[..]);
-        assert_eq!(msg.qos, QoS::AtLeastOnce);
+        assert_eq!(msg.qos, QoS::at_least_once());
         assert!(!msg.retain);
     }
 
@@ -401,7 +448,7 @@ mod tests {
         let msg = Message {
             topic: "test".to_string(),
             payload: "true".into(),
-            qos: QoS::AtLeastOnce,
+            qos: QoS::at_least_once(),
             retain: false,
             instant: Instant::now(),
         };
