@@ -37,8 +37,9 @@ impl<T: TimeZone + Debug> State<T> {
         self.publish_steps();
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     #[allow(clippy::unused_self)]
-    const fn publish_steps(&self) {}
+    fn publish_steps(&self) {}
 
     fn set_timer(&mut self, now: &DateTime<Utc>) {
         let next = self.sequences.front();
