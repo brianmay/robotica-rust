@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
 
+use crate::scheduling::types::utc_now;
 use crate::sources::mqtt::{MqttOut, Subscriptions};
 use crate::spawn;
 
@@ -167,7 +168,6 @@ impl<T: TimeZone + Debug> State<T> {
 fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
     for sequence in &mut *sequences {
         let mark = if let Some(mark) = marks.get(&sequence.id) {
-            println!("Mark found for {}", sequence.id);
             if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
             {
                 Some(mark.clone())
@@ -175,7 +175,6 @@ fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mar
                 None
             }
         } else {
-            println!("No mark found for {}", sequence.id);
             None
         };
 
@@ -218,29 +217,28 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
 
         loop {
             debug!(
-                "{:?}: Next task {:?}, timer at {:?}",
-                Utc::now(),
+                "Next task {:?}, timer at {:?}",
                 state.sequences.front(),
                 state.timer
             );
 
             select! {
                 _ = tokio::time::sleep_until(state.timer) => {
-                    debug!("{:?}: Timer expired", Utc::now());
+                    debug!("Timer expired");
 
                     while let Some(sequence) = state.sequences.front() {
-                        let now = DateTime::from(Utc::now());
+                        let now = utc_now();
 
                         if now < sequence.required_time {
                             // Too early, wait for next timer.
-                            debug!("{now:?}: Too early for {sequence:?}");
+                            debug!("Too early for {sequence:?}");
                             break;
                         } else if sequence.mark.is_some() {
-                            debug!("{now:?}: Ignoring step with mark {:?}", sequence.mark);
+                            debug!("Ignoring step with mark {:?}", sequence.mark);
                             state.sequences.pop_front();
                         } else if now < sequence.latest_time {
                             // Send message.
-                            debug!("{now:?}: Processing step {sequence:?}");
+                            debug!("Processing step {sequence:?}");
                             for task in &sequence.tasks {
                                 for message in task.get_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
@@ -250,18 +248,18 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                             state.sequences.pop_front();
                         } else {
                             // Too late, drop event.
-                            debug!("{now:?}: Too late for {sequence:?}");
+                            debug!("Too late for {sequence:?}");
                             state.sequences.pop_front();
                         }
                     }
 
-                    let now = DateTime::from(Utc::now());
+                    let now = utc_now();
                     state.finalize(&now);
                     expire_marks(&mut state.marks, &now);
                 },
                 Ok((_, mark)) = mark_s.recv() => {
                     state.marks.insert(mark.id.clone(), mark);
-                    debug!("marks: {:?}", state.marks);
+                    debug!("Marks: {:?}", state.marks);
                     set_all_marks(&mut state.sequences, &state.marks);
                 },
             }

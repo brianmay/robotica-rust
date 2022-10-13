@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use chrono::{Datelike, NaiveDateTime, TimeZone, Utc};
+use chrono::{Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
@@ -160,7 +160,7 @@ pub enum DateTimeError<T: TimeZone> {
 }
 
 /// A Serializable `DateTime`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct DateTime<Tz: TimeZone>(chrono::DateTime<Tz>);
 
 impl<T: TimeZone> DateTime<T> {
@@ -174,6 +174,26 @@ impl<T: TimeZone> DateTime<T> {
     #[must_use]
     pub fn time(self) -> Time {
         Time(self.0.time())
+    }
+}
+
+/// Get the current time in UTC timezone.
+#[must_use]
+pub fn utc_now() -> DateTime<Utc> {
+    DateTime(Utc::now())
+}
+
+impl std::fmt::Display for DateTime<Utc> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let local = self.0.with_timezone(&Local);
+        write!(f, "{}", local.format("%Y-%m-%d %H:%M:%S %z"))
+    }
+}
+
+impl<T: TimeZone> std::fmt::Debug for DateTime<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let local = self.0.with_timezone(&Local);
+        write!(f, "{}", local.format("DateTime(%Y-%m-%d %H:%M:%S %z)"))
     }
 }
 

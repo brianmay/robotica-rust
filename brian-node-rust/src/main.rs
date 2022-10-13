@@ -2,13 +2,16 @@ mod http;
 mod robotica;
 
 use std::fmt::Display;
+use std::io::Write;
 use std::time::Duration;
 
 use anyhow::Result;
+use env_logger::Builder;
 use log::error;
 use robotica::Id;
 use robotica_node_rust::entities::create_entity;
 use robotica_node_rust::scheduling::executor::executor;
+use robotica_node_rust::scheduling::types::utc_now;
 use robotica_node_rust::spawn;
 use thiserror::Error;
 use tokio::select;
@@ -21,7 +24,10 @@ use tokio::time::{sleep_until, Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    pretty_env_logger::init();
+    Builder::from_default_env()
+        .format(|buf, record| writeln!(buf, "{} {}: {}", utc_now(), record.level(), record.args()))
+        .init();
+
     color_backtrace::install();
 
     http::start().await;
