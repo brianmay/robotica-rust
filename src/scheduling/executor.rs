@@ -23,21 +23,11 @@ struct Config {
     sequencer: sequencer::ConfigMap,
 }
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Debug, Serialize)]
 struct Tags {
     yesterday: HashSet<String>,
     today: HashSet<String>,
     tomorrow: HashSet<String>,
-}
-
-impl std::fmt::Display for Tags {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "yesterday: {:?}, today: {:?}, tomorrow: {:?}",
-            self.yesterday, self.today, self.tomorrow
-        )
-    }
 }
 
 struct State<T: TimeZone> {
