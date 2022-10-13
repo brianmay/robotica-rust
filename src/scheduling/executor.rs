@@ -42,8 +42,43 @@ struct State<T: TimeZone> {
 
 impl<T: TimeZone + Debug> State<T> {
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
-        self.check_time_travel(now);
+        self.date = now.with_timezone::<T>(&self.timezone).date();
+
+        if let Some(sequences) = self.check_time_travel(self.date) {
+            self.publish_sequences(&sequences);
+            self.sequences = sequences;
+        }
+
         self.timer = self.get_next_timer(now);
+    }
+
+    fn check_time_travel(&self, today: Date) -> Option<VecDeque<Sequence>> {
+        let yesterday = today - Duration::days(1);
+
+        if today < self.date {
+            // If we have travelled back in time, we should drop the list entirely
+            // to avoid duplicating future events.
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            Some(self.get_sequences_all(today))
+        } else if yesterday == self.date {
+            // If we have travelled forward in time by one day, we only need to
+            // add events for tomorrow.
+            // let mut steps = self.sequence.chain(self.get_steps_for_date(&tomorrow));
+            // self.sequence = Box::new(steps);
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            Some(self.get_sequences_tomorrow(today))
+        } else if today > self.date {
+            // If we have travelled forward in time more then one day, regenerate
+            // entire events list.
+            let tags = self.get_tags(today);
+            self.publish_tags(&tags);
+            Some(self.get_sequences_all(today))
+        } else {
+            // No change in date.
+            None
+        }
     }
 
     fn publish_tags(&self, tags: &Tags) {
@@ -115,7 +150,7 @@ impl<T: TimeZone + Debug> State<T> {
         }
     }
 
-    fn get_entire_schedule(&self, date: Date) -> VecDeque<Sequence> {
+    fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
         let date = date - Duration::days(1);
         let yesterday = self.get_sequences_for_date(date);
 
@@ -143,7 +178,7 @@ impl<T: TimeZone + Debug> State<T> {
         sequences
     }
 
-    fn add_next_day(&mut self, date: Date) -> VecDeque<Sequence> {
+    fn get_sequences_tomorrow(&self, date: Date) -> VecDeque<Sequence> {
         let date = date + Duration::days(1);
         let new_schedule = self.get_sequences_for_date(date);
 
@@ -164,39 +199,6 @@ impl<T: TimeZone + Debug> State<T> {
 
         // return.
         sequences
-    }
-
-    fn check_time_travel(&mut self, now: &DateTime<Utc>) {
-        let today = now.with_timezone::<T>(&self.timezone).date();
-        let yesterday = today - Duration::days(1);
-
-        #[allow(clippy::if_same_then_else)]
-        if today < self.date {
-            // If we have travelled back in time, we should drop the list entirely
-            // to avoid duplicating future events.
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            self.sequences = self.get_entire_schedule(today);
-        } else if yesterday == self.date {
-            // If we have travelled forward in time by one day, we only need to
-            // add events for tomorrow.
-            // let mut steps = self.sequence.chain(self.get_steps_for_date(&tomorrow));
-            // self.sequence = Box::new(steps);
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            self.sequences = self.add_next_day(today);
-        } else if today > self.date {
-            // If we have travelled forward in time more then one day, regenerate
-            // entire events list.
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            self.sequences = self.get_entire_schedule(today);
-        } else {
-            // No change in date.
-        };
-
-        self.date = today;
-        self.publish_sequences(&self.sequences);
     }
 }
 
@@ -334,7 +336,7 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
             mqtt_out,
         }
     };
-    let sequences = state.get_entire_schedule(state.date);
+    let sequences = state.get_sequences_all(state.date);
     let mut state = State { sequences, ..state };
 
     {
