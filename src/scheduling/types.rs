@@ -30,9 +30,12 @@ impl Date {
     }
 
     /// Get the number of days from CE of the date.
+    ///
+    // Kludge: This function returns values consistent with Elxir's to_iso_days/1 function.
+
     #[must_use]
     pub fn num_days_from_ce(self) -> i32 {
-        self.0.num_days_from_ce()
+        self.0.num_days_from_ce() + 365
     }
 }
 
@@ -537,5 +540,24 @@ mod tests {
             duration,
             Err(DurationParseError::InvalidDuration(_))
         ));
+    }
+
+    #[test]
+    fn test_date_num_days_from_ce() {
+        // Ensure that this function returns values consistent with Elxir's to_iso_days/1 function.
+        let date = Date::from_str("0000-01-01").unwrap();
+        assert_eq!(date.num_days_from_ce(), 0);
+
+        let date = Date::from_str("0000-01-02").unwrap();
+        assert_eq!(date.num_days_from_ce(), 1);
+
+        let date = Date::from_str("2020-01-01").unwrap();
+        assert_eq!(date.num_days_from_ce(), 737_790);
+
+        let date = Date::from_str("2021-01-01").unwrap();
+        assert_eq!(date.num_days_from_ce(), 738_156);
+
+        let date = Date::from_str("2022-01-01").unwrap();
+        assert_eq!(date.num_days_from_ce(), 738_521);
     }
 }
