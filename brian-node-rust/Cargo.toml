@@ -16,6 +16,6 @@ serde_path_to_error = "0.1.8"
 chrono = "0.4.22"
 chrono-tz = "0.6.3"
 warp = "0.3.3"
-thiserror = "1.0.30"
+thiserror = "1.0.37"
 color-backtrace = "0.5.1"
 robotica-node-rust = { path = ".." }
