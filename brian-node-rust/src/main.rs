@@ -5,8 +5,10 @@ use std::fmt::Display;
 use std::time::Duration;
 
 use anyhow::Result;
+use log::error;
 use robotica::Id;
 use robotica_node_rust::entities::create_entity;
+use robotica_node_rust::scheduling::executor::executor;
 use robotica_node_rust::spawn;
 use thiserror::Error;
 use tokio::select;
@@ -52,26 +54,30 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
 
     monitor_tesla_doors(&mut state, 1);
 
-    let message_sink_temp = state.message_sink.clone();
-    let rx = state
-        .subscriptions
-        .subscribe_into::<Power>("state/Brian/Light/power");
-    tokio::spawn(async move {
-        let mut s = rx.subscribe().await;
-        loop {
-            let msg = s.recv().await;
-            if let Ok((Some(prev), current)) = msg {
-                let announce = format!("Light power changed from {} to {}", prev, current);
-
-                if let Err(err) = message_sink_temp.send(announce).await {
-                    println!("Error sending message: {}", err);
-                }
-            }
-            if let Some(msg) = rx.get().await {
-                println!("get: {:?}", msg);
-            }
-        }
+    executor(&mut state.subscriptions, state.mqtt_out).unwrap_or_else(|err| {
+        error!("Failed to start executor: {}", err);
     });
+
+    // let message_sink_temp = state.message_sink.clone();
+    // let rx = state
+    //     .subscriptions
+    //     .subscribe_into::<Power>("state/Brian/Light/power");
+    // spawn(async move {
+    //     let mut s = rx.subscribe().await;
+    //     loop {
+    //         let msg = s.recv().await;
+    //         if let Ok((Some(prev), current)) = msg {
+    //             let announce = format!("Light power changed from {} to {}", prev, current);
+
+    //             if let Err(err) = message_sink_temp.send(announce).await {
+    //                 println!("Error sending message: {}", err);
+    //             }
+    //         }
+    //         if let Some(msg) = rx.get().await {
+    //             println!("get: {:?}", msg);
+    //         }
+    //     }
+    // });
 
     state.subscriptions
 }

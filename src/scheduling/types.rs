@@ -402,9 +402,11 @@ pub fn convert_date_time_to_utc<T: TimeZone>(
 #[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum MarkStatus {
     /// The tasks are to be cancelled.
+    #[serde(rename = "cancelled")]
     Cancelled,
 
     /// The tasks are already done.
+    #[serde(rename = "done")]
     Done,
 }
 

@@ -45,8 +45,9 @@ impl<T: TimeZone + Debug> State<T> {
         if let Some(next) = next {
             let next = next.required_time.clone();
             let mut next = next - now.clone();
-            if next > Duration::minutes(120) {
-                next = Duration::minutes(120);
+            // We poll at least every two minutes just in case system time changes.
+            if next > Duration::minutes(2) {
+                next = Duration::minutes(2);
             }
             let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
             self.timer = Instant::now() + next;
@@ -165,13 +166,15 @@ impl<T: TimeZone + Debug> State<T> {
 fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
     for sequence in &mut *sequences {
         let mark = if let Some(mark) = marks.get(&sequence.id) {
-            if sequence.required_time <= mark.start_time && sequence.required_time >= mark.stop_time
+            println!("Mark found for {}", sequence.id);
+            if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
             {
                 Some(mark.clone())
             } else {
                 None
             }
         } else {
+            println!("No mark found for {}", sequence.id);
             None
         };
 
@@ -238,6 +241,12 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
     let mut state = State { sequences, ..state };
 
     state.finalize(&now);
+    debug!(
+        "{:?}: Starting executor, Next task {:?}, timer at {:?}",
+        Utc::now(),
+        state.sequences.front(),
+        state.timer
+    );
 
     let mark_rx = subscriptions.subscribe_into::<Mark>("mark");
 
@@ -256,6 +265,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
             select! {
                 _ = tokio::time::sleep_until(state.timer) => {
                     let now = DateTime::from(Utc::now());
+                    debug!("{now:?}: Timer expired");
 
                     while let Some(sequence) = state.sequences.front() {
                         if now < sequence.required_time {
@@ -286,6 +296,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                 },
                 Ok((_, mark)) = mark_s.recv() => {
                     state.marks.insert(mark.id.clone(), mark);
+                    debug!("marks: {:?}", state.marks);
                     set_all_marks(&mut state.sequences, &state.marks);
                 },
             }

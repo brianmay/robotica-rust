@@ -39,7 +39,7 @@ pub struct ConfigTask {
 
     /// The payload of the task.
     #[serde(flatten)]
-    pub payload: Payload,
+    pub payload: Option<Payload>,
 
     /// The qos to be used when sending the message.
     qos: Option<u8>,
@@ -339,7 +339,9 @@ fn config_to_sequence(
 
         let task = Task {
             description: src_task.description,
-            payload: src_task.payload,
+            payload: src_task
+                .payload
+                .unwrap_or_else(|| Payload::String("".to_string())),
             qos: map_qos(src_task.qos),
             retain: src_task.retain.unwrap_or(false),
             locations: src_task.locations,
@@ -359,7 +361,7 @@ fn config_to_sequence(
         if_cond: config.if_cond,
         classifications: config.classifications,
         options: config.options,
-        zero_time: config.zero_time.unwrap(),
+        zero_time: config.zero_time.unwrap_or(false),
         required_time: start_time.clone(),
         required_duration: config.required_time,
         latest_time,
@@ -425,7 +427,7 @@ pub fn get_sequence_with_config(
             let repeat_count = config.repeat_count();
             let id = match &config.id {
                 Some(id) => id.clone(),
-                None => format!("{}-{}", sequence_name, sequence_number),
+                None => format!("{}_{}", sequence_name, sequence_number),
             };
             for repeat in 0..repeat_count {
                 let sequence = config_to_sequence(
@@ -525,7 +527,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -545,7 +547,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -575,7 +577,7 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
-        assert_eq!(sequence[0].id, "test-0");
+        assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
@@ -586,7 +588,7 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
-        assert_eq!(sequence[1].id, "test-1");
+        assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
     }
 
@@ -605,7 +607,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -625,7 +627,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -659,7 +661,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -679,7 +681,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -713,7 +715,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -733,7 +735,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -766,7 +768,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -786,7 +788,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -816,7 +818,7 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
-        assert_eq!(sequence[0].id, "test-0");
+        assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
@@ -827,7 +829,7 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
-        assert_eq!(sequence[1].id, "test-1");
+        assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
     }
 
@@ -845,7 +847,7 @@ mod tests {
             repeat_time: Some(Duration::minutes(10)),
             tasks: vec![ConfigTask {
                 description: None,
-                payload: Payload::String("".to_string()),
+                payload: None,
                 qos: None,
                 retain: None,
                 locations: vec!["test".to_string()],
@@ -874,7 +876,7 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
-        assert_eq!(sequence[0].id, "test-0");
+        assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
@@ -885,7 +887,7 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
         );
-        assert_eq!(sequence[1].id, "test-0");
+        assert_eq!(sequence[1].id, "test_0");
         assert_eq!(sequence[1].tasks.len(), 1);
     }
 
@@ -918,7 +920,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -938,7 +940,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -961,7 +963,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -981,7 +983,7 @@ mod tests {
                 repeat_time: None,
                 tasks: vec![ConfigTask {
                     description: None,
-                    payload: Payload::String("".to_string()),
+                    payload: None,
                     qos: None,
                     retain: None,
                     locations: vec!["test".to_string()],
@@ -1008,7 +1010,7 @@ mod tests {
             sequence[0].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
         );
-        assert_eq!(sequence[0].id, "test-0");
+        assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
@@ -1019,7 +1021,7 @@ mod tests {
             sequence[1].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
         );
-        assert_eq!(sequence[1].id, "christmas-0");
+        assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
 
         assert_eq!(
@@ -1030,7 +1032,7 @@ mod tests {
             sequence[2].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
         );
-        assert_eq!(sequence[2].id, "test-1");
+        assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
 
         assert_eq!(
@@ -1041,7 +1043,7 @@ mod tests {
             sequence[3].latest_time,
             Utc.ymd(2020, 12, 25).and_hms(0, 45, 0).into()
         );
-        assert_eq!(sequence[3].id, "christmas-1");
+        assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);
     }
 }
