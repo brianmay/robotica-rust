@@ -93,7 +93,8 @@ pub async fn test() -> Sender<Command> {
 }
 
 async fn poll(stream: &mut TcpStream) -> Result<(), std::io::Error> {
-    for output in 0..=3 {
+    // Note channels are indexed from 1 not 0.
+    for output in 1..=4 {
         debug!("Sending HDMI query command");
         let cmd = get_cmd_input_for_output(output);
         let response = send_command(stream, &cmd).await?;
