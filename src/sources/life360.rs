@@ -145,7 +145,7 @@ struct Circle {
 /// Source of life360 member information.
 #[must_use]
 pub fn circles(name: &str) -> entities::Receiver<Vec<Member>> {
-    let (tx, rx) = entities::create_entity(name);
+    let (tx, rx) = entities::create_stateless_entity(name);
     let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
     let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
 

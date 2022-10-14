@@ -17,7 +17,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_null() {
-        let (tx, rx) = entities::create_entity("test");
+        let (tx, rx) = entities::create_stateless_entity("test");
         null(rx).await;
         tx.send(10).await;
         tx.send(10).await;

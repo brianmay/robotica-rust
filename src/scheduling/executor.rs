@@ -247,7 +247,7 @@ pub enum ExecutorError {
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt_out)?;
-    let mark_rx = subscriptions.subscribe_into::<Mark>("mark");
+    let mark_rx = subscriptions.subscribe_into_stateless::<Mark>("mark");
 
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;
@@ -294,7 +294,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                     state.finalize(&now);
                     expire_marks(&mut state.marks, &now);
                 },
-                Ok((_, mark)) = mark_s.recv() => {
+                Ok(mark) = mark_s.recv() => {
                     state.marks.insert(mark.id.clone(), mark);
                     debug!("Marks: {:?}", state.marks);
                     set_all_marks(&mut state.sequences, &state.marks);

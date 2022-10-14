@@ -17,7 +17,7 @@ use tokio::select;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Instant};
 
-use crate::entities;
+use crate::entities::{self, StatefulData};
 
 /// `QoS` for MQTT messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -367,7 +367,7 @@ impl Subscriptions {
         if let Some(subscription) = self.0.get(topic) {
             subscription.rx.clone()
         } else {
-            let (tx, rx) = entities::create_entity(topic);
+            let (tx, rx) = entities::create_stateless_entity(topic);
 
             let subscription = Subscription {
                 topic: topic.to_string(),
@@ -381,12 +381,21 @@ impl Subscriptions {
     }
 
     /// Add new subscription and parse incoming data as type T
-    pub fn subscribe_into<T>(&mut self, topic: &str) -> entities::Receiver<T>
+    pub fn subscribe_into_stateless<T>(&mut self, topic: &str) -> entities::Receiver<T>
     where
         T: TryFrom<Message> + Clone + Eq + Send + 'static,
         <T as TryFrom<Message>>::Error: Send + std::error::Error,
     {
-        self.subscribe(topic).translate_into::<T>()
+        self.subscribe(topic).translate_into_stateless::<T>()
+    }
+
+    /// Add new subscription and parse incoming data as type T
+    pub fn subscribe_into_stateful<T>(&mut self, topic: &str) -> entities::Receiver<StatefulData<T>>
+    where
+        T: TryFrom<Message> + Clone + Eq + Send + 'static,
+        <T as TryFrom<Message>>::Error: Send + std::error::Error,
+    {
+        self.subscribe(topic).translate_into_stateful::<T>()
     }
 }
 

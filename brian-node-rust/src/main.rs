@@ -9,13 +9,14 @@ use anyhow::Result;
 use env_logger::Builder;
 use log::error;
 use robotica::Id;
-use robotica_node_rust::entities::create_entity;
+use robotica_node_rust::entities::create_stateful_entity;
+use robotica_node_rust::entities::create_stateless_entity;
+use robotica_node_rust::entities::Sender;
 use robotica_node_rust::scheduling::executor::executor;
 use robotica_node_rust::scheduling::types::utc_now;
 use robotica_node_rust::spawn;
 use thiserror::Error;
 use tokio::select;
-use tokio::sync::mpsc;
 
 use robotica::Power;
 use robotica_node_rust::sources::mqtt::{Message, MqttOut};
@@ -29,6 +30,8 @@ async fn main() -> Result<()> {
         .init();
 
     color_backtrace::install();
+
+    robotica_node_rust::devices::hdmi::test().await;
 
     http::start().await;
 
@@ -44,7 +47,7 @@ struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt_out: MqttOut,
-    message_sink: mpsc::Sender<String>,
+    message_sink: Sender<String>,
 }
 
 async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
@@ -154,25 +157,33 @@ enum TeslaStateErr {
 fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     let fo_rx = state
         .subscriptions
-        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/frunk_open"));
+        .subscribe_into_stateful::<TeslaDoorState>(&format!(
+            "teslamate/cars/{car_number}/frunk_open"
+        ));
     let to_rx = state
         .subscriptions
-        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/trunk_open"));
+        .subscribe_into_stateful::<TeslaDoorState>(&format!(
+            "teslamate/cars/{car_number}/trunk_open"
+        ));
     let do_rx = state
         .subscriptions
-        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/doors_open"));
+        .subscribe_into_stateful::<TeslaDoorState>(&format!(
+            "teslamate/cars/{car_number}/doors_open"
+        ));
     let wo_rx = state
         .subscriptions
-        .subscribe_into::<TeslaDoorState>(&format!("teslamate/cars/{car_number}/windows_open"));
+        .subscribe_into_stateful::<TeslaDoorState>(&format!(
+            "teslamate/cars/{car_number}/windows_open"
+        ));
     let up_rx = state
         .subscriptions
-        .subscribe_into::<TeslaUserIsPresent>(&format!(
+        .subscribe_into_stateful::<TeslaUserIsPresent>(&format!(
             "teslamate/cars/{car_number}/is_user_present"
         ));
 
     let message_sink = state.message_sink.clone();
 
-    let (tx, rx) = create_entity("tesla_doors");
+    let (tx, rx) = create_stateful_entity("tesla_doors");
 
     spawn(async move {
         let mut fo_s = fo_rx.subscribe().await;
@@ -193,12 +204,12 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
             let mut open: Vec<&str> = vec![];
 
-            let maybe_up = up_rx.get().await;
+            let maybe_up = up_rx.get_data().await;
             if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
-                let maybe_fo = fo_rx.get().await;
-                let maybe_to = to_rx.get().await;
-                let maybe_do = do_rx.get().await;
-                let maybe_wo = wo_rx.get().await;
+                let maybe_fo = fo_rx.get_data().await;
+                let maybe_to = to_rx.get_data().await;
+                let maybe_do = do_rx.get_data().await;
+                let maybe_wo = wo_rx.get_data().await;
 
                 println!(
                     "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
@@ -229,7 +240,7 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         }
     });
 
-    let (tx2, rx2) = create_entity("tesla_doors_delayed");
+    let (tx2, rx2) = create_stateful_entity("tesla_doors_delayed");
     spawn(async move {
         let mut state = DelayState::Idle;
         let duration = Duration::from_secs(60);
@@ -281,23 +292,19 @@ fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             } else {
                 format!("The Tesla {} are open", open.join(", "))
             };
-            if let Err(err) = message_sink.send(msg).await {
-                println!("Error sending message: {}", err);
-            }
+            message_sink.send(msg).await;
         }
     });
 }
 
-fn create_message_sink(
-    subscriptions: &mut Subscriptions,
-    mqtt_out: MqttOut,
-) -> mpsc::Sender<String> {
+fn create_message_sink(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Sender<String> {
     let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
-    let gate_in = subscriptions.subscribe_into::<Power>(&gate_topic);
+    let gate_in = subscriptions.subscribe_into_stateless::<Power>(&gate_topic);
 
-    let (tx, mut rx) = mpsc::channel::<String>(100);
+    let (tx, rx) = create_stateless_entity::<String>("messages");
     tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
+        let mut rx = rx.subscribe().await;
+        while let Ok(msg) = rx.recv().await {
             println!("{}", msg);
 
             if let Some(Power::On) = gate_in.get().await {

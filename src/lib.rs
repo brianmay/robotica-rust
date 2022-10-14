@@ -12,6 +12,7 @@ extern crate lalrpop_util;
 
 // extern crate robotica_node_rust_macros;
 
+pub mod devices;
 pub mod entities;
 pub mod scheduling;
 pub mod sinks;
