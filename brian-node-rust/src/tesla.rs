@@ -144,7 +144,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 }
 
                 if let Some(TeslaDoorState::Open) = maybe_to {
-                    open.push("trunk")
+                    open.push("boot")
                 }
 
                 if let Some(TeslaDoorState::Open) = maybe_do {
@@ -174,6 +174,8 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             }
             let msg = if open.is_empty() {
                 "The Tesla is secure".to_string()
+            } else if open.len() == 1 {
+                format!("The Tesla {} is open", open.join(", "))
             } else {
                 format!("The Tesla {} are open", open.join(", "))
             };
