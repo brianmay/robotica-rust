@@ -1,4 +1,8 @@
-use robotica_node_rust::{devices::hdmi::Command, sources::mqtt::Message, spawn, PIPE_SIZE};
+use robotica_node_rust::{
+    devices::hdmi::Command,
+    sources::mqtt::{Message, QoS},
+    spawn, PIPE_SIZE,
+};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::{select, sync::mpsc};
@@ -40,8 +44,6 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         .subscriptions
         .subscribe_into_stateful::<RoboticaCommand>(&topic);
 
-    // let message_sink = state.message_sink.clone();
-
     let (tx, rx) = mpsc::channel(PIPE_SIZE);
 
     spawn(async move {
@@ -58,6 +60,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         }
     });
 
+    let mqtt_out = state.mqtt_out.clone();
     let addr = addr.to_string();
     let (rx, _) = robotica_node_rust::devices::hdmi::run(addr, rx, &Default::default());
 
@@ -67,10 +70,31 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         loop {
             select! {
                 Ok((_, status)) = rx_s.recv() => {
-                    println!("---> HDMI {status:?}");
+                    println!("HDMI {status:?}");
+                    let status = match status {
+                        Ok(values) => values,
+                        Err(_err) => [None; 4],
+                    };
+
+                    let iter = status.iter().map(|x| map_input(*x));
+                    for (output, input) in iter.enumerate() {
+                        // Arrays are 0 based, but outputs are 1 based.
+                        let output = format!("output{}", output + 1);
+                        let topic = id.get_state_topic(&output.to_string());
+                        let payload = input;
+                        let message = Message::from_string(&topic, &payload, false, QoS::at_least_once());
+                        mqtt_out.send(message);
+                    }
                 },
                 else => break,
             };
         }
     });
+}
+
+fn map_input(value: Option<u8>) -> String {
+    match value {
+        Some(v) => v.to_string(),
+        None => "HARD_OFF".to_string(),
+    }
 }

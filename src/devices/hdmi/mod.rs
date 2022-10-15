@@ -141,7 +141,9 @@ where
         let response = send_command(&mut stream, &cmd).await?;
         let input = response[6];
         let output = response[4];
-        status[(output - 1) as usize] = Some(input);
+        if let Some(v) = status.get_mut((output - 1) as usize) {
+            *v = Some(input);
+        }
         debug!("Got HDMI response {} {}", input, output);
     }
     Ok(status)
@@ -157,32 +159,35 @@ where
     A: ToSocketAddrs + Send + Sync + Debug,
 {
     let mut status = *status;
-    let mut stream = connect(&addr).await.unwrap();
+    let mut stream = connect(&addr).await?;
     let cmd = get_cmd_switch(input, output);
     let response = send_command(&mut stream, &cmd).await?;
-    let input = response[6];
-    let output = response[4];
-    status[(output - 1) as usize] = Some(input);
+    // Note response doesn't include the newly selected input.
+    let output = response[6];
+    if let Some(v) = status.get_mut((output - 1) as usize) {
+        *v = Some(input);
+    }
     debug!("Got HDMI response {} {}", input, output);
     Ok(status)
 }
 
-async fn send_command(stream: &mut TcpStream, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-    debug!("Sending HDMI command {bytes:02X?}");
-    stream.write_all(bytes).await?;
+async fn send_command(stream: &mut TcpStream, out_bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+    debug!("Sending HDMI command {out_bytes:02X?}");
+    stream.write_all(out_bytes).await?;
 
-    let mut buffer = [0; 13];
-    let _bytes = stream.read_exact(&mut buffer).await?;
-    debug!("Receiving HDMI response {bytes:02X?}");
+    let mut in_bytes = [0; 13];
+    let _bytes = stream.read_exact(&mut in_bytes).await?;
+    debug!("Receiving HDMI response {in_bytes:02X?}");
 
-    if !check_checksum(buffer.as_ref()) {
+    if !check_checksum(in_bytes.as_ref()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "Checksum error",
         ));
     }
 
-    Ok(buffer.to_vec())
+    let bytes = in_bytes.to_vec();
+    Ok(bytes)
 }
 
 #[must_use]

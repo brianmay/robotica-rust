@@ -126,15 +126,11 @@ async fn test_client_once() {
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
-    client.send(Command::SetInput(1, 1)).await.unwrap();
+    client.send(Command::SetInput(2, 1)).await.unwrap();
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
-    assert_eq!(state, Ok([Some(1), None, None, None]));
-    // let (tx, rx) = oneshot::channel();
-    // client.send(Command::GetErrors(tx)).await.unwrap();
-    // let errors = rx.await.unwrap();
-    // assert_eq!(errors, 0);
+    assert_eq!(state, Ok([Some(2), None, None, None]));
 
     println!("test: Shutting down client");
     client.send(Command::Shutdown).await.unwrap();
@@ -166,11 +162,11 @@ async fn test_client_reconnect() {
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
-    client.send(Command::SetInput(1, 1)).await.unwrap();
+    client.send(Command::SetInput(2, 1)).await.unwrap();
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
-    assert_eq!(state, Ok([Some(1), None, None, None]));
+    assert_eq!(state, Ok([Some(2), None, None, None]));
 
     println!("test: Restarting server");
     server.send(ServerCommand::Shutdown).await.unwrap();
@@ -179,11 +175,11 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: sending test command after server restart");
-    client.send(Command::SetInput(2, 2)).await.unwrap();
+    client.send(Command::SetInput(3, 2)).await.unwrap();
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
-    assert_eq!(state, Ok([Some(1), Some(2), None, None]));
+    assert_eq!(state, Ok([Some(2), Some(3), None, None]));
 
     println!("test: Shutting down client");
     client.send(Command::Shutdown).await.unwrap();
