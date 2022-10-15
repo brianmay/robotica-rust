@@ -7,7 +7,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, ToSocketAddrs},
     select, spawn,
-    sync::{mpsc, oneshot},
+    sync::mpsc,
     task::JoinHandle,
 };
 
@@ -18,8 +18,6 @@ use crate::entities::{self, StatefulData};
 pub enum Command {
     /// Set input for output.
     SetInput(u8, u8),
-    /// Get and reset count of errors that have occurred.
-    GetErrors(oneshot::Sender<u32>),
     /// Shutdown the server.
     Shutdown,
 }
@@ -63,7 +61,6 @@ where
 
     let handle = spawn(async move {
         println!("hdmi: Starting with addr {addr:?}");
-        let mut errors = 0u32;
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
         let addr = addr;
 
@@ -84,7 +81,6 @@ where
                             Err(e) => {
                                 error!("hdmi: error polling {addr:?}: {e}");
                                 tx.send(Err(Error::IoError(e.to_string()))).await;
-                                errors += 1;
                             }
                         }
                     }
@@ -102,13 +98,8 @@ where
                                 Err(e) => {
                                     error!("hdmi: error setting input {addr:?}: {e}");
                                     tx.send(Err(Error::IoError(e.to_string()))).await;
-                                    errors += 1;
                                 }
                             }
-                        }
-                        Command::GetErrors(tx) => {
-                            let _ = tx.send(errors);
-                            errors = 0;
                         }
                         Command::Shutdown => { break; },
                     };
