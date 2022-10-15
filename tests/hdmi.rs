@@ -3,7 +3,10 @@ mod common;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
-use robotica_node_rust::devices::hdmi::{Command, Options};
+use robotica_node_rust::{
+    devices::hdmi::{Command, Options},
+    PIPE_SIZE,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, ToSocketAddrs},
@@ -118,16 +121,20 @@ async fn test_client_once() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, client_handle) = robotica_node_rust::devices::hdmi::run(addr, &options).await;
+    let (client, rx) = mpsc::channel(PIPE_SIZE);
+    let (rx, client_handle) = robotica_node_rust::devices::hdmi::run(addr, rx, &options);
+    let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
     client.send(Command::SetInput(1, 1)).await.unwrap();
 
     println!("test: waiting for client to finish");
-    let (tx, rx) = oneshot::channel();
-    client.send(Command::GetErrors(tx)).await.unwrap();
-    let errors = rx.await.unwrap();
-    assert_eq!(errors, 0);
+    let (_, state) = rx_s.recv().await.unwrap();
+    assert_eq!(state, Ok([Some(1), None, None, None]));
+    // let (tx, rx) = oneshot::channel();
+    // client.send(Command::GetErrors(tx)).await.unwrap();
+    // let errors = rx.await.unwrap();
+    // assert_eq!(errors, 0);
 
     println!("test: Shutting down client");
     client.send(Command::Shutdown).await.unwrap();
@@ -139,44 +146,6 @@ async fn test_client_once() {
 
     println!("test: done");
 }
-
-// #[tokio::test]
-// #[skip_if(predicate = "is_slow")]
-// async fn test_client_timeout() {
-//     common::setup();
-
-//     let options = Options {
-//         disable_polling: true,
-//     };
-//     let addr = "127.0.0.2:0";
-
-//     println!("test: starting server");
-//     let (server, started, server_handle, addr) = fake_server(addr, "only").await.unwrap();
-//     let _ = started.await;
-
-//     let addr = "1.1.1.1:8080";
-//     println!("test: starting client");
-//     let (client, client_handle) = robotica_node_rust::devices::hdmi::run(addr, &options).await;
-
-//     println!("test: sending test command");
-//     client.send(Command::SetInput(1, 1)).await.unwrap();
-
-//     println!("test: waiting for client to finish");
-//     let (tx, rx) = oneshot::channel();
-//     client.send(Command::GetErrors(tx)).await.unwrap();
-//     let errors = rx.await.unwrap();
-//     assert_eq!(errors, 0);
-
-//     println!("test: Shutting down client");
-//     client.send(Command::Shutdown).await.unwrap();
-//     client_handle.await.unwrap();
-
-//     println!("test: Shutting down server");
-//     server.send(ServerCommand::Shutdown).await.unwrap();
-//     server_handle.await.unwrap();
-
-//     println!("test: done");
-// }
 
 #[tokio::test]
 async fn test_client_reconnect() {
@@ -192,16 +161,16 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, client_handle) = robotica_node_rust::devices::hdmi::run(addr, &options).await;
+    let (client, rx) = mpsc::channel(PIPE_SIZE);
+    let (rx, client_handle) = robotica_node_rust::devices::hdmi::run(addr, rx, &options);
+    let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
     client.send(Command::SetInput(1, 1)).await.unwrap();
 
     println!("test: waiting for client to finish");
-    let (tx, rx) = oneshot::channel();
-    client.send(Command::GetErrors(tx)).await.unwrap();
-    let errors = rx.await.unwrap();
-    assert_eq!(errors, 0);
+    let (_, state) = rx_s.recv().await.unwrap();
+    assert_eq!(state, Ok([Some(1), None, None, None]));
 
     println!("test: Restarting server");
     server.send(ServerCommand::Shutdown).await.unwrap();
@@ -210,13 +179,11 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: sending test command after server restart");
-    client.send(Command::SetInput(1, 1)).await.unwrap();
+    client.send(Command::SetInput(2, 2)).await.unwrap();
 
     println!("test: waiting for client to finish");
-    let (tx, rx) = oneshot::channel();
-    client.send(Command::GetErrors(tx)).await.unwrap();
-    let errors = rx.await.unwrap();
-    assert_eq!(errors, 0);
+    let (_, state) = rx_s.recv().await.unwrap();
+    assert_eq!(state, Ok([Some(1), Some(2), None, None]));
 
     println!("test: Shutting down client");
     client.send(Command::Shutdown).await.unwrap();

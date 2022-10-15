@@ -1,8 +1,8 @@
 //! Dodgy HDMI matrix of unknown origin.
 use std::fmt::Debug;
 
-use bytes::Bytes;
 use log::{debug, error};
+use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, ToSocketAddrs},
@@ -11,7 +11,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::PIPE_SIZE;
+use crate::entities::{self, StatefulData};
 
 /// A command to send to the HDMI matrix.
 #[derive(Debug)]
@@ -31,50 +31,80 @@ pub struct Options {
     pub disable_polling: bool,
 }
 
+type Status = [Option<u8>; 4];
+
+/// A connection to an HDMI matrix failed.
+#[derive(Error, Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    /// An IO Error occurred.
+    #[error("IO Error {0}")]
+    IoError(String),
+}
+
 /// The state of the HDMI matrix.
 ///
 /// # Errors
 ///
 /// This function will return an error if the connection to the HDMI matrix fails.
-///
-/// # Panics
-///
-/// This function will panic if the connection to the HDMI matrix fails.
-pub async fn run<A>(addr: A, options: &Options) -> (mpsc::Sender<Command>, JoinHandle<()>)
+pub fn run<A>(
+    addr: A,
+    mut rx_cmd: mpsc::Receiver<Command>,
+    options: &Options,
+) -> (
+    entities::Receiver<StatefulData<Result<Status, Error>>>,
+    JoinHandle<()>,
+)
 where
     A: ToSocketAddrs + Clone + Send + Sync + Debug + 'static,
 {
-    let (tx_cmd, mut rx_cmd) = mpsc::channel(PIPE_SIZE);
-
     let options = options.clone();
+    let name = format!("{addr:?}");
+    let (tx, rx) = entities::create_stateful_entity(&name);
+
     let handle = spawn(async move {
-        println!("client: Starting with addr {addr:?}");
+        println!("hdmi: Starting with addr {addr:?}");
         let mut errors = 0u32;
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
         let addr = addr;
+
+        let mut status: Status = [None; 4];
 
         loop {
             select! {
                 _ = timer.tick() => {
                     if options.disable_polling  {
-                        debug!("client: disabled polling {addr:?}");
+                        debug!("hdmi: disabled polling {addr:?}");
                     } else {
-                        debug!("client: polling {addr:?}");
-                        poll(&addr).await.unwrap_or_else(|err| {
-                            error!("client: Polling HDMI failed: {err}");
-                            errors = errors.saturating_add(1);
-                        });
+                        debug!("hdmi: polling {addr:?}");
+                        match poll(&addr).await {
+                            Ok(new_status) => {
+                                status = new_status;
+                                tx.send(Ok(status)).await;
+                            },
+                            Err(e) => {
+                                error!("hdmi: error polling {addr:?}: {e}");
+                                tx.send(Err(Error::IoError(e.to_string()))).await;
+                                errors += 1;
+                            }
+                        }
                     }
                 }
 
                 Some(cmd) = rx_cmd.recv() => {
-                    debug!("client: Received command {cmd:?} for {addr:?}");
+                    debug!("hdmi: Received command {cmd:?} for {addr:?}");
                     match cmd {
                         Command::SetInput(input, output) => {
-                            set_input(&addr, input, output).await.unwrap_or_else(|err| {
-                                error!("client: Setting HDMI input failed: {err}");
-                                errors = errors.saturating_add(1);
-                            });
+                            match set_input(&addr, input, output, &status).await {
+                                Ok(new_status) => {
+                                    status = new_status;
+                                    tx.send(Ok(status)).await;
+                                },
+                                Err(e) => {
+                                    error!("hdmi: error setting input {addr:?}: {e}");
+                                    tx.send(Err(Error::IoError(e.to_string()))).await;
+                                    errors += 1;
+                                }
+                            }
                         }
                         Command::GetErrors(tx) => {
                             let _ = tx.send(errors);
@@ -85,10 +115,10 @@ where
                 }
             }
         }
-        println!("client: Ending");
+        println!("hdmi: Ending");
     });
 
-    (tx_cmd, handle)
+    (rx, handle)
 }
 
 async fn connect<A>(addr: A) -> Result<TcpStream, std::io::Error>
@@ -107,10 +137,12 @@ where
     }
 }
 
-async fn poll<A>(addr: A) -> Result<(), std::io::Error>
+async fn poll<A>(addr: A) -> Result<Status, std::io::Error>
 where
     A: ToSocketAddrs + Send + Sync + Debug,
 {
+    let mut status = [None; 4];
+
     // Note channels are indexed from 1 not 0.
     let mut stream = connect(&addr).await?;
     for output in 1..=4 {
@@ -118,20 +150,30 @@ where
         let response = send_command(&mut stream, &cmd).await?;
         let input = response[6];
         let output = response[4];
-        let bytes: Bytes = response.into();
-        debug!("Got HDMI response {} {} {bytes:#X}", input, output);
+        status[(output - 1) as usize] = Some(input);
+        debug!("Got HDMI response {} {}", input, output);
     }
-    Ok(())
+    Ok(status)
 }
 
-async fn set_input<A>(addr: A, input: u8, output: u8) -> Result<(), std::io::Error>
+async fn set_input<A>(
+    addr: A,
+    input: u8,
+    output: u8,
+    status: &Status,
+) -> Result<Status, std::io::Error>
 where
     A: ToSocketAddrs + Send + Sync + Debug,
 {
+    let mut status = *status;
     let mut stream = connect(&addr).await.unwrap();
     let cmd = get_cmd_switch(input, output);
-    send_command(&mut stream, &cmd).await?;
-    Ok(())
+    let response = send_command(&mut stream, &cmd).await?;
+    let input = response[6];
+    let output = response[4];
+    status[(output - 1) as usize] = Some(input);
+    debug!("Got HDMI response {} {}", input, output);
+    Ok(status)
 }
 
 async fn send_command(stream: &mut TcpStream, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
@@ -140,7 +182,7 @@ async fn send_command(stream: &mut TcpStream, bytes: &[u8]) -> Result<Vec<u8>, s
 
     let mut buffer = [0; 13];
     let _bytes = stream.read_exact(&mut buffer).await?;
-    debug!("Receiving HDMI command {bytes:02X?}");
+    debug!("Receiving HDMI response {bytes:02X?}");
 
     if !check_checksum(buffer.as_ref()) {
         return Err(std::io::Error::new(

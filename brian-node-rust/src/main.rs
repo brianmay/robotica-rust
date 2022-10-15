@@ -1,27 +1,20 @@
+mod delays;
+mod hdmi;
 mod http;
 mod robotica;
+mod tesla;
 
-use std::fmt::Display;
 use std::io::Write;
-use std::time::Duration;
 
 use anyhow::Result;
 use env_logger::Builder;
 use log::error;
-use robotica::Id;
-use robotica_node_rust::entities::create_stateful_entity;
-use robotica_node_rust::entities::create_stateless_entity;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::scheduling::executor::executor;
 use robotica_node_rust::scheduling::types::utc_now;
-use robotica_node_rust::spawn;
-use thiserror::Error;
-use tokio::select;
 
-use robotica::Power;
-use robotica_node_rust::sources::mqtt::{Message, MqttOut};
+use robotica_node_rust::sources::mqtt::MqttOut;
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
-use tokio::time::{sleep_until, Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -30,8 +23,6 @@ async fn main() -> Result<()> {
         .init();
 
     color_backtrace::install();
-
-    robotica_node_rust::devices::hdmi::run("hdmi.pri:8000", &Default::default()).await;
 
     http::start().await;
 
@@ -43,7 +34,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-struct State {
+pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt_out: MqttOut,
@@ -53,7 +44,7 @@ struct State {
 async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
-    let message_sink = create_message_sink(&mut subscriptions, mqtt_out.clone());
+    let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt_out.clone());
 
     let mut state = State {
         subscriptions,
@@ -61,7 +52,8 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
         message_sink,
     };
 
-    monitor_tesla_doors(&mut state, 1);
+    hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_doors(&mut state, 1);
 
     executor(&mut state.subscriptions, state.mqtt_out).unwrap_or_else(|err| {
         error!("Failed to start executor: {}", err);
@@ -89,244 +81,4 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     // });
 
     state.subscriptions
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum TeslaDoorState {
-    Open,
-    Closed,
-}
-
-impl Display for TeslaDoorState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TeslaDoorState::Open => write!(f, "open"),
-            TeslaDoorState::Closed => write!(f, "closed"),
-        }
-    }
-}
-
-impl TryFrom<Message> for TeslaDoorState {
-    type Error = TeslaStateErr;
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
-        match payload.as_str() {
-            "true" => Ok(TeslaDoorState::Open),
-            "false" => Ok(TeslaDoorState::Closed),
-            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum TeslaUserIsPresent {
-    UserPresent,
-    UserNotPresent,
-}
-
-impl Display for TeslaUserIsPresent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TeslaUserIsPresent::UserPresent => write!(f, "user is present"),
-            TeslaUserIsPresent::UserNotPresent => write!(f, "user is not present"),
-        }
-    }
-}
-
-impl TryFrom<Message> for TeslaUserIsPresent {
-    type Error = TeslaStateErr;
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
-        match payload.as_str() {
-            "true" => Ok(TeslaUserIsPresent::UserPresent),
-            "false" => Ok(TeslaUserIsPresent::UserNotPresent),
-            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-enum TeslaStateErr {
-    #[error("Invalid door state: {0}")]
-    InvalidDoorState(String),
-
-    #[error("Invalid UTF8")]
-    Utf8Error(#[from] std::str::Utf8Error),
-}
-
-fn monitor_tesla_doors(state: &mut State, car_number: usize) {
-    let fo_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<TeslaDoorState>(&format!(
-            "teslamate/cars/{car_number}/frunk_open"
-        ));
-    let to_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<TeslaDoorState>(&format!(
-            "teslamate/cars/{car_number}/trunk_open"
-        ));
-    let do_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<TeslaDoorState>(&format!(
-            "teslamate/cars/{car_number}/doors_open"
-        ));
-    let wo_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<TeslaDoorState>(&format!(
-            "teslamate/cars/{car_number}/windows_open"
-        ));
-    let up_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<TeslaUserIsPresent>(&format!(
-            "teslamate/cars/{car_number}/is_user_present"
-        ));
-
-    let message_sink = state.message_sink.clone();
-
-    let (tx, rx) = create_stateful_entity("tesla_doors");
-
-    spawn(async move {
-        let mut fo_s = fo_rx.subscribe().await;
-        let mut to_s = to_rx.subscribe().await;
-        let mut do_s = do_rx.subscribe().await;
-        let mut wo_s = wo_rx.subscribe().await;
-        let mut up_s = up_rx.subscribe().await;
-
-        loop {
-            select! {
-                Ok((_, _)) = fo_s.recv() => {},
-                Ok((_, _)) = to_s.recv() => {},
-                Ok((_, _)) = do_s.recv() => {},
-                Ok((_, _)) = wo_s.recv() => {},
-                Ok((_, _)) = up_s.recv() => {},
-                else => break,
-            };
-
-            let mut open: Vec<&str> = vec![];
-
-            let maybe_up = up_rx.get_data().await;
-            if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
-                let maybe_fo = fo_rx.get_data().await;
-                let maybe_to = to_rx.get_data().await;
-                let maybe_do = do_rx.get_data().await;
-                let maybe_wo = wo_rx.get_data().await;
-
-                println!(
-                    "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
-                    maybe_fo, maybe_to, maybe_do, maybe_wo, maybe_up
-                );
-
-                if let Some(TeslaDoorState::Open) = maybe_fo {
-                    open.push("frunk")
-                }
-
-                if let Some(TeslaDoorState::Open) = maybe_to {
-                    open.push("trunk")
-                }
-
-                if let Some(TeslaDoorState::Open) = maybe_do {
-                    open.push("doors")
-                }
-
-                if let Some(TeslaDoorState::Open) = maybe_wo {
-                    open.push("windows")
-                }
-            } else {
-                println!("up: {:?}", maybe_up);
-            }
-
-            println!("open: {:?}", open);
-            tx.send(open).await;
-        }
-    });
-
-    let (tx2, rx2) = create_stateful_entity("tesla_doors_delayed");
-    spawn(async move {
-        let mut state = DelayState::Idle;
-        let duration = Duration::from_secs(60);
-        let mut s = rx.subscribe().await;
-
-        loop {
-            select! {
-                Ok((_, v)) = s.recv() => {
-                    println!("delay received: {:?}", v);
-                    let active_value = !v.is_empty();
-                    match (active_value, &state) {
-                        (false, _) => {
-                            state = DelayState::Idle;
-                            tx2.send(v).await;
-                        },
-                        (true, DelayState::Idle) => {
-                            state = DelayState::Delaying(Instant::now() + duration, v);
-                        },
-                        (true, DelayState::Delaying(instant, _)) => {
-                            state = DelayState::Delaying(*instant, v);
-                        },
-                        (true, DelayState::NoDelay) => {
-                            tx2.send(v).await;
-                        },
-                    }
-
-                },
-                Some(()) = maybe_sleep_until(&state) => {
-                    println!("delay timer");
-                    if let DelayState::Delaying(_, v) = state {
-                        tx2.send(v).await;
-                    }
-                    state = DelayState::NoDelay;
-                },
-                else => { break; }
-            }
-        }
-    });
-
-    spawn(async move {
-        let mut s = rx2.subscribe().await;
-        while let Ok((prev, open)) = s.recv().await {
-            println!("out received: {:?} {:?}", prev, open);
-            if prev.is_none() {
-                continue;
-            }
-            let msg = if open.is_empty() {
-                "The Tesla is secure".to_string()
-            } else {
-                format!("The Tesla {} are open", open.join(", "))
-            };
-            message_sink.send(msg).await;
-        }
-    });
-}
-
-fn create_message_sink(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Sender<String> {
-    let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
-    let gate_in = subscriptions.subscribe_into_stateless::<Power>(&gate_topic);
-
-    let (tx, rx) = create_stateless_entity::<String>("messages");
-    tokio::spawn(async move {
-        let mut rx = rx.subscribe().await;
-        while let Ok(msg) = rx.recv().await {
-            println!("{}", msg);
-
-            if let Some(Power::On) = gate_in.get().await {
-                let msg = robotica::string_to_message(&msg, "Brian");
-                mqtt_out.send(msg);
-            }
-        }
-    });
-    tx
-}
-
-enum DelayState<T> {
-    Idle,
-    Delaying(Instant, T),
-    NoDelay,
-}
-
-async fn maybe_sleep_until<T>(state: &DelayState<T>) -> Option<()> {
-    if let DelayState::Delaying(instant, _) = state {
-        sleep_until(*instant).await;
-        Some(())
-    } else {
-        None
-    }
 }

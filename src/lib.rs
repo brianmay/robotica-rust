@@ -22,7 +22,8 @@ use log::error;
 use std::future::Future;
 use tokio::task::JoinHandle;
 
-const PIPE_SIZE: usize = 10;
+/// Size of all pipes.
+pub const PIPE_SIZE: usize = 10;
 
 /// Spawn a task and automatically monitor its execution.
 pub fn spawn<T>(future: T) -> JoinHandle<T::Output>

@@ -1,7 +1,11 @@
 use std::fmt::Display;
 
+use robotica_node_rust::entities::create_stateless_entity;
+use robotica_node_rust::entities::Sender;
 use robotica_node_rust::sources::mqtt::Message;
+use robotica_node_rust::sources::mqtt::MqttOut;
 use robotica_node_rust::sources::mqtt::QoS;
+use robotica_node_rust::sources::mqtt::Subscriptions;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -18,6 +22,9 @@ impl Id {
             device: device.to_string(),
         }
     }
+    // pub fn get_name(&self, postfix: &str) -> String {
+    //     format!("{}_{}_{}", self.location, self.device, postfix)
+    // }
     pub fn get_state_topic(&self, component: &str) -> String {
         format!("state/{}/{}/{}", self.location, self.device, component)
     }
@@ -140,4 +147,26 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
         false,
         QoS::exactly_once(),
     )
+}
+
+pub(crate) fn create_message_sink(
+    subscriptions: &mut Subscriptions,
+    mqtt_out: MqttOut,
+) -> Sender<String> {
+    let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
+    let gate_in = subscriptions.subscribe_into_stateless::<Power>(&gate_topic);
+
+    let (tx, rx) = create_stateless_entity::<String>("messages");
+    tokio::spawn(async move {
+        let mut rx = rx.subscribe().await;
+        while let Ok(msg) = rx.recv().await {
+            println!("{}", msg);
+
+            if let Some(Power::On) = gate_in.get().await {
+                let msg = string_to_message(&msg, "Brian");
+                mqtt_out.send(msg);
+            }
+        }
+    });
+    tx
 }
