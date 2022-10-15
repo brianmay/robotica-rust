@@ -171,7 +171,10 @@ where
     Ok(status)
 }
 
-async fn send_command(stream: &mut TcpStream, out_bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+async fn send_command(
+    stream: &mut TcpStream,
+    out_bytes: &[u8],
+) -> Result<[u8; 13], std::io::Error> {
     let duration = std::time::Duration::from_secs(5);
 
     let result = tokio::time::timeout(duration, async {
@@ -201,8 +204,7 @@ async fn send_command(stream: &mut TcpStream, out_bytes: &[u8]) -> Result<Vec<u8
         ));
     }
 
-    let bytes = in_bytes.to_vec();
-    Ok(bytes)
+    Ok(in_bytes)
 }
 
 #[must_use]
