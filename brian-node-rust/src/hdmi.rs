@@ -82,7 +82,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
                         let output = format!("output{}", output + 1);
                         let topic = id.get_state_topic(&output.to_string());
                         let payload = input;
-                        let message = Message::from_string(&topic, &payload, false, QoS::at_least_once());
+                        let message = Message::from_string(&topic, &payload, true, QoS::at_least_once());
                         mqtt_out.send(message);
                     }
                 },
