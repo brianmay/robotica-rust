@@ -19,7 +19,17 @@ use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
 #[tokio::main]
 async fn main() -> Result<()> {
     Builder::from_default_env()
-        .format(|buf, record| writeln!(buf, "{} {}: {}", utc_now(), record.level(), record.args()))
+        .format(|buf, record| {
+            let module = record.module_path().unwrap_or_default();
+            writeln!(
+                buf,
+                "{} {}: {} {}",
+                utc_now(),
+                record.level(),
+                module,
+                record.args()
+            )
+        })
         .init();
 
     color_backtrace::install();
