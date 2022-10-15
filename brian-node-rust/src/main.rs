@@ -81,11 +81,11 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     //             let announce = format!("Light power changed from {} to {}", prev, current);
 
     //             if let Err(err) = message_sink_temp.send(announce).await {
-    //                 println!("Error sending message: {}", err);
+    //                 error!("Error sending message: {}", err);
     //             }
     //         }
     //         if let Some(msg) = rx.get().await {
-    //             println!("get: {:?}", msg);
+    //             debug!("get: {:?}", msg);
     //         }
     //     }
     // });

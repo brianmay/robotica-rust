@@ -63,7 +63,7 @@ where
     let (tx, rx) = entities::create_stateful_entity(&name);
 
     let handle = spawn(async move {
-        println!("hdmi: Starting with addr {addr:?}");
+        debug!("hdmi: Starting with addr {addr:?}");
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
         let addr = addr;
 
@@ -109,7 +109,7 @@ where
                 }
             }
         }
-        println!("hdmi: Ending");
+        debug!("hdmi: Ending");
     });
 
     (rx, handle)

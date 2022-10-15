@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
+// use log::debug;
 use robotica_node_rust::{
     entities::{create_stateful_entity, StatefulData},
     spawn,
@@ -45,7 +46,7 @@ where
         loop {
             select! {
                 Ok(v) = s.recv() => {
-                    println!("delay received: {:?}", v);
+                    // debug!("delay received: {:?}", v);
                     let active_value = v.is_active();
                     match (active_value, &state) {
                         (false, _) => {
@@ -65,9 +66,11 @@ where
 
                 },
                 Some(()) = maybe_sleep_until(&state) => {
-                    println!("delay timer");
                     if let DelayState::Delaying(_, v) = state {
+                        // debug!("delay timer, sending: {:?}", v);
                         tx_out.send(v).await;
+                    } else {
+                        // debug!("delay timer, not sending anything (shouldn't happen)");
                     }
                     state = DelayState::NoDelay;
                 },

@@ -1,3 +1,4 @@
+use log::debug;
 use robotica_node_rust::{
     devices::hdmi::Command,
     sources::mqtt::{Message, QoS},
@@ -70,7 +71,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         loop {
             select! {
                 Ok((_, status)) = rx_s.recv() => {
-                    println!("HDMI {status:?}");
+                    debug!("HDMI {status:?}");
                     let status = match status {
                         Ok(values) => values,
                         Err(_err) => [None; 4],

@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use log::info;
 use robotica_node_rust::entities::create_stateless_entity;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::sources::mqtt::Message;
@@ -160,7 +161,7 @@ pub(crate) fn create_message_sink(
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
-            println!("{}", msg);
+            info!("Sending message {}", msg);
 
             if let Some(Power::On) = gate_in.get().await {
                 let msg = string_to_message(&msg, "Brian");

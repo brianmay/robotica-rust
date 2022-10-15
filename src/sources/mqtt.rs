@@ -271,7 +271,7 @@ impl MqttClient {
                         },
                         Ok(Event::Outgoing(o)) => {
                             if let Outgoing::Publish(p) = o {
-                                    println!("Published message: {:?}.", p);
+                                    debug!("Published message: {:?}.", p);
                             }
                         },
                         Err(err) => {
@@ -326,7 +326,7 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
             Ok(msg) => {
                 let msg: Message = msg;
                 let topic = &msg.topic;
-                debug!("Incoming mqtt {topic}.");
+                debug!("Received message: {msg:?}.");
                 if let Some(subscription) = subscriptions.get(topic) {
                     subscription.tx.try_send(msg);
                 }

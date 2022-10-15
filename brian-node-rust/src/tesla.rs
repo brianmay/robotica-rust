@@ -1,6 +1,7 @@
 use crate::delays::{delay_input, IsActive};
 
 use super::State;
+use log::debug;
 use robotica_node_rust::entities::create_stateless_entity;
 use robotica_node_rust::sources::mqtt::Message;
 use robotica_node_rust::spawn;
@@ -135,7 +136,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 let maybe_do = do_rx.get_data().await;
                 let maybe_wo = wo_rx.get_data().await;
 
-                println!(
+                debug!(
                     "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
                     maybe_fo, maybe_to, maybe_do, maybe_wo, maybe_up
                 );
@@ -156,10 +157,10 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                     open.push("windows")
                 }
             } else {
-                println!("up: {:?}", maybe_up);
+                debug!("up: {:?}", maybe_up);
             }
 
-            println!("open: {:?}", open);
+            debug!("open: {:?}", open);
             tx.send(open).await;
         }
     });
@@ -170,7 +171,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     spawn(async move {
         let mut s = rx2.subscribe().await;
         while let Ok((prev, open)) = s.recv().await {
-            println!("out received: {:?} {:?}", prev, open);
+            debug!("out received: {:?} {:?}", prev, open);
             if prev.is_none() {
                 continue;
             }
