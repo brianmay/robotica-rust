@@ -18,6 +18,7 @@ use tokio::sync::mpsc;
 use tokio::time::{sleep, Instant};
 
 use crate::entities::{self, StatefulData};
+use crate::is_debug_mode;
 
 /// `QoS` for MQTT messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -415,13 +416,6 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
 
     if let Err(e) = client.try_subscribe_many(topics) {
         error!("Error subscribing to topics: {:?}", e);
-    }
-}
-
-fn is_debug_mode() -> bool {
-    match env::var("DEBUG_MODE") {
-        Ok(value) => value.to_lowercase() == "true",
-        Err(_) => false,
     }
 }
 

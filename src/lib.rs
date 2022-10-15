@@ -19,7 +19,7 @@ pub mod sinks;
 pub mod sources;
 
 use log::error;
-use std::future::Future;
+use std::{env, future::Future};
 use tokio::task::JoinHandle;
 
 /// Size of all pipes.
@@ -43,4 +43,44 @@ where
 
         std::process::exit(1);
     })
+}
+
+/// Is this application being run in debug mode?
+///
+/// For unit tests (not integration tests), this is always true.
+///
+/// If the environment variable `ROBOTICA_DEBUG` is set to true, then this is true.
+///
+/// If being built in dev mode it will be true.
+///
+/// Otherwise, it is false.
+///
+/// Note integration tests will set `ROBOTICA_DEBUG` to false, so that they can test the
+/// production code.
+///
+#[must_use]
+pub fn is_debug_mode() -> bool {
+    if cfg!(test) {
+        return true;
+    }
+
+    if let Ok(value) = env::var("ROBOTICA_DEBUG") {
+        return value.to_lowercase() == "true";
+    }
+
+    if cfg!(debug_assertions) {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_debug_mode() {
+        assert!(is_debug_mode());
+    }
 }

@@ -11,7 +11,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::entities::{self, StatefulData};
+use crate::{
+    entities::{self, StatefulData},
+    is_debug_mode,
+};
 
 /// A command to send to the HDMI matrix.
 #[derive(Debug)]
@@ -134,6 +137,11 @@ where
 {
     let mut status = [None; 4];
 
+    if is_debug_mode() {
+        debug!("Not polling in debug mode");
+        return Ok(status);
+    }
+
     // Note channels are indexed from 1 not 0.
     let mut stream = connect(&addr).await?;
     for output in 1..=4 {
@@ -158,6 +166,11 @@ async fn set_input<A>(
 where
     A: ToSocketAddrs + Send + Sync + Debug,
 {
+    if is_debug_mode() {
+        debug!("Not setting input in debug mode");
+        return Ok(*status);
+    }
+
     let mut status = *status;
     let mut stream = connect(&addr).await?;
     let cmd = get_cmd_switch(input, output);
@@ -173,7 +186,7 @@ where
 
 async fn send_command(
     stream: &mut TcpStream,
-    out_bytes: &[u8],
+    out_bytes: &[u8; 13],
 ) -> Result<[u8; 13], std::io::Error> {
     let duration = std::time::Duration::from_secs(5);
 
