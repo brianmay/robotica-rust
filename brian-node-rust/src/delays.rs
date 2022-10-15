@@ -31,6 +31,7 @@ pub trait IsActive {
 
 pub fn delay_input<T>(
     name: &str,
+    duration: Duration,
     rx: robotica_node_rust::entities::Receiver<T>,
 ) -> robotica_node_rust::entities::Receiver<StatefulData<T>>
 where
@@ -39,7 +40,6 @@ where
     let (tx_out, rx_out) = create_stateful_entity(name);
     spawn(async move {
         let mut state = DelayState::Idle;
-        let duration = Duration::from_secs(60);
         let mut s = rx.subscribe().await;
 
         loop {

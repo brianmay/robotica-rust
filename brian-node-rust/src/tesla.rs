@@ -5,6 +5,7 @@ use robotica_node_rust::entities::create_stateless_entity;
 use robotica_node_rust::sources::mqtt::Message;
 use robotica_node_rust::spawn;
 use std::fmt::Display;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
 
@@ -163,7 +164,8 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         }
     });
 
-    let rx2 = delay_input("tesla_doors (delayed)", rx);
+    let duration = Duration::from_secs(60);
+    let rx2 = delay_input("tesla_doors (delayed)", duration, rx);
 
     spawn(async move {
         let mut s = rx2.subscribe().await;
