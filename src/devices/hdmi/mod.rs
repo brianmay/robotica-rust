@@ -172,12 +172,27 @@ where
 }
 
 async fn send_command(stream: &mut TcpStream, out_bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-    debug!("Sending HDMI command {out_bytes:02X?}");
-    stream.write_all(out_bytes).await?;
+    let duration = std::time::Duration::from_secs(5);
 
-    let mut in_bytes = [0; 13];
-    let _bytes = stream.read_exact(&mut in_bytes).await?;
-    debug!("Receiving HDMI response {in_bytes:02X?}");
+    let result = tokio::time::timeout(duration, async {
+        debug!("Sending HDMI command {out_bytes:02X?}");
+        stream.write_all(out_bytes).await?;
+
+        let mut in_bytes = [0; 13];
+        let _bytes = stream.read_exact(&mut in_bytes).await?;
+        debug!("Receiving HDMI response {in_bytes:02X?}");
+
+        Ok(in_bytes)
+    })
+    .await;
+
+    let in_bytes = match result {
+        Ok(in_bytes) => in_bytes,
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Data timed out",
+        )),
+    }?;
 
     if !check_checksum(in_bytes.as_ref()) {
         return Err(std::io::Error::new(
