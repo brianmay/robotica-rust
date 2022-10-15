@@ -28,5 +28,8 @@ field-ref = "0.2.1"
 [build-dependencies]
 lalrpop = "0.19.3"
 
+[dev-dependencies]
+env_logger = "0.9.1"
+
 [workspace]
 members = ["brian-node-rust"]

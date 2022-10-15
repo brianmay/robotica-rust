@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
 
     color_backtrace::install();
 
-    robotica_node_rust::devices::hdmi::test().await;
+    robotica_node_rust::devices::hdmi::run("hdmi.pri:8000", &Default::default()).await;
 
     http::start().await;
 
