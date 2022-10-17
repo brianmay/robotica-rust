@@ -234,7 +234,7 @@ async fn dispatch_circle_details(
         match get_circle_details(login, circle).await {
             Err(err) => error!("get_circle_details: {err}"),
             Ok(details) => {
-                tx.send(details.members).await;
+                tx.try_send(details.members);
             }
         }
     }

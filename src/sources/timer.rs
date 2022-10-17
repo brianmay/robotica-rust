@@ -16,7 +16,7 @@ pub fn timer(duration: Duration, name: &str) -> entities::Receiver<Instant> {
 
         loop {
             let clone = Instant::now();
-            tx.send(clone).await;
+            tx.try_send(clone);
             interval.tick().await;
         }
     });

@@ -33,12 +33,12 @@ pub struct Sender<T> {
 
 impl<T: Send> Sender<T> {
     /// Send data to the entity.
-    pub async fn send(&self, data: T) {
-        let msg = SendMessage::Set(data);
-        if let Err(err) = self.tx.send(msg).await {
-            error!("send failed: {}", err);
-        }
-    }
+    // pub async fn send(&self, data: T) {
+    //     let msg = SendMessage::Set(data);
+    //     if let Err(err) = self.tx.send(msg).await {
+    //         error!("send failed: {}", err);
+    //     }
+    // }
 
     /// Send data to the entity or fail if buffer is full.
     pub fn try_send(&self, data: T) {
@@ -124,7 +124,7 @@ impl<T: Send + Clone> Receiver<T> {
             while let Ok(data) = sub.recv().await {
                 match U::try_from(data) {
                     Ok(data) => {
-                        tx.send(data).await;
+                        tx.try_send(data);
                     }
                     Err(err) => {
                         error!("{}: parse failed: {}", name, err);
@@ -153,7 +153,7 @@ impl<T: Send + Clone> Receiver<T> {
             while let Ok(data) = sub.recv().await {
                 match U::try_from(data) {
                     Ok(data) => {
-                        tx.send(data).await;
+                        tx.try_send(data);
                     }
                     Err(err) => {
                         error!("{}: parse failed: {}", name, err);
@@ -394,9 +394,9 @@ mod tests {
     #[tokio::test]
     async fn test_stateless_entity() {
         let (tx, rx) = create_stateless_entity::<String>("test");
-        tx.send("hello".to_string()).await;
+        tx.try_send("hello".to_string());
         let mut s = rx.subscribe().await;
-        tx.send("goodbye".to_string()).await;
+        tx.try_send("goodbye".to_string());
 
         let current = s.recv().await.unwrap();
         assert_eq!("hello", current);
@@ -417,9 +417,9 @@ mod tests {
     #[tokio::test]
     async fn test_stateful_entity() {
         let (tx, rx) = create_stateful_entity::<String>("test");
-        tx.send("hello".to_string()).await;
+        tx.try_send("hello".to_string());
         let mut s = rx.subscribe().await;
-        tx.send("goodbye".to_string()).await;
+        tx.try_send("goodbye".to_string());
 
         let (prev, current) = s.recv().await.unwrap();
         assert_eq!(None, prev);

@@ -51,7 +51,7 @@ where
                     match (active_value, &state) {
                         (false, _) => {
                             state = DelayState::Idle;
-                            tx_out.send(v).await;
+                            tx_out.try_send(v);
                         },
                         (true, DelayState::Idle) => {
                             state = DelayState::Delaying(Instant::now() + duration, v);
@@ -60,7 +60,7 @@ where
                             state = DelayState::Delaying(*instant, v);
                         },
                         (true, DelayState::NoDelay) => {
-                            tx_out.send(v).await;
+                            tx_out.try_send(v);
                         },
                     }
 
@@ -68,7 +68,7 @@ where
                 Some(()) = maybe_sleep_until(&state) => {
                     if let DelayState::Delaying(_, v) = state {
                         // debug!("delay timer, sending: {:?}", v);
-                        tx_out.send(v).await;
+                        tx_out.try_send(v);
                     } else {
                         // debug!("delay timer, not sending anything (shouldn't happen)");
                     }

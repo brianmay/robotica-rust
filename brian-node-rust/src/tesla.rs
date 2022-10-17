@@ -161,7 +161,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             }
 
             debug!("open: {:?}", open);
-            tx.send(open).await;
+            tx.try_send(open);
         }
     });
 
@@ -182,7 +182,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             } else {
                 format!("The Tesla {} are open", open.join(", "))
             };
-            message_sink.send(msg).await;
+            message_sink.try_send(msg);
         }
     });
 }

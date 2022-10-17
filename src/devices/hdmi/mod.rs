@@ -79,11 +79,11 @@ where
                         match poll(&addr).await {
                             Ok(new_status) => {
                                 status = new_status;
-                                tx.send(Ok(status)).await;
+                                tx.try_send(Ok(status));
                             },
                             Err(e) => {
                                 error!("hdmi: error polling {addr:?}: {e}");
-                                tx.send(Err(Error::IoError(e.to_string()))).await;
+                                tx.try_send(Err(Error::IoError(e.to_string())));
                             }
                         }
                     }
@@ -96,11 +96,11 @@ where
                             match set_input(&addr, input, output, &status).await {
                                 Ok(new_status) => {
                                     status = new_status;
-                                    tx.send(Ok(status)).await;
+                                    tx.try_send(Ok(status));
                                 },
                                 Err(e) => {
                                     error!("hdmi: error setting input {addr:?}: {e}");
-                                    tx.send(Err(Error::IoError(e.to_string()))).await;
+                                    tx.try_send(Err(Error::IoError(e.to_string())));
                                 }
                             }
                         }
