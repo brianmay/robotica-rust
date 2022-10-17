@@ -23,9 +23,9 @@ impl Id {
             device: device.to_string(),
         }
     }
-    // pub fn get_name(&self, postfix: &str) -> String {
-    //     format!("{}_{}_{}", self.location, self.device, postfix)
-    // }
+    pub fn get_name(&self, postfix: &str) -> String {
+        format!("{}_{}_{}", self.location, self.device, postfix)
+    }
     pub fn get_state_topic(&self, component: &str) -> String {
         format!("state/{}/{}/{}", self.location, self.device, component)
     }

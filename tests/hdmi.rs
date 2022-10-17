@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 
 use robotica_node_rust::{
     devices::hdmi::{Command, Options},
-    PIPE_SIZE,
+    entities,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -121,19 +121,19 @@ async fn test_client_once() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, rx) = mpsc::channel(PIPE_SIZE);
+    let (client, rx) = entities::create_stateless_entity("test");
     let (rx, client_handle) = robotica_node_rust::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
-    client.send(Command::SetInput(2, 1)).await.unwrap();
+    client.try_send(Command::SetInput(2, 1));
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
     assert_eq!(state, Ok([Some(2), None, None, None]));
 
     println!("test: Shutting down client");
-    client.send(Command::Shutdown).await.unwrap();
+    client.try_send(Command::Shutdown);
     client_handle.await.unwrap();
 
     println!("test: Shutting down server");
@@ -157,12 +157,12 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, rx) = mpsc::channel(PIPE_SIZE);
+    let (client, rx) = entities::create_stateless_entity("test");
     let (rx, client_handle) = robotica_node_rust::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
-    client.send(Command::SetInput(2, 1)).await.unwrap();
+    client.try_send(Command::SetInput(2, 1));
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
@@ -175,14 +175,14 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: sending test command after server restart");
-    client.send(Command::SetInput(3, 2)).await.unwrap();
+    client.try_send(Command::SetInput(3, 2));
 
     println!("test: waiting for client to finish");
     let (_, state) = rx_s.recv().await.unwrap();
     assert_eq!(state, Ok([Some(2), Some(3), None, None]));
 
     println!("test: Shutting down client");
-    client.send(Command::Shutdown).await.unwrap();
+    client.try_send(Command::Shutdown);
     client_handle.await.unwrap();
 
     println!("test: Shutting down server");

@@ -1,12 +1,13 @@
 use log::debug;
 use robotica_node_rust::{
     devices::hdmi::Command,
+    entities,
     sources::mqtt::{Message, QoS},
-    spawn, PIPE_SIZE,
+    spawn,
 };
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::{select, sync::mpsc};
+use tokio::select;
 
 use crate::{robotica::Id, State};
 
@@ -45,7 +46,8 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         .subscriptions
         .subscribe_into_stateful::<RoboticaCommand>(&topic);
 
-    let (tx, rx) = mpsc::channel(PIPE_SIZE);
+    let name = id.get_name("hdmi");
+    let (tx, rx) = entities::create_stateless_entity(&name);
 
     spawn(async move {
         let mut rx_s = command_rx.subscribe().await;
@@ -54,7 +56,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
             select! {
                 Ok((_, command)) = rx_s.recv() => {
                     let command = Command::SetInput(command.input, command.output);
-                    tx.send(command).await.unwrap();
+                    tx.try_send(command);
                 },
                 else => break,
             };

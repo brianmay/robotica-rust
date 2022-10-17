@@ -7,7 +7,6 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, ToSocketAddrs},
     select, spawn,
-    sync::mpsc,
     task::JoinHandle,
 };
 
@@ -17,7 +16,7 @@ use crate::{
 };
 
 /// A command to send to the HDMI matrix.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Command {
     /// Set input for output.
     SetInput(u8, u8),
@@ -49,7 +48,7 @@ pub enum Error {
 /// This function will return an error if the connection to the HDMI matrix fails.
 pub fn run<A>(
     addr: A,
-    mut rx_cmd: mpsc::Receiver<Command>,
+    rx_cmd: entities::Receiver<Command>,
     options: &Options,
 ) -> (
     entities::Receiver<StatefulData<Result<Status, Error>>>,
@@ -64,6 +63,7 @@ where
 
     let handle = spawn(async move {
         debug!("hdmi: Starting with addr {addr:?}");
+        let mut rx_cmd_s = rx_cmd.subscribe().await;
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
         let addr = addr;
 
@@ -89,7 +89,7 @@ where
                     }
                 }
 
-                Some(cmd) = rx_cmd.recv() => {
+                Ok(cmd) = rx_cmd_s.recv() => {
                     debug!("hdmi: Received command {cmd:?} for {addr:?}");
                     match cmd {
                         Command::SetInput(input, output) => {
