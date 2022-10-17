@@ -189,7 +189,7 @@ pub struct MqttOut(mpsc::Sender<MqttMessage>);
 
 impl MqttOut {
     /// Send a message to the MQTT broker.
-    pub fn send(&self, msg: Message) {
+    pub fn try_send(&self, msg: Message) {
         let _ = self
             .0
             .try_send(MqttMessage::MqttOut(msg))

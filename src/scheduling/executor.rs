@@ -86,13 +86,13 @@ impl<T: TimeZone + Debug> State<T> {
         info!("Tags: {:?}", tags);
         let message = serde_json::to_string(&tags).unwrap();
         let message = Message::from_string("test/tags", &message, true, QoS::exactly_once());
-        self.mqtt_out.send(message);
+        self.mqtt_out.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let message = serde_json::to_string(&sequences).unwrap();
         let message = Message::from_string("test/sequences", &message, true, QoS::exactly_once());
-        self.mqtt_out.send(message);
+        self.mqtt_out.try_send(message);
     }
 
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
@@ -280,7 +280,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                             for task in &sequence.tasks {
                                 for message in task.get_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
-                                    state.mqtt_out.send(message.clone());
+                                    state.mqtt_out.try_send(message.clone());
                                 }
                             }
                             state.sequences.pop_front();

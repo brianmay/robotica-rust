@@ -165,7 +165,7 @@ pub(crate) fn create_message_sink(
 
             if let Some(Power::On) = gate_in.get().await {
                 let msg = string_to_message(&msg, "Brian");
-                mqtt_out.send(msg);
+                mqtt_out.try_send(msg);
             }
         }
     });
