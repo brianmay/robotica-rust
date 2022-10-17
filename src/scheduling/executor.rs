@@ -91,7 +91,7 @@ impl<T: TimeZone + Debug> State<T> {
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let message = serde_json::to_string(&sequences).unwrap();
-        let message = Message::from_string("test/sequences", &message, false, QoS::exactly_once());
+        let message = Message::from_string("test/sequences", &message, true, QoS::exactly_once());
         self.mqtt_out.send(message);
     }
 
