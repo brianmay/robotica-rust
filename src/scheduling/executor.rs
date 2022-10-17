@@ -84,7 +84,7 @@ impl<T: TimeZone + Debug> State<T> {
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
         let message = serde_json::to_string(&tags).unwrap();
-        let message = Message::from_string("test/tags", &message, false, QoS::exactly_once());
+        let message = Message::from_string("test/tags", &message, true, QoS::exactly_once());
         self.mqtt_out.send(message);
     }
 
