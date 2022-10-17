@@ -168,8 +168,8 @@ impl<T: Send + Clone> Receiver<T> {
 
 impl<T: Send + Clone> Receiver<StatefulData<T>> {
     /// Get the most recent value from the entity.
-    pub async fn get_data(&self) -> Option<T> {
-        self.get().await.map(|(_prev, curr)| curr)
+    pub async fn get_current(&self) -> Option<T> {
+        self.get().await.map(|(_prev, current)| current)
     }
 }
 
@@ -244,8 +244,8 @@ impl<T: Send + Clone> Subscription<StatefulData<T>> {
     /// # Errors
     ///
     /// Returns `RecvError::Closed` if the entity is closed.
-    pub async fn recv_data(&mut self) -> Result<T, RecvError> {
-        self.recv().await.map(|(_prev, curr)| curr)
+    pub async fn recv_current(&mut self) -> Result<T, RecvError> {
+        self.recv().await.map(|(_prev, current)| current)
     }
 
     /// Get the next value but don't wait for it. Returns `None` if there is no value.
@@ -253,8 +253,9 @@ impl<T: Send + Clone> Subscription<StatefulData<T>> {
     /// # Errors
     ///
     /// Returns `RecvError::Closed` if the entity is closed.
-    pub fn try_recv_data(&mut self) -> Result<Option<T>, RecvError> {
-        self.try_recv().map(|opt| opt.map(|(_prev, curr)| curr))
+    pub fn try_recv_current(&mut self) -> Result<Option<T>, RecvError> {
+        self.try_recv()
+            .map(|opt| opt.map(|(_prev, current)| current))
     }
 }
 

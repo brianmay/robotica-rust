@@ -129,12 +129,12 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
             let mut open: Vec<&str> = vec![];
 
-            let maybe_up = up_rx.get_data().await;
+            let maybe_up = up_rx.get_current().await;
             if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
-                let maybe_fo = fo_rx.get_data().await;
-                let maybe_to = to_rx.get_data().await;
-                let maybe_do = do_rx.get_data().await;
-                let maybe_wo = wo_rx.get_data().await;
+                let maybe_fo = fo_rx.get_current().await;
+                let maybe_to = to_rx.get_current().await;
+                let maybe_do = do_rx.get_current().await;
+                let maybe_wo = wo_rx.get_current().await;
 
                 debug!(
                     "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
