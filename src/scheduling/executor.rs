@@ -49,6 +49,7 @@ impl<T: TimeZone + Debug> State<T> {
             self.sequences = sequences;
         }
 
+        self.publish_sequences(&self.sequences);
         self.timer = self.get_next_timer(now);
     }
 
@@ -247,7 +248,6 @@ pub enum ExecutorError {
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt_out)?;
-    state.publish_sequences(&state.sequences);
     let mark_rx = subscriptions.subscribe_into_stateless::<Mark>("mark");
 
     spawn(async move {
