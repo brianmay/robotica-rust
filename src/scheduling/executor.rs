@@ -275,7 +275,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                             state.sequences.pop_front();
                         } else if now < sequence.latest_time {
                             // Send message.
-                            debug!("Processing step {sequence:?}");
+                            info!("Processing step {sequence:?}");
                             for task in &sequence.tasks {
                                 for message in task.get_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
