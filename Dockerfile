@@ -5,23 +5,6 @@ RUN apt-get update \
     && apt-get install -y cmake \
     && rm -rf /var/lib/apt/lists/*
 
-COPY ./Cargo.toml Cargo.lock ./
-COPY ./brian-node-rust/Cargo.toml ./brian-node-rust/Cargo.toml
-RUN mkdir src \
-    && touch src/lib.rs \
-    && mkdir brian-node-rust/src \
-    && touch brian-node-rust/src/lib.rs \
-    && cargo build --release \
-    && rm -rf src brian-node-rust/src
-
-ADD build.rs ./
-ADD src ./src
-RUN mkdir brian-node-rust/src \
-    && touch brian-node-rust/src/lib.rs \
-    && cargo build --release \
-    && cargo build --release -p brian-node-rust\
-    && rm -rf src brian-node-rust
-
 ADD . ./
 RUN cargo build --release -p brian-node-rust
 RUN ls -l /brian-node-rust/target/release/brian-node-rust
