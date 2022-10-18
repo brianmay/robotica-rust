@@ -1,5 +1,6 @@
 //! Run tasks based on schedule.
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::env::{self, VarError};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
@@ -21,6 +22,7 @@ struct Config {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
+    hostname: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,14 +86,16 @@ impl<T: TimeZone + Debug> State<T> {
 
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
+        let topic = format!("robotica/{}/tags", self.config.hostname);
         let message = serde_json::to_string(&tags).unwrap();
-        let message = Message::from_string("test/tags", &message, true, QoS::exactly_once());
+        let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
         self.mqtt_out.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
+        let topic = format!("schedule/{}", self.config.hostname);
         let message = serde_json::to_string(&sequences).unwrap();
-        let message = Message::from_string("test/sequences", &message, true, QoS::exactly_once());
+        let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
         self.mqtt_out.try_send(message);
     }
 
@@ -229,16 +233,20 @@ fn expire_marks(marks: &mut HashMap<String, Mark>, now: &DateTime<Utc>) {
 #[derive(Error, Debug)]
 pub enum ExecutorError {
     /// A classifier config error occurred.
-    #[error("Classifier Config Error {0}")]
+    #[error("Classifier Config Error: {0}")]
     ClassifierConfigError(#[from] classifier::ConfigError),
 
     /// A Scheduler config error occurred.
-    #[error("Scheduler Config Error {0}")]
+    #[error("Scheduler Config Error: {0}")]
     SchedulerConfigError(#[from] scheduler::ConfigError),
 
     /// A Sequencer config error occurred.
-    #[error("Sequencer Config Error {0}")]
+    #[error("Sequencer Config Error: {0}")]
     SequencerConfigError(#[from] sequencer::ConfigError),
+
+    /// The hostname could not be determined.
+    #[error("Could not determine hostname: {0}")]
+    HostnameError(#[from] VarError),
 }
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
@@ -311,6 +319,7 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = DateTime::from(Utc::now());
     let date = now.with_timezone::<Local>(&timezone).date();
+    let hostname = env::var("HOSTNAME")?;
 
     let state = {
         let config = {
@@ -321,6 +330,7 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
                 classifier,
                 scheduler,
                 sequencer,
+                hostname,
             }
         };
 
