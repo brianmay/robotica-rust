@@ -29,6 +29,11 @@ RUN ls -l /brian-node-rust/target/release/brian-node-rust
 FROM debian:bullseye-slim
 ARG APP=/usr/src/app
 
+ARG BUILD_DATE=date
+ARG VCS_REF=vcs
+ENV BUILD_DATE=${BUILD_DATE}
+ENV VCS_REF=${VCS_REF}
+
 RUN apt-get update \
     && apt-get install -y ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
