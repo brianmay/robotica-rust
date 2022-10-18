@@ -66,7 +66,7 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     tesla::monitor_tesla_doors(&mut state, 1);
 
     executor(&mut state.subscriptions, state.mqtt_out).unwrap_or_else(|err| {
-        error!("Failed to start executor: {}", err);
+        panic!("Failed to start executor: {}", err);
     });
 
     // let message_sink_temp = state.message_sink.clone();
