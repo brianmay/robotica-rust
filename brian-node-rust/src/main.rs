@@ -8,7 +8,6 @@ use std::io::Write;
 
 use anyhow::Result;
 use env_logger::Builder;
-use log::error;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::scheduling::executor::executor;
 use robotica_node_rust::scheduling::types::utc_now;
