@@ -94,3 +94,35 @@ Still to be implemented:
 * Not many building blocks supports. Still use node-red for some stuff, and this sends mqtt messages that we can intercept here.
 
 * Tools to debug flows easily.
+
+## Home Assistant
+
+I should have looked seriously at this a lot earlier. But I has obsessed with the "Not invented here" tendency. In hindsight, while
+I am not completely fond of the YAML based language, it is does have good points, and I have tried to integrate some of these
+into my project.
+
+Good points:
+
+* Automatic logging of state.
+* Has support for lots of devices.
+* Automatic detections and configuration of devices.
+* The ability to inspect the current state of an entity, without waiting for an incoming event helps simplify things.  This is possible in node-red, but you read value into global yourself.
+* Entities have type information.
+* Active development.
+* Mobile phone apps with lots of sensors for observation.
+* Python based.
+
+Not so good points:
+
+* Poor security model. If you want to connect somebody's mobile phone via the app, then this person gets complete access to all data on the system. Including from other mobile phones. This cannot be restricted in anyway. A login - required to connect the mobile app - gives full access to the Map, Logbook, and History menu items. If everybody in my household got to see where everyone else was at all times, there would be huge arguments. There has been a long standing issue on this [#7361](https://github.com/home-assistant/frontend/discussions/7361).
+* Automations/scripts language is ugly YAML based language, without any ability for type checking.
+* Changing the type of the entity won't cause Automations/scripts that are broken to become obvious in anyway.
+* Automations GUI, while getting better, still makes it hard to visualize and manipulate structure of code.
+* It is easy to make accidental changes or break things without realizing.
+* While it is possible to use git to track changes to some of the files, this is not supported by the GUI interface.
+* Also not so easy to store some stuff (e.g. entities created with the gui) in git.
+* The organisation of automations vs scripts is poor. Looking at the scripts, for example, it is not possible to tell where it is used. Maybe this is a legacy script, not used any more?  Should I delete it? Not possible to group related entities/automations/scripts together.
+* Home assistant logs are very verbose and log events that look like errors but in actual fact entirely normal. Such as not starting a script because it is already running, and this is what you told it to do.
+
+While there are good points to Home Assistant what I really want is to be able to used compiled code. Code that can
+be easily committed to git using standard workflows. Code that get strongly typed checked during compilation. Tests that can be run before code gets deployed.
