@@ -8,7 +8,7 @@ pub async fn start() {
         let build_date = env::var("BUILD_DATE").unwrap_or_else(|_| "unknown".to_string());
         let vcs_ref = env::var("VCS_REF").unwrap_or_else(|_| "unknown".to_string());
         let hello_string = format!(
-            "Hello from Brian! Build date: {}, VCS ref: {}",
+            "Hello from Robotica! Build date: {}, VCS ref: {}",
             build_date, vcs_ref
         );
 
