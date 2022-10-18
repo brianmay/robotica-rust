@@ -75,7 +75,6 @@ where
                     if options.disable_polling  {
                         debug!("hdmi: disabled polling {addr:?}");
                     } else {
-                        debug!("hdmi: polling {addr:?}");
                         match poll(&addr).await {
                             Ok(new_status) => {
                                 status = new_status;
@@ -138,9 +137,11 @@ where
     let mut status = [None; 4];
 
     if is_debug_mode() {
-        debug!("Not polling in debug mode");
+        debug!("hdmi: Not polling in debug mode");
         return Ok(status);
     }
+
+    debug!("hdmi: polling {addr:?}");
 
     // Note channels are indexed from 1 not 0.
     let mut stream = connect(&addr).await?;
@@ -152,7 +153,7 @@ where
         if let Some(v) = status.get_mut((output - 1) as usize) {
             *v = Some(input);
         }
-        debug!("Got HDMI response {} {}", input, output);
+        debug!("hdmi: Got HDMI response {} {}", input, output);
     }
     Ok(status)
 }
@@ -167,7 +168,7 @@ where
     A: ToSocketAddrs + Send + Sync + Debug,
 {
     if is_debug_mode() {
-        debug!("Not setting input in debug mode");
+        debug!("hdmi: Not setting input in debug mode");
         return Ok(*status);
     }
 
@@ -180,7 +181,7 @@ where
     if let Some(v) = status.get_mut((output - 1) as usize) {
         *v = Some(input);
     }
-    debug!("Got HDMI response {} {}", input, output);
+    debug!("hdmi: Got HDMI response {} {}", input, output);
     Ok(status)
 }
 
@@ -191,12 +192,12 @@ async fn send_command(
     let duration = std::time::Duration::from_secs(5);
 
     let result = tokio::time::timeout(duration, async {
-        debug!("Sending HDMI command {out_bytes:02X?}");
+        debug!("hdmi: Sending HDMI command {out_bytes:02X?}");
         stream.write_all(out_bytes).await?;
 
         let mut in_bytes = [0; 13];
         let _bytes = stream.read_exact(&mut in_bytes).await?;
-        debug!("Receiving HDMI response {in_bytes:02X?}");
+        debug!("hdmi: Receiving HDMI response {in_bytes:02X?}");
 
         Ok(in_bytes)
     })
