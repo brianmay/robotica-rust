@@ -47,6 +47,12 @@ impl<T: Send> Sender<T> {
             error!("send failed: {}", err);
         }
     }
+
+    /// Is the remote end of the channel closed?
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_closed()
+    }
 }
 
 /// Receive a value from an entity.
@@ -115,7 +121,7 @@ impl<T: Send + Clone> Receiver<T> {
         U: TryFrom<T> + Clone + Eq + Send + 'static,
         <U as TryFrom<T>>::Error: Send + std::error::Error,
     {
-        let name = format!("{} (translated)", self.name);
+        let name = format!("{} (translate_into_stateless)", self.name);
         let (tx, rx) = create_stateless_entity(&name);
 
         spawn(async move {
@@ -129,6 +135,11 @@ impl<T: Send + Clone> Receiver<T> {
                     Err(err) => {
                         error!("{}: parse failed: {}", name, err);
                     }
+                }
+
+                if tx.is_closed() {
+                    debug!("{}: tx closed, exiting", name);
+                    break;
                 }
             }
         });
@@ -144,7 +155,7 @@ impl<T: Send + Clone> Receiver<T> {
         U: TryFrom<T> + Clone + Eq + Send + 'static,
         <U as TryFrom<T>>::Error: Send + std::error::Error,
     {
-        let name = format!("{} (translated)", self.name);
+        let name = format!("{} (translate_into_stateful)", self.name);
         let (tx, rx) = create_stateful_entity(&name);
 
         spawn(async move {
@@ -158,6 +169,11 @@ impl<T: Send + Clone> Receiver<T> {
                     Err(err) => {
                         error!("{}: parse failed: {}", name, err);
                     }
+                }
+
+                if tx.is_closed() {
+                    debug!("{}: tx closed, exiting", name);
+                    break;
                 }
             }
         });
