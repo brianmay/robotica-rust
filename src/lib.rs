@@ -20,6 +20,7 @@ pub mod sources;
 
 use log::error;
 use std::{env, future::Future};
+use thiserror::Error;
 use tokio::task::JoinHandle;
 
 /// Size of all pipes.
@@ -73,6 +74,31 @@ pub fn is_debug_mode() -> bool {
     }
 
     false
+}
+
+/// An error that can occur when getting and environment variable.
+#[derive(Error, Debug)]
+pub enum EnvironmentError {
+    /// The environment variable is not set.
+    #[error("The environment variable {0} is not set")]
+    NotSet(String),
+
+    /// The environment variable is not valid UTF-8.
+    #[error("The environment variable {0} is not valid UTF-8")]
+    NotUtf8(String),
+}
+
+/// Get environment variable and return usable error.
+///
+/// # Errors
+///
+/// If the environment variable is not set, or is not valid UTF-8, then an error is returned.
+pub fn get_env(name: &str) -> Result<String, EnvironmentError> {
+    match env::var(name) {
+        Ok(value) => Ok(value),
+        Err(env::VarError::NotPresent) => Err(EnvironmentError::NotSet(name.to_string())),
+        Err(env::VarError::NotUnicode(_)) => Err(EnvironmentError::NotUtf8(name.to_string())),
+    }
 }
 
 #[cfg(test)]

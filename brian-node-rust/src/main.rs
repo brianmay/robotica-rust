@@ -4,36 +4,17 @@ mod http;
 mod robotica;
 mod tesla;
 
-use std::io::Write;
-
 use anyhow::Result;
-use env_logger::Builder;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::scheduling::executor::executor;
-use robotica_node_rust::scheduling::types::utc_now;
 
 use robotica_node_rust::sources::mqtt::MqttOut;
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    Builder::from_default_env()
-        .format(|buf, record| {
-            let module = record.module_path().unwrap_or_default();
-            writeln!(
-                buf,
-                "{} {}: {} {}",
-                utc_now(),
-                record.level(),
-                module,
-                record.args()
-            )
-        })
-        .init();
-
+    tracing_subscriber::fmt::init();
     color_backtrace::install();
-
-    http::start().await;
 
     let (mqtt, mqtt_out) = MqttClient::new();
 
@@ -61,6 +42,7 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
         message_sink,
     };
 
+    http::run(&mut state).await.expect("HTTP server failed");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
 

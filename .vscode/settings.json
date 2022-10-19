@@ -3,6 +3,7 @@
         "accum",
         "Addrs",
         "asyncio",
+        "axum",
         "Behavior",
         "brianmay",
         "chrono",
@@ -27,6 +28,7 @@
         "mqttbytes",
         "nolocal",
         "noncommercially",
+        "OIDC",
         "oneshot",
         "paho",
         "reqwest",
@@ -44,6 +46,7 @@
         "unnested",
         "vars",
         "webpki",
-        "wifi"
+        "wifi",
+        "Writable"
     ]
 }
