@@ -201,6 +201,9 @@ async fn oidc_callback(
                         p { (err) }
                     }
                 }
+                p {
+                    a href=(root_url) { "Home" }
+                }
             }
         }
     )
