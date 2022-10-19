@@ -8,7 +8,7 @@ use anyhow::Result;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::scheduling::executor::executor;
 
-use robotica_node_rust::sources::mqtt::MqttOut;
+use robotica_node_rust::sources::mqtt::Mqtt;
 use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
@@ -16,10 +16,10 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
 
-    let (mqtt, mqtt_out) = MqttClient::new();
+    let (mqtt_client, mqtt) = MqttClient::new();
 
-    let subscriptions: Subscriptions = setup_pipes(mqtt_out).await;
-    mqtt.do_loop(subscriptions).await?;
+    let subscriptions: Subscriptions = setup_pipes(mqtt).await;
+    mqtt_client.do_loop(subscriptions).await?;
 
     Ok(())
 }
@@ -27,18 +27,18 @@ async fn main() -> Result<()> {
 pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
-    mqtt_out: MqttOut,
+    mqtt: Mqtt,
     message_sink: Sender<String>,
 }
 
-async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
+async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
-    let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt_out.clone());
+    let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt.clone());
 
     let mut state = State {
         subscriptions,
-        mqtt_out,
+        mqtt,
         message_sink,
     };
 
@@ -46,7 +46,7 @@ async fn setup_pipes(mqtt_out: MqttOut) -> Subscriptions {
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
 
-    executor(&mut state.subscriptions, state.mqtt_out).unwrap_or_else(|err| {
+    executor(&mut state.subscriptions, state.mqtt).unwrap_or_else(|err| {
         panic!("Failed to start executor: {}", err);
     });
 

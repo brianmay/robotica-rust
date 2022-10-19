@@ -10,9 +10,7 @@ use axum_sessions::{async_session::MemoryStore, extractors::WritableSession};
 use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
 use maud::{html, Markup};
-use robotica_node_rust::{
-    entities::Sender, get_env, sources::mqtt::MqttOut, spawn, EnvironmentError,
-};
+use robotica_node_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
 use thiserror::Error;
 
 use crate::State;
@@ -22,7 +20,7 @@ use self::urls::generate_url_or_default;
 
 pub(crate) struct HttpState {
     #[allow(dead_code)]
-    mqtt_out: MqttOut,
+    mqtt: Mqtt,
     #[allow(dead_code)]
     message_sink: Sender<String>,
     root_url: reqwest::Url,
@@ -46,7 +44,7 @@ pub enum HttpError {
 
 pub async fn run(state: &mut State) -> Result<(), HttpError> {
     let http_state = HttpState {
-        mqtt_out: state.mqtt_out.clone(),
+        mqtt: state.mqtt.clone(),
         message_sink: state.message_sink.clone(),
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
     };

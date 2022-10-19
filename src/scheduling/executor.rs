@@ -11,7 +11,7 @@ use tokio::select;
 use tokio::time::Instant;
 
 use crate::scheduling::types::utc_now;
-use crate::sources::mqtt::{Message, MqttOut, QoS, Subscriptions};
+use crate::sources::mqtt::{Message, Mqtt, QoS, Subscriptions};
 use crate::spawn;
 
 use super::sequencer::Sequence;
@@ -39,7 +39,7 @@ struct State<T: TimeZone> {
     marks: HashMap<String, Mark>,
     timezone: T,
     config: Config,
-    mqtt_out: MqttOut,
+    mqtt: Mqtt,
 }
 
 impl<T: TimeZone + Debug> State<T> {
@@ -89,14 +89,14 @@ impl<T: TimeZone + Debug> State<T> {
         let topic = format!("robotica/{}/tags", self.config.hostname);
         let message = serde_json::to_string(&tags).unwrap();
         let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
-        self.mqtt_out.try_send(message);
+        self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
         let message = serde_json::to_string(&sequences).unwrap();
         let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
-        self.mqtt_out.try_send(message);
+        self.mqtt.try_send(message);
     }
 
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
@@ -254,8 +254,8 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<(), ExecutorError> {
-    let mut state = get_initial_state(mqtt_out)?;
+pub fn executor(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Result<(), ExecutorError> {
+    let mut state = get_initial_state(mqtt)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Mark>("mark");
 
     spawn(async move {
@@ -288,7 +288,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
                             for task in &sequence.tasks {
                                 for message in task.get_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
-                                    state.mqtt_out.try_send(message.clone());
+                                    state.mqtt.try_send(message.clone());
                                 }
                             }
                             state.sequences.pop_front();
@@ -315,7 +315,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt_out: MqttOut) -> Result<
     Ok(())
 }
 
-fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
+fn get_initial_state(mqtt: Mqtt) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = DateTime::from(Utc::now());
     let date = now.with_timezone::<Local>(&timezone).date();
@@ -345,7 +345,7 @@ fn get_initial_state(mqtt_out: MqttOut) -> Result<State<Local>, ExecutorError> {
             marks,
             timezone,
             config,
-            mqtt_out,
+            mqtt,
         }
     };
     let sequences = state.get_sequences_all(state.date);

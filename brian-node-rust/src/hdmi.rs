@@ -63,7 +63,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
         }
     });
 
-    let mqtt_out = state.mqtt_out.clone();
+    let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
     let (rx, _) = robotica_node_rust::devices::hdmi::run(addr, rx, &Default::default());
 
@@ -86,7 +86,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
                         let topic = id.get_state_topic(&output.to_string());
                         let payload = input;
                         let message = Message::from_string(&topic, &payload, true, QoS::at_least_once());
-                        mqtt_out.try_send(message);
+                        mqtt.try_send(message);
                     }
                 },
                 else => break,

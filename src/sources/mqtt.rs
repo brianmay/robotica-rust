@@ -4,21 +4,21 @@ use log::{debug, error, info, warn};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish};
-use rumqttc::v5::{AsyncClient, Event, Incoming, MqttOptions};
+use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::num::ParseIntError;
+use std::str;
 use std::str::Utf8Error;
 use std::time::Duration;
-use std::{env, str};
 use thiserror::Error;
 use tokio::select;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Instant};
 
-use crate::entities::{self, StatefulData};
-use crate::is_debug_mode;
+use crate::entities::{self, Receiver, StatefulData};
+use crate::{get_env, is_debug_mode, EnvironmentError};
 
 /// `QoS` for MQTT messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,17 +161,66 @@ impl TryFrom<Message> for bool {
     }
 }
 
-#[derive(Debug, Clone)]
+/// An error occurred during a `Mqtt` subscribe operation.
+#[derive(Error, Debug)]
+pub enum SubscribeError {
+    /// Send error
+    #[error("Send error")]
+    SendError(),
+
+    /// Receive error
+    #[error("Receive error: {0}")]
+    ReceiveError(#[from] oneshot::error::RecvError),
+
+    /// Client error
+    #[error("Client error: {0}")]
+    ClientError(#[from] ClientError),
+}
+
+#[derive(Debug)]
 enum MqttMessage {
     MqttOut(Message),
+    Subscribe(
+        String,
+        oneshot::Sender<Result<Receiver<Message>, SubscribeError>>,
+    ),
+}
+
+/// Struct used to send outgoing MQTT messages.
+#[derive(Clone)]
+pub struct Mqtt(mpsc::Sender<MqttMessage>);
+
+impl Mqtt {
+    /// Send a message to the MQTT broker.
+    pub fn try_send(&self, msg: Message) {
+        let _ = self
+            .0
+            .try_send(MqttMessage::MqttOut(msg))
+            .map_err(|e| error!("MQTT send error: {}", e));
+    }
+
+    /// Subscribe to a topic and return a receiver for the messages.
+    /// The receiver will be closed when the MQTT connection is closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the subscribe request could not be sent.
+    pub async fn subscribe(&self, topic: &str) -> Result<Receiver<Message>, SubscribeError> {
+        let (tx, rx) = oneshot::channel();
+        self.0
+            .send(MqttMessage::Subscribe(topic.to_string(), tx))
+            .await
+            .map_err(|_| SubscribeError::SendError())?;
+        rx.await?
+    }
 }
 
 /// An error loading the Config.
 #[derive(Error, Debug)]
-pub enum MqttError {
+pub enum MqttClientError {
     /// Environment variable not set.
-    #[error("Environment variable missing {0}")]
-    VarError(String),
+    #[error("Environment variable missing: {0}")]
+    VarError(#[from] EnvironmentError),
 
     /// Environment variable set but invalid.
     #[error("Environment variable {0} invalid {1}")]
@@ -183,34 +232,14 @@ pub struct MqttClient {
     rx: mpsc::Receiver<MqttMessage>,
 }
 
-/// Struct used to send outgoing MQTT messages.
-#[derive(Clone)]
-pub struct MqttOut(mpsc::Sender<MqttMessage>);
-
-impl MqttOut {
-    /// Send a message to the MQTT broker.
-    pub fn try_send(&self, msg: Message) {
-        let _ = self
-            .0
-            .try_send(MqttMessage::MqttOut(msg))
-            .map_err(|e| error!("MQTT send error: {}", e));
-    }
-}
-
-fn get_env(name: &str) -> Result<String, MqttError> {
-    match env::var(name) {
-        Ok(value) => Ok(value),
-        Err(_) => Err(MqttError::VarError(name.to_string())),
-    }
-}
 impl MqttClient {
     /// Create a new MQTT client.
     #[must_use]
-    pub fn new() -> (Self, MqttOut) {
+    pub fn new() -> (Self, Mqtt) {
         // Outgoing MQTT queue.
         let (tx, rx) = mpsc::channel(50);
 
-        (MqttClient { rx }, MqttOut(tx))
+        (MqttClient { rx }, Mqtt(tx))
     }
 
     /// Connect to the MQTT broker and send/receive messages.
@@ -220,12 +249,12 @@ impl MqttClient {
     /// # Errors
     ///
     /// Returns an error if there is a problem with the configuration.
-    pub async fn do_loop(self, subscriptions: Subscriptions) -> Result<(), MqttError> {
+    pub async fn do_loop(self, mut subscriptions: Subscriptions) -> Result<(), MqttClientError> {
         let mqtt_host = get_env("MQTT_HOST")?;
         let mqtt_port = get_env("MQTT_PORT")?;
         let mqtt_port = mqtt_port
             .parse()
-            .map_err(|e| MqttError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
+            .map_err(|e| MqttClientError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
         let username = get_env("MQTT_USERNAME")?;
         let password = get_env("MQTT_PASSWORD")?;
         // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
@@ -307,12 +336,52 @@ impl MqttClient {
                                 }
                             }
                         },
+                        MqttMessage::Subscribe(topic, tx) => {
+                            process_subscribe(&client, &mut subscriptions, &topic, tx);
+                        }
                     }
                 }
                 else => { break; }
             };
         }
         Ok(())
+    }
+}
+
+fn process_subscribe(
+    client: &AsyncClient,
+    subscriptions: &mut Subscriptions,
+    topic: &str,
+    tx: oneshot::Sender<Result<Receiver<Message>, SubscribeError>>,
+) {
+    info!("Subscribing to topic: {}.", topic);
+    let response = if let Some(subscription) = subscriptions.0.get(topic) {
+        Ok(subscription.rx.clone())
+    } else {
+        let (tx, rx) = entities::create_stateless_entity(topic);
+
+        let subscription = Subscription {
+            topic: topic.to_string(),
+            tx,
+            rx: rx.clone(),
+        };
+
+        let filter = topic_to_filter(topic);
+        match client.try_subscribe_many([filter]) {
+            Ok(_) => {
+                info!("Subscribed to topic: {:?}.", topic);
+                subscriptions.0.insert(topic.to_string(), subscription);
+                Ok(rx)
+            }
+            Err(err) => {
+                error!("Failed to subscribe to topics: {:?}.", err);
+                Err(err.into())
+            }
+        }
+    };
+
+    if let Err(err) = tx.send(response) {
+        error!("Failed to send subscribe response: {:?}.", err);
     }
 }
 
@@ -406,13 +475,20 @@ impl Default for Subscriptions {
     }
 }
 
-fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
-    let topics = subscriptions.0.iter().map(|(topic, _)| Filter {
-        path: topic.clone(),
+fn topic_to_filter(topic: &str) -> Filter {
+    Filter {
+        path: topic.to_string(),
         qos: rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
         nolocal: true,
         ..Default::default()
-    });
+    }
+}
+
+fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
+    let topics = subscriptions
+        .0
+        .iter()
+        .map(|(topic, _)| topic_to_filter(topic));
 
     if let Err(e) = client.try_subscribe_many(topics) {
         error!("Error subscribing to topics: {:?}", e);

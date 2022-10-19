@@ -4,7 +4,7 @@ use log::info;
 use robotica_node_rust::entities::create_stateless_entity;
 use robotica_node_rust::entities::Sender;
 use robotica_node_rust::sources::mqtt::Message;
-use robotica_node_rust::sources::mqtt::MqttOut;
+use robotica_node_rust::sources::mqtt::Mqtt;
 use robotica_node_rust::sources::mqtt::QoS;
 use robotica_node_rust::sources::mqtt::Subscriptions;
 use serde::{Deserialize, Serialize};
@@ -150,10 +150,7 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
     )
 }
 
-pub(crate) fn create_message_sink(
-    subscriptions: &mut Subscriptions,
-    mqtt_out: MqttOut,
-) -> Sender<String> {
+pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Sender<String> {
     let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
     let gate_in = subscriptions.subscribe_into_stateless::<Power>(&gate_topic);
 
@@ -165,7 +162,7 @@ pub(crate) fn create_message_sink(
 
             if let Some(Power::On) = gate_in.get().await {
                 let msg = string_to_message(&msg, "Brian");
-                mqtt_out.try_send(msg);
+                mqtt.try_send(msg);
             }
         }
     });

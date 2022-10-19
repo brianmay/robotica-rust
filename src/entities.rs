@@ -56,7 +56,7 @@ impl<T: Send> Sender<T> {
 }
 
 /// Receive a value from an entity.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Receiver<T> {
     name: String,
     tx: mpsc::Sender<ReceiveMessage<T>>,
