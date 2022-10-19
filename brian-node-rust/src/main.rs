@@ -5,11 +5,11 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use robotica_node_rust::entities::Sender;
-use robotica_node_rust::scheduling::executor::executor;
+use robotica_rust::entities::Sender;
+use robotica_rust::scheduling::executor::executor;
 
-use robotica_node_rust::sources::mqtt::Mqtt;
-use robotica_node_rust::sources::mqtt::{MqttClient, Subscriptions};
+use robotica_rust::sources::mqtt::Mqtt;
+use robotica_rust::sources::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {

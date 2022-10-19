@@ -1,4 +1,4 @@
-# robotica-node-rust
+# robotica-rust
 
 Manipulate asynchronous events, using asynchronous tasks.
 

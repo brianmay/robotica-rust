@@ -16,7 +16,7 @@ chrono = "0.4.22"
 chrono-tz = "0.6.3"
 thiserror = "1.0.37"
 color-backtrace = "0.5.1"
-robotica-node-rust = { path = ".." }
+robotica-rust = { path = ".." }
 axum = "0.5.11"
 tracing = "0.1.35"
 tracing-subscriber = "0.3.14"

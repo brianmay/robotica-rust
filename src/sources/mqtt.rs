@@ -261,7 +261,7 @@ impl MqttClient {
 
         let hostname = gethostname::gethostname();
         let hostname = hostname.to_str().unwrap_or("unknown");
-        let client_id = format!("robotica-node-rust-{hostname}");
+        let client_id = format!("robotica-rust-{hostname}");
 
         let mut root_store = rustls::RootCertStore::empty();
         root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {

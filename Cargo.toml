@@ -1,5 +1,5 @@
 [package]
-name = "robotica-node-rust"
+name = "robotica-rust"
 version = "0.1.0"
 edition = "2021"
 

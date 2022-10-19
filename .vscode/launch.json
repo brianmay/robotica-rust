@@ -44,16 +44,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'robotica-node-rust'",
+            "name": "Debug unit tests in library 'robotica-rust'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=robotica-node-rust"
+                    "--package=robotica-rust"
                 ],
                 "filter": {
-                    "name": "robotica-node-rust",
+                    "name": "robotica-rust",
                     "kind": "lib"
                 }
             },

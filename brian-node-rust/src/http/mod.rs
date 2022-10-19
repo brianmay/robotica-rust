@@ -10,7 +10,7 @@ use axum_sessions::{async_session::MemoryStore, extractors::WritableSession};
 use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
 use maud::{html, Markup};
-use robotica_node_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
+use robotica_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
 use thiserror::Error;
 
 use crate::State;

@@ -1,5 +1,5 @@
 use log::debug;
-use robotica_node_rust::{
+use robotica_rust::{
     devices::hdmi::Command,
     entities,
     sources::mqtt::{Message, QoS},
@@ -65,7 +65,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
-    let (rx, _) = robotica_node_rust::devices::hdmi::run(addr, rx, &Default::default());
+    let (rx, _) = robotica_rust::devices::hdmi::run(addr, rx, &Default::default());
 
     spawn(async move {
         let mut rx_s = rx.subscribe().await;

@@ -318,7 +318,7 @@ dependencies = [
  "maud",
  "openid",
  "reqwest",
- "robotica-node-rust",
+ "robotica-rust",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -1711,7 +1711,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "robotica-node-rust"
+name = "robotica-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",

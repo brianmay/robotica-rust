@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate lalrpop_util;
 
-// extern crate robotica_node_rust_macros;
+// extern crate robotica_rust_macros;
 
 pub mod devices;
 pub mod entities;
