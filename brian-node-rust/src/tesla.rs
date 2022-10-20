@@ -28,7 +28,7 @@ impl Display for TeslaDoorState {
 impl TryFrom<Message> for TeslaDoorState {
     type Error = TeslaStateErr;
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         match payload.as_str() {
             "true" => Ok(TeslaDoorState::Open),
             "false" => Ok(TeslaDoorState::Closed),
@@ -55,7 +55,7 @@ impl Display for TeslaUserIsPresent {
 impl TryFrom<Message> for TeslaUserIsPresent {
     type Error = TeslaStateErr;
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         match payload.as_str() {
             "true" => Ok(TeslaUserIsPresent::UserPresent),
             "false" => Ok(TeslaUserIsPresent::UserNotPresent),

@@ -8,6 +8,7 @@ use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fmt;
 use std::num::ParseIntError;
 use std::str;
 use std::str::Utf8Error;
@@ -70,7 +71,7 @@ impl From<QoS> for rumqttc::v5::mqttbytes::QoS {
 }
 
 /// A received/sent MQTT message
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Message {
     /// The topic of the message
     pub topic: String,
@@ -111,6 +112,38 @@ impl Message {
             instant: Instant::now(),
         }
     }
+
+    /// Turn the payload into a string.
+    ///
+    /// # Errors
+    ///
+    /// If the payload is not valid UTF-8.
+    pub fn payload_into_string(&self) -> Result<String, Utf8Error> {
+        Ok(str::from_utf8(&self.payload)?.to_string())
+    }
+}
+
+fn truncate(s: &[u8], max_chars: usize) -> &[u8] {
+    if s.len() > max_chars {
+        &s[..max_chars]
+    } else {
+        s
+    }
+}
+
+impl fmt::Debug for Message {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let payload = truncate(&self.payload, 20);
+
+        formatter
+            .debug_struct("Message")
+            .field("topic", &self.topic)
+            .field("payload", &payload)
+            .field("retain", &self.retain)
+            .field("qos", &self.qos)
+            .field("instant", &self.instant)
+            .finish()
+    }
 }
 
 impl TryFrom<Publish> for Message {
@@ -125,14 +158,6 @@ impl TryFrom<Publish> for Message {
             qos: msg.qos.into(),
             instant: Instant::now(),
         })
-    }
-}
-
-impl TryFrom<Message> for String {
-    type Error = Utf8Error;
-
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        Ok(str::from_utf8(&msg.payload)?.to_string())
     }
 }
 
@@ -152,7 +177,7 @@ impl TryFrom<Message> for bool {
     type Error = BoolError;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         match payload.as_str() {
             "true" => Ok(true),
             "false" => Ok(false),
@@ -280,6 +305,7 @@ impl MqttClient {
         mqtt_options.set_keep_alive(Duration::from_secs(30));
         mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
         mqtt_options.set_credentials(username, password);
+        mqtt_options.set_max_packet_size(100 * 1024, 100 * 10 * 1024);
         // mqtt_options.set_clean_session(false);
 
         let (client, mut event_loop) = AsyncClient::new(mqtt_options, 10);
@@ -509,7 +535,7 @@ mod tests {
             instant: Instant::now(),
         };
 
-        let data: String = msg.try_into().unwrap();
+        let data: String = msg.payload_into_string().unwrap();
         assert_eq!(data, "test");
     }
 

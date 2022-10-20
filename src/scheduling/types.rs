@@ -485,7 +485,7 @@ impl TryFrom<Message> for Mark {
     type Error = MarkError;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         let mark: Mark = serde_json::from_str(&payload)?;
         Ok(mark)
     }

@@ -68,7 +68,7 @@ impl TryFrom<Message> for Power {
     type Error = PowerErr;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         match payload.as_str() {
             "ON" => Ok(Power::On),
             "OFF" => Ok(Power::Off),

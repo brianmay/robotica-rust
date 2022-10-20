@@ -32,7 +32,7 @@ impl TryFrom<Message> for RoboticaCommand {
     type Error = CommandErr;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.try_into()?;
+        let payload: String = msg.payload_into_string()?;
         let mark: RoboticaCommand = serde_json::from_str(&payload)?;
         Ok(mark)
     }

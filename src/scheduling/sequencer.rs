@@ -438,7 +438,7 @@ pub fn get_sequence_with_config(
                 Some(id) => id.clone(),
                 None => format!("{}_{}", sequence_name, sequence_number),
             };
-            for repeat in 0..repeat_count {
+            for repeat in 1..=repeat_count {
                 let sequence = config_to_sequence(
                     sequence_name,
                     config.clone(),
