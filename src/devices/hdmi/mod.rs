@@ -1,7 +1,7 @@
 //! Dodgy HDMI matrix of unknown origin.
 use std::fmt::Debug;
 
-use log::{debug, error};
+use log::{debug, info};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -81,7 +81,7 @@ where
                                 tx.try_send(Ok(status));
                             },
                             Err(e) => {
-                                error!("hdmi: error polling {addr:?}: {e}");
+                                debug!("hdmi: error polling {addr:?}: {e}");
                                 tx.try_send(Err(Error::IoError(e.to_string())));
                             }
                         }
@@ -98,7 +98,7 @@ where
                                     tx.try_send(Ok(status));
                                 },
                                 Err(e) => {
-                                    error!("hdmi: error setting input {addr:?}: {e}");
+                                    info!("hdmi: error setting input {addr:?}: {e}");
                                     tx.try_send(Err(Error::IoError(e.to_string())));
                                 }
                             }
