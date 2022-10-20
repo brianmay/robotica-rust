@@ -27,7 +27,7 @@ use tokio::task::JoinHandle;
 pub const PIPE_SIZE: usize = 10;
 
 /// Spawn a task and automatically monitor its execution.
-pub fn spawn<T>(future: T) -> JoinHandle<T::Output>
+pub fn spawn<T>(future: T) -> JoinHandle<()>
 where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
@@ -38,11 +38,14 @@ where
         let rc = task.await;
 
         match rc {
-            Ok(_rc) => error!("The thread terminated"),
-            Err(err) => error!("The thread aborted with error: {err}"),
+            Ok(_rc) => {
+                error!("The thread terminated normally");
+            }
+            Err(err) => {
+                error!("The thread aborted with error: {err}");
+                std::process::exit(1);
+            }
         };
-
-        std::process::exit(1);
     })
 }
 
