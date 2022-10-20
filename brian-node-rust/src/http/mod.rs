@@ -365,7 +365,7 @@ async fn websocket(stream: WebSocket, state: Arc<HttpState>) {
             }
         }
 
-        debug!("ending recv_task");
+        debug!("recv_task: ending recv_task");
     });
 
     let _ = recv_task.await;

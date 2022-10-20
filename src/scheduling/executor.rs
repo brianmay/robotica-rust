@@ -71,7 +71,7 @@ impl<T: TimeZone + Debug> State<T> {
             // self.sequence = Box::new(steps);
             let tags = self.get_tags(today);
             self.publish_tags(&tags);
-            Some(self.get_sequences_tomorrow(today))
+            Some(self.add_sequences_tomorrow(today))
         } else if today > self.date {
             // If we have travelled forward in time more then one day, regenerate
             // entire events list.
@@ -184,9 +184,9 @@ impl<T: TimeZone + Debug> State<T> {
         sequences
     }
 
-    fn get_sequences_tomorrow(&self, date: Date) -> VecDeque<Sequence> {
-        let date = date + Duration::days(1);
-        let new_schedule = self.get_sequences_for_date(date);
+    fn add_sequences_tomorrow(&self, date: Date) -> VecDeque<Sequence> {
+        let tomorrow = date + Duration::days(1);
+        let new_schedule = self.get_sequences_for_date(tomorrow);
 
         // Allocate result vector.
         let mut sequences = VecDeque::with_capacity(self.sequences.len() + new_schedule.len());
