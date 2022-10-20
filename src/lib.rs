@@ -18,7 +18,7 @@ pub mod scheduling;
 pub mod sinks;
 pub mod sources;
 
-use log::error;
+use log::{debug, error};
 use std::{env, future::Future};
 use thiserror::Error;
 use tokio::task::JoinHandle;
@@ -39,7 +39,7 @@ where
 
         match rc {
             Ok(_rc) => {
-                error!("The thread terminated normally");
+                debug!("The thread terminated normally");
             }
             Err(err) => {
                 error!("The thread aborted with error: {err}");

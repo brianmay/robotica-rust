@@ -313,7 +313,7 @@ impl<T: Send + Clone> Subscription<StatefulData<T>> {
 #[must_use]
 pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender<T>, Receiver<T>) {
     let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
-    let (receive_tx, mut receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
+    let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
 
     drop(out_rx);
@@ -332,6 +332,7 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender
     spawn(async move {
         let name = name;
         let mut saved_data: Option<T> = None;
+        let mut receive_rx = Some(receive_rx);
 
         loop {
             select! {
@@ -341,26 +342,41 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender
                             saved_data = Some(data.clone());
                             if let Err(err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
-                                debug!("{name}: send to broadcast failed: {err} (not an error)");
+                                debug!("create_stateless_entity({name}): send to broadcast failed: {err} (not an error)");
                             }
                         }
                     }
                 }
-                Some(msg) = receive_rx.recv() => {
+                Some(msg) = try_receive(&mut receive_rx) => {
                     match msg {
-                        ReceiveMessage::Get(tx) => {
+                        Some(ReceiveMessage::Get(tx)) => {
                             if tx.send(saved_data.clone()).is_err() {
-                                error!("{name}: get send failed");
+                                error!("create_stateless_entity{name}): get send failed");
                             };
                         }
-                        ReceiveMessage::Subscribe(tx) => {
+                        Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
                             if tx.send((rx, saved_data.clone())).is_err() {
-                                error!("{name}: subscribe send failed");
+                                error!("create_stateless_entity({name}): subscribe send failed");
                             };
+                        }
+                        None => {
+                            debug!("create_stateless_entity({name}): command channel closed");
+                            receive_rx = None;
                         }
                     }
                 }
+                else => {
+                    debug!("create_stateless_entity({name}): all inputs closed");
+                    break;
+                }
+            }
+
+            if let (None, 0) = (&receive_rx, out_tx.receiver_count()) {
+                debug!(
+                    "create_stateless_entity({name}): receiver closed and all subscriptions closed"
+                );
+                break;
             }
         }
     });
@@ -374,7 +390,7 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
     name: &str,
 ) -> (Sender<T>, Receiver<StatefulData<T>>) {
     let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
-    let (receive_tx, mut receive_rx) = mpsc::channel::<ReceiveMessage<StatefulData<T>>>(PIPE_SIZE);
+    let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<StatefulData<T>>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<StatefulData<T>>(PIPE_SIZE);
 
     drop(out_rx);
@@ -395,6 +411,8 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
 
         let mut prev_data: Option<T> = None;
         let mut saved_data: Option<T> = None;
+        let mut receive_rx = Some(receive_rx);
+
         loop {
             select! {
                 Some(msg) = send_rx.recv() => {
@@ -409,35 +427,58 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
                                 saved_data = Some(data.clone());
                                 if let Err(err) = out_tx.send((prev_data.clone(), data)) {
                                     // It is not an error if there are no subscribers.
-                                    debug!("{name}: send to broadcast failed: {err} (not an error)");
+                                    debug!("create_stateful_entity({name}): send to broadcast failed: {err} (not an error)");
                                 }
                             };
                         }
                     }
                 }
-                Some(msg) = receive_rx.recv() => {
+                Some(msg) = try_receive(&mut receive_rx) => {
                     match msg {
-                        ReceiveMessage::Get(tx) => {
+                        Some(ReceiveMessage::Get(tx)) => {
                             let data  = saved_data.clone().map(|data| (prev_data.clone(), data));
                             if tx.send(data).is_err() {
-                                error!("{name}: get send failed");
+                                error!("create_stateful_entity({name}): get send failed");
                             };
                         }
-                        ReceiveMessage::Subscribe(tx) => {
+                        Some(ReceiveMessage::Subscribe(tx)) => {
                             let data  = saved_data.clone().map(|data| (prev_data.clone(), data));
                             let rx = out_tx.subscribe();
                             if tx.send((rx, data)).is_err() {
-                                error!("{name}: subscribe send failed");
+                                error!("create_stateful_entity{name}): subscribe send failed");
                             };
+                        }
+                        None => {
+                            debug!("create_stateful_entity({name}): command channel closed");
+                            receive_rx = None;
                         }
                     }
                 }
+                else => {
+                    debug!("create_stateful_entity({name}): all inputs closed");
+                    break;
+                }
+            }
+
+            if let (None, 0) = (&receive_rx, out_tx.receiver_count()) {
+                debug!(
+                    "create_stateful_entity({name}): receiver closed and all subscriptions closed"
+                );
+                break;
             }
         }
     });
 
     (sender, receiver)
 }
+
+async fn try_receive<T: Send>(rx: &mut Option<mpsc::Receiver<T>>) -> Option<Option<T>> {
+    match rx {
+        Some(rx) => Some(rx.recv().await),
+        None => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
