@@ -53,6 +53,11 @@ impl<T: Send> Sender<T> {
     pub fn is_closed(&self) -> bool {
         self.tx.is_closed()
     }
+
+    /// Completes when the entity is closed.
+    pub async fn closed(&self) {
+        self.tx.closed().await;
+    }
 }
 
 /// Receive a value from an entity.
@@ -127,19 +132,31 @@ impl<T: Send + Clone> Receiver<T> {
         spawn(async move {
             let mut sub = self.subscribe().await;
 
-            while let Ok(data) = sub.recv().await {
-                match U::try_from(data) {
-                    Ok(data) => {
-                        tx.try_send(data);
-                    }
-                    Err(err) => {
-                        error!("{}: parse failed: {}", name, err);
-                    }
-                }
+            loop {
+                select! {
+                    data = sub.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{}: translate_into_stateless({}): recv failed, exiting", name, err);
+                                break;
+                            }
+                        };
 
-                if tx.is_closed() {
-                    debug!("{}: tx closed, exiting", name);
-                    break;
+                        match U::try_from(data) {
+                            Ok(data) => {
+                                tx.try_send(data);
+                            }
+                            Err(err) => {
+                                error!("translate_into_stateless({}): parse failed: {}", name, err);
+                            }
+                        }
+                    }
+
+                    _ = tx.closed() => {
+                        debug!("translate_into_stateless({}): source closed", name);
+                        break;
+                    }
                 }
             }
         });
@@ -161,24 +178,41 @@ impl<T: Send + Clone> Receiver<T> {
         spawn(async move {
             let mut sub = self.subscribe().await;
 
-            while let Ok(data) = sub.recv().await {
-                match U::try_from(data) {
-                    Ok(data) => {
-                        tx.try_send(data);
-                    }
-                    Err(err) => {
-                        error!("{}: parse failed: {}", name, err);
-                    }
-                }
+            loop {
+                select! {
+                    data = sub.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{}: translate_into_stateful({}): recv failed, exiting", name, err);
+                                break;
+                            }
+                        };
 
-                if tx.is_closed() {
-                    debug!("{}: tx closed, exiting", name);
-                    break;
+                        match U::try_from(data) {
+                            Ok(data) => {
+                                tx.try_send(data);
+                            }
+                            Err(err) => {
+                                error!("translate_into_stateful({}): parse failed: {}", name, err);
+                            }
+                        }
+                    }
+
+                    _ = tx.closed() => {
+                        debug!("translate_into_stateful({}): source closed", name);
+                        break;
+                    }
                 }
             }
         });
 
         rx
+    }
+
+    /// Completes when the entity is closed.
+    pub async fn closed(&self) {
+        self.tx.closed().await;
     }
 }
 
