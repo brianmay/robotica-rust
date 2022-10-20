@@ -111,12 +111,14 @@ pub struct Task {
     pub description: Option<String>,
 
     /// The payload of the task.
+    #[serde(flatten)]
     pub payload: Payload,
 
     /// The qos to be used when sending the message.
     qos: mqtt::QoS,
 
     /// The retain value to be used when sending the message.
+    #[serde(skip)]
     retain: bool,
 
     /// The locations this task acts on.
