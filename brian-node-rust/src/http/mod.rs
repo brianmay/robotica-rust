@@ -413,6 +413,6 @@ async fn process_subscribe(
                 }
             }
         }
-        debug!("Ending receiver for {}", topic_clone);
+        debug!("topic_task: Ending receiver for {}", topic_clone);
     });
 }
