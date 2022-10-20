@@ -98,6 +98,9 @@ impl Config {
     fn repeat_count(&self) -> u8 {
         self.repeat_count.unwrap_or(1)
     }
+    fn repeat_time(&self) -> Duration {
+        self.repeat_time.unwrap_or_else(|| Duration::minutes(1))
+    }
 }
 
 /// The configuration for a sequence.
@@ -189,7 +192,7 @@ pub struct Sequence {
     pub latest_time: DateTime<Utc>,
 
     /// The number of the repeat.
-    repeat_number: u8,
+    repeat_number: usize,
 
     /// The tasks to execute.
     pub tasks: Vec<Task>,
@@ -329,7 +332,7 @@ fn config_to_sequence(
     config: Config,
     start_time: &DateTime<Utc>,
     id: String,
-    repeat_number: u8,
+    repeat_number: usize,
 ) -> Sequence {
     let mut tasks = Vec::with_capacity(config.tasks.len());
     config.tasks.into_iter().for_each(|src_task| {
@@ -395,7 +398,6 @@ pub fn get_sequence_with_config(
     start_time: &DateTime<Utc>,
 ) -> Result<Vec<Sequence>, SequenceError> {
     let start_time = start_time.clone();
-    let default_repeat_time = Duration::seconds(0);
 
     let src_sequences: &Vec<Config> = config
         .get(sequence_name)
@@ -407,59 +409,88 @@ pub fn get_sequence_with_config(
         options: options.clone(),
     };
 
-    let src_sequences = src_sequences
+    let expanded_list = src_sequences
         .iter()
         .enumerate()
-        .filter(|(_n, config)| {
-            let mut ok = true;
-
-            if let Some(classifications) = &config.classifications {
-                if today.intersection(classifications).next().is_none() {
-                    ok = false;
-                }
-            }
-
-            if let Some(test_options) = &config.options {
-                if options.intersection(test_options).next().is_none() {
-                    ok = false;
-                }
-            }
-
-            if let Some(if_cond) = &config.if_cond {
-                if !if_cond.iter().any(|c| c.eval(&context)) {
-                    ok = false;
-                }
-            }
-
-            ok
-        })
+        .filter(|(_n, config)| filter_sequence(config, &context))
+        .flat_map(expand_config)
         .collect::<Vec<_>>();
 
-    let mut start_time = get_corrected_start_time(start_time, &src_sequences);
-    let mut sequences: Vec<Sequence> = Vec::with_capacity(src_sequences.len());
+    let mut start_time = get_corrected_start_time(start_time, &expanded_list);
+    let mut sequences: Vec<Sequence> = Vec::with_capacity(expanded_list.len());
 
-    for (sequence_number, config) in &src_sequences {
-        let mut repeat_time = start_time.clone();
-        let repeat_count = config.repeat_count();
-        let id = match &config.id {
+    for expanded in &expanded_list {
+        let id = match &expanded.config.id {
             Some(id) => id.clone(),
-            None => format!("{}_{}", sequence_name, sequence_number),
+            None => format!("{}_{}", sequence_name, expanded.number),
         };
-        for repeat in 1..=repeat_count {
-            let sequence = config_to_sequence(
-                sequence_name,
-                (*config).clone(),
-                &repeat_time,
-                id.clone(),
-                repeat,
-            );
-            repeat_time = repeat_time + config.repeat_time.unwrap_or(default_repeat_time);
-            sequences.push(sequence);
-        }
-        start_time = start_time + config.required_time;
+        let sequence = config_to_sequence(
+            sequence_name,
+            expanded.config.clone(),
+            &start_time,
+            id,
+            expanded.repeat_number,
+        );
+        sequences.push(sequence);
+        start_time = start_time + expanded.duration;
     }
 
     Ok(sequences)
+}
+
+fn filter_sequence(config: &Config, context: &Context) -> bool {
+    let mut ok = true;
+    if let Some(classifications) = &config.classifications {
+        if context.today.intersection(classifications).next().is_none() {
+            ok = false;
+        }
+    }
+    if let Some(test_options) = &config.options {
+        if context.options.intersection(test_options).next().is_none() {
+            ok = false;
+        }
+    }
+    if let Some(if_cond) = &config.if_cond {
+        if !if_cond.iter().any(|c| c.eval(context)) {
+            ok = false;
+        }
+    }
+    ok
+}
+
+#[derive(Clone)]
+struct ExpandedConfig<'a> {
+    config: &'a Config,
+    number: usize,
+    repeat_number: usize,
+    duration: Duration,
+}
+
+fn expand_config((n, config): (usize, &Config)) -> Vec<ExpandedConfig> {
+    let repeat_count = config.repeat_count() as usize;
+    let mut out = Vec::with_capacity(repeat_count);
+
+    for i in 1..repeat_count {
+        let duration = config.repeat_time();
+        out.push(ExpandedConfig {
+            config,
+            number: n,
+            repeat_number: i,
+            duration,
+        });
+    }
+
+    if repeat_count >= 1 {
+        let duration = config.required_time;
+        out.push(ExpandedConfig {
+            config,
+            number: n,
+            repeat_number: repeat_count,
+            duration,
+        });
+    }
+
+    out
 }
 
 /// Get the sequence for the given schedule.
@@ -496,17 +527,16 @@ pub fn schedule_list_to_sequence(
 
 fn get_corrected_start_time(
     start_time: DateTime<Utc>,
-    config: &Vec<(usize, &Config)>,
+    expanded_list: &Vec<ExpandedConfig>,
 ) -> DateTime<Utc> {
     let mut updated_start_time = start_time.clone();
 
-    for (_n, sequence) in config {
-        if sequence.zero_time == Some(true) {
+    for expanded in expanded_list {
+        if expanded.config.zero_time == Some(true) {
             return updated_start_time;
         }
 
-        updated_start_time =
-            updated_start_time - sequence.required_time * i32::from(sequence.repeat_count());
+        updated_start_time = updated_start_time - expanded.duration;
     }
 
     // If we didn't find any zero time sequences, then just return the start time.
@@ -609,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_corrected_start_time_0() {
+    fn test_filter_sequence() {
         let config = vec![
             Config {
                 id: None,
@@ -653,9 +683,217 @@ mod tests {
             },
         ];
 
+        let context = Context {
+            today: HashSet::from(["christmas".to_string()]),
+            tomorrow: HashSet::from([]),
+            options: HashSet::from(["boxing".to_string()]),
+        };
+        let result = filter_sequence(&config[0], &context);
+        assert!(result);
+        let result = filter_sequence(&config[1], &context);
+        assert!(result);
+
+        let context = Context {
+            today: HashSet::from([]),
+            tomorrow: HashSet::from([]),
+            options: HashSet::from(["boxing".to_string()]),
+        };
+        let result = filter_sequence(&config[0], &context);
+        assert!(!result);
+        let result = filter_sequence(&config[1], &context);
+        assert!(result);
+
+        let context = Context {
+            today: HashSet::from(["christmas".to_string()]),
+            tomorrow: HashSet::from([]),
+            options: HashSet::from([]),
+        };
+        let result = filter_sequence(&config[0], &context);
+        assert!(!result);
+        let result = filter_sequence(&config[1], &context);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_expand_0() {
+        let config = vec![Config {
+            id: None,
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(false),
+            required_time: Duration::minutes(15),
+            latest_time: None,
+            repeat_count: Some(0),
+            repeat_time: Some(Duration::minutes(5)),
+            tasks: vec![ConfigTask {
+                description: None,
+                payload: None,
+                qos: None,
+                retain: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        }];
+
         let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
+
+        let result = expand_config(config[0]);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_expand_1() {
+        let config = vec![Config {
+            id: None,
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(false),
+            required_time: Duration::minutes(15),
+            latest_time: None,
+            repeat_count: Some(1),
+            repeat_time: Some(Duration::minutes(5)),
+            tasks: vec![ConfigTask {
+                description: None,
+                payload: None,
+                qos: None,
+                retain: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        }];
+
+        let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
+
+        let result = expand_config(config[0]);
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0].duration, Duration::minutes(15));
+        assert_eq!(result[0].number, 0);
+        assert_eq!(result[0].repeat_number, 1);
+    }
+
+    #[test]
+    fn test_expand_3() {
+        let config = vec![
+            Config {
+                id: None,
+                classifications: Some(HashSet::from(["christmas".to_string()])),
+                options: Some(HashSet::from(["boxing".to_string()])),
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(3),
+                repeat_time: Some(Duration::minutes(5)),
+                tasks: vec![ConfigTask {
+                    description: None,
+                    payload: None,
+                    qos: None,
+                    retain: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+            Config {
+                id: None,
+                classifications: None,
+                options: None,
+                if_cond: None,
+                zero_time: Some(false),
+                required_time: Duration::minutes(15),
+                latest_time: None,
+                repeat_count: Some(3),
+                repeat_time: None,
+                tasks: vec![ConfigTask {
+                    description: None,
+                    payload: None,
+                    qos: None,
+                    retain: None,
+                    locations: vec!["test".to_string()],
+                    devices: vec!["test".to_string()],
+                    topics: None,
+                }],
+            },
+        ];
+
+        let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
+
+        let result = expand_config(config[0]);
+        assert_eq!(result.len(), 3);
+
+        assert_eq!(result[0].duration, Duration::minutes(5));
+        assert_eq!(result[0].number, 0);
+        assert_eq!(result[0].repeat_number, 1);
+
+        assert_eq!(result[1].duration, Duration::minutes(5));
+        assert_eq!(result[1].number, 0);
+        assert_eq!(result[1].repeat_number, 2);
+
+        assert_eq!(result[2].duration, Duration::minutes(15));
+        assert_eq!(result[2].number, 0);
+        assert_eq!(result[2].repeat_number, 3);
+
+        let result = expand_config(config[1]);
+        assert_eq!(result.len(), 3);
+
+        assert_eq!(result[0].duration, Duration::minutes(1));
+        assert_eq!(result[0].number, 1);
+        assert_eq!(result[0].repeat_number, 1);
+
+        assert_eq!(result[1].duration, Duration::minutes(1));
+        assert_eq!(result[1].number, 1);
+        assert_eq!(result[1].repeat_number, 2);
+
+        assert_eq!(result[2].duration, Duration::minutes(15));
+        assert_eq!(result[2].number, 1);
+        assert_eq!(result[2].repeat_number, 3);
+    }
+
+    #[test]
+    fn test_get_corrected_start_time_0() {
+        let config = Config {
+            id: None,
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(false),
+            required_time: Duration::minutes(15),
+            latest_time: None,
+            repeat_count: Some(2),
+            repeat_time: None,
+            tasks: vec![ConfigTask {
+                description: None,
+                payload: None,
+                qos: None,
+                retain: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        };
+
+        let expanded = vec![
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config,
+            },
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config,
+            },
+        ];
+
         let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
-        let corrected_datetime = get_corrected_start_time(datetime, &config);
+        let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
         assert_eq!(
             corrected_datetime,
@@ -665,52 +903,44 @@ mod tests {
 
     #[test]
     fn test_get_corrected_start_time_1() {
-        let config = vec![
-            Config {
-                id: None,
-                classifications: Some(HashSet::from(["christmas".to_string()])),
-                options: Some(HashSet::from(["boxing".to_string()])),
-                if_cond: None,
-                zero_time: Some(true),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
+        let config = Config {
+            id: None,
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(true),
+            required_time: Duration::minutes(15),
+            latest_time: None,
+            repeat_count: Some(2),
+            repeat_time: None,
+            tasks: vec![ConfigTask {
+                description: None,
+                payload: None,
+                qos: None,
+                retain: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        };
+
+        let expanded = vec![
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config,
             },
-            Config {
-                id: None,
-                classifications: None,
-                options: None,
-                if_cond: None,
-                zero_time: Some(false),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config,
             },
         ];
 
-        let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
         let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
-        let corrected_datetime = get_corrected_start_time(datetime, &config);
+        let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
         assert_eq!(
             corrected_datetime,
@@ -720,111 +950,53 @@ mod tests {
 
     #[test]
     fn test_get_corrected_start_time_2() {
-        let config = vec![
-            Config {
-                id: None,
-                classifications: Some(HashSet::from(["christmas".to_string()])),
-                options: Some(HashSet::from(["boxing".to_string()])),
-                if_cond: None,
-                zero_time: Some(false),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
+        let config = Config {
+            id: None,
+            classifications: Some(HashSet::from(["christmas".to_string()])),
+            options: Some(HashSet::from(["boxing".to_string()])),
+            if_cond: None,
+            zero_time: Some(false),
+            required_time: Duration::minutes(15),
+            latest_time: None,
+            repeat_count: Some(2),
+            repeat_time: None,
+            tasks: vec![ConfigTask {
+                description: None,
+                payload: None,
+                qos: None,
+                retain: None,
+                locations: vec!["test".to_string()],
+                devices: vec!["test".to_string()],
+                topics: None,
+            }],
+        };
+
+        let config2 = Config {
+            zero_time: Some(true),
+            ..config.clone()
+        };
+
+        let expanded = vec![
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config,
             },
-            Config {
-                id: None,
-                classifications: None,
-                options: None,
-                if_cond: None,
-                zero_time: Some(true),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
+            ExpandedConfig {
+                number: 0,
+                repeat_number: 1,
+                duration: Duration::minutes(15),
+                config: &config2,
             },
         ];
 
-        let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
         let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
-        let corrected_datetime = get_corrected_start_time(datetime, &config);
+        let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
         assert_eq!(
             corrected_datetime,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
-        );
-    }
-
-    #[test]
-    fn test_get_corrected_start_time_1_disabled_2_enabled() {
-        let config = vec![
-            Config {
-                id: None,
-                classifications: Some(HashSet::from(["christmas_disabled".to_string()])),
-                options: Some(HashSet::from(["boxing_disabled".to_string()])),
-                if_cond: None,
-                zero_time: Some(false),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
-            },
-            Config {
-                id: None,
-                classifications: None,
-                options: None,
-                if_cond: None,
-                zero_time: Some(true),
-                required_time: Duration::minutes(15),
-                latest_time: None,
-                repeat_count: Some(2),
-                repeat_time: None,
-                tasks: vec![ConfigTask {
-                    description: None,
-                    payload: None,
-                    qos: None,
-                    retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
-                }],
-            },
-        ];
-
-        let config: Vec<(usize, &Config)> = config.iter().enumerate().collect();
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
-        let corrected_datetime = get_corrected_start_time(datetime, &config);
-
-        assert_eq!(
-            corrected_datetime,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
         );
     }
 
