@@ -115,6 +115,7 @@ pub struct Task {
     pub payload: Payload,
 
     /// The qos to be used when sending the message.
+    #[serde(skip)]
     qos: mqtt::QoS,
 
     /// The retain value to be used when sending the message.
