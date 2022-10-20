@@ -2,7 +2,7 @@
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
-    ops::{Add, Sub},
+    ops::{Add, Mul, Sub},
     str::FromStr,
 };
 
@@ -413,6 +413,14 @@ impl<'de> Deserialize<'de> for Duration {
         let s: String = Deserialize::deserialize(deserializer)?;
         let d = Duration::from_str(&s).map_err(serde::de::Error::custom)?;
         Ok(d)
+    }
+}
+
+impl Mul<i32> for Duration {
+    type Output = Duration;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Duration(self.0 * rhs)
     }
 }
 

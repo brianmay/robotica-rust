@@ -505,10 +505,8 @@ fn get_corrected_start_time(
             return updated_start_time;
         }
 
-        // FIXME: Use multiply.
-        for _ in 0..sequence.repeat_count() {
-            updated_start_time = updated_start_time - sequence.required_time;
-        }
+        updated_start_time =
+            updated_start_time - sequence.required_time * i32::from(sequence.repeat_count());
     }
 
     // If we didn't find any zero time sequences, then just return the start time.
