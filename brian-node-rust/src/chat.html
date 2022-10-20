@@ -19,7 +19,11 @@
             join_btn.addEventListener("click", function(e) {
                 this.disabled = true;
 
-                const websocket = new WebSocket("ws://localhost:4000/websocket");
+                let protocol = "wss://";
+                if (location.protocol === "http:") {
+                    protocol = "ws://";
+                }
+                const websocket = new WebSocket(protocol + location.host + "/websocket");
 
                 websocket.onopen = function() {
                     console.log("connection opened");
