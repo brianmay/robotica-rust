@@ -1,17 +1,25 @@
 mod oidc;
 mod urls;
 
+use std::include_str;
 use std::{collections::HashMap, env, sync::Arc};
 
+use axum::body::Body;
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::WebSocketUpgrade;
 use axum::http::Uri;
+use axum::response::{Html, IntoResponse, Response};
 use axum::{extract::Query, routing::get, Extension, Router};
 use axum_sessions::extractors::ReadableSession;
 use axum_sessions::{async_session::MemoryStore, extractors::WritableSession};
 use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
+use futures::{sink::SinkExt, stream::StreamExt};
 use maud::{html, Markup};
+use reqwest::StatusCode;
 use robotica_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
 use thiserror::Error;
+use tracing::error;
 
 use crate::State;
 
@@ -87,8 +95,10 @@ async fn server(
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/test", get(test))
         .route("/login", get(login))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
+        .route("/websocket", get(websocket_handler))
         .layer(Extension(http_state))
         .layer(Extension(oidc))
         .layer(session_layer);
@@ -126,6 +136,11 @@ async fn root(state: Extension<Arc<HttpState>>, session: ReadableSession) -> Mar
             }
         }
     )
+}
+
+// Include utf-8 file at **compile** time.
+async fn test() -> Html<&'static str> {
+    Html(include_str!("../chat.html"))
 }
 
 async fn login(
@@ -205,4 +220,37 @@ async fn oidc_callback(
             }
         }
     )
+}
+
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    Extension(state): Extension<Arc<HttpState>>,
+    session: ReadableSession,
+) -> Response {
+    if let Some(_name) = session.get::<String>("user") {
+        ws.on_upgrade(|socket| websocket(socket, state))
+            .into_response()
+    } else {
+        Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(Body::empty())
+            .unwrap()
+            .into_response()
+    }
+}
+
+async fn websocket(stream: WebSocket, _state: Arc<HttpState>) {
+    // By splitting we can send and receive at the same time.
+    let (mut sender, mut receiver) = stream.split();
+
+    // This task will receive messages from client and send them to broadcast subscribers.
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(Message::Text(text))) = receiver.next().await {
+            if sender.send(Message::Text(text)).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let _ = recv_task.await;
 }
