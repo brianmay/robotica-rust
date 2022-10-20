@@ -156,6 +156,7 @@ pub struct Sequence {
     pub id: String,
 
     /// The name of this sequence.
+    #[serde(skip)]
     pub sequence_name: String,
 
     /// The conditions that must be true before this is scheduled.
@@ -163,18 +164,22 @@ pub struct Sequence {
     if_cond: Option<Vec<Boolean<Context>>>,
 
     /// The required classifications for this step.
+    #[serde(skip)]
     classifications: Option<HashSet<String>>,
 
     // The required options for this step.
+    #[serde(skip)]
     options: Option<HashSet<String>>,
 
     /// If true this is considered the "zero time" for this sequence.
+    #[serde(skip)]
     zero_time: bool,
 
     /// The start time of this step.
     pub required_time: DateTime<Utc>,
 
     /// The required duration of this step.
+    #[serde(skip)]
     required_duration: Duration,
 
     /// The latest time this step can be completed.
