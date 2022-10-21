@@ -1,0 +1,8 @@
+#!/bin/sh
+set -ex
+DEST_DIR="../dist/"
+mkdir -p "$DEST_DIR"
+cp node_modules/bootstrap/dist/css/bootstrap.min.css "$DEST_DIR"
+cp node_modules/bootstrap/dist/css/bootstrap.min.css.map "$DEST_DIR"
+cp node_modules/bootstrap/dist/js/bootstrap.min.js "$DEST_DIR"
+cp node_modules/bootstrap/dist/js/bootstrap.min.js.map "$DEST_DIR"
