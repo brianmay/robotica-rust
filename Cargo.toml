@@ -24,6 +24,20 @@ chrono = "0.4.19"
 lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = "1.6.0"
 field-ref = "0.2.1"
+tracing = "0.1.35"
+# tracing-subscriber = "0.3.14"
+
+# http server
+axum = { version = "0.5.17", features = ["ws"] }
+openid = "0.10.0"
+maud = { version = "0.24.0", features = ["axum"] }
+axum-sessions = "0.3.1"
+base64 = "0.13.0"
+url = "2.2.2"
+futures = "0.3.25"
+tower = "0.4.13"
+tower-http = { version = "0.3.4", features = ["fs", "trace"] }
+
 
 [build-dependencies]
 lalrpop = "0.19.3"

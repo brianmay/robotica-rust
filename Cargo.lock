@@ -100,9 +100,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.57"
+version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76464446b8bc32758d7e88ee1a804d9914cd9b1cb264c029899680b0be29826f"
+checksum = "1e805d94e6b5001b651426cf4cd446b1ab5f319d27bab5c644f61de0a804360c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -323,28 +323,18 @@ name = "brian-node-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
- "axum-sessions",
- "base64",
  "chrono",
  "chrono-tz",
  "color-backtrace",
- "futures",
  "log",
- "maud",
- "openid",
- "reqwest",
  "robotica-rust",
  "serde",
  "serde_json",
  "serde_path_to_error",
  "thiserror",
  "tokio",
- "tower",
- "tower-http",
  "tracing",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -1917,14 +1907,20 @@ name = "robotica-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
+ "axum-sessions",
+ "base64",
  "bytes",
  "chrono",
  "env_logger",
  "field-ref",
+ "futures",
  "gethostname",
  "lalrpop",
  "lalrpop-util",
  "log",
+ "maud",
+ "openid",
  "regex",
  "reqwest",
  "rumqttc",
@@ -1935,6 +1931,10 @@ dependencies = [
  "serde_yaml",
  "thiserror",
  "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "url",
  "webpki-roots",
 ]
 

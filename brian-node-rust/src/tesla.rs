@@ -3,7 +3,7 @@ use crate::delays::{delay_input, IsActive};
 use super::State;
 use log::debug;
 use robotica_rust::entities::create_stateless_entity;
-use robotica_rust::sources::mqtt::Message;
+use robotica_rust::services::mqtt::Message;
 use robotica_rust::spawn;
 use std::fmt::Display;
 use std::time::Duration;

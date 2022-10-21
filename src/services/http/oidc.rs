@@ -54,7 +54,7 @@ impl Client {
         Ok(client)
     }
 
-    pub fn get_auth_url(&self, origin_url: &str) -> Result<String, Error> {
+    pub fn get_auth_url(&self, origin_url: &str) -> String {
         let scopes = self.config.scopes.join(" ");
 
         let auth_url = self.oidc_client.auth_url(&Options {
@@ -63,8 +63,7 @@ impl Client {
             ..Default::default()
         });
 
-        let url = auth_url.into();
-        Ok(url)
+        auth_url.into()
     }
 
     pub async fn request_token(&self, code: &str) -> Result<(Token, Userinfo), Error> {

@@ -2,7 +2,7 @@ use log::debug;
 use robotica_rust::{
     devices::hdmi::Command,
     entities,
-    sources::mqtt::{Message, QoS},
+    services::mqtt::{Message, QoS},
     spawn,
 };
 use serde::Deserialize;

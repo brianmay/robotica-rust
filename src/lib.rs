@@ -15,6 +15,7 @@ extern crate lalrpop_util;
 pub mod devices;
 pub mod entities;
 pub mod scheduling;
+pub mod services;
 pub mod sinks;
 pub mod sources;
 

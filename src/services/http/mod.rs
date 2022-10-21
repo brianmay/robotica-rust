@@ -1,3 +1,4 @@
+//! HTTP server
 mod oidc;
 mod urls;
 
@@ -20,8 +21,6 @@ use base64::decode;
 use futures::{sink::SinkExt, stream::StreamExt};
 use maud::{html, Markup};
 use reqwest::StatusCode;
-use robotica_rust::sources::mqtt;
-use robotica_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -31,39 +30,57 @@ use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 
-use crate::State;
+use crate::services::mqtt;
+use crate::services::mqtt::Mqtt;
+use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
-use self::urls::generate_url_or_default;
 
-pub(crate) struct HttpState {
+pub(crate) struct HttpConfig {
     #[allow(dead_code)]
     mqtt: Mqtt,
-    #[allow(dead_code)]
-    message_sink: Sender<String>,
     root_url: reqwest::Url,
 }
 
+impl HttpConfig {
+    // fn generate_url(&self, path: &str) -> Result<String, url::ParseError> {
+    //     urls::generate_url(&self.root_url, path)
+    // }
+
+    fn generate_url_or_default(&self, path: &str) -> String {
+        urls::generate_url_or_default(&self.root_url, path)
+    }
+}
+
+/// An error running the HTTP service.
 #[derive(Error, Debug)]
 pub enum HttpError {
+    /// There was a problem with an environment variable.
     #[error("Environment error: {0}")]
     Environment(#[from] EnvironmentError),
 
+    /// There was an error configuring OIDC support.
     #[error("OIDC error: {0}")]
     Oidc(#[from] oidc::Error),
 
+    /// There was an error decoding the base64 secret.
     #[error("Base64 Decode Error")]
     Base64Decode(#[from] base64::DecodeError),
 
-    // Parse error
+    /// URL Parse error
     #[error("URL Parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 }
 
-pub async fn run(state: &mut State) -> Result<(), HttpError> {
-    let http_state = HttpState {
-        mqtt: state.mqtt.clone(),
-        message_sink: state.message_sink.clone(),
+/// Run the HTTP service.
+///
+/// # Errors
+///
+/// This function will return an error if there is a problem configuring the HTTP service.
+#[allow(clippy::unused_async)]
+pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
+    let http_config = HttpConfig {
+        mqtt,
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
     };
 
@@ -71,10 +88,8 @@ pub async fn run(state: &mut State) -> Result<(), HttpError> {
     let secret = decode(get_env("SESSION_SECRET")?)?;
     let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
 
-    let redirect = generate_url_or_default(
-        &http_state,
-        "/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz",
-    );
+    let redirect = http_config
+        .generate_url_or_default("/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz");
 
     let config = oidc::Config {
         issuer: get_env("OIDC_DISCOVERY_URL")?,
@@ -87,7 +102,7 @@ pub async fn run(state: &mut State) -> Result<(), HttpError> {
     let client = Client::new(config).await?;
 
     spawn(async {
-        server(http_state, client, session_layer)
+        server(http_config, client, session_layer)
             .await
             .expect("http server failed");
     });
@@ -96,11 +111,11 @@ pub async fn run(state: &mut State) -> Result<(), HttpError> {
 }
 
 async fn server(
-    http_state: HttpState,
+    config: HttpConfig,
     oidc: Client,
     session_layer: SessionLayer<MemoryStore>,
 ) -> Result<(), HttpError> {
-    let http_state = Arc::new(http_state);
+    let http_state = Arc::new(config);
     let oidc = Arc::new(oidc);
 
     let app = Router::new()
@@ -156,13 +171,14 @@ async fn server(
     Ok(())
 }
 
-async fn root(state: Extension<Arc<HttpState>>, session: ReadableSession) -> Markup {
+#[allow(clippy::unused_async)]
+async fn root(http_config: Extension<Arc<HttpConfig>>, session: ReadableSession) -> Markup {
     let build_date = env::var("BUILD_DATE").unwrap_or_else(|_| "unknown".to_string());
     let vcs_ref = env::var("VCS_REF").unwrap_or_else(|_| "unknown".to_string());
 
     let user = session.get::<String>("user");
 
-    let login_url = generate_url_or_default(&state, "/login");
+    let login_url = http_config.generate_url_or_default("/login");
 
     html!(
         html {
@@ -182,18 +198,20 @@ async fn root(state: Extension<Arc<HttpState>>, session: ReadableSession) -> Mar
 }
 
 // Include utf-8 file at **compile** time.
+#[allow(clippy::unused_async)]
 async fn test() -> Html<&'static str> {
-    Html(include_str!("../chat.html"))
+    Html(include_str!("chat.html"))
 }
 
+#[allow(clippy::unused_async)]
 async fn login(
-    state: Extension<Arc<HttpState>>,
+    http_config: Extension<Arc<HttpConfig>>,
     oidc_client: Extension<Arc<Client>>,
     origin_url: Uri,
 ) -> Markup {
     let origin_url = origin_url.path_and_query().unwrap().as_str();
-    let auth_url = oidc_client.get_auth_url(origin_url).unwrap();
-    let root_url = generate_url_or_default(&state, "/");
+    let auth_url = oidc_client.get_auth_url(origin_url);
+    let root_url = http_config.generate_url_or_default("/");
 
     html!(
         html {
@@ -215,12 +233,12 @@ async fn login(
 }
 
 async fn oidc_callback(
-    state: Extension<Arc<HttpState>>,
+    http_path: Extension<Arc<HttpConfig>>,
     oidc_client: Extension<Arc<Client>>,
     Query(params): Query<HashMap<String, String>>,
     mut session: WritableSession,
 ) -> Markup {
-    let root_url = generate_url_or_default(&state, "/");
+    let root_url = http_path.generate_url_or_default("/");
 
     let code = params
         .get("code")
@@ -265,11 +283,13 @@ async fn oidc_callback(
     )
 }
 
+#[allow(clippy::unused_async)]
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    Extension(state): Extension<Arc<HttpState>>,
+    Extension(state): Extension<Arc<HttpConfig>>,
     session: ReadableSession,
 ) -> Response {
+    #[allow(clippy::option_if_let_else)]
     if let Some(_name) = session.get::<String>("user") {
         info!("Accessing websocket");
         ws.on_upgrade(|socket| websocket(socket, state))
@@ -315,7 +335,7 @@ impl TryFrom<mqtt::Message> for MqttMessage {
     }
 }
 
-async fn websocket(stream: WebSocket, state: Arc<HttpState>) {
+async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
     // By splitting we can send and receive at the same time.
     let (mut sender, mut receiver) = stream.split();
 
@@ -407,13 +427,13 @@ async fn websocket(stream: WebSocket, state: Arc<HttpState>) {
         debug!("recv_task: ending recv_task");
     });
 
-    let _ = recv_task.await;
+    let _rc = recv_task.await;
     send_task.abort();
 }
 
 async fn process_subscribe(
     topic: String,
-    state: &Arc<HttpState>,
+    state: &Arc<HttpConfig>,
     sender: mpsc::UnboundedSender<MqttMessage>,
 ) {
     info!("Subscribing to {}", topic);

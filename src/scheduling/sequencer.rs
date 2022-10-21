@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::sources::mqtt;
+use crate::services::mqtt;
 
 use super::{
     ast::{Boolean, Fields},

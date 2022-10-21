@@ -1,6 +1,5 @@
 mod delays;
 mod hdmi;
-mod http;
 mod robotica;
 mod tesla;
 
@@ -8,8 +7,9 @@ use anyhow::Result;
 use robotica_rust::entities::Sender;
 use robotica_rust::scheduling::executor::executor;
 
-use robotica_rust::sources::mqtt::Mqtt;
-use robotica_rust::sources::mqtt::{MqttClient, Subscriptions};
+use robotica_rust::services::http;
+use robotica_rust::services::mqtt::Mqtt;
+use robotica_rust::services::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -42,7 +42,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         message_sink,
     };
 
-    http::run(&mut state).await.expect("HTTP server failed");
+    http::run(state.mqtt.clone()).await.expect("HTTP server failed");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
 

@@ -3,10 +3,10 @@ use std::fmt::Display;
 use log::info;
 use robotica_rust::entities::create_stateless_entity;
 use robotica_rust::entities::Sender;
-use robotica_rust::sources::mqtt::Message;
-use robotica_rust::sources::mqtt::Mqtt;
-use robotica_rust::sources::mqtt::QoS;
-use robotica_rust::sources::mqtt::Subscriptions;
+use robotica_rust::services::mqtt::Message;
+use robotica_rust::services::mqtt::Mqtt;
+use robotica_rust::services::mqtt::QoS;
+use robotica_rust::services::mqtt::Subscriptions;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
