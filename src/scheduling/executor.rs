@@ -44,15 +44,16 @@ struct State<T: TimeZone> {
 
 impl<T: TimeZone + Debug> State<T> {
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
-        self.date = now.with_timezone::<T>(&self.timezone).date();
+        let today = now.with_timezone::<T>(&self.timezone).date();
 
-        if let Some(sequences) = self.check_time_travel(self.date) {
+        if let Some(sequences) = self.check_time_travel(today) {
             self.publish_sequences(&sequences);
             self.sequences = sequences;
         }
 
         self.publish_sequences(&self.sequences);
         self.timer = self.get_next_timer(now);
+        self.date = today;
     }
 
     fn check_time_travel(&self, today: Date) -> Option<VecDeque<Sequence>> {
