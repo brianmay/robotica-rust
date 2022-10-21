@@ -2,11 +2,12 @@ mod oidc;
 mod urls;
 
 use std::include_str;
+use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::Arc;
 use std::{collections::HashMap, env};
 
-use axum::body::Body;
+use axum::body::{boxed, Body};
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::WebSocketUpgrade;
 use axum::http::Uri;
@@ -23,8 +24,11 @@ use robotica_rust::sources::mqtt;
 use robotica_rust::{entities::Sender, get_env, sources::mqtt::Mqtt, spawn, EnvironmentError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::select;
 use tokio::sync::mpsc;
+use tokio::{fs, select};
+use tower::{ServiceBuilder, ServiceExt};
+use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 
 use crate::State;
@@ -100,14 +104,47 @@ async fn server(
     let oidc = Arc::new(oidc);
 
     let app = Router::new()
-        .route("/", get(root))
+        // .route("/", get(root))
         .route("/test", get(test))
         .route("/login", get(login))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
+        .route("/api/hello", get(root))
+        .fallback(get(|req| async move {
+            match ServeDir::new("./dist").oneshot(req).await {
+                Ok(res) => {
+                    let status = res.status();
+                    match status {
+                        StatusCode::NOT_FOUND => {
+                            let index_path = PathBuf::from("./dist").join("index.html");
+                            let index_content = match fs::read_to_string(index_path).await {
+                                Err(_) => {
+                                    return Response::builder()
+                                        .status(StatusCode::NOT_FOUND)
+                                        .body(boxed(Body::from("index file not found")))
+                                        .unwrap()
+                                }
+                                Ok(index_content) => index_content,
+                            };
+
+                            Response::builder()
+                                .status(StatusCode::OK)
+                                .body(boxed(Body::from(index_content)))
+                                .unwrap()
+                        }
+                        _ => res.map(boxed),
+                    }
+                }
+                Err(err) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(boxed(Body::from(format!("error: {err}"))))
+                    .expect("error response"),
+            }
+        }))
         .layer(Extension(http_state))
         .layer(Extension(oidc))
-        .layer(session_layer);
+        .layer(session_layer)
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     let addr = "[::]:4000".parse().unwrap();
     tracing::info!("listening on {}", addr);
@@ -234,9 +271,11 @@ async fn websocket_handler(
     session: ReadableSession,
 ) -> Response {
     if let Some(_name) = session.get::<String>("user") {
+        info!("Accessing websocket");
         ws.on_upgrade(|socket| websocket(socket, state))
             .into_response()
     } else {
+        error!("Permission denied to websocket");
         Response::builder()
             .status(StatusCode::UNAUTHORIZED)
             .body(Body::empty())

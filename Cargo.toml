@@ -32,4 +32,4 @@ lalrpop = "0.19.3"
 env_logger = "0.9.1"
 
 [workspace]
-members = ["brian-node-rust"]
+members = ["brian-node-rust", "robotica-frontend"]
