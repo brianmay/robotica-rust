@@ -386,6 +386,7 @@ async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
                     let msg = match msg {
                         Some(Ok(Message::Text(msg))) => msg,
                         Some(Ok(Message::Binary(_))) => {
+                            // FIXME: Implement binary messages
                             error!("recv_task: received binary message, ignoring");
                             continue;
                         }
