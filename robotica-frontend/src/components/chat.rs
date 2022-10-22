@@ -1,52 +1,24 @@
-use serde::{Deserialize, Serialize};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
-use yew_agent::{Bridge, Bridged};
 
 use crate::{
-    services::{event_bus::EventBus, websocket::WebsocketService},
+    services::{
+        robotica::{MqttMessage, WsCommand},
+        websocket::WebsocketService,
+    },
     User,
 };
 
 pub enum Msg {
-    HandleMsg(String),
+    HandleMsg(MqttMessage),
     SubmitMessage,
 }
 
-#[derive(Deserialize)]
-struct MessageData {
-    from: String,
-    message: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MsgTypes {
-    Users,
-    Register,
-    Message,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WebSocketMessage {
-    message_type: MsgTypes,
-    data_array: Option<Vec<String>>,
-    data: Option<String>,
-}
-
-#[derive(Clone)]
-struct UserProfile {
-    name: String,
-    avatar: String,
-}
-
 pub struct Chat {
-    users: Vec<UserProfile>,
+    // users: Vec<UserProfile>,
     chat_input: NodeRef,
     wss: WebsocketService,
-    messages: Vec<MessageData>,
-    _producer: Box<dyn Bridge<EventBus>>,
+    messages: Vec<MqttMessage>,
 }
 impl Component for Chat {
     type Message = Msg;
@@ -57,29 +29,21 @@ impl Component for Chat {
             .link()
             .context::<User>(Callback::noop())
             .expect("context to be set");
-        let wss = WebsocketService::new();
+
+        let callback = ctx.link().callback(Msg::HandleMsg);
+        let mut wss = WebsocketService::new(callback);
         let _username = user.name.borrow().clone();
 
-        // let message = WebSocketMessage {
-        //     message_type: MsgTypes::Register,
-        //     data: Some(username),
-        //     data_array: None,
-        // };
-
-        // if let Ok(_) = wss
-        //     .tx
-        //     .clone()
-        //     .try_send(serde_json::to_string(&message).unwrap())
-        // {
-        //     log::debug!("message sent successfully");
-        // }
+        let command = WsCommand::Subscribe {
+            topic: "test".into(),
+        };
+        wss.tx.try_send(command).unwrap();
 
         Self {
-            users: vec![],
+            // users: vec![],
             messages: vec![],
             chat_input: NodeRef::default(),
             wss,
-            _producer: EventBus::bridge(ctx.link().callback(Msg::HandleMsg)),
         }
     }
 
@@ -87,54 +51,18 @@ impl Component for Chat {
         let submit = ctx.link().callback(|_| Msg::SubmitMessage);
         html! {
             <div class="flex w-screen">
-                <div class="flex-none w-56 h-screen bg-gray-100">
-                    <div class="text-xl p-3">{"Users"}</div>
-                    {
-                        self.users.clone().iter().map(|u| {
-                            html!{
-                                <div class="flex m-3 bg-white rounded-lg p-2">
-                                    <div>
-                                        <img class="w-12 h-12 rounded-full" src={u.avatar.clone()} alt="avatar"/>
-                                    </div>
-                                    <div class="flex-grow p-3">
-                                        <div class="flex text-xs justify-between">
-                                            <div>{u.name.clone()}</div>
-                                        </div>
-                                        <div class="text-xs text-gray-400">
-                                            {"Hi there!"}
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }).collect::<Html>()
-                    }
-                </div>
                 <div class="grow h-screen flex flex-col">
-                    <div class="w-full h-14 border-b-2 border-gray-300"><div class="text-xl p-3">{"💬 Chat!"}</div></div>
                     <div class="w-full grow overflow-auto border-b-2 border-gray-300">
                         {
                             self.messages.iter().map(|m| {
-                                let user = self.users.iter().find(|u| u.name == m.from).unwrap();
-                                html!{
-                                    <div class="flex items-end w-3/6 bg-gray-100 m-8 rounded-tl-lg rounded-tr-lg rounded-br-lg ">
-                                        <img class="w-8 h-8 rounded-full m-3" src={user.avatar.clone()} alt="avatar"/>
-                                        <div class="p-3">
-                                            <div class="text-sm">
-                                                {m.from.clone()}
-                                            </div>
-                                            <div class="text-xs text-gray-500">
-                                                if m.message.ends_with(".gif") {
-                                                    <img class="mt-3" src={m.message.clone()}/>
-                                                } else {
-                                                    {m.message.clone()}
-                                                }
-                                            </div>
-                                        </div>
+                                html! {
+                                    <div class="flex flex-row">
+                                        <div class="p-2">{m.topic.clone()}</div>
+                                        <div class="p-2">{m.payload.clone()}</div>
                                     </div>
                                 }
                             }).collect::<Html>()
                         }
-
                     </div>
                     <div class="w-full h-14 flex px-3 items-center">
                         <input ref={self.chat_input.clone()} type="text" placeholder="Message" class="block w-full py-2 pl-4 mx-3 bg-gray-100 rounded-full outline-none focus:text-gray-700" name="message" required=true />
@@ -151,47 +79,19 @@ impl Component for Chat {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::HandleMsg(s) => {
-                let msg: WebSocketMessage = serde_json::from_str(&s).unwrap();
-                match msg.message_type {
-                    MsgTypes::Users => {
-                        let users_from_message = msg.data_array.unwrap_or_default();
-                        self.users = users_from_message
-                            .iter()
-                            .map(|u| UserProfile {
-                                name: u.into(),
-                                avatar: format!(
-                                    "https://avatars.dicebear.com/api/adventurer-neutral/{}.svg",
-                                    u
-                                ),
-                            })
-                            .collect();
-                        true
-                    }
-                    MsgTypes::Message => {
-                        let message_data: MessageData =
-                            serde_json::from_str(&msg.data.unwrap()).unwrap();
-                        self.messages.push(message_data);
-                        true
-                    }
-                    _ => false,
-                }
+            Msg::HandleMsg(msg) => {
+                self.messages.push(msg);
+                true
             }
             Msg::SubmitMessage => {
                 let input = self.chat_input.cast::<HtmlInputElement>();
                 if let Some(input) = input {
-                    //log::debug!("got input: {:?}", input.value());
-                    let message = WebSocketMessage {
-                        message_type: MsgTypes::Message,
-                        data: Some(input.value()),
-                        data_array: None,
+                    let message = MqttMessage {
+                        topic: "test".to_string(),
+                        payload: input.value(),
                     };
-                    if let Err(e) = self
-                        .wss
-                        .tx
-                        .clone()
-                        .try_send(serde_json::to_string(&message).unwrap())
-                    {
+                    let command = WsCommand::Send(message);
+                    if let Err(e) = self.wss.tx.try_send(command) {
                         log::debug!("error sending to channel: {:?}", e);
                     }
                     input.set_value("");

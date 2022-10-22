@@ -157,12 +157,12 @@ async fn fallback_handler(
             .into_response();
     }
 
-    match ServeDir::new("./dist").oneshot(req).await {
+    match ServeDir::new("./robotica-frontend/dist").oneshot(req).await {
         Ok(response) => {
             let status = response.status();
             match status {
                 StatusCode::NOT_FOUND => {
-                    let index_path = PathBuf::from("./dist").join("index.html");
+                    let index_path = PathBuf::from("./robotica-frontend/dist").join("index.html");
                     let index_content = match fs::read_to_string(index_path).await {
                         Err(_) => {
                             return Response::builder()
@@ -310,7 +310,7 @@ async fn websocket_handler(
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
-enum WsMessage {
+enum WsCommand {
     Subscribe { topic: String },
     Send(MqttMessage),
 }
@@ -407,12 +407,12 @@ async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
                             break;
                         }
                     };
-                    let msg: Result<WsMessage, _> = serde_json::from_str(&msg);
+                    let msg: Result<WsCommand, _> = serde_json::from_str(&msg);
                     match msg {
-                        Ok(WsMessage::Subscribe { topic }) => {
+                        Ok(WsCommand::Subscribe { topic }) => {
                             process_subscribe(topic, &state, tx.clone()).await;
                         }
-                        Ok(WsMessage::Send(msg)) => {
+                        Ok(WsCommand::Send(msg)) => {
                             tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
                             let message: mqtt::Message = msg.into();
                             state.mqtt.try_send(message);

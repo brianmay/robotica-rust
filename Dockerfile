@@ -5,9 +5,19 @@ RUN apt-get update \
     && apt-get install -y cmake \
     && rm -rf /var/lib/apt/lists/*
 
-ADD . ./
+# Install nodejs
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN apt-get update && apt-get install nodejs
+
+# Install wasm-pack
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+ADD ./ ./
 RUN cargo build --release -p brian-node-rust
 RUN ls -l /brian-node-rust/target/release/brian-node-rust
+RUN npm -C robotica-frontend install
+RUN npm -C robotica-frontend run build
+RUN ls -l /brian-node-rust/robotica-frontend/dist
 
 FROM debian:bullseye-slim
 ARG APP=/usr/src/app
@@ -31,6 +41,8 @@ RUN groupadd $APP_USER \
     && mkdir -p ${APP}
 
 COPY --from=builder /brian-node-rust/target/release/brian-node-rust ${APP}/brian-node-rust
+COPY --from=builder /brian-node-rust/robotica-frontend/dist ${APP}/robotica-frontend/dist
+RUN ls -l ${APP}/robotica-frontend/dist
 
 RUN chown -R $APP_USER:$APP_USER ${APP}
 

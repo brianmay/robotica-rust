@@ -1,2 +1,5 @@
-/target
-/.git
+local/
+target/
+.envrc/
+robotica-frontend/node_modules/
+robotica-frontenv/dist/

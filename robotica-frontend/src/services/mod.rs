@@ -1,2 +1,2 @@
-pub mod event_bus;
+pub mod robotica;
 pub mod websocket;

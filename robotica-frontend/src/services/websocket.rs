@@ -1,54 +1,69 @@
-use futures::{channel::mpsc::Sender, SinkExt, StreamExt};
+use futures::{
+    channel::mpsc::Sender,
+    future::{select, Either},
+    SinkExt, StreamExt,
+};
+use log::error;
 use reqwasm::websocket::{futures::WebSocket, Message};
-
 use wasm_bindgen_futures::spawn_local;
-use yew_agent::Dispatched;
+use yew::Callback;
 
-use crate::services::event_bus::Request;
-
-use super::event_bus::EventBus;
+use super::robotica::{MqttMessage, WsCommand};
 
 pub struct WebsocketService {
-    pub tx: Sender<String>,
+    pub tx: Sender<WsCommand>,
+}
+
+fn message_to_string(msg: Message) -> Option<String> {
+    match msg {
+        Message::Text(s) => Some(s),
+        Message::Bytes(b) => match String::from_utf8(b) {
+            Ok(s) => Some(s),
+            Err(err) => {
+                error!("Failed to convert binary message to string: {:?}", err);
+                None
+            }
+        },
+    }
 }
 
 impl WebsocketService {
-    pub fn new() -> Self {
-        let ws = WebSocket::open("ws://localhost:4000/websocket").unwrap();
+    pub fn new(callback: Callback<MqttMessage>) -> Self {
+        let mut ws = WebSocket::open("ws://localhost:4000/websocket").unwrap();
 
-        let (mut write, mut read) = ws.split();
-
-        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<String>(1000);
-        let mut event_bus = EventBus::dispatcher();
+        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<WsCommand>(10);
 
         spawn_local(async move {
-            while let Some(s) = in_rx.next().await {
-                log::debug!("got event from channel! {}", s);
-                write.send(Message::Text(s)).await.unwrap();
-            }
-        });
-
-        spawn_local(async move {
-            log::debug!("WebSocket Opened");
-            while let Some(msg) = read.next().await {
-                match msg {
-                    Ok(Message::Text(data)) => {
-                        log::debug!("from websocket: {}", data);
-                        event_bus.send(Request::EventBusMsg(data));
+            loop {
+                match select(in_rx.next(), ws.next()).await {
+                    Either::Left((Some(cmd), _)) => {
+                        serde_json::to_string(&cmd)
+                            .map(Message::Text)
+                            .map(|m| ws.send(m))
+                            .unwrap()
+                            .await
+                            .unwrap();
                     }
-                    Ok(Message::Bytes(b)) => {
-                        let decoded = std::str::from_utf8(&b);
-                        if let Ok(val) = decoded {
-                            log::debug!("from websocket: {}", val);
-                            event_bus.send(Request::EventBusMsg(val.into()));
+                    Either::Left((None, _)) => {
+                        error!("Command channel closed");
+                        break;
+                    }
+                    Either::Right((Some(Ok(msg)), _)) => {
+                        if let Some(msg) = message_to_string(msg) {
+                            let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
+                            callback.emit(msg);
                         }
                     }
-                    Err(e) => {
-                        log::error!("ws: {:?}", e)
+                    Either::Right((Some(Err(err)), _)) => {
+                        error!("Failed to receive message: {:?}", err);
+                        break;
+                    }
+                    Either::Right((None, _)) => {
+                        error!("Websocket closed");
+                        break;
                     }
                 }
             }
-            log::debug!("WebSocket Closed");
         });
 
         Self { tx: in_tx }
