@@ -9,6 +9,18 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/robotica-frontend"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "npm"
+    directory: "/robotica-frontend"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/brian-node-rust"
+    schedule:
+      interval: "daily"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
