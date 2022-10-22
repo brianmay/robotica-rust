@@ -1,3 +1,5 @@
+# robotica-frontend
+
 ## How to install
 
 ```sh

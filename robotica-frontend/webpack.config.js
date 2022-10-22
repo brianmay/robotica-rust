@@ -10,7 +10,7 @@ module.exports = {
     asyncWebAssembly: true,
   },
   entry: {
-    index: "./js/index.js"
+    index: "./assets/js/index.js"
   },
   output: {
     path: dist,
@@ -22,12 +22,40 @@ module.exports = {
   plugins: [
     new CopyPlugin({
       patterns: [
-        path.resolve(__dirname, "static")
+        path.resolve(__dirname, "assets/static")
       ]
     }),
 
     new WasmPackPlugin({
       crateDirectory: __dirname,
     }),
-  ]
-};
+  ],
+  module: {
+    rules: [
+      {
+        test: /\.(scss)$/,
+        use: [
+          {
+            loader: 'style-loader'
+          },
+          {
+            loader: 'css-loader'
+          },
+          {
+            loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: () => [
+                  require('autoprefixer')
+                ]
+              }
+            }
+          },
+          {
+            loader: 'sass-loader'
+          }
+        ]
+      }
+    ]
+  }
+}
