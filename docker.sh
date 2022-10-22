@@ -1,8 +1,9 @@
 #!/bin/sh
 set -ex
-docker run --rm --ti \
+docker run --rm -ti \
     -p 4000:4000 \
     -v /home/brian/tree/personal/relixir/local/config:/config \
+    --init \
     --env HOSTNAME="$HOSTNAME" \
     --env ROOT_URL="$ROOT_URL" \
     --env MQTT_HOST="$MQTT_HOST" \
