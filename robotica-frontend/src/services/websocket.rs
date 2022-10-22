@@ -3,9 +3,10 @@ use futures::{
     future::{select, Either},
     SinkExt, StreamExt,
 };
-use log::error;
+use log::{error, info};
 use reqwasm::websocket::{futures::WebSocket, Message};
 use wasm_bindgen_futures::spawn_local;
+use web_sys::{console::info_0, window};
 use yew::Callback;
 
 use super::robotica::{MqttMessage, WsCommand};
@@ -29,7 +30,10 @@ fn message_to_string(msg: Message) -> Option<String> {
 
 impl WebsocketService {
     pub fn new(callback: Callback<MqttMessage>) -> Self {
-        let mut ws = WebSocket::open("ws://localhost:4000/websocket").unwrap();
+        let url = get_websocket_url();
+        info!("Connecting to {}", url);
+
+        let mut ws = WebSocket::open(&url).unwrap();
 
         let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<WsCommand>(10);
 
@@ -68,4 +72,16 @@ impl WebsocketService {
 
         Self { tx: in_tx }
     }
+}
+
+fn get_websocket_url() -> String {
+    let window = window().unwrap();
+    let location = window.location();
+    let protocol = if location.protocol().unwrap() == "https:" {
+        "wss"
+    } else {
+        "ws"
+    };
+    let host = location.host().unwrap();
+    format!("{}://{}/websocket", protocol, host)
 }
