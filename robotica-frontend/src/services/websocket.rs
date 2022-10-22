@@ -3,10 +3,10 @@ use futures::{
     future::{select, Either},
     SinkExt, StreamExt,
 };
-use log::{error, info};
+use log::{debug, error, info};
 use reqwasm::websocket::{futures::WebSocket, Message};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{console::info_0, window};
+use web_sys::window;
 use yew::Callback;
 
 use super::robotica::{MqttMessage, WsCommand};
@@ -54,6 +54,7 @@ impl WebsocketService {
                     }
                     Either::Right((Some(Ok(msg)), _)) => {
                         if let Some(msg) = message_to_string(msg) {
+                            debug!("Received message: {:?}", msg);
                             let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
                             callback.emit(msg);
                         }

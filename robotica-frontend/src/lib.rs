@@ -69,7 +69,7 @@ fn app() -> Html {
             <ContextProvider<User> context={(*ctx).clone()}>
                 <BrowserRouter>
                     { nav_bar() }
-                    <div class="flex w-screen h-screen">
+                    <div>
                         <Switch<Route> render={Switch::render(switch)}/>
                     </div>
                 </BrowserRouter>

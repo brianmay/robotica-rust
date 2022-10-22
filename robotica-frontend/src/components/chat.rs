@@ -1,3 +1,4 @@
+use log::{debug, error};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
@@ -80,6 +81,7 @@ impl Component for Chat {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::HandleMsg(msg) => {
+                debug!("Got message: {:?}", msg);
                 self.messages.push(msg);
                 true
             }
@@ -92,7 +94,7 @@ impl Component for Chat {
                     };
                     let command = WsCommand::Send(message);
                     if let Err(e) = self.wss.tx.try_send(command) {
-                        log::debug!("error sending to channel: {:?}", e);
+                        error!("error sending to channel: {:?}", e);
                     }
                     input.set_value("");
                 };
