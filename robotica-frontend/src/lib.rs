@@ -29,7 +29,7 @@ fn switch(selected_route: &Route) -> Html {
         Route::Root => html! {<Root/>},
         Route::Chat => html! {<Chat/>},
         Route::Login => html! {<Login/>},
-        Route::NotFound => html! {<h1>{"404 baby"}</h1>},
+        Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     }
 }
 
