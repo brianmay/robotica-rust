@@ -32,7 +32,7 @@ axum = { version = "0.5.17", features = ["ws"] }
 openid = "0.10.0"
 maud = { version = "0.24.0", features = ["axum"] }
 axum-sessions = "0.3.1"
-base64 = "0.13.0"
+base64 = "0.13.1"
 url = "2.2.2"
 futures = "0.3.25"
 tower = "0.4.13"
