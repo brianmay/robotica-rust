@@ -42,7 +42,9 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         message_sink,
     };
 
-    http::run(state.mqtt.clone()).await.expect("HTTP server failed");
+    http::run(state.mqtt.clone())
+        .await
+        .expect("HTTP server failed");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
 
