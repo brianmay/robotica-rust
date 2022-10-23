@@ -5,6 +5,7 @@ use futures::{
     future::{select, Either},
     SinkExt, StreamExt,
 };
+use gloo_timers::callback::Timeout;
 use log::{debug, error, info};
 use reqwasm::websocket::{futures::WebSocket, Message};
 use wasm_bindgen_futures::spawn_local;
@@ -19,7 +20,14 @@ pub enum Command {
         topic: String,
         callback: Callback<MqttMessage>,
     },
+    EventHandler(Callback<WsEvent>),
     Send(MqttMessage),
+    Reconnect,
+}
+
+pub enum WsEvent {
+    Disconnect,
+    Connect,
 }
 
 #[derive(Clone)]
@@ -53,13 +61,18 @@ impl WebsocketService {
 
         let mut ws = WebSocket::open(&url).unwrap();
         let mut subscriptions: HashMap<String, Vec<Callback<MqttMessage>>> = HashMap::new();
+        let mut event_handlers: Vec<Callback<WsEvent>> = vec![];
+        let mut is_connected = true;
+        let mut timeout = Option::<Timeout>::None;
 
         let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<Command>(10);
 
+        let in_tx_clone = in_tx.clone();
         spawn_local(async move {
             loop {
                 match select(in_rx.next(), ws.next()).await {
                     Either::Left((Some(Command::Subscribe { topic, callback }), _)) => {
+                        debug!("ws: Subscribing to {}", topic);
                         match subscriptions.get_mut(&topic) {
                             Some(callbacks) => callbacks.push(callback),
                             None => {
@@ -72,18 +85,41 @@ impl WebsocketService {
                         }
                     }
                     Either::Left((Some(Command::Send(msg)), _)) => {
+                        debug!("ws: Sending message: {:?}", msg);
                         let command = WsCommand::Send(msg);
                         ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
                             .await
                             .unwrap();
                     }
+                    Either::Left((Some(Command::EventHandler(handler)), _)) => {
+                        debug!("ws: Register event handler.");
+                        if is_connected {
+                            handler.emit(WsEvent::Connect);
+                        } else {
+                            handler.emit(WsEvent::Disconnect);
+                        }
+                        event_handlers.push(handler);
+                    }
+                    Either::Left((Some(Command::Reconnect), _)) => {
+                        info!("ws: Trying to reconnect to websocket.");
+                        timeout.map(|t| t.forget());
+                        timeout = None;
+                        for handler in &event_handlers {
+                            handler.emit(WsEvent::Disconnect);
+                        }
+                        ws = WebSocket::open(&url).unwrap();
+                        for handler in &event_handlers {
+                            handler.emit(WsEvent::Connect);
+                        }
+                        is_connected = true;
+                    }
                     Either::Left((None, _)) => {
-                        error!("Command channel closed");
+                        error!("ws: Command channel closed, quitting.");
                         break;
                     }
                     Either::Right((Some(Ok(msg)), _)) => {
+                        debug!("ws: Received message: {:?}", msg);
                         if let Some(msg) = message_to_string(msg) {
-                            debug!("Received message: {:?}", msg);
                             let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
                             if let Some(callbacks) = subscriptions.get(&msg.topic) {
                                 for callback in callbacks {
@@ -93,12 +129,26 @@ impl WebsocketService {
                         }
                     }
                     Either::Right((Some(Err(err)), _)) => {
-                        error!("Failed to receive message: {:?}", err);
-                        break;
+                        error!("ws: Failed to receive message: {:?}, reconnecting.", err);
+                        is_connected = false;
+                        for handler in &event_handlers {
+                            handler.emit(WsEvent::Disconnect);
+                        }
+                        let mut in_tx_clone = in_tx_clone.clone();
+                        let _ = Timeout::new(5000, move || {
+                            in_tx_clone.try_send(Command::Reconnect).unwrap();
+                        });
                     }
                     Either::Right((None, _)) => {
-                        error!("Websocket closed");
-                        break;
+                        error!("ws: closed, reconnecting.");
+                        is_connected = false;
+                        for handler in &event_handlers {
+                            handler.emit(WsEvent::Disconnect);
+                        }
+                        let mut in_tx_clone = in_tx_clone.clone();
+                        timeout = Some(Timeout::new(5000, move || {
+                            in_tx_clone.try_send(Command::Reconnect).unwrap();
+                        }));
                     }
                 }
             }

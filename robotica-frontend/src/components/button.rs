@@ -8,7 +8,7 @@ use crate::services::{
         Label,
     },
     robotica::MqttMessage,
-    websocket::{Command, WebsocketService},
+    websocket::{Command, WebsocketService, WsEvent},
 };
 
 #[derive(Clone, Properties, Eq, PartialEq)]
@@ -208,6 +208,7 @@ pub struct Button<T: ConfigTrait> {
 pub enum Message {
     Click,
     Receive((Label, String)),
+    Event(WsEvent),
 }
 
 impl From<LightProps> for lights::Config {
@@ -238,22 +239,31 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
 
         let controller = props.create_controller();
         let state = controller.new_state();
-        let tx = wss.tx.clone();
 
-        controller.get_subscriptions().iter().for_each(move |s| {
-            let topic = s.topic.clone();
-            let s = (*s).clone();
-            // let state = state.clone();
-            // let controller = controller.clone();
+        {
+            let tx = wss.tx.clone();
+            controller.get_subscriptions().iter().for_each(move |s| {
+                let topic = s.topic.clone();
+                let s = (*s).clone();
+                // let state = state.clone();
+                // let controller = controller.clone();
 
-            let callback = ctx
-                .link()
-                .callback(move |msg: MqttMessage| Message::Receive((s.label, msg.payload)));
+                let callback = ctx
+                    .link()
+                    .callback(move |msg: MqttMessage| Message::Receive((s.label, msg.payload)));
 
-            let subscribe = Command::Subscribe { topic, callback };
-            let mut tx = tx.clone();
-            tx.try_send(subscribe).unwrap();
-        });
+                let subscribe = Command::Subscribe { topic, callback };
+                let mut tx_clone = tx.clone();
+                tx_clone.try_send(subscribe).unwrap();
+            });
+        }
+
+        {
+            let callback = ctx.link().callback(Message::Event);
+            let msg = Command::EventHandler(callback);
+            let mut tx = wss.tx.clone();
+            tx.try_send(msg).unwrap();
+        }
 
         Button {
             controller,
@@ -322,6 +332,10 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
                 self.controller
                     .process_message(label, payload, &mut self.state);
             }
+            Message::Event(WsEvent::Disconnect) => {
+                self.controller.process_disconnected(&mut self.state)
+            }
+            Message::Event(WsEvent::Connect) => {}
         }
         true
     }

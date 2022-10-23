@@ -9,6 +9,7 @@ use yew_router::prelude::*;
 mod components;
 use components::lights::Lights;
 use components::login::Login;
+use components::ws_client::WsClient;
 
 mod services;
 
@@ -29,7 +30,7 @@ pub enum Route {
 fn switch(selected_route: &Route) -> Html {
     match selected_route {
         Route::Root => html! {<Root/>},
-        Route::Lights => html! {<Lights/>},
+        Route::Lights => html! {<WsClient><Lights/></WsClient>},
         Route::Login => html! {<Login/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     }

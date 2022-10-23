@@ -1,9 +1,10 @@
+use log::info;
 use yew::prelude::*;
 
 use crate::services::controllers::{Action, Icon};
+use crate::services::websocket::{Command, WebsocketService, WsEvent};
 
 use super::button::{Button, LightProps, MusicProps, SwitchProps};
-use super::ws_client::WsClient;
 
 #[function_component(Lights)]
 pub fn lights_view() -> Html {
@@ -35,8 +36,36 @@ pub fn lights_view() -> Html {
         hard_off: "/images/tv_off.svg".into(),
     };
 
+    let connected = use_state(|| false);
+
+    let callback = {
+        let connected = connected.clone();
+
+        Callback::from(move |msg: WsEvent| match msg {
+            WsEvent::Connect => {
+                connected.set(true);
+            }
+            WsEvent::Disconnect => {
+                connected.set(false);
+            }
+        })
+    };
+
+    let wss = use_context::<WebsocketService>().expect("No context found.");
+    use_ref(|| {
+        info!("Connecting to event handler");
+        let msg = Command::EventHandler(callback);
+        let mut tx = wss.tx;
+        tx.try_send(msg).unwrap();
+    });
+
     html! {
-        <WsClient>
+        <>
+            if !*connected {
+                <div class="alert alert-danger" role="alert">
+                    { "The connection is down." }
+                </div>
+            }
             <div>
                 <h2>{"Brian's Room"}</h2>
                 <Button<LightProps> name={"Brian Auto"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
@@ -54,6 +83,6 @@ pub fn lights_view() -> Html {
                 <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
             </div>
 
-        </WsClient>
+        </>
     }
 }
