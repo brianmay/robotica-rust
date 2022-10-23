@@ -243,8 +243,8 @@ async fn root(session: ReadableSession) -> Markup {
         html {
             head {
                 title { "Robotica" }
-                link rel="stylesheet" href="bootstrap.min.css" {}
-                script src="bootstrap.min.js" {}
+                meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" {}
+                script src="backend.js" {}
             }
             body {
                 ( nav_bar() )

@@ -10,7 +10,8 @@ module.exports = {
     asyncWebAssembly: true,
   },
   entry: {
-    index: "./assets/js/index.js"
+    index: "./assets/js/index.js",
+    backend: "./assets/js/backend.js"
   },
   output: {
     path: dist,
