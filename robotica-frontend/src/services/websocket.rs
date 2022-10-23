@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use futures::{
     channel::mpsc::Sender,
     future::{select, Either},
@@ -11,8 +13,24 @@ use yew::Callback;
 
 use super::robotica::{MqttMessage, WsCommand};
 
+#[derive(Debug)]
+pub enum Command {
+    Subscribe {
+        topic: String,
+        callback: Callback<MqttMessage>,
+    },
+    Send(MqttMessage),
+}
+
+#[derive(Clone)]
 pub struct WebsocketService {
-    pub tx: Sender<WsCommand>,
+    pub tx: Sender<Command>,
+}
+
+impl PartialEq for WebsocketService {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 fn message_to_string(msg: Message) -> Option<String> {
@@ -29,22 +47,33 @@ fn message_to_string(msg: Message) -> Option<String> {
 }
 
 impl WebsocketService {
-    pub fn new(callback: Callback<MqttMessage>) -> Self {
+    pub fn new() -> Self {
         let url = get_websocket_url();
         info!("Connecting to {}", url);
 
         let mut ws = WebSocket::open(&url).unwrap();
+        let mut subscriptions: HashMap<String, Vec<Callback<MqttMessage>>> = HashMap::new();
 
-        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<WsCommand>(10);
+        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<Command>(10);
 
         spawn_local(async move {
             loop {
                 match select(in_rx.next(), ws.next()).await {
-                    Either::Left((Some(cmd), _)) => {
-                        serde_json::to_string(&cmd)
-                            .map(Message::Text)
-                            .map(|m| ws.send(m))
-                            .unwrap()
+                    Either::Left((Some(Command::Subscribe { topic, callback }), _)) => {
+                        match subscriptions.get_mut(&topic) {
+                            Some(callbacks) => callbacks.push(callback),
+                            None => {
+                                subscriptions.insert(topic.clone(), vec![callback]);
+                                let command = WsCommand::Subscribe { topic };
+                                ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
+                                    .await
+                                    .unwrap();
+                            }
+                        }
+                    }
+                    Either::Left((Some(Command::Send(msg)), _)) => {
+                        let command = WsCommand::Send(msg);
+                        ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
                             .await
                             .unwrap();
                     }
@@ -56,7 +85,11 @@ impl WebsocketService {
                         if let Some(msg) = message_to_string(msg) {
                             debug!("Received message: {:?}", msg);
                             let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
-                            callback.emit(msg);
+                            if let Some(callbacks) = subscriptions.get(&msg.topic) {
+                                for callback in callbacks {
+                                    callback.emit(msg.clone());
+                                }
+                            }
                         }
                     }
                     Either::Right((Some(Err(err)), _)) => {

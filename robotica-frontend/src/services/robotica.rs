@@ -8,7 +8,7 @@ pub enum WsCommand {
     Send(MqttMessage),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MqttMessage {
     pub topic: String,
     pub payload: String,

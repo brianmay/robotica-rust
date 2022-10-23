@@ -2,12 +2,9 @@ use log::{debug, error};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
-use crate::{
-    services::{
-        robotica::{MqttMessage, WsCommand},
-        websocket::WebsocketService,
-    },
-    User,
+use crate::services::{
+    robotica::MqttMessage,
+    websocket::{Command, WebsocketService},
 };
 
 pub enum Msg {
@@ -26,19 +23,16 @@ impl Component for Chat {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (user, _) = ctx
-            .link()
-            .context::<User>(Callback::noop())
-            .expect("context to be set");
-
         let callback = ctx.link().callback(Msg::HandleMsg);
-        let mut wss = WebsocketService::new(callback);
-        let _username = user.name.borrow().clone();
-
-        let command = WsCommand::Subscribe {
-            topic: "test".into(),
+        let subscribe = Command::Subscribe {
+            topic: "test".to_string(),
+            callback,
         };
-        wss.tx.try_send(command).unwrap();
+        let (wss, _) = ctx
+            .link()
+            .context::<WebsocketService>(Callback::noop())
+            .expect("Context to be set");
+        wss.tx.clone().try_send(subscribe).unwrap();
 
         Self {
             // users: vec![],
@@ -92,7 +86,7 @@ impl Component for Chat {
                         topic: "test".to_string(),
                         payload: input.value(),
                     };
-                    let command = WsCommand::Send(message);
+                    let command = Command::Send(message);
                     if let Err(e) = self.wss.tx.try_send(command) {
                         error!("error sending to channel: {:?}", e);
                     }

@@ -1,13 +1,13 @@
+#![allow(clippy::let_unit_value)]
+
 use std::{cell::RefCell, rc::Rc};
 
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-// use yew_router::{BrowserRouter, Routable, Switch};
-
 mod components;
-use components::chat::Chat;
+use components::lights::Lights;
 use components::login::Login;
 
 mod services;
@@ -16,8 +16,8 @@ mod services;
 pub enum Route {
     #[at("/")]
     Root,
-    #[at("/chat")]
-    Chat,
+    #[at("/lights")]
+    Lights,
     #[at("/login")]
     Login,
     #[not_found]
@@ -29,7 +29,7 @@ pub enum Route {
 fn switch(selected_route: &Route) -> Html {
     match selected_route {
         Route::Root => html! {<Root/>},
-        Route::Chat => html! {<Chat/>},
+        Route::Lights => html! {<Lights/>},
         Route::Login => html! {<Login/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     }
@@ -103,7 +103,7 @@ fn nav_bar() -> Html {
                         <Link<Route> classes="nav-link" to={Route::Root}>{ "Home" }</Link<Route>>
                     </li>
                     <li class="nav-item">
-                        <Link<Route> classes="nav-link" to={Route::Chat}>{ "Chat" }</Link<Route>>
+                        <Link<Route> classes="nav-link" to={Route::Lights}>{ "Lights" }</Link<Route>>
                     </li>
                     <li class="nav-item">
                         <Link<Route> classes="nav-link" to={Route::Login}>{ "Login" }</Link<Route>>

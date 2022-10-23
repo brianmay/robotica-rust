@@ -1,0 +1,7 @@
+.button {
+    @extend .btn;
+    @extend .btn-lg;
+    width: 128px;
+    height: 256px;
+    margin: 16px;
+}
