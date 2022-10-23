@@ -15,8 +15,8 @@ mod services;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
-    #[at("/")]
-    Root,
+    #[at("/test")]
+    Test,
     #[at("/lights")]
     Lights,
     #[at("/login")]
@@ -28,11 +28,18 @@ pub enum Route {
 
 #[allow(clippy::let_unit_value)]
 fn switch(selected_route: &Route) -> Html {
-    match selected_route {
-        Route::Root => html! {<Root/>},
-        Route::Lights => html! {<WsClient><Lights/></WsClient>},
+    let content = match selected_route {
+        Route::Test => html! { <Test/> },
+        Route::Lights => html! { <WsClient><Lights/></WsClient> },
         Route::Login => html! {<Login/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
+    };
+
+    html! {
+        <>
+            <NavBar/>
+            {content}
+        </>
     }
 }
 
@@ -43,8 +50,8 @@ pub struct UserInner {
     pub name: RefCell<String>,
 }
 
-#[function_component(Root)]
-fn root() -> Html {
+#[function_component(Test)]
+fn test() -> Html {
     let user = use_context::<User>().expect("No context found.");
     let name = user.name.borrow();
 
@@ -69,7 +76,6 @@ fn app() -> Html {
         <>
             <ContextProvider<User> context={(*ctx).clone()}>
                 <BrowserRouter>
-                    { nav_bar() }
                     <div>
                         <Switch<Route> render={Switch::render(switch)}/>
                     </div>
@@ -87,7 +93,31 @@ pub fn run() -> Result<(), JsValue> {
     Ok(())
 }
 
+#[function_component(NavBar)]
 fn nav_bar() -> Html {
+    let route: Option<Route> = match use_location() {
+        Some(location) => location.route(),
+        None => None,
+    };
+
+    let classes = |link_route| {
+        let mut classes = classes!("nav-link");
+        if Some(link_route) == route {
+            classes.push("active");
+        }
+        classes
+    };
+
+    // let active = |link_route| Some(link_route) == route;
+
+    let link = |link_route, text| {
+        html! {
+            <Link<Route> classes={classes(link_route)} to={link_route}>
+                {text}
+            </Link<Route>>
+        }
+    };
+
     html! {
         <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
             <div class="container-fluid">
@@ -98,36 +128,15 @@ fn nav_bar() -> Html {
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="/">{ "Home" }</a>
+                        { link(Route::Lights, "Lights") }
                     </li>
                     <li class="nav-item">
-                        <Link<Route> classes="nav-link" to={Route::Root}>{ "Home" }</Link<Route>>
+                        { link(Route::Login, "Login") }
                     </li>
                     <li class="nav-item">
-                        <Link<Route> classes="nav-link" to={Route::Lights}>{ "Lights" }</Link<Route>>
-                    </li>
-                    <li class="nav-item">
-                        <Link<Route> classes="nav-link" to={Route::Login}>{ "Login" }</Link<Route>>
-                    </li>
-                    <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        { "Dropdown" }
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="#">{ "Action" }</a></li>
-                        <li><a class="dropdown-item" href="#">{ "Another action" }</a></li>
-                        <li><hr class="dropdown-divider"/></li>
-                        <li><a class="dropdown-item" href="#">{ "Something else here" }</a></li>
-                    </ul>
-                    </li>
-                    <li class="nav-item">
-                    <a class="nav-link disabled">{ "Disabled" }</a>
+                        { link(Route::Test, "Test") }
                     </li>
                 </ul>
-                <form class="d-flex" role="search">
-                    <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search" />
-                    <button class="btn btn-outline-success" type="submit">{ "Search" }</button>
-                </form>
                 </div>
             </div>
         </nav>
