@@ -60,7 +60,7 @@ impl WebsocketService {
         info!("Connecting to {}", url);
 
         let keep_alive_duration_millis = 15_000;
-        let reconnect_delay_millis = 5000;
+        let reconnect_delay_millis = 5_000;
 
         let mut ws = WebSocket::open(&url).unwrap();
         let mut subscriptions: HashMap<String, Vec<Callback<MqttMessage>>> = HashMap::new();
