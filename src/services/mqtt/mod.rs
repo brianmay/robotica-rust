@@ -1,4 +1,6 @@
 //! Source (and sink) for MQTT data.
+pub mod topics;
+
 use bytes::Bytes;
 use log::{debug, error, info, warn};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
