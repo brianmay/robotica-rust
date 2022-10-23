@@ -2,6 +2,7 @@
 mod oidc;
 mod urls;
 
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::Arc;
@@ -137,8 +138,26 @@ async fn server(
     Ok(())
 }
 
-fn get_user(session: &ReadableSession) -> Option<String> {
-    session.get::<String>("user")
+#[derive(Debug)]
+struct User {
+    name: String,
+}
+
+impl Display for User {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+fn set_user(
+    session: &mut WritableSession,
+    user_info: &openid::Userinfo,
+) -> Result<(), serde_json::Error> {
+    session.insert("user", &user_info.name)
+}
+
+fn get_user(session: &ReadableSession) -> Option<User> {
+    session.get::<String>("user").map(|name| User { name })
 }
 
 async fn fallback_handler(
@@ -259,7 +278,9 @@ async fn oidc_callback(
 
     match result {
         Ok((_token, user_info)) => {
-            session.insert("user", &user_info.name).unwrap();
+            set_user(&mut session, &user_info).unwrap_or_else(|err| {
+                tracing::error!("failed to set user in session: {err}");
+            });
 
             let url = http_config.generate_url_or_default(&state);
 
