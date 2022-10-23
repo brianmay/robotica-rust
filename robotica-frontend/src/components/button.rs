@@ -275,7 +275,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
 
         match display_state {
             DisplayState::HardOff => classes.push("btn-light"),
-            DisplayState::Off => classes.push("btn-primary"),
+            DisplayState::Off => classes.push("btn-dark"),
             DisplayState::Error => classes.push("btn-danger"),
             DisplayState::Unknown => classes.push("btn-warning"),
             DisplayState::On => classes.push("btn-success"),
