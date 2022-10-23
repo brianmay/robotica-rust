@@ -12,6 +12,8 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 use yew::Callback;
 
+use crate::services::controllers::Subscription;
+
 use super::robotica::{MqttMessage, WsCommand};
 
 #[derive(Debug)]
@@ -108,10 +110,19 @@ impl WebsocketService {
                             handler.emit(WsEvent::Disconnect);
                         }
                         ws = WebSocket::open(&url).unwrap();
+                        for topic in subscriptions.keys() {
+                            let command = WsCommand::Subscribe {
+                                topic: topic.clone(),
+                            };
+                            ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
+                                .await
+                                .unwrap();
+                        }
                         for handler in &event_handlers {
                             handler.emit(WsEvent::Connect);
                         }
                         is_connected = true;
+                        info!("ws: Reconnected to websocket.");
                     }
                     Either::Left((None, _)) => {
                         error!("ws: Command channel closed, quitting.");
