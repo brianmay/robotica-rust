@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum WsCommand {
     Subscribe { topic: String },
     Send(MqttMessage),
+    KeepAlive,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

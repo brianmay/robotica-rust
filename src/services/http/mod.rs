@@ -313,6 +313,7 @@ async fn websocket_handler(
 enum WsCommand {
     Subscribe { topic: String },
     Send(MqttMessage),
+    KeepAlive,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -416,6 +417,9 @@ async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
                             tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
                             let message: mqtt::Message = msg.into();
                             state.mqtt.try_send(message);
+                        }
+                        Ok(WsCommand::KeepAlive) => {
+                            // Do nothing
                         }
                         Err(err) => {
                             tracing::error!("recv_task: Error parsing message: {}", err);
