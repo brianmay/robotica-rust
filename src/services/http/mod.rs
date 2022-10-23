@@ -176,12 +176,13 @@ async fn fallback_handler(
             .into_response();
     }
 
-    match ServeDir::new("./robotica-frontend/dist").oneshot(req).await {
+    let static_path = "./robotica-frontend/dist";
+    match ServeDir::new(static_path).oneshot(req).await {
         Ok(response) => {
             let status = response.status();
             match status {
                 StatusCode::NOT_FOUND => {
-                    let index_path = PathBuf::from("./robotica-frontend/dist").join("index.html");
+                    let index_path = PathBuf::from(static_path).join("index.html");
                     let index_content = match fs::read_to_string(index_path).await {
                         Err(_) => {
                             return Response::builder()
