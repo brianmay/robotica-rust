@@ -59,17 +59,15 @@ impl WebsocketService {
         let url = get_websocket_url();
         info!("Connecting to {}", url);
 
+        let keep_alive_duration_millis = 15_000;
+        let reconnect_delay_millis = 5000;
+
         let mut ws = WebSocket::open(&url).unwrap();
         let mut subscriptions: HashMap<String, Vec<Callback<MqttMessage>>> = HashMap::new();
         let mut event_handlers: Vec<Callback<WsEvent>> = vec![];
         let mut is_connected = true;
         let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<Command>(10);
-
-        debug!("Scheduling next keepalive");
-        let mut in_tx_clone = in_tx.clone();
-        let mut timeout = Some(Timeout::new(5000, move || {
-            in_tx_clone.try_send(Command::KeepAlive).unwrap();
-        }));
+        let mut timeout = schedule_keep_alive(&in_tx, keep_alive_duration_millis);
 
         let in_tx_clone = in_tx.clone();
         spawn_local(async move {
@@ -85,6 +83,8 @@ impl WebsocketService {
                                 ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
                                     .await
                                     .unwrap();
+                                timeout =
+                                    schedule_keep_alive(&in_tx_clone, keep_alive_duration_millis);
                             }
                         }
                     }
@@ -94,6 +94,7 @@ impl WebsocketService {
                         ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
                             .await
                             .unwrap();
+                        timeout = schedule_keep_alive(&in_tx_clone, keep_alive_duration_millis);
                     }
                     Either::Left((Some(Command::EventHandler(handler)), _)) => {
                         debug!("ws: Register event handler.");
@@ -130,18 +131,14 @@ impl WebsocketService {
                             is_connected = true;
                             info!("ws: Reconnected to websocket and resubscribed.");
                         } else {
-                            debug!("ws: Sending keepalive.");
+                            debug!("ws: Sending keep alive.");
                             let command = WsCommand::KeepAlive;
                             ws.send(Message::Text(serde_json::to_string(&command).unwrap()))
                                 .await
                                 .unwrap();
                         }
 
-                        debug!("Scheduling next keepalive");
-                        let mut in_tx_clone = in_tx_clone.clone();
-                        timeout = Some(Timeout::new(5000, move || {
-                            in_tx_clone.try_send(Command::KeepAlive).unwrap();
-                        }));
+                        timeout = schedule_keep_alive(&in_tx_clone, keep_alive_duration_millis);
                     }
                     Either::Left((None, _)) => {
                         error!("ws: Command channel closed, quitting.");
@@ -157,6 +154,7 @@ impl WebsocketService {
                                 }
                             }
                         }
+                        timeout = schedule_keep_alive(&in_tx_clone, keep_alive_duration_millis);
                     }
                     Either::Right((Some(Err(err)), _)) => {
                         error!("ws: Failed to receive message: {:?}, reconnecting.", err);
@@ -164,10 +162,7 @@ impl WebsocketService {
                         for handler in &event_handlers {
                             handler.emit(WsEvent::Disconnect);
                         }
-                        let mut in_tx_clone = in_tx_clone.clone();
-                        let _ = Timeout::new(5000, move || {
-                            in_tx_clone.try_send(Command::KeepAlive).unwrap();
-                        });
+                        timeout = schedule_keep_alive(&in_tx_clone, reconnect_delay_millis);
                     }
                     Either::Right((None, _)) => {
                         error!("ws: closed, reconnecting.");
@@ -175,10 +170,7 @@ impl WebsocketService {
                         for handler in &event_handlers {
                             handler.emit(WsEvent::Disconnect);
                         }
-                        let mut in_tx_clone = in_tx_clone.clone();
-                        timeout = Some(Timeout::new(5000, move || {
-                            in_tx_clone.try_send(Command::KeepAlive).unwrap();
-                        }));
+                        timeout = schedule_keep_alive(&in_tx_clone, reconnect_delay_millis);
                     }
                 }
             }
@@ -186,6 +178,14 @@ impl WebsocketService {
 
         Self { tx: in_tx }
     }
+}
+
+fn schedule_keep_alive(in_tx: &Sender<Command>, millis: u32) -> Option<Timeout> {
+    debug!("Scheduling next keepalive");
+    let mut in_tx_clone = in_tx.clone();
+    Some(Timeout::new(millis, move || {
+        in_tx_clone.try_send(Command::KeepAlive).unwrap();
+    }))
 }
 
 fn get_websocket_url() -> String {
