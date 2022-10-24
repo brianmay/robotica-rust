@@ -10,6 +10,7 @@ use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
 
+use crate::scheduling::sequencer::check_schedule;
 use crate::scheduling::types::utc_now;
 use crate::services::mqtt::{Message, Mqtt, QoS, Subscriptions};
 use crate::spawn;
@@ -245,6 +246,10 @@ pub enum ExecutorError {
     #[error("Sequencer Config Error: {0}")]
     SequencerConfigError(#[from] sequencer::ConfigError),
 
+    /// A Scheduler config error occurred.
+    #[error("Sequencer Config Check Error: {0}")]
+    SequencerConfigCheckError(#[from] sequencer::ConfigCheckError),
+
     /// The hostname could not be determined.
     #[error("Could not determine hostname: {0}")]
     HostnameError(#[from] VarError),
@@ -327,6 +332,7 @@ fn get_initial_state(mqtt: Mqtt) -> Result<State<Local>, ExecutorError> {
             let classifier = classifier::load_config_from_default_file()?;
             let scheduler = scheduler::load_config_from_default_file()?;
             let sequencer = sequencer::load_config_from_default_file()?;
+            check_schedule(&scheduler, &sequencer)?;
             Config {
                 classifier,
                 scheduler,

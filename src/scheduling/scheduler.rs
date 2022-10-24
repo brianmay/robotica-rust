@@ -46,6 +46,14 @@ pub struct Config {
     sequences: HashMap<String, Sequence>,
 }
 
+impl Config {
+    /// Retrieve the sequences from the config.
+    #[must_use]
+    pub const fn get_sequences(&self) -> &HashMap<String, Sequence> {
+        &self.sequences
+    }
+}
+
 #[derive(Debug)]
 struct Context {
     today: HashSet<String>,
@@ -228,6 +236,37 @@ pub fn get_schedule<T: TimeZone>(
     let config_list = load_config_from_default_file()?;
     let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
     Ok(schedule)
+}
+
+/// Create test schedule for testing.
+///
+/// # Panics
+///
+/// Panics if something goes wrong.
+#[cfg(test)]
+#[must_use]
+pub fn create_test_config() -> Vec<Config> {
+    vec![Config {
+        if_cond: None,
+        today: None,
+        tomorrow: None,
+        sequences: HashMap::from([
+            (
+                "wake_up".to_string(),
+                Sequence {
+                    time: "08:30:00".parse().unwrap(),
+                    options: None,
+                },
+            ),
+            (
+                "sleep".to_string(),
+                Sequence {
+                    time: "20:30:00".parse().unwrap(),
+                    options: None,
+                },
+            ),
+        ]),
+    }]
 }
 
 #[cfg(test)]

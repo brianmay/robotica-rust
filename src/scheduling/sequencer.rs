@@ -15,7 +15,8 @@ use crate::services::mqtt;
 
 use super::{
     ast::{Boolean, Fields},
-    conditions, scheduler,
+    conditions,
+    scheduler::{self},
     types::{DateTime, Duration, Mark},
 };
 
@@ -280,15 +281,19 @@ pub enum ConfigError {
     YamlError(PathBuf, serde_yaml::Error),
 }
 
+/// An error loading the Config
+#[derive(Error, Debug)]
+pub enum ConfigCheckError {
+    /// Environment variable not set
+    #[error("Sequence {0} could not be found")]
+    SequenceError(String),
+}
+
 /// Load the scheduler config from the given path.
 ///
 /// # Errors
 ///
 /// If the file cannot be read or parsed.
-///
-/// # Panics
-///
-/// Never (FIXME: check this).
 pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
     let f = std::fs::File::open(&filename)
         .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
@@ -308,6 +313,27 @@ pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
     let env_name = "SEQUENCES_FILE";
     let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
     load_config(Path::new(&filename))
+}
+
+/// Check the config for errors.
+///
+/// # Errors
+///
+/// Returns an error if a sequence is referenced that does not exist.
+pub fn check_schedule(
+    schedule: &[scheduler::Config],
+    sequence: &ConfigMap,
+) -> Result<(), ConfigCheckError> {
+    for s in schedule {
+        s.get_sequences().keys().try_for_each(|k| {
+            if sequence.contains_key(k) {
+                Ok(())
+            } else {
+                Err(ConfigCheckError::SequenceError(k.to_string()))
+            }
+        })?;
+    }
+    Ok(())
 }
 
 /// Something went wrong trying to get a sequence.
@@ -1292,5 +1318,70 @@ mod tests {
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_check_schedule_bad() {
+        let schedule: Vec<scheduler::Config> = scheduler::create_test_config();
+
+        let sequence = HashMap::new();
+        let err = check_schedule(&schedule, &sequence);
+        assert!(err.is_err());
+        assert!(matches!(err, Err(ConfigCheckError::SequenceError(_))));
+    }
+
+    #[test]
+    fn test_check_schedule_good() {
+        let schedule: Vec<scheduler::Config> = scheduler::create_test_config();
+
+        let sequence = HashMap::from([
+            (
+                "wake_up".to_string(),
+                vec![Config {
+                    id: None,
+                    classifications: None,
+                    options: None,
+                    if_cond: None,
+                    zero_time: Some(true),
+                    required_time: Duration::minutes(30),
+                    latest_time: None,
+                    repeat_count: None,
+                    repeat_time: None,
+                    tasks: vec![ConfigTask {
+                        description: None,
+                        payload: None,
+                        qos: None,
+                        retain: None,
+                        locations: vec!["test".to_string()],
+                        devices: vec!["test".to_string()],
+                        topics: None,
+                    }],
+                }],
+            ),
+            (
+                "sleep".to_string(),
+                vec![Config {
+                    id: None,
+                    classifications: None,
+                    options: None,
+                    if_cond: None,
+                    zero_time: Some(false),
+                    required_time: Duration::minutes(30),
+                    latest_time: None,
+                    repeat_count: None,
+                    repeat_time: None,
+                    tasks: vec![ConfigTask {
+                        description: None,
+                        payload: None,
+                        qos: None,
+                        retain: None,
+                        locations: vec!["test".to_string()],
+                        devices: vec!["test".to_string()],
+                        topics: None,
+                    }],
+                }],
+            ),
+        ]);
+        check_schedule(&schedule, &sequence).unwrap();
     }
 }
