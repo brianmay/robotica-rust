@@ -36,6 +36,8 @@ use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
 
+use super::mqtt::topics::topic_matches_any;
+
 struct HttpConfig {
     #[allow(dead_code)]
     mqtt: Mqtt,
@@ -115,7 +117,7 @@ async fn server(
     oidc: Client,
     session_layer: SessionLayer<MemoryStore>,
 ) -> Result<(), HttpError> {
-    let http_state = Arc::new(config);
+    let config = Arc::new(config);
     let oidc = Arc::new(oidc);
 
     let app = Router::new()
@@ -123,7 +125,7 @@ async fn server(
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
         .fallback(get(fallback_handler))
-        .layer(Extension(http_state))
+        .layer(Extension(config))
         .layer(Extension(oidc))
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
@@ -313,13 +315,13 @@ async fn oidc_callback(
             session.destroy();
             html!(
                     html {
-                    head {
-                        title { "Robotica - Login" }
+                        head {
+                            title { "Robotica - Login" }
+                        }
+                        body {
+                            h1 { ( format!("Login Failed: {e}") ) }
+                        }
                     }
-                    body {
-                        h1 { ( format!("Login Failed: {e}") ) }
-                    }
-                }
             )
             .into_response()
         }
@@ -329,13 +331,13 @@ async fn oidc_callback(
 #[allow(clippy::unused_async)]
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    Extension(state): Extension<Arc<HttpConfig>>,
+    Extension(config): Extension<Arc<HttpConfig>>,
     session: ReadableSession,
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
-    if let Some(_name) = get_user(&session) {
+    if let Some(user) = get_user(&session) {
         info!("Accessing websocket");
-        ws.on_upgrade(|socket| websocket(socket, state))
+        ws.on_upgrade(|socket| websocket(socket, config, user))
             .into_response()
     } else {
         error!("Permission denied to websocket");
@@ -379,7 +381,7 @@ impl TryFrom<mqtt::Message> for MqttMessage {
     }
 }
 
-async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
+async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
     // By splitting we can send and receive at the same time.
     let (mut sender, mut receiver) = stream.split();
 
@@ -450,12 +452,16 @@ async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
                     let msg: Result<WsCommand, _> = serde_json::from_str(&msg);
                     match msg {
                         Ok(WsCommand::Subscribe { topic }) => {
-                            process_subscribe(topic, &state, tx.clone()).await;
+                            if check_topic_subscribe_allowed(&topic, &user, &config) {
+                                process_subscribe(topic, &config, tx.clone()).await;
+                            }
                         }
                         Ok(WsCommand::Send(msg)) => {
-                            tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
-                            let message: mqtt::Message = msg.into();
-                            state.mqtt.try_send(message);
+                            if check_topic_send_allowed(&msg.topic, &user, &config) {
+                                tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
+                                let message: mqtt::Message = msg.into();
+                                config.mqtt.try_send(message);
+                            }
                         }
                         Ok(WsCommand::KeepAlive) => {
                             // Do nothing
@@ -479,13 +485,44 @@ async fn websocket(stream: WebSocket, state: Arc<HttpConfig>) {
     send_task.abort();
 }
 
+const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &["state/#"];
+const ALLOWED_SEND_TOPICS: &[&str] = &["command/#"];
+
+#[must_use]
+fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {
+    let topics = ALLOWED_SUBSCRIBE_TOPICS
+        .iter()
+        .map(std::string::ToString::to_string);
+    if topic_matches_any(topic, topics) {
+        debug!("check_topic_subscribe_allowed: topic {} allowed", topic);
+        true
+    } else {
+        error!("check_topic_subscribe_allowed: Topic {} not allowed", topic);
+        false
+    }
+}
+
+#[must_use]
+fn check_topic_send_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {
+    let topics = ALLOWED_SEND_TOPICS
+        .iter()
+        .map(std::string::ToString::to_string);
+    if topic_matches_any(topic, topics) {
+        debug!("check_topic_send_allowed: topic {} allowed", topic);
+        true
+    } else {
+        error!("check_topic_send_allowed: topic {} not allowed", topic);
+        false
+    }
+}
+
 async fn process_subscribe(
     topic: String,
-    state: &Arc<HttpConfig>,
+    config: &Arc<HttpConfig>,
     sender: mpsc::UnboundedSender<MqttMessage>,
 ) {
     info!("Subscribing to {}", topic);
-    let rc = state.mqtt.subscribe(&topic).await;
+    let rc = config.mqtt.subscribe(&topic).await;
     let rx = match rc {
         Ok(rx) => rx,
         Err(e) => {
