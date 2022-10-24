@@ -3,7 +3,7 @@ use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
 use crate::services::{
-    robotica::MqttMessage,
+    websocket::protocol::MqttMessage,
     websocket::{Command, WebsocketService},
 };
 

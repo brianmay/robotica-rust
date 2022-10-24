@@ -6,7 +6,7 @@ use crate::services::{
         lights::{self, Priority},
         music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
     },
-    robotica::MqttMessage,
+    websocket::protocol::MqttMessage,
     websocket::{Command, WebsocketService, WsEvent},
 };
 
