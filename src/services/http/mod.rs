@@ -173,7 +173,7 @@ async fn fallback_handler(
 ) -> Response {
     let asset_file = {
         let path = req.uri().path();
-        ALLOWED_SUFFIXES.contains(&path)
+        ALLOWED_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
     };
 
     if !asset_file && get_user(&session).is_none() {
