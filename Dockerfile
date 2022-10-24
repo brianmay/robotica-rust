@@ -13,6 +13,15 @@ RUN apt-get update && apt-get install nodejs
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 ADD ./ ./
+ARG BUILD_DATE=date
+ARG VCS_REF=vcs
+ENV BUILD_DATE=${BUILD_DATE}
+ENV VCS_REF=${VCS_REF}
+
+RUN echo "pub const BUILD_DATE: &str = \"$BUILD_DATE\"" > robotica-frontend/src/version.rs
+RUN echo "pub const VCS_REF: &str = \"$VCS_REF\"" >> robotica-frontend/src/version.rs
+RUN cat robotica-frontend/src/version.rs
+
 RUN cargo build --release -p brian-node-rust
 RUN ls -l /brian-node-rust/target/release/brian-node-rust
 RUN npm -C robotica-frontend install

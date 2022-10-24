@@ -160,12 +160,21 @@ fn get_user(session: &ReadableSession) -> Option<User> {
     session.get::<String>("user").map(|name| User { name })
 }
 
+const ALLOWED_SUFFIXES: [&str; 8] = [
+    ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2",
+];
+
 async fn fallback_handler(
     session: ReadableSession,
     oidc_client: Extension<Arc<Client>>,
     req: Request<Body>,
 ) -> Response {
-    if get_user(&session).is_none() {
+    let asset_file = {
+        let path = req.uri().path();
+        ALLOWED_SUFFIXES.contains(&path)
+    };
+
+    if !asset_file && get_user(&session).is_none() {
         let origin_url = req.uri().path_and_query().unwrap().as_str();
         let auth_url = oidc_client.get_auth_url(origin_url);
         return Response::builder()
@@ -181,7 +190,8 @@ async fn fallback_handler(
         Ok(response) => {
             let status = response.status();
             match status {
-                StatusCode::NOT_FOUND => {
+                // If this is an asset file, then don't redirect to index.html
+                StatusCode::NOT_FOUND if !asset_file => {
                     let index_path = PathBuf::from(static_path).join("index.html");
                     let index_content = match fs::read_to_string(index_path).await {
                         Err(_) => {
@@ -246,11 +256,21 @@ async fn root(session: ReadableSession) -> Markup {
             body {
                 ( nav_bar() )
                 h1 { "Robotica" }
-                p { @match user {
-                    Some(user) => ( format!("Hello, {}!", user) ),
-                    None => ( "You are not logged in!" ),
-                } }
-                p { "Build date: " (build_date) ", VCS ref: " (vcs_ref) }
+                p {
+                    @match user {
+                        Some(user) => ( format!("Hello, {}!", user) ),
+                        None => ( "You are not logged in!" ),
+                    }
+                }
+                footer {
+                    div {
+                        div { (format!("Build Date: {}", build_date)) }
+                        div { (format!("Version: {}", vcs_ref)) }
+                    }
+                    div {
+                        "Robotica"
+                    }
+                }
             }
         }
     )

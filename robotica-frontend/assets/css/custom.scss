@@ -5,3 +5,19 @@
     height: 256px;
     margin: 4px;
 }
+
+footer {
+    @extend .d-flex;
+    @extend .flex-wrap;
+    @extend .justify-content-between;
+    @extend .align-items-center;
+    @extend .py-3;
+    @extend .my-4;
+    @extend .border-top;
+}
+
+footer div {
+    @extend .mx-2;
+    @extend .text-muted;
+    @extend .text-decoration-none;
+}

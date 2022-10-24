@@ -12,6 +12,7 @@ use components::login::Login;
 use components::ws_client::WsClient;
 
 mod services;
+mod version;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
@@ -39,7 +40,22 @@ fn switch(selected_route: &Route) -> Html {
         <>
             <NavBar/>
             {content}
+            {footer()}
         </>
+    }
+}
+
+fn footer() -> Html {
+    html! {
+        <footer>
+            <div>
+                <div>{"Build Date: "} {version::BUILD_DATE}</div>
+                <div>{"Version: "} {version::VCS_REF}</div>
+            </div>
+            <div>
+                { "Robotica" }
+            </div>
+        </footer>
     }
 }
 
@@ -76,9 +92,7 @@ fn app() -> Html {
         <>
             <ContextProvider<User> context={(*ctx).clone()}>
                 <BrowserRouter>
-                    <div>
-                        <Switch<Route> render={Switch::render(switch)}/>
-                    </div>
+                   <Switch<Route> render={Switch::render(switch)}/>
                 </BrowserRouter>
             </ContextProvider<User>>
         </>
