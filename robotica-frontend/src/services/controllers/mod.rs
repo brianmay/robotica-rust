@@ -60,8 +60,7 @@ impl Display for DisplayState {
 }
 
 pub trait ConfigTrait {
-    type Controller: ControllerTrait<State = Self::State>;
-    type State;
+    type Controller: ControllerTrait;
 
     fn create_controller(&self) -> Self::Controller;
 }
@@ -87,24 +86,12 @@ impl Icon {
     }
 }
 
-#[derive(Clone)]
-pub struct CommonConfig {
-    pub name: String,
-    pub topic_substr: String,
-    pub action: Action,
-    pub icon: Icon,
-}
-
 pub trait ControllerTrait {
-    type State;
-
-    // fn new(config: impl ConfigTrait<Controller = Self>) -> Self;
-    fn new_state(&self) -> Self::State;
     fn get_subscriptions(&self) -> Vec<Subscription>;
-    fn process_disconnected(&self, state: &mut Self::State);
-    fn process_message(&self, label: Label, data: String, state: &mut Self::State);
-    fn get_display_state(&self, state: &Self::State) -> DisplayState;
-    fn get_press_commands(&self, state: &Self::State) -> Vec<Command>;
+    fn process_disconnected(&mut self);
+    fn process_message(&mut self, label: Label, data: String);
+    fn get_display_state(&self) -> DisplayState;
+    fn get_press_commands(&self) -> Vec<Command>;
     fn get_icon(&self) -> Icon;
     fn get_name(&self) -> String;
     fn get_action(&self) -> Action;

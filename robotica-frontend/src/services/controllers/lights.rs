@@ -1,34 +1,34 @@
 use log::error;
 
 use super::{
-    Action, Command, CommonConfig, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
-    Subscription,
+    Action, Command, ConfigTrait, ControllerTrait, DisplayState, Icon, Label, Subscription,
 };
 
 #[derive(Clone)]
 pub struct Config {
-    pub c: CommonConfig,
+    pub name: String,
+    pub topic_substr: String,
+    pub action: Action,
+    pub icon: Icon,
     pub scene: String,
     pub priority: Priority,
 }
 
 impl ConfigTrait for Config {
     type Controller = Controller;
-    type State = State;
 
     fn create_controller(&self) -> Controller {
         Controller {
             config: self.clone(),
+            power: None,
+            scenes: None,
+            priorities: None,
         }
     }
 }
 
 pub struct Controller {
     config: Config,
-}
-
-#[derive(Clone)]
-pub struct State {
     power: Option<String>,
     scenes: Option<Vec<String>>,
     priorities: Option<Vec<Priority>>,
@@ -39,39 +39,25 @@ fn topic(parts: &[&str]) -> String {
 }
 
 impl ControllerTrait for Controller {
-    type State = State;
-
-    // fn new(config: impl ConfigTrait<Controller = Self>) -> Self {
-    //     config.create_controller()
-    // }
-
-    fn new_state(&self) -> State {
-        State {
-            power: None,
-            scenes: None,
-            priorities: None,
-        }
-    }
-
     fn get_subscriptions(&self) -> Vec<Subscription> {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.c.topic_substr, "power"];
+        let p = ["state", &config.topic_substr, "power"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Power as u32,
         };
         result.push(s);
 
-        let p = ["state", &config.c.topic_substr, "scenes"];
+        let p = ["state", &config.topic_substr, "scenes"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Scenes as u32,
         };
         result.push(s);
 
-        let p = ["state", &config.c.topic_substr, "priorities"];
+        let p = ["state", &config.topic_substr, "priorities"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Priorities as u32,
@@ -81,17 +67,17 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&self, label: Label, data: String, state: &mut State) {
+    fn process_message(&mut self, label: Label, data: String) {
         match label.try_into() {
-            Ok(ButtonStateMsgType::Power) => state.power = Some(data),
+            Ok(ButtonStateMsgType::Power) => self.power = Some(data),
 
             Ok(ButtonStateMsgType::Scenes) => match serde_json::from_str(&data) {
-                Ok(scenes) => state.scenes = Some(scenes),
+                Ok(scenes) => self.scenes = Some(scenes),
                 Err(e) => error!("Invalid scenes value {}: {}", data, e),
             },
 
             Ok(ButtonStateMsgType::Priorities) => match serde_json::from_str(&data) {
-                Ok(priorities) => state.priorities = Some(priorities),
+                Ok(priorities) => self.priorities = Some(priorities),
                 Err(e) => error!("Invalid priorities value {}: {}", data, e),
             },
 
@@ -99,40 +85,40 @@ impl ControllerTrait for Controller {
         }
     }
 
-    fn process_disconnected(&self, state: &mut State) {
-        state.power = None;
-        state.scenes = None;
-        state.priorities = None;
+    fn process_disconnected(&mut self) {
+        self.power = None;
+        self.scenes = None;
+        self.priorities = None;
     }
 
-    fn get_display_state(&self, state: &State) -> DisplayState {
-        let action = &self.config.c.action;
+    fn get_display_state(&self) -> DisplayState {
+        let action = &self.config.action;
 
         match action {
-            Action::TurnOn => get_display_state_turn_on(self, state),
-            Action::TurnOff => get_display_state_turn_off(self, state),
-            Action::Toggle => get_display_state_toggle(self, state),
+            Action::TurnOn => get_display_state_turn_on(self),
+            Action::TurnOff => get_display_state_turn_off(self),
+            Action::Toggle => get_display_state_toggle(self),
         }
     }
 
-    fn get_press_commands(&self, state: &State) -> Vec<Command> {
+    fn get_press_commands(&self) -> Vec<Command> {
         let mut message = serde_json::json!({
             "scene": self.config.scene,
             "priority": self.config.priority,
         });
 
-        match self.config.c.action {
+        match self.config.action {
             Action::TurnOn => {}
             Action::TurnOff => message["action"] = serde_json::json!("turn_off"),
             Action::Toggle => {
-                let display_state = self.get_display_state(state);
+                let display_state = self.get_display_state();
                 if let DisplayState::On = display_state {
                     message["action"] = serde_json::json!("turn_off");
                 };
             }
         };
 
-        let topic = format!("command/{}", self.config.c.topic_substr);
+        let topic = format!("command/{}", self.config.topic_substr);
         let command = Command {
             topic,
             payload: message,
@@ -142,21 +128,21 @@ impl ControllerTrait for Controller {
     }
 
     fn get_icon(&self) -> Icon {
-        self.config.c.icon.clone()
+        self.config.icon.clone()
     }
 
     fn get_name(&self) -> String {
-        self.config.c.name.clone()
+        self.config.name.clone()
     }
 
     fn get_action(&self) -> Action {
-        self.config.c.action
+        self.config.action
     }
 }
 
-fn get_display_state_turn_on(lb: &Controller, state: &State) -> DisplayState {
-    let power = state.power.as_deref();
-    let scenes = state.scenes.as_deref();
+fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
+    let power = lb.power.as_deref();
+    let scenes = lb.scenes.as_deref();
     let scene = &lb.config.scene;
 
     let scenes_empty = match scenes {
@@ -179,10 +165,10 @@ fn get_display_state_turn_on(lb: &Controller, state: &State) -> DisplayState {
     }
 }
 
-fn get_display_state_turn_off(lb: &Controller, state: &State) -> DisplayState {
-    let power = state.power.as_deref();
-    let scenes = state.scenes.as_deref();
-    let priorities = state.priorities.as_deref();
+fn get_display_state_turn_off(lb: &Controller) -> DisplayState {
+    let power = lb.power.as_deref();
+    let scenes = lb.scenes.as_deref();
+    let priorities = lb.priorities.as_deref();
     let priority = lb.config.priority;
 
     let scenes_empty = match scenes {
@@ -204,9 +190,9 @@ fn get_display_state_turn_off(lb: &Controller, state: &State) -> DisplayState {
     }
 }
 
-fn get_display_state_toggle(lb: &Controller, state: &State) -> DisplayState {
-    let power = state.power.as_deref();
-    let scenes = state.scenes.as_deref();
+fn get_display_state_toggle(lb: &Controller) -> DisplayState {
+    let power = lb.power.as_deref();
+    let scenes = lb.scenes.as_deref();
     let scene = &lb.config.scene;
 
     let scenes_empty = match scenes {

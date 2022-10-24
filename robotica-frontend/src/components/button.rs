@@ -4,8 +4,7 @@ use crate::services::{
     controllers::{
         get_display_state_for_action,
         lights::{self, Priority},
-        music, switch, Action, CommonConfig, ConfigTrait, ControllerTrait, DisplayState, Icon,
-        Label,
+        music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
     },
     robotica::MqttMessage,
     websocket::{Command, WebsocketService, WsEvent},
@@ -23,17 +22,14 @@ pub struct LightProps {
 
 impl ConfigTrait for LightProps {
     type Controller = lights::Controller;
-    type State = lights::State;
 
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
         let config = lights::Config {
-            c: CommonConfig {
-                name: props.name,
-                topic_substr: props.topic_substr,
-                action: props.action,
-                icon: props.icon,
-            },
+            name: props.name,
+            topic_substr: props.topic_substr,
+            action: props.action,
+            icon: props.icon,
             scene: props.scene,
             priority: props.priority,
         };
@@ -53,17 +49,14 @@ pub struct MusicProps {
 
 impl ConfigTrait for MusicProps {
     type Controller = music::Controller;
-    type State = music::State;
 
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
         let config = music::Config {
-            c: CommonConfig {
-                name: props.name,
-                topic_substr: props.topic_substr,
-                action: props.action,
-                icon: props.icon,
-            },
+            name: props.name,
+            topic_substr: props.topic_substr,
+            action: props.action,
+            icon: props.icon,
             play_list: props.play_list,
         };
 
@@ -81,127 +74,22 @@ pub struct SwitchProps {
 
 impl ConfigTrait for SwitchProps {
     type Controller = switch::Controller;
-    type State = switch::State;
 
     fn create_controller(&self) -> Self::Controller {
         let config = (*self).clone();
         let config = switch::Config {
-            c: CommonConfig {
-                name: config.name,
-                topic_substr: config.topic_substr,
-                action: config.action,
-                icon: config.icon,
-            },
+            name: config.name,
+            topic_substr: config.topic_substr,
+            action: config.action,
+            icon: config.icon,
         };
 
         config.create_controller()
     }
 }
 
-// #[function_component(LightButton)]
-// pub fn light_button(props: &Props) -> Html {
-//     let wss = use_context::<WebsocketService>().expect("No context found.");
-
-//     let controller = use_state(move || {
-//         let config = Config {
-//             c: CommonConfig {
-//                 topic_substr: props.topic_substr.clone(),
-//                 action: props.action.clone(),
-//                 icon: props.icon.clone(),
-//             },
-//             scene: props.scene.clone(),
-//             priority: props.priority,
-//         };
-
-//         config.create_controller()
-//     });
-
-//     let state = {
-//         let controller = controller.clone();
-//         use_state(|| (*controller).new_state())
-//     };
-
-//     {
-//         let controller = controller.clone();
-//         let state = state.clone();
-
-//         use_state(move || {
-//             controller.get_subscriptions().iter().for_each(move |s| {
-//                 let topic = s.topic.clone();
-//                 let s = (*s).clone();
-//                 let state = state.clone();
-//                 let controller = controller.clone();
-
-//                 let callback = callback::Callback::from(move |msg: MqttMessage| {
-//                     let new_state = (*state).clone();
-//                     let new_state = controller.process_message(s.label, msg.payload, new_state);
-//                     state.set(new_state);
-//                 });
-
-//                 subscribe(&topic, callback);
-//             });
-//         });
-//     }
-
-//     let display_state = {
-//         let controller = controller.clone();
-//         let display_state = controller.get_display_state(&*state);
-//         get_display_state_for_action(display_state, &props.action)
-//     };
-
-//     let click_callback = {
-//         let controller = controller;
-//         let state = state;
-//         let wss = wss;
-
-//         callback::Callback::from(move |_| {
-//             let mut tx = wss.tx.clone();
-//             let commands = controller.get_press_commands(&*state);
-//             for c in commands {
-//                 let msg = MqttMessage {
-//                     topic: c.get_topic().to_string(),
-//                     payload: c.get_payload().to_string(),
-//                 };
-//                 tx.try_send(Command::Send(msg)).unwrap();
-//             }
-//         })
-//     };
-
-//     html! {
-//         <button
-//             class="button"
-//             onclick={click_callback}
-//         >
-//             <span class="icon">
-//                 <img src={props.icon.to_href(&display_state)}/>
-//                 <div>{ display_state }</div>
-//             </span>
-//             <span>{ &props.name }</span>
-//         </button>
-//     }
-// }
-
-// fn subscribe(topic: &str, callback: Callback<MqttMessage>) {
-//     let wss = use_context::<WebsocketService>().expect("No context found.");
-
-//     let topic = topic.to_string();
-//     use_effect(move || {
-//         let wss = wss.clone();
-//         let callback = callback.clone();
-//         let topic = topic;
-
-//         let subscribe = Command::Subscribe { topic, callback };
-
-//         let mut tx = wss.tx;
-//         tx.try_send(subscribe).unwrap();
-
-//         move || {}
-//     });
-// }
-
 pub struct Button<T: ConfigTrait> {
     controller: T::Controller,
-    state: T::State,
     wss: WebsocketService,
 }
 
@@ -214,12 +102,10 @@ pub enum Message {
 impl From<LightProps> for lights::Config {
     fn from(props: LightProps) -> Self {
         Self {
-            c: CommonConfig {
-                name: props.name.clone(),
-                topic_substr: props.topic_substr,
-                action: props.action,
-                icon: props.icon,
-            },
+            name: props.name.clone(),
+            topic_substr: props.topic_substr,
+            action: props.action,
+            icon: props.icon,
             scene: props.scene,
             priority: props.priority,
         }
@@ -238,7 +124,6 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             .expect("No context found.");
 
         let controller = props.create_controller();
-        let state = controller.new_state();
 
         {
             let tx = wss.tx.clone();
@@ -265,11 +150,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             tx.try_send(msg).unwrap();
         }
 
-        Button {
-            controller,
-            state,
-            wss,
-        }
+        Button { controller, wss }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
@@ -278,7 +159,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
         let icon = self.controller.get_icon();
         let name = self.controller.get_name();
         let action = self.controller.get_action();
-        let display_state = self.controller.get_display_state(&self.state);
+        let display_state = self.controller.get_display_state();
         let display_state = get_display_state_for_action(display_state, &action);
 
         let mut classes = classes!("button");
@@ -319,7 +200,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Message::Click => {
-                let commands = self.controller.get_press_commands(&self.state);
+                let commands = self.controller.get_press_commands();
                 for c in commands {
                     let msg = MqttMessage {
                         topic: c.get_topic().to_string(),
@@ -329,12 +210,9 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
                 }
             }
             Message::Receive((label, payload)) => {
-                self.controller
-                    .process_message(label, payload, &mut self.state);
+                self.controller.process_message(label, payload);
             }
-            Message::Event(WsEvent::Disconnect) => {
-                self.controller.process_disconnected(&mut self.state)
-            }
+            Message::Event(WsEvent::Disconnect) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connect) => {}
         }
         true
