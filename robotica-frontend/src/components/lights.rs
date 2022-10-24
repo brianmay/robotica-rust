@@ -8,33 +8,10 @@ use super::button::{Button, LightProps, MusicProps, SwitchProps};
 
 #[function_component(Lights)]
 pub fn lights_view() -> Html {
-    let light_icon = Icon {
-        on: "/images/light_on.svg".into(),
-        on_other: "/images/light_on_other.svg".into(),
-        off: "/images/light_off.svg".into(),
-        hard_off: "/images/light_hard_off.svg".into(),
-    };
-
-    let wake_up_icon = Icon {
-        on: "/images/wake_up_on.svg".into(),
-        on_other: "/images/wake_up_on_other.svg".into(),
-        off: "/images/wake_up_off.svg".into(),
-        hard_off: "/images/wake_up_hard_off.svg".into(),
-    };
-
-    let fan_icon = Icon {
-        on: "/images/fan_on.svg".into(),
-        on_other: "/images/fan_on_other.svg".into(),
-        off: "/images/fan_off.svg".into(),
-        hard_off: "/images/fan_hard_off.svg".into(),
-    };
-
-    let tv_icon = Icon {
-        on: "/images/tv_on.svg".into(),
-        on_other: "/images/tv_on_other.svg".into(),
-        off: "/images/tv_off.svg".into(),
-        hard_off: "/images/tv_off.svg".into(),
-    };
+    let light_icon = Icon::new("light");
+    let wake_up_icon = Icon::new("wake_up");
+    let fan_icon = Icon::new("fan");
+    let tv_icon = Icon::new("tv");
 
     let connected = use_state(|| false);
 

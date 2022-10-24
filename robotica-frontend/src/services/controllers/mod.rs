@@ -67,22 +67,26 @@ pub trait ConfigTrait {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Icon {
-    pub on: String,
-    pub off: String,
-    pub hard_off: String,
-    pub on_other: String,
+    pub name: String,
 }
 
 impl Icon {
-    pub fn to_href(&self, state: &DisplayState) -> String {
-        match state {
-            DisplayState::HardOff => self.hard_off.clone(),
-            DisplayState::Error => self.hard_off.clone(),
-            DisplayState::Unknown => self.hard_off.clone(),
-            DisplayState::On => self.on.clone(),
-            DisplayState::Off => self.off.clone(),
-            DisplayState::OnOther => self.on_other.clone(),
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
         }
+    }
+
+    pub fn to_href(&self, state: &DisplayState) -> String {
+        let version = match state {
+            DisplayState::HardOff => "hard_off",
+            DisplayState::Error => "hard_off",
+            DisplayState::Unknown => "hard_off",
+            DisplayState::On => "on",
+            DisplayState::Off => "off",
+            DisplayState::OnOther => "on_other",
+        };
+        format!("/images/{}_{}.svg", self.name, version)
     }
 }
 
