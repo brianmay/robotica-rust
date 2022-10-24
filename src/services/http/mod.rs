@@ -36,7 +36,7 @@ use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
 
-pub(crate) struct HttpConfig {
+struct HttpConfig {
     #[allow(dead_code)]
     mqtt: Mqtt,
     root_url: reqwest::Url,
