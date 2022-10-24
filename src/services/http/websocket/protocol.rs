@@ -2,7 +2,20 @@ use std::str::Utf8Error;
 
 use serde::{Deserialize, Serialize};
 
-use crate::services::mqtt;
+use crate::services::{http::protocol::User, mqtt};
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "error")]
+pub(super) enum WsError {
+    NotAuthorized,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+pub(super) enum WsConnect {
+    Connected(User),
+    Disconnected(WsError),
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -33,5 +46,18 @@ impl TryFrom<mqtt::Message> for MqttMessage {
             topic: msg.topic,
             payload,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn test_ws_connect() {
+        let connect = WsConnect::Disconnected(WsError::NotAuthorized);
+        let json = serde_json::to_string(&connect).unwrap();
+        assert_eq!(json, r#"{"type":"Disconnected","error":"NotAuthorized"}"#,);
     }
 }

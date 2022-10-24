@@ -1,3 +1,5 @@
+mod protocol;
+
 use std::sync::Arc;
 
 use axum::{
@@ -17,10 +19,8 @@ use tracing::{debug, error, info};
 
 use crate::services::mqtt::{self, topics::topic_matches_any};
 
+use self::protocol::{MqttMessage, WsCommand};
 use super::{get_user, HttpConfig, User};
-use protocol::{MqttMessage, WsCommand};
-
-mod protocol;
 
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(

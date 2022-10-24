@@ -1,9 +1,9 @@
 //! HTTP server
 mod oidc;
+mod protocol;
 mod urls;
 mod websocket;
 
-use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{collections::HashMap, env};
@@ -30,6 +30,7 @@ use crate::services::mqtt::Mqtt;
 use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
+use self::protocol::User;
 
 struct HttpConfig {
     #[allow(dead_code)]
@@ -131,17 +132,6 @@ async fn server(
         .unwrap();
 
     Ok(())
-}
-
-#[derive(Debug)]
-struct User {
-    name: String,
-}
-
-impl Display for User {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
 }
 
 fn set_user(

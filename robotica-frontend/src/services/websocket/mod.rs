@@ -14,7 +14,7 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 use yew::Callback;
 
-use protocol::{MqttMessage, WsCommand};
+use self::protocol::{MqttMessage, WsCommand};
 
 #[derive(Debug)]
 pub enum Command {

@@ -1,6 +1,21 @@
 //! Common structures to communicate with robotica
 use serde::{Deserialize, Serialize};
 
+use crate::services::protocol::User;
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "error")]
+pub(super) enum WsError {
+    NotAuthorized,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub(super) enum WsConnect {
+    Connected(User),
+    Disconnected,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum WsCommand {
