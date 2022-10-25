@@ -1,4 +1,4 @@
-use log::info;
+use log::{error, info};
 use yew::prelude::*;
 
 use crate::services::controllers::{Action, Icon};
@@ -26,7 +26,8 @@ pub fn lights_view() -> Html {
         info!("Connecting to event handler");
         let msg = Command::EventHandler(callback);
         let mut tx = wss.tx;
-        tx.try_send(msg).unwrap();
+        tx.try_send(msg)
+            .unwrap_or_else(|_| error!("Failed to register event handler"));
     });
 
     match &*state {

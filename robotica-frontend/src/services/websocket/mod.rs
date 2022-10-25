@@ -89,9 +89,7 @@ impl WebsocketService {
         };
 
         spawn_local(async move {
-            let (ws, timeout) = reconnect_and_set_keep_alive(&state).await;
-            state.ws = ws;
-            state.timeout = timeout;
+            reconnect_and_set_keep_alive(&mut state).await;
 
             loop {
                 match &mut state.ws {
@@ -187,10 +185,7 @@ async fn process_command(command: Command, state: &mut State) {
                         Message::Text(serde_json::to_string(&command).unwrap()),
                     )
                     .await;
-                    state.timeout = Some(schedule_keep_alive(
-                        &state.in_tx,
-                        KEEP_ALIVE_DURATION_MILLIS,
-                    ));
+                    set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
                 }
             };
         }
@@ -202,10 +197,7 @@ async fn process_command(command: Command, state: &mut State) {
                 Message::Text(serde_json::to_string(&command).unwrap()),
             )
             .await;
-            state.timeout = Some(schedule_keep_alive(
-                &state.in_tx,
-                KEEP_ALIVE_DURATION_MILLIS,
-            ));
+            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
         Command::EventHandler(handler) => {
             debug!("ws: Register event handler.");
@@ -221,9 +213,7 @@ async fn process_command(command: Command, state: &mut State) {
             state.timeout = None;
 
             if !is_connected {
-                let (ws, timeout) = reconnect_and_set_keep_alive(state).await;
-                state.ws = ws;
-                state.timeout = timeout;
+                reconnect_and_set_keep_alive(state).await;
             } else {
                 debug!("ws: Sending keep alive.");
                 let command = WsCommand::KeepAlive;
@@ -234,10 +224,7 @@ async fn process_command(command: Command, state: &mut State) {
                 .await;
             }
 
-            state.timeout = Some(schedule_keep_alive(
-                &state.in_tx,
-                KEEP_ALIVE_DURATION_MILLIS,
-            ));
+            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
     };
 }
@@ -254,10 +241,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
                     }
                 }
             }
-            state.timeout = Some(schedule_keep_alive(
-                &state.in_tx,
-                KEEP_ALIVE_DURATION_MILLIS,
-            ));
+            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
         Some(Err(err)) => {
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
@@ -265,7 +249,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnect(err.to_string()));
             }
-            state.timeout = Some(schedule_keep_alive(&state.in_tx, RECONNECT_DELAY_MILLIS));
+            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
         None => {
             error!("ws: closed, reconnecting.");
@@ -273,35 +257,37 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnect("Connection closed".to_string()));
             }
-            state.timeout = Some(schedule_keep_alive(&state.in_tx, RECONNECT_DELAY_MILLIS));
+            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
     }
 }
 
-async fn reconnect_and_set_keep_alive(state: &State) -> (Option<WebSocket>, Option<Timeout>) {
+async fn reconnect_and_set_keep_alive(state: &mut State) {
     let ws = reconnect(&state.url, &state.subscriptions).await;
     match ws {
         Ok(ws) => {
-            let timeout = schedule_keep_alive(&state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+            info!("ws: Connected.");
+            state.ws = Some(ws);
+            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Connect);
             }
-            (Some(ws), Some(timeout))
         }
         Err(ConnectError::RetryableError(err)) => {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
-            let timeout = schedule_keep_alive(&state.in_tx, RECONNECT_DELAY_MILLIS);
+            state.ws = None;
+            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnect(err.to_string()));
             }
-            (None, Some(timeout))
         }
         Err(ConnectError::FatalError(err)) => {
             error!("ws: Failed to reconnect: {}, not retrying", err);
+            state.ws = None;
+            state.timeout = None;
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::FatalError(err.to_string()));
             }
-            (None, None)
         }
     }
 }
@@ -324,7 +310,7 @@ async fn reconnect(
                         info!("ws: Connected to websocket as user {}.", user.name);
                     }
                     WsConnect::Disconnected(WsError::NotAuthorized) => {
-                        return Err(FatalError::Error("Not authorized.".into()).into())
+                        return Err(FatalError::Error("Not authorized".into()).into())
                     }
                 }
             }
@@ -334,7 +320,7 @@ async fn reconnect(
             return Err(RetryableError::AnyError(err.into()).into());
         }
         None => {
-            return Err(RetryableError::AnyError(eyre::eyre!("Websocket closed.")).into());
+            return Err(RetryableError::AnyError(eyre::eyre!("Websocket closed")).into());
         }
     }
 
@@ -356,12 +342,12 @@ async fn reconnect(
     Ok(ws)
 }
 
-fn schedule_keep_alive(in_tx: &Sender<Command>, millis: u32) -> Timeout {
-    debug!("Scheduling next keepalive");
+fn set_timeout(timeout: &mut Option<Timeout>, in_tx: &Sender<Command>, millis: u32) {
+    debug!("Scheduling next keep alive");
     let mut in_tx_clone = in_tx.clone();
-    Timeout::new(millis, move || {
+    *timeout = Some(Timeout::new(millis, move || {
         in_tx_clone.try_send(Command::KeepAlive).unwrap();
-    })
+    }))
 }
 
 fn get_websocket_url() -> String {
