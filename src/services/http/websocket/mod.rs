@@ -118,11 +118,11 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
                             continue;
                         }
                         Some(Err(err)) => {
-                            error!("recv_task: failed to receive message from web socket, stopping: {}", err);
+                            debug!("recv_task: failed to receive message from web socket, stopping: {}", err);
                             break;
                         }
                         None => {
-                            error!("recv_task: failed to receive message from web socket, stopping");
+                            debug!("recv_task: websocket closed, stopping");
                             break;
                         }
                     };
