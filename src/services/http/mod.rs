@@ -12,8 +12,9 @@ use axum::body::{boxed, Body};
 use axum::http::Request;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::Query, routing::get, Extension, Router};
+use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
-use axum_sessions::{async_session::MemoryStore, extractors::WritableSession};
+use axum_sessions::extractors::WritableSession;
 use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
 use maud::{html, Markup, DOCTYPE};
@@ -80,7 +81,7 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
     };
 
-    let store = MemoryStore::new();
+    let store = CookieStore::new();
     let secret = decode(get_env("SESSION_SECRET")?)?;
     let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
 
@@ -109,7 +110,7 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
 async fn server(
     config: HttpConfig,
     oidc: Client,
-    session_layer: SessionLayer<MemoryStore>,
+    session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
     let config = Arc::new(config);
     let oidc = Arc::new(oidc);
