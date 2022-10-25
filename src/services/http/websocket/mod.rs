@@ -100,10 +100,14 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
                 msg = receiver.next() => {
                     let msg = match msg {
                         Some(Ok(Message::Text(msg))) => msg,
-                        Some(Ok(Message::Binary(_))) => {
-                            // FIXME: Implement binary messages
-                            error!("recv_task: received binary message, ignoring");
-                            continue;
+                        Some(Ok(Message::Binary(msg))) => {
+                            match String::from_utf8(msg) {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    error!("recv_task: failed to parse binary message: {}", e);
+                                    continue;
+                                }
+                            }
                         }
                         Some(Ok(Message::Close(_))) => {
                             debug!("recv_task: received close message, stopping");
