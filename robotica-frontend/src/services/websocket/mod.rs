@@ -299,6 +299,7 @@ async fn reconnect(
     info!("ws: Reconnecting to websocket.");
     let mut ws = WebSocket::open(url).map_err(|err| RetryableError::AnyError(err.into()))?;
 
+    debug!("ws: Waiting for connected message.");
     match ws.next().await {
         Some(Ok(msg)) => {
             if let Some(msg) = message_to_string(msg) {
@@ -310,16 +311,19 @@ async fn reconnect(
                         info!("ws: Connected to websocket as user {}.", user.name);
                     }
                     WsConnect::Disconnected(WsError::NotAuthorized) => {
-                        return Err(FatalError::Error("Not authorized".into()).into())
+                        info!("ws: Not authorized to connect to websocket.");
+                        return Err(FatalError::Error("Not authorized".into()).into());
                     }
                 }
             }
         }
         Some(Err(err)) => {
+            debug!("ws: Failed to receive connected message: {:?}.", err);
             let err = MyWebSocketError(err);
             return Err(RetryableError::AnyError(err.into()).into());
         }
         None => {
+            debug!("ws: Connection closed, waiting for connected message.");
             return Err(RetryableError::AnyError(eyre::eyre!("Websocket closed")).into());
         }
     }
@@ -344,10 +348,14 @@ async fn reconnect(
 
 fn set_timeout(timeout: &mut Option<Timeout>, in_tx: &Sender<Command>, millis: u32) {
     debug!("Scheduling next keep alive");
+    if let Some(timeout) = timeout.take() {
+        timeout.cancel();
+    }
     let mut in_tx_clone = in_tx.clone();
     *timeout = Some(Timeout::new(millis, move || {
         in_tx_clone.try_send(Command::KeepAlive).unwrap();
-    }))
+    }));
+    debug!("Scheduling next keep alive.... done");
 }
 
 fn get_websocket_url() -> String {
