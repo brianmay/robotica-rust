@@ -31,8 +31,8 @@ pub enum Command {
 }
 
 pub enum WsEvent {
-    Connect,
-    Disconnect(String),
+    Connected,
+    Disconnected(String),
     FatalError(String),
 }
 
@@ -202,9 +202,9 @@ async fn process_command(command: Command, state: &mut State) {
         Command::EventHandler(handler) => {
             debug!("ws: Register event handler.");
             if is_connected {
-                handler.emit(WsEvent::Connect);
+                handler.emit(WsEvent::Connected);
             } else {
-                handler.emit(WsEvent::Disconnect("Not connected".to_string()));
+                handler.emit(WsEvent::Disconnected("Not connected".to_string()));
             }
             state.event_handlers.push(handler);
         }
@@ -247,7 +247,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
             state.ws = None;
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnect(err.to_string()));
+                handler.emit(WsEvent::Disconnected(err.to_string()));
             }
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
@@ -255,7 +255,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             error!("ws: closed, reconnecting.");
             state.ws = None;
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnect("Connection closed".to_string()));
+                handler.emit(WsEvent::Disconnected("Connection closed".to_string()));
             }
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
@@ -270,7 +270,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
             state.ws = Some(ws);
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Connect);
+                handler.emit(WsEvent::Connected);
             }
         }
         Err(ConnectError::RetryableError(err)) => {
@@ -278,7 +278,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
             state.ws = None;
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnect(err.to_string()));
+                handler.emit(WsEvent::Disconnected(err.to_string()));
             }
         }
         Err(ConnectError::FatalError(err)) => {

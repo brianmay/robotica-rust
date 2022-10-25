@@ -13,7 +13,7 @@ pub fn lights_view() -> Html {
     let fan_icon = Icon::new("fan");
     let tv_icon = Icon::new("tv");
 
-    let state = use_state(|| WsEvent::Disconnect("Not connected yet".to_string()));
+    let state = use_state(|| WsEvent::Disconnected("Not connected yet".to_string()));
 
     let callback = {
         let state = state.clone();
@@ -31,7 +31,7 @@ pub fn lights_view() -> Html {
     });
 
     match &*state {
-        WsEvent::Connect => {
+        WsEvent::Connected => {
             html!(
                 <>
                     <div class="flex flex-row">
@@ -55,7 +55,7 @@ pub fn lights_view() -> Html {
                 </>
             )
         }
-        WsEvent::Disconnect(reason) => {
+        WsEvent::Disconnected(reason) => {
             html!(
                 <div class="alert alert-warning">
                     {"Disconnected: "} {reason}
