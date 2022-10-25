@@ -209,7 +209,7 @@ async fn process_command(command: Command, state: &mut State) {
             state.event_handlers.push(handler);
         }
         Command::KeepAlive => {
-            info!("ws: Got KeepAlive command.");
+            debug!("ws: Got KeepAlive command.");
             state.timeout = None;
 
             if !is_connected {
