@@ -20,6 +20,8 @@ log = "0.4.17"
 yew-agent = "0.1.0"
 console_error_panic_hook = "0.1.7"
 gloo-timers = "0.2.2"
+thiserror = "1.0.37"
+eyre = "0.6.8"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

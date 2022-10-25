@@ -3,7 +3,6 @@ mod protocol;
 use std::sync::Arc;
 
 use axum::{
-    body::Body,
     extract::{
         ws::{Message, WebSocket},
         WebSocketUpgrade,
@@ -13,13 +12,12 @@ use axum::{
 };
 use axum_sessions::extractors::ReadableSession;
 use futures::{SinkExt, StreamExt};
-use reqwest::StatusCode;
 use tokio::{select, sync::mpsc};
 use tracing::{debug, error, info};
 
 use crate::services::mqtt::{self, topics::topic_matches_any};
 
-use self::protocol::{MqttMessage, WsCommand};
+use self::protocol::{MqttMessage, WsCommand, WsConnect, WsError};
 use super::{get_user, HttpConfig, User};
 
 #[allow(clippy::unused_async)]
@@ -35,17 +33,30 @@ pub(super) async fn websocket_handler(
             .into_response()
     } else {
         error!("Permission denied to websocket");
-        Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(Body::empty())
-            .unwrap()
+        ws.on_upgrade(|socket| websocket_error(socket, WsError::NotAuthorized))
             .into_response()
+    }
+}
+
+async fn websocket_error(stream: WebSocket, error: WsError) {
+    let mut stream = stream;
+    let message = WsConnect::Disconnected(error);
+    let message = serde_json::to_string(&message).unwrap();
+    if let Err(e) = stream.send(Message::Text(message)).await {
+        error!("Error sending websocket error: {}", e);
     }
 }
 
 async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
     // By splitting we can send and receive at the same time.
     let (mut sender, mut receiver) = stream.split();
+
+    // Send Connect message.
+    let message = WsConnect::Connected(user.clone());
+    let message = serde_json::to_string(&message).unwrap();
+    if let Err(e) = sender.send(Message::Text(message)).await {
+        error!("Error sending websocket error: {}", e);
+    }
 
     // We can't clone sender, so we create a process that can receive from multiple threads.
     let (tx, rx) = mpsc::unbounded_channel::<MqttMessage>();

@@ -36,6 +36,7 @@
         "paho",
         "reqwasm",
         "reqwest",
+        "Retryable",
         "Routable",
         "rssi",
         "rumqttc",

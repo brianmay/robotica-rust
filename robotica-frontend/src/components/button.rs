@@ -212,7 +212,8 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             Message::Receive((label, payload)) => {
                 self.controller.process_message(label, payload);
             }
-            Message::Event(WsEvent::Disconnect) => self.controller.process_disconnected(),
+            Message::Event(WsEvent::Disconnect(_)) => self.controller.process_disconnected(),
+            Message::Event(WsEvent::FatalError(_)) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connect) => {}
         }
         true

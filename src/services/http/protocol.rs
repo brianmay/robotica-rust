@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(super) struct User {
     pub(super) name: String,
 }

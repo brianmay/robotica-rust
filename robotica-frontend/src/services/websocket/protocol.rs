@@ -13,7 +13,7 @@ pub(super) enum WsError {
 #[serde(tag = "type")]
 pub(super) enum WsConnect {
     Connected(User),
-    Disconnected,
+    Disconnected(WsError),
 }
 
 #[derive(Debug, Serialize)]
