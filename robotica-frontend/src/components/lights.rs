@@ -34,22 +34,23 @@ pub fn lights_view() -> Html {
         WsEvent::Connected => {
             html!(
                 <>
-                    <div class="flex flex-row">
-                        <h2>{"Brian's Room"}</h2>
+                    <h2>{"Brian's Room"}</h2>
+                    <div class="d-flex flex-row flex-wrap buttons">
                         <Button<LightProps> name={"Brian Auto"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                         <Button<LightProps> name={"Brian On"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
                         <Button<SwitchProps> name={"Brian Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
                         <Button<MusicProps> name={"Sleep"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={wake_up_icon.clone()} play_list={"sleep"} />
                         <Button<MusicProps> name={"Wakeup"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={wake_up_icon} play_list={"wake_up"} />
                     </div>
-                    <div class="flex flex-row">
-                        <h2>{"Passage"}</h2>
+
+                    <h2>{"Passage"}</h2>
+                    <div class="d-flex flex-row flex-wrap buttons">
                         <Button<LightProps> name={"Passage Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                         <Button<LightProps> name={"Passage On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"default"} priority={100} />
                     </div>
-                    <div class="flex flex-row">
 
                     <h2>{"Dining Room"}</h2>
+                    <div class="d-flex flex-row flex-wrap buttons">
                         <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
                     </div>
                 </>
