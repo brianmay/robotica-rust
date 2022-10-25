@@ -35,7 +35,7 @@ pub fn lights_view() -> Html {
             html!(
                 <>
                     <h2>{"Brian's Room"}</h2>
-                    <div class="d-flex flex-row flex-wrap buttons">
+                    <div class="buttons">
                         <Button<LightProps> name={"Brian Auto"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                         <Button<LightProps> name={"Brian On"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
                         <Button<SwitchProps> name={"Brian Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
@@ -44,13 +44,13 @@ pub fn lights_view() -> Html {
                     </div>
 
                     <h2>{"Passage"}</h2>
-                    <div class="d-flex flex-row flex-wrap buttons">
+                    <div class="buttons">
                         <Button<LightProps> name={"Passage Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                         <Button<LightProps> name={"Passage On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"default"} priority={100} />
                     </div>
 
                     <h2>{"Dining Room"}</h2>
-                    <div class="d-flex flex-row flex-wrap buttons">
+                    <div class="buttons">
                         <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
                     </div>
                 </>

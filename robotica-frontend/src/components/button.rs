@@ -188,11 +188,11 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
                 {disabled}
                 onclick={click_callback}
             >
-                <span class="icon">
+                <div class="icon">
                     <img src={icon.to_href(&display_state)}/>
-                    <div>{ display_state }</div>
-                </span>
-                <span>{ &name }</span>
+                </div>
+                <div>{ display_state }</div>
+                <div>{ &name }</div>
             </button>
         }
     }

@@ -54,7 +54,7 @@ impl Display for DisplayState {
             DisplayState::Unknown => write!(f, "Unknown"),
             DisplayState::On => write!(f, "On"),
             DisplayState::Off => write!(f, "Off"),
-            DisplayState::OnOther => write!(f, "On Other"),
+            DisplayState::OnOther => write!(f, "Other"),
         }
     }
 }
