@@ -4,9 +4,7 @@ Manipulate asynchronous events, using asynchronous tasks.
 
 ## Getting started
 
-Sample code in the `brian-node-rust` directory.
-
-Sample helm chart in my helm report (see [instructions](https://github.com/brianmay/charts/) called `brian-node-rust`, note that is specific to my example, and requires the code implement a simple HTTP server for health checks. Various [values](https://github.com/brianmay/charts/blob/main/charts/brian-node-rust/values.yaml) need to be set. The image repository and tag can be overridden.
+Sample code in the `brian-backend` directory.
 
 ## Rationale
 
@@ -65,7 +63,7 @@ I still like some features of this implementation. However I think it is far too
 
 As an example, just recently I have started experiencing a problem where it sometimes would not send the "The Tesla has been plugged in" message, and I have no idea why.
 
-## Robotica Node Rust
+## Robotica Rust
 
 Yes another rewrite. In Rust. Features:
 

@@ -1,5 +1,5 @@
 FROM docker.io/library/rust:1.60-bullseye as builder
-WORKDIR /brian-node-rust
+WORKDIR /brian-backend
 
 RUN apt-get update \
     && apt-get install -y cmake \
@@ -22,11 +22,11 @@ RUN echo "pub const BUILD_DATE: &str = \"$BUILD_DATE\";" > robotica-frontend/src
 RUN echo "pub const VCS_REF: &str = \"$VCS_REF\";" >> robotica-frontend/src/version.rs
 RUN cat robotica-frontend/src/version.rs
 
-RUN cargo build --release -p brian-node-rust
-RUN ls -l /brian-node-rust/target/release/brian-node-rust
+RUN cargo build --release -p brian-backend
+RUN ls -l /brian-backend/target/release/brian-backend
 RUN npm -C robotica-frontend install
 RUN npm -C robotica-frontend run build
-RUN ls -l /brian-node-rust/robotica-frontend/dist
+RUN ls -l /brian-backend/robotica-frontend/dist
 
 FROM debian:bullseye-slim
 ARG APP=/usr/src/app
@@ -49,8 +49,8 @@ RUN groupadd $APP_USER \
     && useradd -g $APP_USER $APP_USER \
     && mkdir -p ${APP}
 
-COPY --from=builder /brian-node-rust/target/release/brian-node-rust ${APP}/brian-node-rust
-COPY --from=builder /brian-node-rust/robotica-frontend/dist ${APP}/robotica-frontend/dist
+COPY --from=builder /brian-backend/target/release/brian-backend ${APP}/brian-backend
+COPY --from=builder /brian-backend/robotica-frontend/dist ${APP}/robotica-frontend/dist
 RUN ls -l ${APP}/robotica-frontend/dist
 
 RUN chown -R $APP_USER:$APP_USER ${APP}
@@ -58,4 +58,4 @@ RUN chown -R $APP_USER:$APP_USER ${APP}
 USER $APP_USER
 WORKDIR ${APP}
 
-CMD ["./brian-node-rust"]
+CMD ["./brian-backend"]
