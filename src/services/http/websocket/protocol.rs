@@ -3,6 +3,7 @@ use std::str::Utf8Error;
 use serde::{Deserialize, Serialize};
 
 use crate::services::{http::protocol::User, mqtt};
+use crate::version::Version;
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "error")]
@@ -13,7 +14,7 @@ pub(super) enum WsError {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub(super) enum WsConnect {
-    Connected(User),
+    Connected { user: User, version: Version },
     Disconnected(WsError),
 }
 

@@ -30,7 +30,7 @@ pub fn lights_view() -> Html {
     });
 
     match &*state {
-        WsEvent::Connected => {
+        WsEvent::Connected { user, version } => {
             html!(
                 <>
                     <h2>{"Brian's Room"}</h2>
@@ -52,6 +52,8 @@ pub fn lights_view() -> Html {
                     <div class="buttons">
                         <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
                     </div>
+
+                    <p>{format!("Connected to backend as {} with version {}", user, version)}</p>
                 </>
             )
         }

@@ -16,9 +16,14 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 use yew::Callback;
 
-use crate::services::websocket::protocol::{WsConnect, WsError};
+use crate::{
+    services::websocket::protocol::{WsConnect, WsError},
+    version::Version,
+};
 
 use self::protocol::{MqttMessage, WsCommand};
+
+use super::protocol::User;
 
 /// A websocket command, sent to the websocket service.
 #[derive(Debug)]
@@ -38,10 +43,28 @@ pub enum Command {
     KeepAlive,
 }
 
+/// The details from the backend
+struct Backend {
+    /// The websocket to talk to the backend
+    ws: WebSocket,
+
+    /// The user on the backend
+    user: User,
+
+    /// The version of the backend
+    version: Version,
+}
+
 /// A connect/disconnect event
 pub enum WsEvent {
     /// Connected to the websocket server
-    Connected,
+    Connected {
+        /// The user on the backend
+        user: User,
+
+        /// The version of the backend
+        version: Version,
+    },
     /// Disconnected from the websocket server, will retry
     Disconnected(String),
     /// Disconnected from the websocket server, will not retry
@@ -77,10 +100,35 @@ fn message_to_string(msg: Message) -> Option<String> {
 const KEEP_ALIVE_DURATION_MILLIS: u32 = 15_000;
 const RECONNECT_DELAY_MILLIS: u32 = 5_000;
 
+enum BackendState {
+    /// Backend is connected
+    Connected(Backend),
+    /// Disconnected from the websocket server, will retry
+    Disconnected(String),
+    /// Disconnected from the websocket server, will not retry
+    FatalError(String),
+}
+
+impl BackendState {
+    const fn is_connected(&self) -> bool {
+        matches!(self, BackendState::Connected(_))
+    }
+
+    async fn send(&mut self, msg: Message) {
+        if let BackendState::Connected(backend) = self {
+            backend.ws.send(msg).await.unwrap_or_else(|err| {
+                error!("ws: Failed to send message: {:?}", err);
+            });
+        } else {
+            error!("Discarding outgoing message as not connected");
+        }
+    }
+}
+
 struct State {
     url: String,
     subscriptions: HashMap<String, Vec<Callback<MqttMessage>>>,
-    ws: Option<WebSocket>,
+    backend: BackendState,
     timeout: Option<Timeout>,
     in_tx: Sender<Command>,
     event_handlers: Vec<Callback<WsEvent>>,
@@ -98,7 +146,7 @@ impl WebsocketService {
         let mut state = State {
             url,
             subscriptions: HashMap::new(),
-            ws: None,
+            backend: BackendState::Disconnected("Not connected".to_string()),
             timeout: None,
             in_tx: in_tx.clone(),
             event_handlers: vec![],
@@ -108,20 +156,22 @@ impl WebsocketService {
             reconnect_and_set_keep_alive(&mut state).await;
 
             loop {
-                match &mut state.ws {
-                    Some(ws) => match select(in_rx.next(), ws.next()).await {
-                        Either::Left((Some(command), _)) => {
-                            process_command(command, &mut state).await;
+                match &mut state.backend {
+                    BackendState::Connected(backend) => {
+                        match select(in_rx.next(), backend.ws.next()).await {
+                            Either::Left((Some(command), _)) => {
+                                process_command(command, &mut state).await;
+                            }
+                            Either::Left((None, _)) => {
+                                error!("ws: Command channel closed, quitting.");
+                                break;
+                            }
+                            Either::Right((msg, _)) => {
+                                process_message(msg, &mut state);
+                            }
                         }
-                        Either::Left((None, _)) => {
-                            error!("ws: Command channel closed, quitting.");
-                            break;
-                        }
-                        Either::Right((msg, _)) => {
-                            process_message(msg, &mut state);
-                        }
-                    },
-                    None => {
+                    }
+                    _ => {
                         if let Some(command) = in_rx.next().await {
                             process_command(command, &mut state).await;
                         } else {
@@ -180,18 +230,8 @@ enum ConnectError {
     RetryableError(#[from] RetryableError),
 }
 
-async fn send(ws: &mut Option<WebSocket>, msg: Message) {
-    if let Some(ws) = ws {
-        ws.send(msg).await.unwrap_or_else(|err| {
-            error!("ws: Failed to send message: {:?}", err);
-        });
-    } else {
-        error!("Discarding outgoing message as not connected");
-    }
-}
-
 async fn process_command(command: Command, state: &mut State) {
-    let is_connected = state.ws.is_some();
+    let is_connected = state.backend.is_connected();
 
     match command {
         Command::Subscribe { topic, callback } => {
@@ -201,30 +241,38 @@ async fn process_command(command: Command, state: &mut State) {
             } else {
                 state.subscriptions.insert(topic.clone(), vec![callback]);
                 let command = WsCommand::Subscribe { topic };
-                send(
-                    &mut state.ws,
-                    Message::Text(serde_json::to_string(&command).unwrap()),
-                )
-                .await;
+                state
+                    .backend
+                    .send(Message::Text(serde_json::to_string(&command).unwrap()))
+                    .await;
                 set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             };
         }
         Command::Send(msg) => {
             debug!("ws: Sending message: {:?}", msg);
             let command = WsCommand::Send(msg);
-            send(
-                &mut state.ws,
-                Message::Text(serde_json::to_string(&command).unwrap()),
-            )
-            .await;
+            state
+                .backend
+                .send(Message::Text(serde_json::to_string(&command).unwrap()))
+                .await;
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
         Command::EventHandler(handler) => {
             debug!("ws: Register event handler.");
-            if is_connected {
-                handler.emit(WsEvent::Connected);
-            } else {
-                handler.emit(WsEvent::Disconnected("Not connected".to_string()));
+            #[allow(clippy::option_if_let_else)]
+            match &state.backend {
+                BackendState::Connected(backend) => {
+                    handler.emit(WsEvent::Connected {
+                        user: backend.user.clone(),
+                        version: backend.version.clone(),
+                    });
+                }
+                BackendState::Disconnected(str) => {
+                    handler.emit(WsEvent::Disconnected(str.clone()));
+                }
+                BackendState::FatalError(str) => {
+                    handler.emit(WsEvent::FatalError(str.clone()));
+                }
             }
             state.event_handlers.push(handler);
         }
@@ -235,11 +283,10 @@ async fn process_command(command: Command, state: &mut State) {
             if is_connected {
                 debug!("ws: Sending keep alive.");
                 let command = WsCommand::KeepAlive;
-                send(
-                    &mut state.ws,
-                    Message::Text(serde_json::to_string(&command).unwrap()),
-                )
-                .await;
+                state
+                    .backend
+                    .send(Message::Text(serde_json::to_string(&command).unwrap()))
+                    .await;
             } else {
                 reconnect_and_set_keep_alive(state).await;
             }
@@ -265,7 +312,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
         }
         Some(Err(err)) => {
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
-            state.ws = None;
+            state.backend = BackendState::Disconnected(err.to_string());
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnected(err.to_string()));
             }
@@ -273,9 +320,10 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
         }
         None => {
             error!("ws: closed, reconnecting.");
-            state.ws = None;
+            let msg = "Connection closed";
+            state.backend = BackendState::Disconnected(msg.to_string());
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnected("Connection closed".to_string()));
+                handler.emit(WsEvent::Disconnected(msg.to_string()));
             }
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
@@ -285,26 +333,29 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
 async fn reconnect_and_set_keep_alive(state: &mut State) {
     let ws = reconnect(&state.url, &state.subscriptions).await;
     match ws {
-        Ok(ws) => {
+        Ok(backend) => {
             info!("ws: Connected.");
-            state.ws = Some(ws);
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             for handler in &state.event_handlers {
-                handler.emit(WsEvent::Connected);
+                handler.emit(WsEvent::Connected {
+                    user: backend.user.clone(),
+                    version: backend.version.clone(),
+                });
             }
+            state.backend = BackendState::Connected(backend);
         }
         Err(ConnectError::RetryableError(err)) => {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
-            state.ws = None;
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
+            state.backend = BackendState::Disconnected(err.to_string());
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnected(err.to_string()));
             }
         }
         Err(ConnectError::FatalError(err)) => {
             error!("ws: Failed to reconnect: {}, not retrying", err);
-            state.ws = None;
             state.timeout = None;
+            state.backend = BackendState::FatalError(err.to_string());
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::FatalError(err.to_string()));
             }
@@ -315,28 +366,34 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
 async fn reconnect(
     url: &str,
     subscriptions: &HashMap<String, Vec<Callback<MqttMessage>>>,
-) -> Result<WebSocket, ConnectError> {
+) -> Result<Backend, ConnectError> {
     info!("ws: Reconnecting to websocket.");
     let mut ws = WebSocket::open(url).map_err(|err| RetryableError::AnyError(err.into()))?;
 
     debug!("ws: Waiting for connected message.");
-    match ws.next().await {
+    let (user, version) = match ws.next().await {
         Some(Ok(msg)) => {
             if let Some(msg) = message_to_string(msg) {
                 let msg: WsConnect = serde_json::from_str(&msg)
                     .map_err(|err| RetryableError::AnyError(err.into()))?;
 
                 match msg {
-                    WsConnect::Connected(user) => {
+                    WsConnect::Connected { user, version } => {
                         info!("ws: Connected to websocket as user {}.", user.name);
+                        (user, version)
                     }
                     WsConnect::Disconnected(WsError::NotAuthorized) => {
                         info!("ws: Not authorized to connect to websocket.");
                         return Err(FatalError::Error("Not authorized".into()).into());
                     }
                 }
+            } else {
+                return Err(
+                    RetryableError::AnyError(eyre::eyre!("Connect message not received")).into(),
+                );
             }
         }
+
         Some(Err(err)) => {
             debug!("ws: Failed to receive connected message: {:?}.", err);
             let err = MyWebSocketError(err);
@@ -346,7 +403,7 @@ async fn reconnect(
             debug!("ws: Connection closed, waiting for connected message.");
             return Err(RetryableError::AnyError(eyre::eyre!("Websocket closed")).into());
         }
-    }
+    };
 
     for topic in subscriptions.keys() {
         let command = WsCommand::Subscribe {
@@ -361,9 +418,10 @@ async fn reconnect(
             .map_err(MyWebSocketError)
             .map_err(|err| RetryableError::AnyError(err.into()))?;
     }
-
     info!("ws: Resubscribed to topics.");
-    Ok(ws)
+
+    let backend = Backend { ws, user, version };
+    Ok(backend)
 }
 
 fn set_timeout(timeout: &mut Option<Timeout>, in_tx: &Sender<Command>, millis: u32) {

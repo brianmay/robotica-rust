@@ -15,7 +15,10 @@ use futures::{SinkExt, StreamExt};
 use tokio::{select, sync::mpsc};
 use tracing::{debug, error, info};
 
-use crate::services::mqtt::{self, topics::topic_matches_any};
+use crate::{
+    services::mqtt::{self, topics::topic_matches_any},
+    version::Version,
+};
 
 use self::protocol::{MqttMessage, WsCommand, WsConnect, WsError};
 use super::{get_user, HttpConfig, User};
@@ -52,7 +55,10 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
     let (mut sender, mut receiver) = stream.split();
 
     // Send Connect message.
-    let message = WsConnect::Connected(user.clone());
+    let message = WsConnect::Connected {
+        user: user.clone(),
+        version: Version::get(),
+    };
     let message = serde_json::to_string(&message).unwrap();
     if let Err(e) = sender.send(Message::Text(message)).await {
         error!("Error sending websocket error: {}", e);

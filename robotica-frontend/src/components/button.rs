@@ -254,7 +254,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             }
             Message::Event(WsEvent::Disconnected(_)) => self.controller.process_disconnected(),
             Message::Event(WsEvent::FatalError(_)) => self.controller.process_disconnected(),
-            Message::Event(WsEvent::Connected) => {}
+            Message::Event(WsEvent::Connected { .. }) => {}
         }
         true
     }

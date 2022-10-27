@@ -3,9 +3,11 @@ use std::fmt::{Display, Formatter};
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-pub(super) struct User {
-    pub(super) name: String,
+/// The user on the backend
+#[derive(Clone, Debug, Deserialize)]
+pub struct User {
+    /// The name of the user on the backend
+    pub name: String,
 }
 
 impl Display for User {

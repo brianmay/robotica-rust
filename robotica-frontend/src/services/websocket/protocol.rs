@@ -1,7 +1,7 @@
 //! Common interfaces between robotica frontends and backends
 use serde::{Deserialize, Serialize};
 
-use crate::services::protocol::User;
+use crate::{services::protocol::User, version::Version};
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "error")]
@@ -12,11 +12,11 @@ pub(super) enum WsError {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub(super) enum WsConnect {
-    Connected(User),
+    Connected { user: User, version: Version },
     Disconnected(WsError),
 }
 
-/// Message sent from the frotnend to the backend.
+/// Message sent from the frontend to the backend.
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum WsCommand {
