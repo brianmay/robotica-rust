@@ -20,6 +20,17 @@ pub struct Version {
     pub vcs_ref: String,
 }
 
+impl Version {
+    /// Get the version information for this build
+    #[must_use]
+    pub fn get() -> Version {
+        Version {
+            build_date: BUILD_DATE.unwrap_or("unknown").into(),
+            vcs_ref: VCS_REF.unwrap_or("unknown").into(),
+        }
+    }
+}
+
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Built on {} from {}", self.build_date, self.vcs_ref)

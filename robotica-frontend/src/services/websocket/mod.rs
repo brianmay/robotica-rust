@@ -377,10 +377,23 @@ async fn reconnect(
                 let msg: WsConnect = serde_json::from_str(&msg)
                     .map_err(|err| RetryableError::AnyError(err.into()))?;
 
+                let our_version = Version::get();
                 match msg {
-                    WsConnect::Connected { user, version } => {
+                    WsConnect::Connected { user, version }
+                        if version.vcs_ref == our_version.vcs_ref =>
+                    {
                         info!("ws: Connected to websocket as user {}.", user.name);
                         (user, version)
+                    }
+                    WsConnect::Connected { version, .. } => {
+                        info!(
+                            "ws: Backend version {version} but frontend is {}.",
+                            our_version
+                        );
+                        return Err(FatalError::Error(
+                            "Backend version has changed; please reload".into(),
+                        )
+                        .into());
                     }
                     WsConnect::Disconnected(WsError::NotAuthorized) => {
                         info!("ws: Not authorized to connect to websocket.");
