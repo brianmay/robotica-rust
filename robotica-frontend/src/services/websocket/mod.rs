@@ -374,8 +374,8 @@ async fn reconnect(
     let (user, version) = match ws.next().await {
         Some(Ok(msg)) => {
             if let Some(msg) = message_to_string(msg) {
-                let msg: WsConnect = serde_json::from_str(&msg)
-                    .map_err(|err| RetryableError::AnyError(err.into()))?;
+                let msg: WsConnect =
+                    serde_json::from_str(&msg).map_err(|err| FatalError::AnyError(err.into()))?;
 
                 let our_version = Version::get();
                 match msg {
