@@ -20,8 +20,14 @@ jobs:
         run: cargo clippy --no-deps -- -Dwarnings
       - name: Compile
         run: cargo build
-      - name: Test
+      - name: Test backend lib
         run: cargo test
+      - name: Test frontend lib
+        run: cargo test -p robotica-frontend
+      - name: Test backend lib (Brian)
+        run: cargo test -p brian-backend
+      - name: Test frontend lib (Brian)
+        run: cargo test -p brian-frontend
 
   push:
     name: Push
