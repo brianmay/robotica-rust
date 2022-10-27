@@ -4,15 +4,26 @@ Manipulate asynchronous events, using asynchronous tasks.
 
 ## Getting started
 
-Sample code in the `brian-backend` directory.
+Sample backend code in the `brian-backend` directory. Sample yew based front end code in the `brian-backend` directory.
 
 ## Rationale
 
-My journey for IOT control has come via three solutions:
+My journey for IOT control has come via 6 major solutions:
 
-1. [Node Red](https://nodered.org/)
-2. [Penguin Nodes](https://github.com/brianmay/penguin_nodes/) - Elixir solution
-3. Robotica Node Rust - Rust solution
+1. [Robotica/Python version](https://github.com/brianmay/robotica/). I can't remember much about this.
+2. [Robotica/Elixir version](https://github.com/brianmay/robotica-elixir/). Basically a scheduler with device plugins and RPI3 based GUI.
+3. [Node Red](https://nodered.org/)
+4. [Penguin Nodes](https://github.com/brianmay/penguin_nodes/) - Elixir solution.
+5. [Home Assistant](https://www.home-assistant.io/)
+6. [Robotica Rust](https://github.com/brianmay/robotica-rust/) (this project) - Rust solution.
+
+## Robotica/Elixir version
+
+Elixir is a good language. I like its functional aspects. I like its concurrency checking.
+
+Unfortunately its type checking it currently terrible. It is slow and clumsy to use in CI. And it misses glaring errors between declared types and actual types. Hence my work at maintaining existing code is hampered because I don't know what the types of data various functions accept.
+
+There is work on getting better type checking into the language. But until then I currently prefer Rust.
 
 ## Node Red
 
@@ -63,35 +74,6 @@ I still like some features of this implementation. However I think it is far too
 
 As an example, just recently I have started experiencing a problem where it sometimes would not send the "The Tesla has been plugged in" message, and I have no idea why.
 
-## Robotica Rust
-
-Yes another rewrite. In Rust. Features:
-
-* Design is considerably simpler.
-* Uses asyncio tasks.
-* Type checking between threads is enforced at compile time.
-* Creating/maintaining/reading flows is a lot easier.
-* Structured as a library, so the parts not-specific to my setup can be shared by different projects.
-* On unexpected failure should hopefully exit to allow monitoring system (e.g. kubernetes) to restart.
-* Updated to reduce excessive messages being sent that were the exact same as the last message.
-
-Limitations:
-
-* Lost the ability to automatically restart tasks. If one task fails, need to abort everything.
-* Can only have one copy running at a time. Or you will get duplicate outgoing events.
-* This should still be considered alpha status. As in the APIs are still being developed and could change without notice.
-
-Still to be implemented:
-
-* Split between binary crate and library still needs more work. Ideally binary crate should only contain stuff that is specific to my setup, but probably contains more then that.
-
-* Logging still needs more work. Not sure how to approach this yet.
-
-* Haven't tried to save state. Hoping this won't be required. When the process starts it will subscribe to mqtt and pick up retained data which is sufficient for now. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
-
-* Not many building blocks supports. Still use node-red for some stuff, and this sends mqtt messages that we can intercept here.
-
-* Tools to debug flows easily.
 
 ## Home Assistant
 
@@ -124,3 +106,33 @@ Not so good points:
 
 While there are good points to Home Assistant what I really want is to be able to used compiled code. Code that can
 be easily committed to git using standard workflows. Code that get strongly typed checked during compilation. Tests that can be run before code gets deployed.
+
+## Robotica Rust
+
+Yes another rewrite. In Rust. Features:
+
+* Design is considerably simpler.
+* Uses asyncio tasks.
+* Type checking between threads is enforced at compile time.
+* Creating/maintaining/reading flows is a lot easier.
+* Structured as a library, so the parts not-specific to my setup can be shared by different projects.
+* On unexpected failure should hopefully exit to allow monitoring system (e.g. kubernetes) to restart.
+* Updated to reduce excessive messages being sent that were the exact same as the last message.
+
+Limitations:
+
+* Lost the ability to automatically restart tasks. If one task fails, need to abort everything.
+* Can only have one copy running at a time. Or you will get duplicate outgoing events.
+* This should still be considered alpha status. As in the APIs are still being developed and could change without notice.
+
+Still to be implemented:
+
+* Split between binary crate and library still needs more work. Ideally binary crate should only contain stuff that is specific to my setup, but probably contains more then that.
+
+* Logging still needs more work. Not sure how to approach this yet.
+
+* Haven't tried to save state. Hoping this won't be required. When the process starts it will subscribe to mqtt and pick up retained data which is sufficient for now. Have some ideas, but means the nodes will need to have a unique id and this is likely to add to the complexity.
+
+* Not many building blocks supports. Still use home-assistant for most of my stuff and my older robotica elixir based drivers for other stuff. They communicate with each other using MQTT.
+
+* Tools to debug flows easily.

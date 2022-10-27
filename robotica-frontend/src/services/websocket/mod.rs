@@ -1,3 +1,4 @@
+//! Websocket service for robotica frontend.
 pub mod protocol;
 
 use std::collections::HashMap;
@@ -19,25 +20,38 @@ use crate::services::websocket::protocol::{WsConnect, WsError};
 
 use self::protocol::{MqttMessage, WsCommand};
 
+/// A websocket command, sent to the websocket service.
 #[derive(Debug)]
 pub enum Command {
+    /// Subscribe to a MQTT topic.
     Subscribe {
+        /// MQTT topic to subscribe to.
         topic: String,
+        /// Callback to call when a message is received.
         callback: Callback<MqttMessage>,
     },
+    /// Callback to call when a connect or disconnect event occurs.
     EventHandler(Callback<WsEvent>),
+    /// Send a MQTT message.
     Send(MqttMessage),
+    /// Send a keep alive message.
     KeepAlive,
 }
 
+/// A connect/disconnect event
 pub enum WsEvent {
+    /// Connected to the websocket server
     Connected,
+    /// Disconnected from the websocket server, will retry
     Disconnected(String),
+    /// Disconnected from the websocket server, will not retry
     FatalError(String),
 }
 
+/// The websocket service
 #[derive(Clone)]
 pub struct WebsocketService {
+    /// Channel to send commands to the websocket service.
     pub tx: Sender<Command>,
 }
 
@@ -73,6 +87,8 @@ struct State {
 }
 
 impl WebsocketService {
+    /// Create a new websocket service.
+    #[must_use]
     pub fn new() -> Self {
         let url = get_websocket_url();
         info!("Connecting to {}", url);
@@ -105,15 +121,14 @@ impl WebsocketService {
                             process_message(msg, &mut state);
                         }
                     },
-                    None => match in_rx.next().await {
-                        Some(command) => {
+                    None => {
+                        if let Some(command) = in_rx.next().await {
                             process_command(command, &mut state).await;
-                        }
-                        None => {
+                        } else {
                             error!("ws: Command channel closed, quitting.");
                             break;
                         }
-                    },
+                    }
                 };
             }
         });
@@ -122,7 +137,13 @@ impl WebsocketService {
     }
 }
 
-/// WebSocket error does not implement std::error::Error so we wrap it.
+impl Default for WebsocketService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// `WebSocketError` does not implement `std::error::Error` so we wrap it.
 #[derive(Debug)]
 struct MyWebSocketError(WebSocketError);
 
@@ -163,7 +184,7 @@ async fn send(ws: &mut Option<WebSocket>, msg: Message) {
     if let Some(ws) = ws {
         ws.send(msg).await.unwrap_or_else(|err| {
             error!("ws: Failed to send message: {:?}", err);
-        })
+        });
     } else {
         error!("Discarding outgoing message as not connected");
     }
@@ -175,18 +196,17 @@ async fn process_command(command: Command, state: &mut State) {
     match command {
         Command::Subscribe { topic, callback } => {
             debug!("ws: Subscribing to {}", topic);
-            match state.subscriptions.get_mut(&topic) {
-                Some(callbacks) => callbacks.push(callback),
-                None => {
-                    state.subscriptions.insert(topic.clone(), vec![callback]);
-                    let command = WsCommand::Subscribe { topic };
-                    send(
-                        &mut state.ws,
-                        Message::Text(serde_json::to_string(&command).unwrap()),
-                    )
-                    .await;
-                    set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
-                }
+            if let Some(callbacks) = state.subscriptions.get_mut(&topic) {
+                callbacks.push(callback);
+            } else {
+                state.subscriptions.insert(topic.clone(), vec![callback]);
+                let command = WsCommand::Subscribe { topic };
+                send(
+                    &mut state.ws,
+                    Message::Text(serde_json::to_string(&command).unwrap()),
+                )
+                .await;
+                set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             };
         }
         Command::Send(msg) => {
@@ -212,9 +232,7 @@ async fn process_command(command: Command, state: &mut State) {
             debug!("ws: Got KeepAlive command.");
             state.timeout = None;
 
-            if !is_connected {
-                reconnect_and_set_keep_alive(state).await;
-            } else {
+            if is_connected {
                 debug!("ws: Sending keep alive.");
                 let command = WsCommand::KeepAlive;
                 send(
@@ -222,6 +240,8 @@ async fn process_command(command: Command, state: &mut State) {
                     Message::Text(serde_json::to_string(&command).unwrap()),
                 )
                 .await;
+            } else {
+                reconnect_and_set_keep_alive(state).await;
             }
 
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);

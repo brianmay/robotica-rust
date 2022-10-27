@@ -1,16 +1,30 @@
+//! A robotica light controller
+
 use log::error;
 
 use super::{
     Action, Command, ConfigTrait, ControllerTrait, DisplayState, Icon, Label, Subscription,
 };
 
+/// The configuration for a light controller
 #[derive(Clone)]
 pub struct Config {
+    /// The name of the light
     pub name: String,
+
+    /// The topic substring for the light
     pub topic_substr: String,
+
+    /// The action to take when the light is clicked
     pub action: Action,
+
+    /// The icon to display for the light
     pub icon: Icon,
+
+    /// The scene to use for the light
     pub scene: String,
+
+    /// The priority to use for the scene
     pub priority: Priority,
 }
 
@@ -27,6 +41,7 @@ impl ConfigTrait for Config {
     }
 }
 
+/// The controller for a light
 pub struct Controller {
     config: Config,
     power: Option<String>,
@@ -112,7 +127,7 @@ impl ControllerTrait for Controller {
             Action::TurnOff => message["action"] = serde_json::json!("turn_off"),
             Action::Toggle => {
                 let display_state = self.get_display_state();
-                if let DisplayState::On = display_state {
+                if display_state == DisplayState::On {
                     message["action"] = serde_json::json!("turn_off");
                 };
             }
@@ -147,8 +162,7 @@ fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
 
     let scenes_empty = match scenes {
         Some(scenes) if !scenes.is_empty() => false,
-        Some(_) => true,
-        None => true,
+        Some(_) | None => true,
     };
 
     match power {
@@ -173,8 +187,7 @@ fn get_display_state_turn_off(lb: &Controller) -> DisplayState {
 
     let scenes_empty = match scenes {
         Some(scenes) if !scenes.is_empty() => false,
-        Some(_) => true,
-        None => true,
+        Some(_) | None => true,
     };
 
     match power {
@@ -197,8 +210,7 @@ fn get_display_state_toggle(lb: &Controller) -> DisplayState {
 
     let scenes_empty = match scenes {
         Some(scenes) if !scenes.is_empty() => false,
-        Some(_) => true,
-        None => true,
+        Some(_) | None => true,
     };
 
     match power {
@@ -234,4 +246,5 @@ impl TryFrom<u32> for ButtonStateMsgType {
     }
 }
 
+/// The type used to represent a priority of a light scene
 pub type Priority = i32;

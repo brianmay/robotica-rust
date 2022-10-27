@@ -1,3 +1,4 @@
+//! Provide functionality to process asynchronous streams of data for IOT devices.
 #![warn(missing_docs)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::nursery)]
@@ -5,7 +6,6 @@
 // #![deny(clippy::expect_used)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::use_self)]
-//! Provide functionality to process asynchronous streams of data for IOT devices.
 
 #[macro_use]
 extern crate lalrpop_util;

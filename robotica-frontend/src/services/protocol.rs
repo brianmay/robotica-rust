@@ -1,3 +1,4 @@
+//! Common interfaces between robotica frontends and backends
 use std::fmt::{Display, Formatter};
 
 use serde::Deserialize;

@@ -1,3 +1,4 @@
+//! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
 use crate::services::{
@@ -10,13 +11,25 @@ use crate::services::{
     websocket::{Command, WebsocketService, WsEvent},
 };
 
+/// The yew properties for a light button.
 #[derive(Clone, Properties, Eq, PartialEq)]
 pub struct LightProps {
+    /// The name of the light.
     pub name: String,
+
+    /// The base string that all topics are derived from.
     pub topic_substr: String,
+
+    /// The action that the button should perform.
     pub action: Action,
+
+    /// The icon to display on the button.
     pub icon: Icon,
+
+    /// The scene to activate when the button is pressed.
     pub scene: String,
+
+    /// The priority of the scene.
     pub priority: Priority,
 }
 
@@ -38,12 +51,22 @@ impl ConfigTrait for LightProps {
     }
 }
 
+/// The yew properties for a music button.
 #[derive(Clone, Properties, Eq, PartialEq)]
 pub struct MusicProps {
+    /// The name of the music button.
     pub name: String,
+
+    /// The base string that all topics are derived from.
     pub topic_substr: String,
+
+    /// The action that the button should perform.
     pub action: Action,
+
+    /// The icon to display on the button.
     pub icon: Icon,
+
+    /// The play list to play when this button is pressed.
     pub play_list: String,
 }
 
@@ -64,11 +87,19 @@ impl ConfigTrait for MusicProps {
     }
 }
 
+/// The yew properties for a switch button.
 #[derive(Clone, Properties, Eq, PartialEq)]
 pub struct SwitchProps {
+    /// The name of the switch button.
     pub name: String,
+
+    /// The base string that all topics are derived from.
     pub topic_substr: String,
+
+    /// The action that the button should perform.
     pub action: Action,
+
+    /// The icon to display on the button.
     pub icon: Icon,
 }
 
@@ -88,14 +119,21 @@ impl ConfigTrait for SwitchProps {
     }
 }
 
+/// A yew button
 pub struct Button<T: ConfigTrait> {
     controller: T::Controller,
     wss: WebsocketService,
 }
 
+/// The yew message for a button.
 pub enum Message {
+    /// Button has been clicked
     Click,
+
+    /// Button was received MQTT message
     Receive((Label, String)),
+
+    /// Button was received a WebSocket event
     Event(WsEvent),
 }
 
@@ -173,6 +211,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             DisplayState::OnOther => classes.push("btn-secondary"),
         }
 
+        #[allow(clippy::match_same_arms)]
         let disabled = match display_state {
             DisplayState::HardOff => true,
             DisplayState::Off => false,
@@ -198,6 +237,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        #[allow(clippy::match_same_arms)]
         match msg {
             Message::Click => {
                 let commands = self.controller.get_press_commands();

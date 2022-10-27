@@ -1,3 +1,4 @@
+//! A robotica switch controller
 use log::error;
 
 use super::{
@@ -5,11 +6,19 @@ use super::{
     Icon, Label, Subscription,
 };
 
+/// The configuration for a switch controller
 #[derive(Clone)]
 pub struct Config {
+    /// The name of the switch
     pub name: String,
+
+    /// The topic substring for the switch
     pub topic_substr: String,
+
+    /// The action to take when the switch is clicked
     pub action: Action,
+
+    /// The icon to display for the switch
     pub icon: Icon,
 }
 
@@ -17,22 +26,17 @@ impl ConfigTrait for Config {
     type Controller = Controller;
 
     fn create_controller(&self) -> Controller {
-        Controller::new(self)
-    }
-}
-
-pub struct Controller {
-    config: Config,
-    power: Option<String>,
-}
-
-impl Controller {
-    pub fn new(config: &Config) -> Self {
-        Self {
-            config: config.clone(),
+        Controller {
+            config: self.clone(),
             power: None,
         }
     }
+}
+
+/// The controller for a switch
+pub struct Controller {
+    config: Config,
+    power: Option<String>,
 }
 
 fn topic(parts: &[&str]) -> String {
@@ -55,10 +59,10 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        match label.try_into() {
-            Ok(ButtonStateMsgType::Power) => self.power = Some(data),
-
-            _ => error!("Invalid message label {}", label),
+        if let Ok(ButtonStateMsgType::Power) = label.try_into() {
+            self.power = Some(data);
+        } else {
+            error!("Invalid message label {}", label);
         }
     }
 
@@ -89,7 +93,7 @@ impl ControllerTrait for Controller {
             Action::TurnOff => payload["action"] = serde_json::json!("turn_off"),
             Action::Toggle => {
                 let display_state = self.get_display_state();
-                if let DisplayState::On = display_state {
+                if display_state == DisplayState::On {
                     payload["action"] = serde_json::json!("turn_off");
                 } else {
                     payload["action"] = serde_json::json!("turn_on");

@@ -1,3 +1,4 @@
+//! A robotica music controller
 use log::error;
 
 use super::{
@@ -5,12 +6,22 @@ use super::{
     Icon, Label, Subscription,
 };
 
+/// The configuration for a music controller
 #[derive(Clone)]
 pub struct Config {
+    /// The name of the music
     pub name: String,
+
+    /// The topic substring for the music
     pub topic_substr: String,
+
+    /// The action to take when the music is clicked
     pub action: Action,
+
+    /// The icon to display for the music
     pub icon: Icon,
+
+    /// The playlist to use for the music
     pub play_list: String,
 }
 
@@ -18,16 +29,22 @@ impl ConfigTrait for Config {
     type Controller = Controller;
 
     fn create_controller(&self) -> Controller {
-        Controller::new(self)
+        Controller {
+            config: self.clone(),
+            play_list: None,
+        }
     }
 }
 
+/// The controller for a music
 pub struct Controller {
     config: Config,
     play_list: Option<String>,
 }
 
 impl Controller {
+    /// Create a new music controller
+    #[must_use]
     pub fn new(config: &Config) -> Self {
         Self {
             config: config.clone(),
@@ -56,10 +73,10 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        match label.try_into() {
-            Ok(ButtonStateMsgType::PlayList) => self.play_list = Some(data),
-
-            _ => error!("Invalid message label {}", label),
+        if let Ok(ButtonStateMsgType::PlayList) = label.try_into() {
+            self.play_list = Some(data);
+        } else {
+            error!("Invalid message label {}", label);
         }
     }
 
