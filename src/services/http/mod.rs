@@ -215,7 +215,7 @@ fn nav_bar() -> Markup {
                 div class="collapse navbar-collapse" id="navbarNav" {
                     div class="navbar-nav" {
                         li class="nav-item" {
-                            a class="nav-link" href="/login" { "Login" }
+                            a class="nav-link" href="/welcome" { "Login" }
                         }
                     }
                 }

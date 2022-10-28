@@ -2,24 +2,23 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use robotica_frontend::components::ws_client::WsClient;
 use robotica_frontend::version;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
 mod components;
-use components::lights::Lights;
-use components::login::Login;
+use components::rooms::{BrianRoom, DiningRoom};
+use components::welcome::Welcome;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
-    #[at("/test")]
-    Test,
-    #[at("/lights")]
-    Lights,
-    #[at("/login")]
-    Login,
+    #[at("/brian")]
+    BrianRoom,
+    #[at("/dining")]
+    DiningRoom,
+    #[at("/welcome")]
+    Welcome,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -28,9 +27,9 @@ pub enum Route {
 #[allow(clippy::let_unit_value)]
 fn switch(selected_route: &Route) -> Html {
     let content = match selected_route {
-        Route::Test => html! { <Test/> },
-        Route::Lights => html! { <WsClient><Lights/></WsClient> },
-        Route::Login => html! {<Login/>},
+        Route::BrianRoom => html! { <BrianRoom/> },
+        Route::DiningRoom => html! { <DiningRoom/> },
+        Route::Welcome => html! {<Welcome/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
@@ -144,13 +143,13 @@ fn nav_bar() -> Html {
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        { link(Route::Lights, "Lights") }
+                        { link(Route::Welcome, "Welcome") }
                     </li>
                     <li class="nav-item">
-                        { link(Route::Login, "Login") }
+                        { link(Route::BrianRoom, "Brian's Room") }
                     </li>
                     <li class="nav-item">
-                        { link(Route::Test, "Test") }
+                        { link(Route::DiningRoom, "Dining Room") }
                     </li>
                 </ul>
                 </div>
