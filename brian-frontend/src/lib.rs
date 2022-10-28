@@ -2,6 +2,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
+use components::tags_view::TagsView;
 use robotica_frontend::version;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
@@ -22,6 +23,8 @@ pub enum Route {
     Welcome,
     #[at("/schedule")]
     Schedule,
+    #[at("/tags")]
+    Tags,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -33,6 +36,7 @@ fn switch(selected_route: &Route) -> Html {
         Route::BrianRoom => html! { <BrianRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
         Route::Schedule => html! { <ScheduleView/> },
+        Route::Tags => html! { <TagsView/> },
         Route::Welcome => html! {<Welcome/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
@@ -157,6 +161,9 @@ fn nav_bar() -> Html {
                     </li>
                     <li class="nav-item">
                         { link(Route::Schedule, "Schedule") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::Tags, "Tags") }
                     </li>
                 </ul>
                 </div>

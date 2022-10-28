@@ -1,5 +1,8 @@
 //! Common interfaces between robotica frontends and backends
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::HashSet,
+    fmt::{Display, Formatter},
+};
 
 use chrono::Utc;
 use serde::Deserialize;
@@ -216,4 +219,17 @@ impl Display for Sequence {
         write!(f, "{}", task_list.join(", "))?;
         Ok(())
     }
+}
+
+/// The tags for yesterday, today, and tomorrow.
+#[derive(Debug, Deserialize)]
+pub struct Tags {
+    /// The tags for yesterday.
+    pub yesterday: HashSet<String>,
+
+    /// The tags for today.
+    pub today: HashSet<String>,
+
+    /// The tags for tomorrow.
+    pub tomorrow: HashSet<String>,
 }
