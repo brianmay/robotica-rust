@@ -30,11 +30,6 @@ pub fn schedule(props: &Props) -> Html {
                 },
                 |new_schedule: Vec<Sequence>| sequence_list.set(new_schedule),
             );
-
-            // .map(|new_schedule: Vec<Sequence>| schedule.set(new_schedule))
-            // .unwrap_or_else(|e| {
-            //     log::error!("Failed to parse schedule: {}", e);
-            // });
         })
     };
 
@@ -49,9 +44,15 @@ pub fn schedule(props: &Props) -> Html {
         {
             sequence_list.iter().map(|sequence| {
                 html! {
-                    <div id={sequence.id.clone()}>
-                        <span>{sequence.required_time.clone()}</span>
-                        <span>{format!("{}", sequence)}</span>
+                    <div class="sequence" id={sequence.id.clone()}>
+                        <div>{sequence.required_time.clone()}</div>
+                        <div>{
+                            sequence.tasks.iter().map(|task| {
+                                html! {
+                                    <div>{task}</div>
+                                }
+                            }).collect::<Html>()
+                        }</div>
                     </div>
                 }
             }).collect::<Html>()

@@ -208,19 +208,6 @@ pub struct Sequence {
     pub mark: Option<Mark>,
 }
 
-impl Display for Sequence {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut task_list = vec![];
-
-        for task in &self.tasks {
-            task_list.push(format!("{}", task));
-        }
-
-        write!(f, "{}", task_list.join(", "))?;
-        Ok(())
-    }
-}
-
 /// The tags for yesterday, today, and tomorrow.
 #[derive(Debug, Deserialize)]
 pub struct Tags {
