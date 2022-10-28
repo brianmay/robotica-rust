@@ -9,6 +9,7 @@ use yew_router::prelude::*;
 
 mod components;
 use components::rooms::{BrianRoom, DiningRoom};
+use components::schedule_view::ScheduleView;
 use components::welcome::Welcome;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
@@ -19,6 +20,8 @@ pub enum Route {
     DiningRoom,
     #[at("/welcome")]
     Welcome,
+    #[at("/schedule")]
+    Schedule,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -29,6 +32,7 @@ fn switch(selected_route: &Route) -> Html {
     let content = match selected_route {
         Route::BrianRoom => html! { <BrianRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
+        Route::Schedule => html! { <ScheduleView/> },
         Route::Welcome => html! {<Welcome/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
@@ -150,6 +154,9 @@ fn nav_bar() -> Html {
                     </li>
                     <li class="nav-item">
                         { link(Route::DiningRoom, "Dining Room") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::Schedule, "Schedule") }
                     </li>
                 </ul>
                 </div>

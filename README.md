@@ -74,7 +74,6 @@ I still like some features of this implementation. However I think it is far too
 
 As an example, just recently I have started experiencing a problem where it sometimes would not send the "The Tesla has been plugged in" message, and I have no idea why.
 
-
 ## Home Assistant
 
 I should have looked seriously at this a lot earlier. But I has obsessed with the "Not invented here" tendency. In hindsight, while

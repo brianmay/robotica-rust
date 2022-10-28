@@ -11,4 +11,5 @@
 
 pub mod components;
 pub mod services;
+mod types;
 pub mod version;

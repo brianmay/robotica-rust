@@ -25,10 +25,31 @@ footer {
     @extend .py-3;
     @extend .my-4;
     @extend .border-top;
+
+    div {
+        @extend .mx-2;
+        @extend .text-muted;
+        @extend .text-decoration-none;
+    }
 }
 
-footer div {
-    @extend .mx-2;
-    @extend .text-muted;
-    @extend .text-decoration-none;
+.sequence_list {
+    @extend .container;
+
+    div {
+        @extend .row;
+        @extend .border-top;
+
+        &:hover {
+            background-color: aqua;
+        }
+    }
+
+    div span:nth-child(1) {
+        @extend .col-sm-3;
+    }
+
+    div span:nth-child(2) {
+        @extend .col-sm-9;
+    }
 }

@@ -177,7 +177,9 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
 
                 let subscribe = Command::Subscribe { topic, callback };
                 let mut tx_clone = tx.clone();
-                tx_clone.try_send(subscribe).unwrap();
+                tx_clone
+                    .try_send(subscribe)
+                    .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
             });
         }
 
@@ -185,7 +187,8 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
             let callback = ctx.link().callback(Message::Event);
             let msg = Command::EventHandler(callback);
             let mut tx = wss.tx.clone();
-            tx.try_send(msg).unwrap();
+            tx.try_send(msg)
+                .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
         }
 
         Button { controller, wss }
