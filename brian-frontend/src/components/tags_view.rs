@@ -33,11 +33,13 @@ pub fn tags_view() -> Html {
         })
     };
 
-    let topic = "robotica/robotica.linuxpenguins.xyz/tags".to_string();
-    let subscribe = Command::Subscribe { topic, callback };
-    let mut tx = wss.tx;
-    tx.try_send(subscribe)
-        .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+    use_ref(|| {
+        let topic = "robotica/robotica.linuxpenguins.xyz/tags".to_string();
+        let subscribe = Command::Subscribe { topic, callback };
+        let mut tx = wss.tx;
+        tx.try_send(subscribe)
+            .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+    });
 
     html! {
         <RequireConnection>

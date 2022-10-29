@@ -31,11 +31,13 @@ pub fn schedule(props: &Props) -> Html {
         })
     };
 
-    let topic = props.topic.clone();
-    let subscribe = Command::Subscribe { topic, callback };
-    let mut tx = wss.tx;
-    tx.try_send(subscribe)
-        .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+    use_ref(|| {
+        let topic = props.topic.clone();
+        let subscribe = Command::Subscribe { topic, callback };
+        let mut tx = wss.tx;
+        tx.try_send(subscribe)
+            .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+    });
 
     html! {
         <div class="sequence_list">

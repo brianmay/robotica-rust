@@ -127,6 +127,7 @@ struct State {
     timeout: Option<Timeout>,
     in_tx: Sender<Command>,
     event_handlers: Vec<Callback<WsEvent>>,
+    last_message: HashMap<String, MqttMessage>,
 }
 
 impl WebsocketService {
@@ -145,6 +146,7 @@ impl WebsocketService {
             timeout: None,
             in_tx: in_tx.clone(),
             event_handlers: vec![],
+            last_message: HashMap::new(),
         };
 
         spawn_local(async move {
@@ -231,17 +233,24 @@ async fn process_command(command: Command, state: &mut State) {
     match command {
         Command::Subscribe { topic, callback } => {
             debug!("ws: Subscribing to {}", topic);
+            if let Some(last_message) = state.last_message.get(&topic) {
+                callback.emit(last_message.clone());
+            }
+            debug!("ws: set last message for {}", topic);
             if let Some(callbacks) = state.subscriptions.get_mut(&topic) {
                 callbacks.push(callback);
             } else {
                 state.subscriptions.insert(topic.clone(), vec![callback]);
-                let command = WsCommand::Subscribe { topic };
+                let command = WsCommand::Subscribe {
+                    topic: topic.clone(),
+                };
                 state
                     .backend
                     .send(Message::Text(serde_json::to_string(&command).unwrap()))
                     .await;
                 set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             };
+            debug!("ws: subscribed to {}", topic);
         }
         Command::Send(msg) => {
             debug!("ws: Sending message: {:?}", msg);
@@ -296,6 +305,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             debug!("ws: Received message: {:?}", msg);
             if let Some(msg) = message_to_string(msg) {
                 let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
+                state.last_message.insert(msg.topic.clone(), msg.clone());
                 if let Some(callbacks) = state.subscriptions.get(&msg.topic) {
                     for callback in callbacks {
                         callback.emit(msg.clone());
@@ -307,6 +317,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
         Some(Err(err)) => {
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
             state.backend = BackendState::Disconnected(err.to_string());
+            state.last_message = HashMap::new();
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnected(err.to_string()));
             }
@@ -316,6 +327,7 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             error!("ws: closed, reconnecting.");
             let msg = "Connection closed";
             state.backend = BackendState::Disconnected(msg.to_string());
+            state.last_message = HashMap::new();
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnected(msg.to_string()));
             }
@@ -342,6 +354,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
             state.backend = BackendState::Disconnected(err.to_string());
+            state.last_message = HashMap::new();
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::Disconnected(err.to_string()));
             }
@@ -350,6 +363,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
             error!("ws: Failed to reconnect: {}, not retrying", err);
             state.timeout = None;
             state.backend = BackendState::FatalError(err.to_string());
+            state.last_message = HashMap::new();
             for handler in &state.event_handlers {
                 handler.emit(WsEvent::FatalError(err.to_string()));
             }
