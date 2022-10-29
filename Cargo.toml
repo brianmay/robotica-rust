@@ -6,47 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4.17"
-bytes = "1.2.1"
-rumqttc = { version = "0.17.0", git = "https://github.com/bytebeamio/rumqtt", branch = "hotfix-v5-fields" }
-rustls = "0.20.7"
-webpki-roots = "0.22.0"
-tokio = { version = "1.21.2", features = ["full"] }
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.87"
-serde_yaml = "0.9.14"
-anyhow = "1.0.66"
-reqwest = "0.11.12"
-serde_path_to_error = "0.1.8"
-gethostname = "0.3.0"
-thiserror = "1.0.37"
-chrono = "0.4.19"
-lalrpop-util = { version = "0.19.7", features = ["lexer"] }
-regex = "1.6.0"
-field-ref = "0.2.1"
-tracing = "0.1.35"
-robotica-common = { path = "robotica-common" }
-
-# http server
-axum = { version = "0.5.17", features = ["ws"] }
-openid = "0.10.0"
-maud = { version = "0.24.0", features = ["axum"] }
-axum-sessions = "0.3.1"
-base64 = "0.13.1"
-url = "2.2.2"
-futures = "0.3.25"
-tower = "0.4.13"
-tower-http = { version = "0.3.4", features = ["fs", "trace"] }
-
-
-[build-dependencies]
-lalrpop = "0.19.3"
-
-[dev-dependencies]
-env_logger = "0.9.1"
 
 [workspace]
 members = [
+    "robotica-backend",
     "robotica-frontend",
     "robotica-common",
     "brian-backend",

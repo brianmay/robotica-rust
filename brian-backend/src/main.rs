@@ -4,12 +4,12 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use robotica_rust::entities::Sender;
-use robotica_rust::scheduling::executor::executor;
+use robotica_backend::entities::Sender;
+use robotica_backend::scheduling::executor::executor;
 
-use robotica_rust::services::http;
-use robotica_rust::services::mqtt::Mqtt;
-use robotica_rust::services::mqtt::{MqttClient, Subscriptions};
+use robotica_backend::services::http;
+use robotica_backend::services::mqtt::Mqtt;
+use robotica_backend::services::mqtt::{MqttClient, Subscriptions};
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -321,8 +321,8 @@ dependencies = [
  "chrono-tz",
  "color-backtrace",
  "log",
+ "robotica-backend",
  "robotica-common",
- "robotica-rust",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -1914,37 +1914,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "robotica-common"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "robotica-frontend"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "eyre",
- "futures",
- "gloo-timers",
- "log",
- "reqwasm",
- "robotica-common",
- "serde",
- "serde_json",
- "thiserror",
- "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "web-sys",
- "yew",
-]
-
-[[package]]
-name = "robotica-rust"
+name = "robotica-backend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1979,6 +1949,40 @@ dependencies = [
  "url",
  "webpki-roots",
 ]
+
+[[package]]
+name = "robotica-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "robotica-frontend"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "eyre",
+ "futures",
+ "gloo-timers",
+ "log",
+ "reqwasm",
+ "robotica-common",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
+ "yew",
+]
+
+[[package]]
+name = "robotica-rust"
+version = "0.1.0"
 
 [[package]]
 name = "route-recognizer"

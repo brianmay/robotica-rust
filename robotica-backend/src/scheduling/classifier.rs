@@ -141,15 +141,17 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
                 continue;
             }
         }
-        if let Some(week_day) = c.week_day {
-            if week_day && date.weekday() == chrono::Weekday::Sat.into()
-                || date.weekday() == chrono::Weekday::Sun.into()
-            {
+        let weekday = date.weekday();
+        if let Some(weekday_wanted) = c.week_day {
+            let is_weekday =
+                !(weekday == chrono::Weekday::Sat.into() || weekday == chrono::Weekday::Sun.into());
+
+            if is_weekday != weekday_wanted {
                 continue;
             }
         }
         if let Some(day_of_week) = c.day_of_week {
-            if date.weekday() != day_of_week {
+            if weekday != day_of_week {
                 continue;
             }
         }

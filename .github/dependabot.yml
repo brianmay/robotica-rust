@@ -9,8 +9,8 @@ updates:
     directory: "/robotica-common"
     schedule:
       interval: "daily"
-  - package-ecosystem: "cargo" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "cargo"
+    directory: "/roobotica-backend"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"

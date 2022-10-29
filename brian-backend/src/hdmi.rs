@@ -3,8 +3,8 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::select;
 
+use robotica_backend::{devices::hdmi::Command, entities, services::mqtt::Message, spawn};
 use robotica_common::mqtt::QoS;
-use robotica_rust::{devices::hdmi::Command, entities, services::mqtt::Message, spawn};
 
 use crate::{robotica::Id, State};
 
@@ -62,7 +62,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
-    let (rx, _) = robotica_rust::devices::hdmi::run(addr, rx, &Default::default());
+    let (rx, _) = robotica_backend::devices::hdmi::run(addr, rx, &Default::default());
 
     spawn(async move {
         let mut rx_s = rx.subscribe().await;

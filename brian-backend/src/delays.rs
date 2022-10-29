@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 // use log::debug;
-use robotica_rust::{
+use robotica_backend::{
     entities::{create_stateful_entity, StatefulData},
     spawn,
 };
@@ -33,8 +33,8 @@ pub trait IsActive {
 pub fn delay_input<T>(
     name: &str,
     duration: Duration,
-    rx: robotica_rust::entities::Receiver<T>,
-) -> robotica_rust::entities::Receiver<StatefulData<T>>
+    rx: robotica_backend::entities::Receiver<T>,
+) -> robotica_backend::entities::Receiver<StatefulData<T>>
 where
     T: Clone + Debug + Send + Sync + Eq + IsActive + 'static,
 {

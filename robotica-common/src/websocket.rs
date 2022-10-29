@@ -1,4 +1,4 @@
-//! Common structs shared between robotica-rust and robotica-frontend for websockets
+//! Common structs shared between robotica-backend and robotica-frontend for websockets
 use serde::{Deserialize, Serialize};
 
 use crate::{user::User, version::Version};

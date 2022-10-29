@@ -1,4 +1,4 @@
-//! Scheduler struct shared between robotica-rust and robotica-frontend
+//! Scheduler struct shared between robotica-backend and robotica-frontend
 use std::{
     collections::HashSet,
     fmt::{Display, Formatter},

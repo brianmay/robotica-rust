@@ -23,7 +23,7 @@ jobs:
       - name: Test common lib
         run: cargo test -p robotica-common
       - name: Test backend lib
-        run: cargo test
+        run: cargo test -p robotica-backend
       - name: Test frontend lib
         run: cargo test -p robotica-frontend
       - name: Test backend lib (Brian)
