@@ -15,7 +15,7 @@ pub struct Props {
 /// Component that shows the schedule
 #[function_component(Schedule)]
 pub fn schedule(props: &Props) -> Html {
-    let wss = use_state(WebsocketService::new);
+    let wss = use_context::<WebsocketService>().expect("No context found.");
 
     let sequence_list = use_state(std::vec::Vec::new);
 
@@ -33,7 +33,7 @@ pub fn schedule(props: &Props) -> Html {
 
     let topic = props.topic.clone();
     let subscribe = Command::Subscribe { topic, callback };
-    let mut tx = wss.tx.clone();
+    let mut tx = wss.tx;
     tx.try_send(subscribe)
         .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
 
