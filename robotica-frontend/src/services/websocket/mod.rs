@@ -282,11 +282,10 @@ async fn process_command(command: Command, state: &mut State) {
                     .backend
                     .send(Message::Text(serde_json::to_string(&command).unwrap()))
                     .await;
+                set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             } else {
                 reconnect_and_set_keep_alive(state).await;
             }
-
-            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
     };
 }
