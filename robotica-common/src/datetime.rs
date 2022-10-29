@@ -355,13 +355,24 @@ impl From<chrono::Duration> for Duration {
     }
 }
 
+const fn div_rem(a: u64, b: u64) -> (u64, u64) {
+    (a / b, a % b)
+}
+
 impl Serialize for Duration {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let s = self.0.to_std().map_err(serde::ser::Error::custom)?;
-        serializer.serialize_u64(s.as_secs())
+
+        let secs = s.as_secs();
+
+        let (minutes, secs) = div_rem(secs, 60);
+        let (hours, minutes) = div_rem(minutes, 60);
+
+        let result = format!("{:02}:{:02}:{:02}", hours, minutes, secs);
+        serializer.serialize_str(&result)
     }
 }
 
@@ -496,6 +507,22 @@ mod tests {
             duration,
             Err(DurationParseError::InvalidDuration(_))
         ));
+    }
+
+    #[test]
+    fn test_duration_serialize() {
+        let duration = Duration::from_str("1:2:3").unwrap();
+        let json = serde_json::to_string(&duration).unwrap();
+        assert_eq!(json, "\"01:02:03\"");
+    }
+
+    #[test]
+    fn test_duration_deserialize() {
+        let json = "\"01:02:03\"";
+        let duration: Duration = serde_json::from_str(json).unwrap();
+        assert_eq!(duration.num_hours(), 1);
+        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
     }
 
     #[test]
