@@ -3,12 +3,12 @@ pub mod topics;
 
 use bytes::Bytes;
 use log::{debug, error, info, warn};
+use robotica_common::mqtt::QoS;
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::ParseIntError;
@@ -23,52 +23,68 @@ use tokio::time::{sleep, Instant};
 use crate::entities::{self, Receiver, StatefulData};
 use crate::{get_env, is_debug_mode, EnvironmentError};
 
-/// `QoS` for MQTT messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct QoS(rumqttc::v5::mqttbytes::QoS);
+// /// `QoS` for MQTT messages.
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// pub struct QoS(rumqttc::v5::mqttbytes::QoS);
 
-impl QoS {
-    /// QOS==0 (at most once)
-    #[must_use]
-    pub const fn at_least_once() -> QoS {
-        QoS(rumqttc::v5::mqttbytes::QoS::AtLeastOnce)
-    }
+// impl QoS {
+//     /// QOS==0 (at most once)
+//     #[must_use]
+//     pub const fn at_least_once() -> QoS {
+//         QoS(rumqttc::v5::mqttbytes::QoS::AtLeastOnce)
+//     }
 
-    /// QOS==1 (at least once)
-    #[must_use]
-    pub const fn at_most_once() -> QoS {
-        QoS(rumqttc::v5::mqttbytes::QoS::AtMostOnce)
-    }
+//     /// QOS==1 (at least once)
+//     #[must_use]
+//     pub const fn at_most_once() -> QoS {
+//         QoS(rumqttc::v5::mqttbytes::QoS::AtMostOnce)
+//     }
 
-    /// QOS==2 (exactly once)
-    #[must_use]
-    pub const fn exactly_once() -> QoS {
-        QoS(rumqttc::v5::mqttbytes::QoS::ExactlyOnce)
+//     /// QOS==2 (exactly once)
+//     #[must_use]
+//     pub const fn exactly_once() -> QoS {
+//         QoS(rumqttc::v5::mqttbytes::QoS::ExactlyOnce)
+//     }
+// }
+
+// impl Serialize for QoS {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         serializer.serialize_str(match self.0 {
+//             rumqttc::v5::mqttbytes::QoS::AtLeastOnce => "AtLeastOnce",
+//             rumqttc::v5::mqttbytes::QoS::AtMostOnce => "AtMostOnce",
+//             rumqttc::v5::mqttbytes::QoS::ExactlyOnce => "ExactlyOnce",
+//         })
+//     }
+// }
+
+// impl From<rumqttc::v5::mqttbytes::QoS> for QoS {
+//     fn from(qos: rumqttc::v5::mqttbytes::QoS) -> Self {
+//         QoS(qos)
+//     }
+// }
+
+// impl From<QoS> for rumqttc::v5::mqttbytes::QoS {
+//     fn from(qos: QoS) -> Self {
+//         qos.0
+//     }
+// }
+
+const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
+    match qos {
+        QoS::AtMostOnce => rumqttc::v5::mqttbytes::QoS::AtMostOnce,
+        QoS::AtLeastOnce => rumqttc::v5::mqttbytes::QoS::AtLeastOnce,
+        QoS::ExactlyOnce => rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
     }
 }
 
-impl Serialize for QoS {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(match self.0 {
-            rumqttc::v5::mqttbytes::QoS::AtLeastOnce => "AtLeastOnce",
-            rumqttc::v5::mqttbytes::QoS::AtMostOnce => "AtMostOnce",
-            rumqttc::v5::mqttbytes::QoS::ExactlyOnce => "ExactlyOnce",
-        })
-    }
-}
-
-impl From<rumqttc::v5::mqttbytes::QoS> for QoS {
-    fn from(qos: rumqttc::v5::mqttbytes::QoS) -> Self {
-        QoS(qos)
-    }
-}
-
-impl From<QoS> for rumqttc::v5::mqttbytes::QoS {
-    fn from(qos: QoS) -> Self {
-        qos.0
+const fn qos_from_rumqttc(qos: rumqttc::v5::mqttbytes::QoS) -> QoS {
+    match qos {
+        rumqttc::v5::mqttbytes::QoS::AtMostOnce => QoS::AtMostOnce,
+        rumqttc::v5::mqttbytes::QoS::AtLeastOnce => QoS::AtLeastOnce,
+        rumqttc::v5::mqttbytes::QoS::ExactlyOnce => QoS::ExactlyOnce,
     }
 }
 
@@ -157,7 +173,7 @@ impl TryFrom<Publish> for Message {
             topic,
             payload: msg.payload,
             retain: msg.retain,
-            qos: msg.qos.into(),
+            qos: qos_from_rumqttc(msg.qos),
             instant: Instant::now(),
         })
     }
@@ -359,7 +375,7 @@ impl MqttClient {
                             }
 
                             if !debug_mode {
-                                if let Err(err) = client.try_publish(msg.topic, msg.qos.into(), msg.retain, msg.payload) {
+                                if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), msg.retain, msg.payload) {
                                     error!("Failed to publish message: {:?}.", err);
                                 }
                             }
@@ -532,7 +548,7 @@ mod tests {
         let msg = Message {
             topic: "test".to_string(),
             payload: "test".into(),
-            qos: QoS::at_least_once(),
+            qos: QoS::AtLeastOnce,
             retain: false,
             instant: Instant::now(),
         };
@@ -543,10 +559,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_to_message() {
-        let msg = Message::from_string("test", "test", false, QoS::at_least_once());
+        let msg = Message::from_string("test", "test", false, QoS::AtLeastOnce);
         assert_eq!(msg.topic, "test");
         assert_eq!(msg.payload, b"test"[..]);
-        assert_eq!(msg.qos, QoS::at_least_once());
+        assert_eq!(msg.qos, QoS::AtLeastOnce);
         assert!(!msg.retain);
     }
 
@@ -555,7 +571,7 @@ mod tests {
         let msg = Message {
             topic: "test".to_string(),
             payload: "true".into(),
-            qos: QoS::at_least_once(),
+            qos: QoS::AtLeastOnce,
             retain: false,
             instant: Instant::now(),
         };

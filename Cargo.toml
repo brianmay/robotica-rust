@@ -25,7 +25,7 @@ lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = "1.6.0"
 field-ref = "0.2.1"
 tracing = "0.1.35"
-# tracing-subscriber = "0.3.14"
+robotica-common = { path = "robotica-common" }
 
 # http server
 axum = { version = "0.5.17", features = ["ws"] }
@@ -46,4 +46,9 @@ lalrpop = "0.19.3"
 env_logger = "0.9.1"
 
 [workspace]
-members = ["robotica-frontend", "brian-backend", "brian-frontend"]
+members = [
+    "robotica-frontend",
+    "robotica-common",
+    "brian-backend",
+    "brian-frontend",
+]

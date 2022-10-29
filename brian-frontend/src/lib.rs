@@ -2,16 +2,16 @@
 
 use std::{cell::RefCell, rc::Rc};
 
+mod components;
+use components::rooms::{BrianRoom, DiningRoom};
+use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
-use robotica_frontend::version;
+use components::welcome::Welcome;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-mod components;
-use components::rooms::{BrianRoom, DiningRoom};
-use components::schedule_view::ScheduleView;
-use components::welcome::Welcome;
+use robotica_common::version;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {

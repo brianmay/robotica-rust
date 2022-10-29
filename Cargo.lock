@@ -321,6 +321,7 @@ dependencies = [
  "chrono-tz",
  "color-backtrace",
  "log",
+ "robotica-common",
  "robotica-rust",
  "serde",
  "serde_json",
@@ -338,6 +339,7 @@ dependencies = [
  "console_error_panic_hook",
  "itertools",
  "log",
+ "robotica-common",
  "robotica-frontend",
  "serde_json",
  "wasm-bindgen",
@@ -1912,6 +1914,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "robotica-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "robotica-frontend"
 version = "0.1.0"
 dependencies = [
@@ -1921,6 +1933,7 @@ dependencies = [
  "gloo-timers",
  "log",
  "reqwasm",
+ "robotica-common",
  "serde",
  "serde_json",
  "thiserror",
@@ -1951,6 +1964,7 @@ dependencies = [
  "openid",
  "regex",
  "reqwest",
+ "robotica-common",
  "rumqttc",
  "rustls",
  "serde",

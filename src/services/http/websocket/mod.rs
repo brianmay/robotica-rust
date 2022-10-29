@@ -1,6 +1,4 @@
-mod protocol;
-
-use std::sync::Arc;
+use std::{str::Utf8Error, sync::Arc};
 
 use axum::{
     extract::{
@@ -15,13 +13,33 @@ use futures::{SinkExt, StreamExt};
 use tokio::{select, sync::mpsc};
 use tracing::{debug, error, info};
 
-use crate::{
-    services::mqtt::{self, topics::topic_matches_any},
+use robotica_common::{
+    mqtt::QoS,
     version::Version,
+    websocket::{MqttMessage, WsCommand, WsConnect, WsError},
 };
 
-use self::protocol::{MqttMessage, WsCommand, WsConnect, WsError};
+use crate::services::mqtt::{self, topics::topic_matches_any};
+
 use super::{get_user, HttpConfig, User};
+
+impl From<MqttMessage> for mqtt::Message {
+    fn from(msg: MqttMessage) -> Self {
+        mqtt::Message::from_string(&msg.topic, &msg.payload, false, QoS::ExactlyOnce)
+    }
+}
+
+impl TryFrom<mqtt::Message> for MqttMessage {
+    type Error = Utf8Error;
+
+    fn try_from(msg: mqtt::Message) -> Result<Self, Self::Error> {
+        let payload = msg.payload_into_string()?;
+        Ok(MqttMessage {
+            topic: msg.topic,
+            payload,
+        })
+    }
+}
 
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(

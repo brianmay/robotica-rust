@@ -5,19 +5,36 @@ use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
 use log::{debug, error, info};
+use robotica_common::mqtt::QoS;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
 
+use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
+use robotica_common::scheduler::{Mark, Payload, Task};
+
 use crate::scheduling::sequencer::check_schedule;
-use crate::scheduling::types::utc_now;
-use crate::services::mqtt::{Message, Mqtt, QoS, Subscriptions};
+use crate::services::mqtt::{Message, Mqtt, Subscriptions};
 use crate::spawn;
 
 use super::sequencer::Sequence;
-use super::types::{Date, DateTime, Duration, Mark};
 use super::{classifier, scheduler, sequencer};
+
+/// Get the MQTT message for this task.
+#[must_use]
+pub fn get_task_messages(task: &Task) -> Vec<Message> {
+    let mut messages = Vec::with_capacity(task.topics.len());
+    for topic in &task.topics {
+        let payload = match &task.payload {
+            Payload::String(s) => s.to_string(),
+            Payload::Json(v) => v.to_string(),
+        };
+        let message = Message::from_string(topic, &payload, task.retain, task.qos);
+        messages.push(message);
+    }
+    messages
+}
 
 struct Config {
     classifier: Vec<classifier::Config>,
@@ -90,14 +107,14 @@ impl<T: TimeZone + Debug> State<T> {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.hostname);
         let message = serde_json::to_string(&tags).unwrap();
-        let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
+        let message = Message::from_string(&topic, &message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
         let message = serde_json::to_string(&sequences).unwrap();
-        let message = Message::from_string(&topic, &message, true, QoS::exactly_once());
+        let message = Message::from_string(&topic, &message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
@@ -292,7 +309,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Result<(), Exe
                             // Send message.
                             info!("Processing step {sequence:?}");
                             for task in &sequence.tasks {
-                                for message in task.get_messages() {
+                                for message in get_task_messages(task) {
                                     debug!("{now:?}: Sending task {message:?}");
                                     state.mqtt.try_send(message.clone());
                                 }

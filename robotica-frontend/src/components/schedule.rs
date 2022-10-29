@@ -1,11 +1,9 @@
 //! Component that shows the schedule
 use yew::prelude::*;
 
-use crate::services::{
-    protocol::Sequence,
-    websocket::Command,
-    websocket::{protocol::MqttMessage, WebsocketService},
-};
+use robotica_common::{scheduler::Sequence, websocket::MqttMessage};
+
+use crate::services::{websocket::Command, websocket::WebsocketService};
 
 /// The yew properties for the websocket client
 #[derive(Properties, Eq, PartialEq)]

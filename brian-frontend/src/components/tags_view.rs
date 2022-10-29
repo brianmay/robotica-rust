@@ -1,9 +1,11 @@
 //! Component that shows the schedule
 use itertools::sorted;
-use robotica_frontend::services::protocol::Tags;
-use robotica_frontend::services::websocket::Command;
-use robotica_frontend::services::websocket::{protocol::MqttMessage, WebsocketService};
 use yew::prelude::*;
+
+use robotica_common::scheduler::Tags;
+use robotica_common::websocket::MqttMessage;
+use robotica_frontend::services::websocket::Command;
+use robotica_frontend::services::websocket::WebsocketService;
 
 /// Component that shows the schedule
 #[function_component(TagsView)]

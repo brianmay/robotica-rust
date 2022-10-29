@@ -1,13 +1,14 @@
 //! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
+use robotica_common::websocket::MqttMessage;
+
 use crate::services::{
     controllers::{
         get_display_state_for_action,
         lights::{self, Priority},
         music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
     },
-    websocket::protocol::MqttMessage,
     websocket::{Command, WebsocketService, WsEvent},
 };
 

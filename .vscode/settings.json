@@ -24,11 +24,14 @@
         "frunk",
         "geofence",
         "gethostname",
+        "gloo",
         "HARDOFF",
+        "itertools",
         "LALRPOP",
         "linuxpenguins",
         "mqtt",
         "mqttbytes",
+        "mtype",
         "nolocal",
         "noncommercially",
         "OIDC",
@@ -57,6 +60,7 @@
         "Userinfo",
         "vars",
         "webpki",
+        "websockets",
         "wifi",
         "Writable"
     ]

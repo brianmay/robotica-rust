@@ -10,10 +10,9 @@ use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use super::{
-    ast::{Boolean, Fields, Reference},
-    types::{Date, Weekday},
-};
+use robotica_common::datetime::{Date, Weekday};
+
+use super::ast::{Boolean, Fields, Reference};
 
 #[derive(Debug)]
 struct Context {

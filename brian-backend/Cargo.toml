@@ -19,3 +19,4 @@ color-backtrace = "0.5.1"
 robotica-rust = { path = ".." }
 tracing = "0.1.35"
 tracing-subscriber = "0.3.14"
+robotica-common = { path = "../robotica-common" }

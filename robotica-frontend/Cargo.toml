@@ -18,6 +18,7 @@ thiserror = "1.0.37"
 wasm-bindgen-futures = "0.4.27"
 web-sys = "0.3.60"
 yew = "0.19"
+robotica-common = { path = "../robotica-common" }
 
 [dev-dependencies]
 # futures = "0.3.25"

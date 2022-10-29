@@ -18,7 +18,6 @@ pub mod scheduling;
 pub mod services;
 pub mod sinks;
 pub mod sources;
-pub mod version;
 
 use log::{debug, error};
 use std::{env, future::Future};

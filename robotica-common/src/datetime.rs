@@ -1,4 +1,4 @@
-//! Serializable types.
+//! Serializable datetime types.
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use chrono::{Datelike, Local, TimeZone, Utc};
+use chrono::{Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
@@ -148,17 +148,17 @@ impl<'de> Deserialize<'de> for Time {
     }
 }
 
-// /// An error that can occur when translating a `DateTime`.
-// #[derive(Error, Debug)]
-// pub enum DateTimeError<T: TimeZone> {
-//     /// There are no options converting this date time to a local date time.
-//     #[error("Can't convert DateTime {0} to local timezone")]
-//     CantConvertDateTime(NaiveDateTime),
+/// An error that can occur when translating a `DateTime`.
+#[derive(Error, Debug)]
+pub enum DateTimeError<T: TimeZone> {
+    /// There are no options converting this date time to a local date time.
+    #[error("Can't convert DateTime {0} to local timezone")]
+    CantConvertDateTime(NaiveDateTime),
 
-//     /// There are multiple options converting this date time to a local date time.
-//     #[error("DateTime {0} is ambiguous when converting to local timezone")]
-//     AmbiguousDateTime(NaiveDateTime, DateTime<T>, DateTime<T>),
-// }
+    /// There are multiple options converting this date time to a local date time.
+    #[error("DateTime {0} is ambiguous when converting to local timezone")]
+    AmbiguousDateTime(NaiveDateTime, DateTime<T>, DateTime<T>),
+}
 
 /// A Serializable `DateTime`.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -178,11 +178,11 @@ impl<T: TimeZone> DateTime<T> {
     }
 }
 
-// /// Get the current time in UTC timezone.
-// #[must_use]
-// pub fn utc_now() -> DateTime<Utc> {
-//     DateTime(Utc::now())
-// }
+/// Get the current time in UTC timezone.
+#[must_use]
+pub fn utc_now() -> DateTime<Utc> {
+    DateTime(Utc::now())
+}
 
 impl std::fmt::Display for DateTime<Utc> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -339,14 +339,14 @@ impl Duration {
         Self(chrono::Duration::minutes(minutes))
     }
 
-    // /// Convert the duration to a std duration.
-    // ///
-    // /// # Errors
-    // ///
-    // /// If the duration is negative.
-    // pub fn to_std(&self) -> Result<std::time::Duration, OutOfRangeError> {
-    //     self.0.to_std().map_err(|_| OutOfRangeError {})
-    // }
+    /// Convert the duration to a std duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is negative.
+    pub fn to_std(&self) -> Result<std::time::Duration, OutOfRangeError> {
+        self.0.to_std().map_err(|_| OutOfRangeError {})
+    }
 }
 
 impl From<chrono::Duration> for Duration {
@@ -422,90 +422,50 @@ impl Mul<i32> for Duration {
     }
 }
 
-// /// Convert a Date and a Time to a Utc `DateTime`.
-// ///
-// /// # Errors
-// ///
-// /// If the date and time cannot be converted to a local date time.
-// pub fn convert_date_time_to_utc<T: TimeZone>(
-//     date: Date,
-//     time: Time,
-//     timezone: &T,
-// ) -> Result<DateTime<chrono::Utc>, DateTimeError<T>> {
-//     let date = date.0;
-//     let time = time.0;
-//     let datetime = chrono::NaiveDateTime::new(date, time);
-//     let datetime = match timezone.from_local_datetime(&datetime) {
-//         chrono::LocalResult::None => Err(DateTimeError::CantConvertDateTime(datetime)),
-//         chrono::LocalResult::Single(datetime) => Ok(datetime),
-//         chrono::LocalResult::Ambiguous(x, y) => Err(DateTimeError::AmbiguousDateTime(
-//             datetime,
-//             x.into(),
-//             y.into(),
-//         )),
-//     }?;
-//     Ok(datetime.with_timezone(&chrono::Utc).into())
-// }
-
-/// The status of the Mark.
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
-pub enum MarkStatus {
-    /// The tasks are to be cancelled.
-    #[serde(rename = "cancelled")]
-    Cancelled,
-
-    /// The tasks are already done.
-    #[serde(rename = "done")]
-    Done,
-}
-
-/// A mark on a step.
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
-pub struct Mark {
-    /// The id of the step.
-    pub id: String,
-
-    /// The status of the Mark.
-    pub status: MarkStatus,
-
-    /// The start time of the Mark.
-    pub start_time: DateTime<Utc>,
-
-    /// The end time of the Mark.
-    pub stop_time: DateTime<Utc>,
-}
-
-/// An error that can occur when parsing a mark.
-#[derive(Error, Debug)]
-pub enum MarkError {
-    /// The Mark is invalid.
-    #[error("Invalid mark {0}")]
-    ParseError(#[from] serde_json::Error),
-
-    /// UTF-8 error in Mark.
-    #[error("Invalid UTF8")]
-    Utf8Error(#[from] std::str::Utf8Error),
+/// Convert a Date and a Time to a Utc `DateTime`.
+///
+/// # Errors
+///
+/// If the date and time cannot be converted to a local date time.
+pub fn convert_date_time_to_utc<T: TimeZone>(
+    date: Date,
+    time: Time,
+    timezone: &T,
+) -> Result<DateTime<chrono::Utc>, DateTimeError<T>> {
+    let date = date.0;
+    let time = time.0;
+    let datetime = chrono::NaiveDateTime::new(date, time);
+    let datetime = match timezone.from_local_datetime(&datetime) {
+        chrono::LocalResult::None => Err(DateTimeError::CantConvertDateTime(datetime)),
+        chrono::LocalResult::Single(datetime) => Ok(datetime),
+        chrono::LocalResult::Ambiguous(x, y) => Err(DateTimeError::AmbiguousDateTime(
+            datetime,
+            x.into(),
+            y.into(),
+        )),
+    }?;
+    Ok(datetime.with_timezone(&chrono::Utc).into())
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    // use chrono::FixedOffset;
+    use chrono::FixedOffset;
 
     use super::*;
 
-    // #[test]
-    // fn test_convert_date_time_to_utc() {
-    //     let date = Date::from_str("2020-01-01").unwrap();
-    //     let time = Time::from_str("10:00:00").unwrap();
-    //     let timezone = FixedOffset::east(60 * 60 * 10);
-    //     let datetime = convert_date_time_to_utc(date, time, &timezone).unwrap();
-    //     assert_eq!(
-    //         datetime,
-    //         chrono::Utc.ymd(2020, 1, 1).and_hms(00, 0, 0).into()
-    //     );
-    // }
+    #[test]
+    fn test_convert_date_time_to_utc() {
+        let date = Date::from_str("2020-01-01").unwrap();
+        let time = Time::from_str("10:00:00").unwrap();
+        let timezone = FixedOffset::east(60 * 60 * 10);
+        let datetime = convert_date_time_to_utc(date, time, &timezone).unwrap();
+        assert_eq!(
+            datetime,
+            chrono::Utc.ymd(2020, 1, 1).and_hms(00, 0, 0).into()
+        );
+    }
 
     #[test]
     fn test_duration() {

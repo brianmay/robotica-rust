@@ -1,13 +1,10 @@
 use log::debug;
-use robotica_rust::{
-    devices::hdmi::Command,
-    entities,
-    services::mqtt::{Message, QoS},
-    spawn,
-};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::select;
+
+use robotica_common::mqtt::QoS;
+use robotica_rust::{devices::hdmi::Command, entities, services::mqtt::Message, spawn};
 
 use crate::{robotica::Id, State};
 
@@ -85,7 +82,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
                         let output = format!("output{}", output + 1);
                         let topic = id.get_state_topic(&output.to_string());
                         let payload = input;
-                        let message = Message::from_string(&topic, &payload, true, QoS::at_least_once());
+                        let message = Message::from_string(&topic, &payload, true, QoS::AtLeastOnce);
                         mqtt.try_send(message);
                     }
                 },

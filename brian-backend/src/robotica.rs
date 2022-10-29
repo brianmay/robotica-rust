@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
 use log::info;
+use robotica_common::mqtt::QoS;
 use robotica_rust::entities::create_stateless_entity;
 use robotica_rust::entities::Sender;
 use robotica_rust::services::mqtt::Message;
 use robotica_rust::services::mqtt::Mqtt;
-use robotica_rust::services::mqtt::QoS;
 use robotica_rust::services::mqtt::Subscriptions;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -146,7 +146,7 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
         &id.get_command_topic(&[]),
         &payload,
         false,
-        QoS::exactly_once(),
+        QoS::ExactlyOnce,
     )
 }
 

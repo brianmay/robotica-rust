@@ -1,6 +1,4 @@
 //! Websocket service for robotica frontend.
-pub mod protocol;
-
 use std::collections::HashMap;
 
 use futures::{
@@ -16,14 +14,11 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 use yew::Callback;
 
-use crate::{
-    services::websocket::protocol::{WsConnect, WsError},
+use robotica_common::{
+    user::User,
     version::Version,
+    websocket::{MqttMessage, WsCommand, WsConnect, WsError},
 };
-
-use self::protocol::{MqttMessage, WsCommand};
-
-use super::protocol::User;
 
 /// A websocket command, sent to the websocket service.
 #[derive(Debug)]

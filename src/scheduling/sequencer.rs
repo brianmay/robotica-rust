@@ -8,29 +8,19 @@ use std::{
 use chrono::Utc;
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 
-use crate::services::mqtt;
+use robotica_common::{
+    datetime::{DateTime, Duration},
+    mqtt::QoS,
+    scheduler::{Mark, Payload, Task},
+};
 
 use super::{
     ast::{Boolean, Fields},
     conditions,
     scheduler::{self},
-    types::{DateTime, Duration, Mark},
 };
-
-/// Payload in a task.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub enum Payload {
-    /// A string payload.
-    #[serde(rename = "payload_str")]
-    String(String),
-
-    /// A JSON payload.
-    #[serde(rename = "payload_json")]
-    Json(Value),
-}
 
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
@@ -107,55 +97,10 @@ impl Config {
 /// The configuration for a sequence.
 pub type ConfigMap = HashMap<String, Vec<Config>>;
 
-/// A task with all values completed.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize)]
-pub struct Task {
-    /// The description of the task.
-    pub description: Option<String>,
-
-    /// The payload of the task.
-    #[serde(flatten)]
-    pub payload: Payload,
-
-    /// The qos to be used when sending the message.
-    #[serde(skip)]
-    qos: mqtt::QoS,
-
-    /// The retain value to be used when sending the message.
-    #[serde(skip)]
-    retain: bool,
-
-    /// The locations this task acts on.
-    locations: Vec<String>,
-
-    /// The devices this task acts on.
-    devices: Vec<String>,
-
-    /// The topics this task will send to.
-    ///
-    /// If this is not specified, the topic will be generated from the locations and devices.
-    topics: Vec<String>,
-}
-
-impl Task {
-    /// Get the MQTT message for this task.
-    #[must_use]
-    pub fn get_messages(&self) -> Vec<mqtt::Message> {
-        let mut messages = Vec::with_capacity(self.topics.len());
-        for topic in &self.topics {
-            let payload = match &self.payload {
-                Payload::String(s) => s.to_string(),
-                Payload::Json(v) => v.to_string(),
-            };
-            let message = mqtt::Message::from_string(topic, &payload, self.retain, self.qos);
-            messages.push(message);
-        }
-        messages
-    }
-}
-
 /// The schedule with all values completed.
+///
+/// Note this is a copy of the struct from robotica-common, because
+/// it has some fields that are not serializable.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct Sequence {
@@ -344,12 +289,12 @@ pub enum SequenceError {
     NoSequence(String),
 }
 
-const fn map_qos(qos: Option<u8>) -> mqtt::QoS {
+const fn map_qos(qos: Option<u8>) -> QoS {
     match qos {
-        Some(0) => mqtt::QoS::at_most_once(),
-        Some(1) => mqtt::QoS::at_least_once(),
-        // Some(2) => mqtt::QoS::ExactlyOnce(),
-        _ => mqtt::QoS::exactly_once(),
+        Some(0) => QoS::AtMostOnce,
+        Some(1) => QoS::AtLeastOnce,
+        // Some(2) => QoS::ExactlyOnce,
+        _ => QoS::ExactlyOnce,
     }
 }
 

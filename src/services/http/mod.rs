@@ -1,6 +1,5 @@
 //! HTTP server
 mod oidc;
-mod protocol;
 mod urls;
 mod websocket;
 
@@ -26,12 +25,13 @@ use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::error;
 
+use robotica_common::user::User;
+
 use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::Mqtt;
 use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
-use self::protocol::User;
 
 struct HttpConfig {
     #[allow(dead_code)]
