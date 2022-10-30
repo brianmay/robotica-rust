@@ -36,6 +36,8 @@ pub enum Command {
     Send(MqttMessage),
     /// Send a keep alive message.
     KeepAlive,
+    /// Close the websocket.
+    Close,
 }
 
 /// The details from the backend
@@ -153,28 +155,21 @@ impl WebsocketService {
             reconnect_and_set_keep_alive(&mut state).await;
 
             loop {
-                match &mut state.backend {
-                    BackendState::Connected(backend) => {
-                        match select(in_rx.next(), backend.ws.next()).await {
-                            Either::Left((Some(command), _)) => {
-                                process_command(command, &mut state).await;
-                            }
-                            Either::Left((None, _)) => {
-                                error!("ws: Command channel closed, quitting.");
+                if let BackendState::Connected(backend) = &mut state.backend {
+                    match select(in_rx.next(), backend.ws.next()).await {
+                        Either::Left((command, _)) => {
+                            if process_command(command, &mut state).await.is_close() {
                                 break;
                             }
-                            Either::Right((msg, _)) => {
-                                process_message(msg, &mut state);
-                            }
+                        }
+                        Either::Right((msg, _)) => {
+                            process_message(msg, &mut state);
                         }
                     }
-                    _ => {
-                        if let Some(command) = in_rx.next().await {
-                            process_command(command, &mut state).await;
-                        } else {
-                            error!("ws: Command channel closed, quitting.");
-                            break;
-                        }
+                } else {
+                    let command = in_rx.next().await;
+                    if process_command(command, &mut state).await.is_close() {
+                        break;
                     }
                 };
             }
@@ -227,11 +222,22 @@ enum ConnectError {
     RetryableError(#[from] RetryableError),
 }
 
-async fn process_command(command: Command, state: &mut State) {
+enum ProcessCommandResult {
+    Close,
+    Continue,
+}
+
+impl ProcessCommandResult {
+    const fn is_close(&self) -> bool {
+        matches!(self, ProcessCommandResult::Close)
+    }
+}
+
+async fn process_command(command: Option<Command>, state: &mut State) -> ProcessCommandResult {
     let is_connected = state.backend.is_connected();
 
     match command {
-        Command::Subscribe { topic, callback } => {
+        Some(Command::Subscribe { topic, callback }) => {
             debug!("ws: Subscribing to {}", topic);
             if let Some(last_message) = state.last_message.get(&topic) {
                 callback.emit(last_message.clone());
@@ -251,8 +257,9 @@ async fn process_command(command: Command, state: &mut State) {
                 set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             };
             debug!("ws: subscribed to {}", topic);
+            ProcessCommandResult::Continue
         }
-        Command::Send(msg) => {
+        Some(Command::Send(msg)) => {
             debug!("ws: Sending message: {:?}", msg);
             let command = WsCommand::Send(msg);
             state
@@ -260,8 +267,9 @@ async fn process_command(command: Command, state: &mut State) {
                 .send(Message::Text(serde_json::to_string(&command).unwrap()))
                 .await;
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+            ProcessCommandResult::Continue
         }
-        Command::EventHandler(handler) => {
+        Some(Command::EventHandler(handler)) => {
             debug!("ws: Register event handler.");
             #[allow(clippy::option_if_let_else)]
             match &state.backend {
@@ -279,8 +287,9 @@ async fn process_command(command: Command, state: &mut State) {
                 }
             }
             state.event_handlers.push(handler);
+            ProcessCommandResult::Continue
         }
-        Command::KeepAlive => {
+        Some(Command::KeepAlive) => {
             debug!("ws: Got KeepAlive command.");
             state.timeout = None;
 
@@ -295,8 +304,15 @@ async fn process_command(command: Command, state: &mut State) {
             } else {
                 reconnect_and_set_keep_alive(state).await;
             }
+            ProcessCommandResult::Continue
         }
-    };
+        Some(Command::Close) | None => {
+            debug!("ws: Got Close command.");
+            state.timeout = None;
+            state.backend = BackendState::Disconnected("Closed".to_string());
+            ProcessCommandResult::Close
+        }
+    }
 }
 
 fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut State) {
