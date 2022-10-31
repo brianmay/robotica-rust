@@ -155,7 +155,7 @@ impl WebsocketService {
                 if let BackendState::Connected(backend) = &mut state.backend {
                     match select(in_rx.next(), backend.ws.next()).await {
                         Either::Left((command, _)) => {
-                            if process_command(command, &mut state).await.is_close() {
+                            if process_command(command, &mut state).await.is_stop() {
                                 break;
                             }
                         }
@@ -165,7 +165,7 @@ impl WebsocketService {
                     }
                 } else {
                     let command = in_rx.next().await;
-                    if process_command(command, &mut state).await.is_close() {
+                    if process_command(command, &mut state).await.is_stop() {
                         break;
                     }
                 };
@@ -232,13 +232,13 @@ enum ConnectError {
 }
 
 enum ProcessCommandResult {
-    Close,
+    Stop,
     Continue,
 }
 
 impl ProcessCommandResult {
-    const fn is_close(&self) -> bool {
-        matches!(self, ProcessCommandResult::Close)
+    const fn is_stop(&self) -> bool {
+        matches!(self, ProcessCommandResult::Stop)
     }
 }
 
@@ -293,7 +293,7 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
             debug!("ws: Got Close command.");
             state.timeout = None;
             state.backend = BackendState::Disconnected("Closed".to_string());
-            ProcessCommandResult::Close
+            ProcessCommandResult::Stop
         }
     }
 }
