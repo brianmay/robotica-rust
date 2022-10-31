@@ -11,7 +11,7 @@ use super::require_connection::RequireConnection;
 #[function_component(BrianRoom)]
 pub fn brian_room() -> Html {
     let light_icon = Icon::new("light");
-    let wake_up_icon = Icon::new("wake_up");
+    let speaker_icon = Icon::new("speaker");
     let fan_icon = Icon::new("fan");
 
     html!(
@@ -30,9 +30,9 @@ pub fn brian_room() -> Html {
 
             <h2>{"Music"}</h2>
             <div class="buttons">
-                <Button<MusicProps> name={"Frozen"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={wake_up_icon.clone()} play_list={"frozen"} />
-                <Button<MusicProps> name={"Sleep"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={wake_up_icon.clone()} play_list={"sleep"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={wake_up_icon} play_list={"wake_up"} />
+                <Button<MusicProps> name={"Frozen"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
+                <Button<MusicProps> name={"Sleep"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"sleep"} />
+                <Button<MusicProps> name={"Wakeup"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
             </div>
 
             <h2>{"Switches"}</h2>
