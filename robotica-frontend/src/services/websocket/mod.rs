@@ -1,5 +1,7 @@
 //! Websocket service for robotica frontend.
-use std::collections::HashMap;
+pub mod event_bus;
+
+use std::collections::HashSet;
 
 use futures::{
     channel::mpsc::Sender,
@@ -22,21 +24,18 @@ use robotica_common::{
 
 /// A websocket command, sent to the websocket service.
 #[derive(Debug)]
-pub enum Command {
+enum Command {
     /// Subscribe to a MQTT topic.
     Subscribe {
         /// MQTT topic to subscribe to.
         topic: String,
-        /// Callback to call when a message is received.
-        callback: Callback<MqttMessage>,
     },
     /// Callback to call when a connect or disconnect event occurs.
-    EventHandler(Callback<WsEvent>),
-    /// Send a MQTT message.
     Send(MqttMessage),
     /// Send a keep alive message.
     KeepAlive,
     /// Close the websocket.
+    #[allow(dead_code)]
     Close,
 }
 
@@ -52,6 +51,7 @@ struct Backend {
     version: Version,
 }
 
+#[derive(Clone)]
 /// A connect/disconnect event
 pub enum WsEvent {
     /// Connected to the websocket server
@@ -64,15 +64,13 @@ pub enum WsEvent {
     },
     /// Disconnected from the websocket server, will retry
     Disconnected(String),
-    /// Disconnected from the websocket server, will not retry
-    FatalError(String),
 }
 
 /// The websocket service
 #[derive(Clone)]
 pub struct WebsocketService {
     /// Channel to send commands to the websocket service.
-    pub tx: Sender<Command>,
+    tx: Sender<Command>,
 }
 
 impl PartialEq for WebsocketService {
@@ -124,18 +122,18 @@ impl BackendState {
 
 struct State {
     url: String,
-    subscriptions: HashMap<String, Vec<Callback<MqttMessage>>>,
+    subscriptions: HashSet<String>,
     backend: BackendState,
     timeout: Option<Timeout>,
     in_tx: Sender<Command>,
-    event_handlers: Vec<Callback<WsEvent>>,
-    last_message: HashMap<String, MqttMessage>,
+    msg_callback: Callback<MqttMessage>,
+    event_callback: Callback<WsEvent>,
 }
 
 impl WebsocketService {
     /// Create a new websocket service.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(msg_callback: Callback<MqttMessage>, event_callback: Callback<WsEvent>) -> Self {
         let url = get_websocket_url();
         info!("Connecting to {}", url);
 
@@ -143,12 +141,12 @@ impl WebsocketService {
 
         let mut state = State {
             url,
-            subscriptions: HashMap::new(),
+            subscriptions: HashSet::new(),
             backend: BackendState::Disconnected("Not connected".to_string()),
             timeout: None,
             in_tx: in_tx.clone(),
-            event_handlers: vec![],
-            last_message: HashMap::new(),
+            msg_callback,
+            event_callback,
         };
 
         spawn_local(async move {
@@ -177,11 +175,22 @@ impl WebsocketService {
 
         Self { tx: in_tx }
     }
-}
 
-impl Default for WebsocketService {
-    fn default() -> Self {
-        Self::new()
+    fn command(&mut self, command: Command) {
+        let mut tx = self.tx.clone();
+        spawn_local(async move {
+            if let Err(err) = tx.send(command).await {
+                error!("Failed to send command: {:?}", err);
+            }
+        });
+    }
+
+    fn send(&mut self, msg: MqttMessage) {
+        self.command(Command::Send(msg));
+    }
+
+    fn subscribe(&mut self, topic: String) {
+        self.command(Command::Subscribe { topic });
     }
 }
 
@@ -237,16 +246,10 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
     let is_connected = state.backend.is_connected();
 
     match command {
-        Some(Command::Subscribe { topic, callback }) => {
+        Some(Command::Subscribe { topic }) => {
             debug!("ws: Subscribing to {}", topic);
-            if let Some(last_message) = state.last_message.get(&topic) {
-                callback.emit(last_message.clone());
-            }
-            debug!("ws: set last message for {}", topic);
-            if let Some(callbacks) = state.subscriptions.get_mut(&topic) {
-                callbacks.push(callback);
-            } else {
-                state.subscriptions.insert(topic.clone(), vec![callback]);
+            if !state.subscriptions.contains(&topic) {
+                state.subscriptions.insert(topic.clone());
                 let command = WsCommand::Subscribe {
                     topic: topic.clone(),
                 };
@@ -267,26 +270,6 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
                 .send(Message::Text(serde_json::to_string(&command).unwrap()))
                 .await;
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
-            ProcessCommandResult::Continue
-        }
-        Some(Command::EventHandler(handler)) => {
-            debug!("ws: Register event handler.");
-            #[allow(clippy::option_if_let_else)]
-            match &state.backend {
-                BackendState::Connected(backend) => {
-                    handler.emit(WsEvent::Connected {
-                        user: backend.user.clone(),
-                        version: backend.version.clone(),
-                    });
-                }
-                BackendState::Disconnected(str) => {
-                    handler.emit(WsEvent::Disconnected(str.clone()));
-                }
-                BackendState::FatalError(str) => {
-                    handler.emit(WsEvent::FatalError(str.clone()));
-                }
-            }
-            state.event_handlers.push(handler);
             ProcessCommandResult::Continue
         }
         Some(Command::KeepAlive) => {
@@ -321,32 +304,25 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
             debug!("ws: Received message: {:?}", msg);
             if let Some(msg) = message_to_string(msg) {
                 let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
-                state.last_message.insert(msg.topic.clone(), msg.clone());
-                if let Some(callbacks) = state.subscriptions.get(&msg.topic) {
-                    for callback in callbacks {
-                        callback.emit(msg.clone());
-                    }
-                }
+                state.msg_callback.emit(msg);
             }
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
         }
         Some(Err(err)) => {
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
             state.backend = BackendState::Disconnected(err.to_string());
-            state.last_message = HashMap::new();
-            for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnected(err.to_string()));
-            }
+            state
+                .event_callback
+                .emit(WsEvent::Disconnected(err.to_string()));
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
         None => {
             error!("ws: closed, reconnecting.");
             let msg = "Connection closed";
             state.backend = BackendState::Disconnected(msg.to_string());
-            state.last_message = HashMap::new();
-            for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnected(msg.to_string()));
-            }
+            state
+                .event_callback
+                .emit(WsEvent::Disconnected(msg.to_string()));
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
         }
     }
@@ -358,39 +334,32 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
         Ok(backend) => {
             info!("ws: Connected.");
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
-            for handler in &state.event_handlers {
-                handler.emit(WsEvent::Connected {
-                    user: backend.user.clone(),
-                    version: backend.version.clone(),
-                });
-            }
+            state.event_callback.emit(WsEvent::Connected {
+                user: backend.user.clone(),
+                version: backend.version.clone(),
+            });
             state.backend = BackendState::Connected(backend);
         }
         Err(ConnectError::RetryableError(err)) => {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
             set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
             state.backend = BackendState::Disconnected(err.to_string());
-            state.last_message = HashMap::new();
-            for handler in &state.event_handlers {
-                handler.emit(WsEvent::Disconnected(err.to_string()));
-            }
+            state
+                .event_callback
+                .emit(WsEvent::Disconnected(err.to_string()));
         }
         Err(ConnectError::FatalError(err)) => {
             error!("ws: Failed to reconnect: {}, not retrying", err);
             state.timeout = None;
             state.backend = BackendState::FatalError(err.to_string());
-            state.last_message = HashMap::new();
-            for handler in &state.event_handlers {
-                handler.emit(WsEvent::FatalError(err.to_string()));
-            }
+            state
+                .event_callback
+                .emit(WsEvent::Disconnected(err.to_string()));
         }
     }
 }
 
-async fn reconnect(
-    url: &str,
-    subscriptions: &HashMap<String, Vec<Callback<MqttMessage>>>,
-) -> Result<Backend, ConnectError> {
+async fn reconnect(url: &str, subscriptions: &HashSet<String>) -> Result<Backend, ConnectError> {
     info!("ws: Reconnecting to websocket.");
     let mut ws = WebSocket::open(url).map_err(|err| RetryableError::AnyError(err.into()))?;
 
@@ -442,7 +411,7 @@ async fn reconnect(
         }
     };
 
-    for topic in subscriptions.keys() {
+    for topic in subscriptions {
         let command = WsCommand::Subscribe {
             topic: topic.clone(),
         };

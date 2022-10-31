@@ -1,9 +1,11 @@
 //! Component that shows the schedule
+use log::error;
 use yew::prelude::*;
 
 use robotica_common::{scheduler::Sequence, websocket::MqttMessage};
+use yew_agent::Bridged;
 
-use crate::services::{websocket::Command, websocket::WebsocketService};
+use crate::services::websocket::event_bus::{Command, EventBus};
 
 /// The yew properties for the websocket client
 #[derive(Properties, Eq, PartialEq)]
@@ -15,9 +17,15 @@ pub struct Props {
 /// Component that shows the schedule
 #[function_component(Schedule)]
 pub fn schedule(props: &Props) -> Html {
-    let wss = use_context::<WebsocketService>().expect("No context found.");
-
     let sequence_list = use_state(std::vec::Vec::new);
+
+    let callback = {
+        Callback::from(move |msg: ()| {
+            error!("Received message: {:?}", msg);
+        })
+    };
+
+    let events = use_mut_ref(|| EventBus::bridge(callback));
 
     let callback = {
         let sequence_list = sequence_list.clone();
@@ -34,9 +42,7 @@ pub fn schedule(props: &Props) -> Html {
     use_ref(|| {
         let topic = props.topic.clone();
         let subscribe = Command::Subscribe { topic, callback };
-        let mut tx = wss.tx;
-        tx.try_send(subscribe)
-            .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+        events.borrow_mut().send(subscribe);
     });
 
     html! {

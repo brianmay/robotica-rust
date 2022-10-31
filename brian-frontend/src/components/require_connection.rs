@@ -1,7 +1,11 @@
 use log::{error, info};
 use yew::prelude::*;
 
-use robotica_frontend::services::websocket::{Command, WebsocketService, WsEvent};
+use robotica_frontend::services::websocket::{
+    event_bus::{Command, EventBus},
+    WsEvent,
+};
+use yew_agent::Bridged;
 
 /// The yew properties for the RequireConnection component
 #[derive(Properties, PartialEq)]
@@ -12,6 +16,13 @@ pub struct Props {
 
 #[function_component(RequireConnection)]
 pub fn require_connection(props: &Props) -> Html {
+    let callback = {
+        Callback::from(move |msg: ()| {
+            error!("Received message: {:?}", msg);
+        })
+    };
+
+    let events = use_mut_ref(|| EventBus::bridge(callback));
     let state = use_state(|| WsEvent::Disconnected("Not connected yet".to_string()));
 
     let callback = {
@@ -20,13 +31,10 @@ pub fn require_connection(props: &Props) -> Html {
         Callback::from(move |msg: WsEvent| state.set(msg))
     };
 
-    let wss = use_context::<WebsocketService>().expect("No context found.");
     use_ref(|| {
         info!("Connecting to event handler");
         let msg = Command::EventHandler(callback);
-        let mut tx = wss.tx;
-        tx.try_send(msg)
-            .unwrap_or_else(|_| error!("Failed to register event handler"));
+        events.borrow_mut().send(msg);
     });
 
     match &*state {
@@ -42,13 +50,6 @@ pub fn require_connection(props: &Props) -> Html {
             html!(
                 <div class="alert alert-warning">
                     {"Disconnected: "} {reason}
-                </div>
-            )
-        }
-        WsEvent::FatalError(reason) => {
-            html!(
-                <div class="alert alert-danger">
-                    {"Fatal Error: "} {reason}
                 </div>
             )
         }

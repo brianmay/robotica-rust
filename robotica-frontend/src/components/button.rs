@@ -2,6 +2,7 @@
 use yew::prelude::*;
 
 use robotica_common::websocket::MqttMessage;
+use yew_agent::{Bridge, Bridged};
 
 use crate::services::{
     controllers::{
@@ -9,7 +10,10 @@ use crate::services::{
         lights::{self, Priority},
         music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
     },
-    websocket::{Command, WebsocketService, WsEvent},
+    websocket::{
+        event_bus::{Command, EventBus},
+        WsEvent,
+    },
 };
 
 /// The yew properties for a light button.
@@ -123,7 +127,7 @@ impl ConfigTrait for SwitchProps {
 /// A yew button
 pub struct Button<T: ConfigTrait> {
     controller: T::Controller,
-    wss: WebsocketService,
+    events: Box<dyn Bridge<EventBus>>,
 }
 
 /// The yew message for a button.
@@ -157,42 +161,29 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
 
     fn create(ctx: &Context<Self>) -> Self {
         let props = ctx.props();
-        let (wss, _) = ctx
-            .link()
-            .context::<WebsocketService>(Callback::noop())
-            .expect("No context found.");
-
+        let mut events = EventBus::bridge(ctx.link().batch_callback(|_| None));
         let controller = props.create_controller();
 
         {
-            let tx = wss.tx.clone();
-            controller.get_subscriptions().iter().for_each(move |s| {
+            controller.get_subscriptions().iter().for_each(|s| {
                 let topic = s.topic.clone();
                 let s = (*s).clone();
-                // let state = state.clone();
-                // let controller = controller.clone();
-
                 let callback = ctx
                     .link()
                     .callback(move |msg: MqttMessage| Message::Receive((s.label, msg.payload)));
 
                 let subscribe = Command::Subscribe { topic, callback };
-                let mut tx_clone = tx.clone();
-                tx_clone
-                    .try_send(subscribe)
-                    .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+                events.send(subscribe);
             });
         }
 
         {
             let callback = ctx.link().callback(Message::Event);
             let msg = Command::EventHandler(callback);
-            let mut tx = wss.tx.clone();
-            tx.try_send(msg)
-                .unwrap_or_else(|err| log::error!("Could not send subscribe command: {err}"));
+            events.send(msg);
         }
 
-        Button { controller, wss }
+        Button { controller, events }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
@@ -250,14 +241,13 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
                         topic: c.get_topic().to_string(),
                         payload: c.get_payload().to_string(),
                     };
-                    self.wss.tx.try_send(Command::Send(msg)).unwrap();
+                    self.events.send(Command::Send(msg));
                 }
             }
             Message::Receive((label, payload)) => {
                 self.controller.process_message(label, payload);
             }
             Message::Event(WsEvent::Disconnected(_)) => self.controller.process_disconnected(),
-            Message::Event(WsEvent::FatalError(_)) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connected { .. }) => {}
         }
         true

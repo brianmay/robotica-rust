@@ -11,8 +11,6 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use robotica_frontend::components::ws_client::WsClient;
-
 use robotica_common::version;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
@@ -46,9 +44,7 @@ fn switch(selected_route: &Route) -> Html {
     html! {
         <>
             <NavBar/>
-            <WsClient>
-                {content}
-            </WsClient>
+            {content}
             {footer()}
         </>
     }
