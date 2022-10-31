@@ -116,10 +116,10 @@ impl Icon {
     #[must_use]
     pub fn to_href(&self, state: &DisplayState) -> String {
         let version = match state {
-            DisplayState::HardOff | DisplayState::Error | DisplayState::Unknown => "hard_off",
+            DisplayState::HardOff | DisplayState::Error | DisplayState::Unknown => "error",
             DisplayState::On => "on",
             DisplayState::Off => "off",
-            DisplayState::OnOther => "on_other",
+            DisplayState::OnOther => "other",
         };
         format!("/images/{}_{}.svg", self.name, version)
     }

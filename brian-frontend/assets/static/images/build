@@ -12,9 +12,9 @@ do_image() {
 do_images() {
     prefix="$1"
     do_image "$prefix"_off black
-    do_image "$prefix"_hard_off black
+    do_image "$prefix"_error black
     do_image "$prefix"_on white
-    do_image "$prefix"_on_other black
+    do_image "$prefix"_other black
 }
 
 do_images light
