@@ -347,6 +347,7 @@ dependencies = [
  "log",
  "robotica-common",
  "robotica-frontend",
+ "serde",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-test",

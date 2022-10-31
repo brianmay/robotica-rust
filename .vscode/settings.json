@@ -62,6 +62,7 @@
         "webpki",
         "websockets",
         "wifi",
-        "Writable"
+        "Writable",
+        "zigbee"
     ]
 }

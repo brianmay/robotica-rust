@@ -186,7 +186,7 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
     send_task.abort();
 }
 
-const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &["state/#", "schedule/#", "robotica/#"];
+const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &["state/#", "schedule/#", "robotica/#", "zigbee2mqtt/#"];
 const ALLOWED_SEND_TOPICS: &[&str] = &["command/#"];
 
 #[must_use]

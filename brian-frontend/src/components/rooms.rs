@@ -1,36 +1,15 @@
-use std::ops::Deref;
-
-use robotica_common::websocket::MqttMessage;
-use robotica_frontend::services::websocket::event_bus::{Command, EventBus};
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{Button, LightProps, MusicProps, SwitchProps};
+use robotica_frontend::components::mqtt_last::MqttLast;
 use robotica_frontend::services::controllers::{Action, Icon};
-use yew_agent::Bridged;
+
+use crate::zigbee2mqtt;
 
 use super::require_connection::RequireConnection;
 
 #[function_component(BrianRoom)]
 pub fn brian_room() -> Html {
-    let callback = { Callback::from(move |_| {}) };
-
-    let events = use_mut_ref(|| EventBus::bridge(callback));
-
-    let light_power = use_state(|| None);
-
-    let callback = {
-        let light_power = light_power.clone();
-        Callback::from(move |msg: MqttMessage| {
-            light_power.set(Some(msg.payload));
-        })
-    };
-
-    use_ref(|| {
-        let topic = "state/Brian/Light/power".to_string();
-        let subscribe = Command::Subscribe { topic, callback };
-        events.borrow_mut().send(subscribe);
-    });
-
     let light_icon = Icon::new("light");
     let wake_up_icon = Icon::new("wake_up");
     let fan_icon = Icon::new("fan");
@@ -40,10 +19,8 @@ pub fn brian_room() -> Html {
             <h1>{ "Brian's Room" }</h1>
 
             <h2>
-                {"Lights"}
-                if let Some(power) = light_power.deref() {
-                    {" - "} {power}
-                }
+                {"Lights - "}
+                <MqttLast<String> topic="state/Brian/Light/power"/>
             </h2>
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
@@ -81,6 +58,10 @@ pub fn dining_room() -> Html {
         <RequireConnection>
             <h1>{ "Dining Room" }</h1>
 
+            <div>
+                {"Front door - "} <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Dining/door"/>
+            </div>
+
             <h2>{"Switches"}</h2>
             <div class="buttons">
                 <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
@@ -90,6 +71,28 @@ pub fn dining_room() -> Html {
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                 <Button<LightProps> name={"On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"default"} priority={100} />
+            </div>
+        </RequireConnection>
+    )
+}
+
+#[function_component(TwinsRoom)]
+pub fn twins_room() -> Html {
+    html!(
+        <RequireConnection>
+            <h1>{ "Twins Room" }</h1>
+        </RequireConnection>
+    )
+}
+
+#[function_component(Bathroom)]
+pub fn bathroom() -> Html {
+    html!(
+        <RequireConnection>
+            <h1>{ "Bathroom" }</h1>
+
+            <div>
+                {"Bathroom door - "} <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Bathroom/door"/>
             </div>
         </RequireConnection>
     )

@@ -2,23 +2,30 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-mod components;
-use components::rooms::{BrianRoom, DiningRoom};
-use components::schedule_view::ScheduleView;
-use components::tags_view::TagsView;
-use components::welcome::Welcome;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
 use robotica_common::version;
 
+mod components;
+use components::rooms::{Bathroom, BrianRoom, DiningRoom, TwinsRoom};
+use components::schedule_view::ScheduleView;
+use components::tags_view::TagsView;
+use components::welcome::Welcome;
+
+mod zigbee2mqtt;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
     #[at("/brian")]
     BrianRoom,
+    #[at("/twins")]
+    TwinsRoom,
     #[at("/dining")]
     DiningRoom,
+    #[at("/bathroom")]
+    Bathroom,
     #[at("/welcome")]
     Welcome,
     #[at("/schedule")]
@@ -34,7 +41,9 @@ pub enum Route {
 fn switch(selected_route: &Route) -> Html {
     let content = match selected_route {
         Route::BrianRoom => html! { <BrianRoom/> },
+        Route::TwinsRoom => html! { <TwinsRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
+        Route::Bathroom => html! { <Bathroom/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::Welcome => html! {<Welcome/>},
@@ -157,7 +166,13 @@ fn nav_bar() -> Html {
                         { link(Route::BrianRoom, "Brian's Room") }
                     </li>
                     <li class="nav-item">
+                        { link(Route::TwinsRoom, "Twins's Room") }
+                    </li>
+                    <li class="nav-item">
                         { link(Route::DiningRoom, "Dining Room") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::Bathroom, "Bathroom") }
                     </li>
                     <li class="nav-item">
                         { link(Route::Schedule, "Schedule") }
