@@ -48,6 +48,7 @@ pub fn brian_room() -> Html {
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                 <Button<LightProps> name={"On"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
+                <Button<LightProps> name={"Rainbow"} topic_substr={"Brian/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
             </div>
 
             <h2>{"Music"}</h2>
