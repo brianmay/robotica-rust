@@ -6,7 +6,7 @@ use yew_agent::{Bridge, Bridged};
 
 use crate::services::{
     controllers::{
-        get_display_state_for_action,
+        get_display_state_for_action, hdmi,
         lights::{self, Priority},
         music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
     },
@@ -118,6 +118,46 @@ impl ConfigTrait for SwitchProps {
             topic_substr: config.topic_substr,
             action: config.action,
             icon: config.icon,
+        };
+
+        config.create_controller()
+    }
+}
+
+/// The yew properties for a switch button.
+#[derive(Clone, Properties, Eq, PartialEq)]
+pub struct HdmiProps {
+    /// The name of the switch button.
+    pub name: String,
+
+    /// The base string that all topics are derived from.
+    pub topic_substr: String,
+
+    /// The action that the button should perform.
+    pub action: Action,
+
+    /// The icon to display on the button.
+    pub icon: Icon,
+
+    /// The input of the switch
+    pub input: u8,
+
+    /// The output of the switch
+    pub output: u8,
+}
+
+impl ConfigTrait for HdmiProps {
+    type Controller = hdmi::Controller;
+
+    fn create_controller(&self) -> Self::Controller {
+        let config = (*self).clone();
+        let config = hdmi::Config {
+            name: config.name,
+            topic_substr: config.topic_substr,
+            action: config.action,
+            icon: config.icon,
+            input: config.input,
+            output: config.output,
         };
 
         config.create_controller()

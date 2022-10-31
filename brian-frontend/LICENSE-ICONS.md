@@ -5,7 +5,7 @@ Images adapted from following sources:
 ## MIT license
 
 assets/static/images/lights\* - [light-bulb](https://heroicons.com/) "light-bulb"
-assets/static/images/wake_up\* - [login](https://heroicons.com/) "login"
+assets/static/images/select\* - [login](https://heroicons.com/) "login"
 
 ## CC0 license
 

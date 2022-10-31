@@ -1,6 +1,7 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
+pub mod hdmi;
 pub mod lights;
 pub mod music;
 pub mod switch;

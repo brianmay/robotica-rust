@@ -9,7 +9,7 @@ use yew_router::prelude::*;
 use robotica_common::version;
 
 mod components;
-use components::rooms::{Bathroom, BrianRoom, DiningRoom, TwinsRoom};
+use components::rooms::{Bathroom, BrianRoom, DiningRoom, LoungeRoom, TwinsRoom};
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
@@ -22,6 +22,8 @@ pub enum Route {
     BrianRoom,
     #[at("/twins")]
     TwinsRoom,
+    #[at("/lounge")]
+    LoungeRoom,
     #[at("/dining")]
     DiningRoom,
     #[at("/bathroom")]
@@ -42,6 +44,7 @@ fn switch(selected_route: &Route) -> Html {
     let content = match selected_route {
         Route::BrianRoom => html! { <BrianRoom/> },
         Route::TwinsRoom => html! { <TwinsRoom/> },
+        Route::LoungeRoom => html! { <LoungeRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
         Route::Bathroom => html! { <Bathroom/> },
         Route::Schedule => html! { <ScheduleView/> },
@@ -167,6 +170,9 @@ fn nav_bar() -> Html {
                     </li>
                     <li class="nav-item">
                         { link(Route::TwinsRoom, "Twins's Room") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::LoungeRoom, "Lounge Room") }
                     </li>
                     <li class="nav-item">
                         { link(Route::DiningRoom, "Dining Room") }

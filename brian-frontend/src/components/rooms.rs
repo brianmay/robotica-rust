@@ -1,6 +1,8 @@
 use yew::prelude::*;
 
-use robotica_frontend::components::button::{Button, LightProps, MusicProps, SwitchProps};
+use robotica_frontend::components::button::{
+    Button, HdmiProps, LightProps, MusicProps, SwitchProps,
+};
 use robotica_frontend::components::mqtt_last::MqttLast;
 use robotica_frontend::services::controllers::{Action, Icon};
 
@@ -55,6 +57,7 @@ pub fn brian_room() -> Html {
 pub fn dining_room() -> Html {
     let light_icon = Icon::new("light");
     let tv_icon = Icon::new("tv");
+    let select_icon = Icon::new("select");
 
     html!(
         <RequireConnection>
@@ -69,12 +72,39 @@ pub fn dining_room() -> Html {
                 <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
             </div>
 
+            <h2>{"TV"}</h2>
+            <div class="buttons">
+                <Button<HdmiProps> name={"WiiU"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=1 output=1 />
+                <Button<HdmiProps> name={"Google"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=2 output=1 />
+                <Button<HdmiProps> name={"Xbox"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=3 output=1 />
+                <Button<HdmiProps> name={"MythTV"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon} input=4 output=1 />
+            </div>
+
             <h2>{"Passage"}</h2>
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                 <Button<LightProps> name={"On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"default"} priority={100} />
             </div>
         </RequireConnection>
+    )
+}
+
+#[function_component(LoungeRoom)]
+pub fn lounge_room() -> Html {
+    let select_icon = Icon::new("select");
+
+    html!(
+        <RequireConnection>
+            <h1>{ "Lounge Room" }</h1>
+
+            <h2>{"TV"}</h2>
+            <div class="buttons">
+                <Button<HdmiProps> name={"WiiU"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=1 output=2 />
+                <Button<HdmiProps> name={"Google"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=2 output=2 />
+                <Button<HdmiProps> name={"Xbox"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=3 output=2 />
+                <Button<HdmiProps> name={"MythTV"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon} input=4 output=2 />
+            </div>
+    </RequireConnection>
     )
 }
 
