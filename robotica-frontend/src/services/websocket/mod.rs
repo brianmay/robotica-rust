@@ -137,7 +137,7 @@ impl WebsocketService {
         let url = get_websocket_url();
         info!("Connecting to {}", url);
 
-        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<Command>(10);
+        let (in_tx, mut in_rx) = futures::channel::mpsc::channel::<Command>(50);
 
         let mut state = State {
             url,
@@ -177,12 +177,9 @@ impl WebsocketService {
     }
 
     fn command(&mut self, command: Command) {
-        let mut tx = self.tx.clone();
-        spawn_local(async move {
-            if let Err(err) = tx.send(command).await {
-                error!("Failed to send command: {:?}", err);
-            }
-        });
+        if let Err(err) = self.tx.try_send(command) {
+            error!("ws: Failed to send command: {:?}", err);
+        }
     }
 
     fn send(&mut self, msg: MqttMessage) {
