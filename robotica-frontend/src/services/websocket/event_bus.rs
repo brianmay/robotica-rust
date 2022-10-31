@@ -127,3 +127,9 @@ impl Agent for EventBus {
         self.event_callbacks.remove(&id);
     }
 }
+
+impl Drop for EventBus {
+    fn drop(&mut self) {
+        self.ws.close();
+    }
+}

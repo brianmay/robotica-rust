@@ -35,7 +35,6 @@ enum Command {
     /// Send a keep alive message.
     KeepAlive,
     /// Close the websocket.
-    #[allow(dead_code)]
     Close,
 }
 
@@ -188,6 +187,10 @@ impl WebsocketService {
 
     fn subscribe(&mut self, topic: String) {
         self.command(Command::Subscribe { topic });
+    }
+
+    fn close(&mut self) {
+        self.command(Command::Close);
     }
 }
 
