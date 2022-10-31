@@ -89,12 +89,20 @@ pub fn twins_room() -> Html {
 
 #[function_component(Bathroom)]
 pub fn bathroom() -> Html {
+    let schedule_icon = Icon::new("schedule");
+
     html!(
         <RequireConnection>
             <h1>{ "Bathroom" }</h1>
 
             <div>
                 {"Bathroom door - "} <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Bathroom/door"/>
+            </div>
+
+            <h2>{"Switches"}</h2>
+            <div class="buttons">
+                <Button<SwitchProps> name={"Brian"} topic_substr={"Brian/Request_Bathroom"} action={Action::Toggle} icon={schedule_icon.clone()} />
+                <Button<SwitchProps> name={"Dining"} topic_substr={"Dining/Request_Bathroom"} action={Action::Toggle} icon={schedule_icon} />
             </div>
         </RequireConnection>
     )
