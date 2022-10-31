@@ -13,6 +13,7 @@ pub fn brian_room() -> Html {
     let light_icon = Icon::new("light");
     let speaker_icon = Icon::new("speaker");
     let fan_icon = Icon::new("fan");
+    let night_icon = Icon::new("night");
 
     html!(
         <RequireConnection>
@@ -38,6 +39,7 @@ pub fn brian_room() -> Html {
             <h2>{"Switches"}</h2>
             <div class="buttons">
                 <Button<SwitchProps> name={"Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
+                <Button<SwitchProps> name={"Night"} topic_substr={"Brian/Night"} action={Action::Toggle} icon={night_icon} />
             </div>
 
             <h2>{"Passage"}</h2>
