@@ -250,4 +250,3 @@ pub fn passage() -> Html {
         </RequireConnection>
     )
 }
-
