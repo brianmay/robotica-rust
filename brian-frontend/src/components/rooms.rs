@@ -237,16 +237,18 @@ pub fn passage() -> Html {
 
     html!(
         <RequireConnection>
-            <h2>{"Passage"}</h2>
+            <h1>{"Passage"}</h1>
+
+            <h2>
+                {"Lights - "}
+                <MqttLast<String> topic="state/Passage/Light/power"/>
+            </h2>
+
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                 <Button<LightProps> name={"On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
                 <Button<LightProps> name={"Rainbow"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"rainbow"} priority={100} />
             </div>
-            <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/Passage/Light/power"/>
-            </h2>
         </RequireConnection>
     )
 }
