@@ -10,7 +10,7 @@ use robotica_common::version;
 
 mod components;
 use components::rooms::{
-    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, TwinsRoom,
+    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, TwinsRoom, Passage,
 };
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
@@ -36,6 +36,8 @@ pub enum Route {
     DiningRoom,
     #[at("/bathroom")]
     Bathroom,
+    #[at("/passage")]
+    Passage,
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -56,6 +58,7 @@ fn switch(selected_route: &Route) -> Html {
         Route::LoungeRoom => html! { <LoungeRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
         Route::Bathroom => html! { <Bathroom/> },
+        Route::Passage => html! { <Passage/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
@@ -221,6 +224,9 @@ fn nav_bar() -> Html {
                             </li>
                             <li>
                                 { dropdown_link(Route::Bathroom, "Bathroom") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::Passage, "Passage") }
                             </li>
                           </ul>
                         </li>
