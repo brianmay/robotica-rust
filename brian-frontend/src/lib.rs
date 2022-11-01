@@ -10,7 +10,7 @@ use robotica_common::version;
 
 mod components;
 use components::rooms::{
-    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, TwinsRoom, Passage,
+    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, Passage, TwinsRoom,
 };
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
