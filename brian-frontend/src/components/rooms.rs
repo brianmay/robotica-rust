@@ -54,7 +54,7 @@ pub fn jan_room() -> Html {
 
     html!(
         <RequireConnection>
-            <h1>{ "jans' Room" }</h1>
+            <h1>{ "Jan's Room" }</h1>
 
             <h2>
                 {"Lights - "}
