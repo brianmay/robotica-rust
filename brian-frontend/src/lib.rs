@@ -9,7 +9,9 @@ use yew_router::prelude::*;
 use robotica_common::version;
 
 mod components;
-use components::rooms::{Bathroom, BrianRoom, DiningRoom, LoungeRoom, TwinsRoom};
+use components::rooms::{
+    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, TwinsRoom,
+};
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
@@ -159,46 +161,76 @@ fn nav_bar() -> Html {
         }
     };
 
+    let dropdown_classes = |link_route| {
+        let mut classes = classes!("dropdown-item");
+        if Some(link_route) == route {
+            classes.push("active");
+        }
+        classes
+    };
+
+    let dropdown_link = |link_route, text| {
+        html! {
+            <Link<Route> classes={dropdown_classes(link_route)} to={link_route}>
+                {text}
+            </Link<Route>>
+        }
+    };
+
     html! {
         <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
             <div class="container-fluid">
                 <a class="navbar-brand" href="/">{ "Robotica" }</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
+                    <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        { link(Route::Welcome, "Welcome") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::BrianRoom, "Brian's Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::JanRoom, "Jan's Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::TwinsRoom, "Twins' Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::AkiraRoom, "Akira's Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::LoungeRoom, "Lounge Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::DiningRoom, "Dining Room") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::Bathroom, "Bathroom") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::Schedule, "Schedule") }
-                    </li>
-                    <li class="nav-item">
-                        { link(Route::Tags, "Tags") }
-                    </li>
-                </ul>
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item">
+                            { link(Route::Welcome, "Welcome") }
+                        </li>
+                        <li class="nav-item dropdown">
+                          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            {"Bedrooms"}
+                          </a>
+                          <ul class="dropdown-menu">
+                            <li>
+                                { dropdown_link(Route::BrianRoom, "Brian's Room") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::JanRoom, "Jan's Room") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::TwinsRoom, "Twins' Room") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::AkiraRoom, "Akira's Room") }
+                            </li>
+                          </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            {"Common"}
+                          </a>
+                          <ul class="dropdown-menu">
+                            <li>
+                                { dropdown_link(Route::LoungeRoom, "Lounge Room") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::DiningRoom, "Dining Room") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::Bathroom, "Bathroom") }
+                            </li>
+                          </ul>
+                        </li>
+                        <li class="nav-item">
+                            { link(Route::Schedule, "Schedule") }
+                        </li>
+                        <li class="nav-item">
+                            { link(Route::Tags, "Tags") }
+                        </li>
+                    </ul>
                 </div>
             </div>
         </nav>
