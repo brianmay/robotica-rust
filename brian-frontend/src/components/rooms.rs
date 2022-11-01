@@ -197,15 +197,6 @@ pub fn lounge_room() -> Html {
                 <Button<HdmiProps> name={"Xbox"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=3 output=2 />
                 <Button<HdmiProps> name={"MythTV"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon} input=4 output=2 />
             </div>
-            <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/Dining/Light/power"/>
-            </h2>
-            <div class="buttons">
-                <Button<LightProps> name={"Auto"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
-                <Button<LightProps> name={"On"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
-                <Button<LightProps> name={"Rainbow"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
-            </div>
         </RequireConnection>
     )
 }
