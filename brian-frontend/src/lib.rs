@@ -18,18 +18,22 @@ mod zigbee2mqtt;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
+    #[at("/welcome")]
+    Welcome,
     #[at("/brian")]
     BrianRoom,
+    #[at("/jan")]
+    JanRoom,
     #[at("/twins")]
     TwinsRoom,
+    #[at("/akira")]
+    AkiraRoom,
     #[at("/lounge")]
     LoungeRoom,
     #[at("/dining")]
     DiningRoom,
     #[at("/bathroom")]
     Bathroom,
-    #[at("/welcome")]
-    Welcome,
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -42,14 +46,16 @@ pub enum Route {
 #[allow(clippy::let_unit_value)]
 fn switch(selected_route: &Route) -> Html {
     let content = match selected_route {
+        Route::Welcome => html! {<Welcome/>},
         Route::BrianRoom => html! { <BrianRoom/> },
+        Route::JanRoom => html! { <JanRoom/> },
         Route::TwinsRoom => html! { <TwinsRoom/> },
+        Route::AkiraRoom => html! { <AkiraRoom/> },
         Route::LoungeRoom => html! { <LoungeRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
         Route::Bathroom => html! { <Bathroom/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
-        Route::Welcome => html! {<Welcome/>},
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
@@ -169,7 +175,13 @@ fn nav_bar() -> Html {
                         { link(Route::BrianRoom, "Brian's Room") }
                     </li>
                     <li class="nav-item">
-                        { link(Route::TwinsRoom, "Twins's Room") }
+                        { link(Route::JanRoom, "Jan's Room") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::TwinsRoom, "Twins' Room") }
+                    </li>
+                    <li class="nav-item">
+                        { link(Route::AkiraRoom, "Akira's Room") }
                     </li>
                     <li class="nav-item">
                         { link(Route::LoungeRoom, "Lounge Room") }
