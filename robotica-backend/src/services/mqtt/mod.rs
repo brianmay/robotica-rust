@@ -204,6 +204,14 @@ impl TryFrom<Message> for bool {
     }
 }
 
+impl TryFrom<Message> for serde_json::Value {
+    type Error = serde_json::Error;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        serde_json::from_slice(&msg.payload)
+    }
+}
+
 /// An error occurred during a `Mqtt` subscribe operation.
 #[derive(Error, Debug)]
 pub enum SubscribeError {

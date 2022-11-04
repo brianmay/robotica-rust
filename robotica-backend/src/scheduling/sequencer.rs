@@ -239,7 +239,7 @@ pub enum ConfigCheckError {
 ///
 /// If the file cannot be read or parsed.
 pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
-    let f = std::fs::File::open(&filename)
+    let f = std::fs::File::open(filename)
         .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
 
     let config: ConfigMap = serde_yaml::from_reader(f)
@@ -323,7 +323,7 @@ fn config_to_sequence(
             description: src_task.description,
             payload: src_task
                 .payload
-                .unwrap_or_else(|| Payload::String("".to_string())),
+                .unwrap_or_else(|| Payload::String(String::new())),
             qos: map_qos(src_task.qos),
             retain: src_task.retain.unwrap_or(false),
             locations: src_task.locations,
@@ -390,10 +390,10 @@ pub fn get_sequence_with_config(
     let mut sequences: Vec<Sequence> = Vec::with_capacity(expanded_list.len());
 
     for expanded in &expanded_list {
-        let id = match &expanded.config.id {
-            Some(id) => id.clone(),
-            None => format!("{}_{}", sequence_name, expanded.number),
-        };
+        let id = expanded.config.id.as_ref().map_or_else(
+            || format!("{}_{}", sequence_name, expanded.number),
+            std::clone::Clone::clone,
+        );
         let sequence = config_to_sequence(
             sequence_name,
             expanded.config.clone(),

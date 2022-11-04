@@ -95,7 +95,7 @@ pub enum ConfigError {
 ///
 /// If the file cannot be read or parsed.
 pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
-    let f = std::fs::File::open(&filename)
+    let f = std::fs::File::open(filename)
         .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
 
     let config: Vec<Config> = serde_yaml::from_reader(f)

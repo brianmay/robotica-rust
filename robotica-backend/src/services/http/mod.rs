@@ -268,10 +268,7 @@ async fn oidc_callback(
     Query(params): Query<HashMap<String, String>>,
     mut session: WritableSession,
 ) -> Response {
-    let code = params
-        .get("code")
-        .cloned()
-        .unwrap_or_else(|| "".to_string());
+    let code = params.get("code").cloned().unwrap_or_default();
 
     let state = params
         .get("state")

@@ -183,7 +183,6 @@ pub fn dining_room() -> Html {
 
 #[function_component(LoungeRoom)]
 pub fn lounge_room() -> Html {
-    let light_icon = Icon::new("light");
     let select_icon = Icon::new("select");
 
     html!(

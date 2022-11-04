@@ -80,12 +80,13 @@ impl<T: Send + Clone> Receiver<T> {
             error!("{}: get/send failed: {}", self.name, err);
             panic!("get failed");
         };
-        if let Ok(v) = rx.await {
-            v
-        } else {
-            error!("{}: get/await failed", self.name);
-            panic!("get failed");
-        }
+        (rx.await).map_or_else(
+            |_| {
+                error!("{}: get/await failed", self.name);
+                panic!("get failed");
+            },
+            |v| v,
+        )
     }
 
     /// Subscribe to this entity.
@@ -418,10 +419,7 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
                 Some(msg) = send_rx.recv() => {
                     match msg {
                         SendMessage::Set(data) => {
-                            let changed = match saved_data {
-                                Some(ref saved_data) => data != *saved_data,
-                                None => true,
-                            };
+                            let changed = saved_data.as_ref().map_or(true, |saved_data| data != *saved_data);
                             if changed {
                                 prev_data = saved_data.clone();
                                 saved_data = Some(data.clone());
