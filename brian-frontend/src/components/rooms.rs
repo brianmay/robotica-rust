@@ -117,7 +117,7 @@ pub fn akira_room() -> Html {
 
     html!(
         <RequireConnection>
-            <h1>{ "Akiras' Room" }</h1>
+            <h1>{ "Akira's Room" }</h1>
 
             <h2>
                 {"Lights - "}
