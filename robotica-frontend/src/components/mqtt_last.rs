@@ -20,7 +20,8 @@ pub struct Props {
 #[function_component(MqttLast)]
 pub fn mqtt_last<T>(props: &Props) -> Html
 where
-    T: From<String> + Display + 'static,
+    T: TryFrom<String> + Display + 'static,
+    T::Error: std::fmt::Debug + std::fmt::Display,
 {
     let message = use_state::<Option<T>, _>(|| None);
 
@@ -31,7 +32,12 @@ where
     let callback = {
         let message = message.clone();
         Callback::from(move |msg: MqttMessage| {
-            message.set(Some(T::from(msg.payload)));
+            T::try_from(msg.payload).map_or_else(
+                |e| {
+                    log::error!("Failed to parse message: {}", e);
+                },
+                |new_message| message.set(Some(new_message)),
+            );
         })
     };
 

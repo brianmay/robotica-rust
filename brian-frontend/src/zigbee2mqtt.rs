@@ -24,8 +24,10 @@ impl Display for Door {
     }
 }
 
-impl From<String> for Door {
-    fn from(s: String) -> Self {
-        serde_json::from_str(&s).unwrap()
+impl TryFrom<String> for Door {
+    type Error = serde_json::Error;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        serde_json::from_str(&s)
     }
 }
