@@ -7,9 +7,11 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::use_self)]
 
+pub mod anavi_thermometer;
 pub mod datetime;
 pub mod mqtt;
 pub mod scheduler;
 pub mod user;
 pub mod version;
 pub mod websocket;
+pub mod zigbee2mqtt;

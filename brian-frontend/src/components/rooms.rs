@@ -6,7 +6,8 @@ use robotica_frontend::components::button::{
 use robotica_frontend::components::mqtt_last::MqttLast;
 use robotica_frontend::services::controllers::{Action, Icon};
 
-use crate::zigbee2mqtt;
+use robotica_common::anavi_thermometer as anavi;
+use robotica_common::zigbee2mqtt;
 
 use super::require_connection::RequireConnection;
 
@@ -208,9 +209,37 @@ pub fn bathroom() -> Html {
         <RequireConnection>
             <h1>{ "Bathroom" }</h1>
 
-            <div>
-                {"Bathroom door - "} <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Bathroom/door"/>
-            </div>
+            <table class="table container table-striped table-hover">
+                <tbody>
+                    <tr>
+                        <th>{"Bathroom door"}</th>
+                        <td>
+                            <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Bathroom/door"/>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>{"Air temperature"}</th>
+                        <td>
+                            <MqttLast<anavi::Temperature> topic="workgroup/3765653003a76f301ad767b4676d7065/air/temperature"/>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>{"Air humidity"}</th>
+                        <td>
+                            <MqttLast<anavi::Humidity> topic="workgroup/3765653003a76f301ad767b4676d7065/air/humidity"/>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>{"Water temperature"}</th>
+                        <td>
+                            <MqttLast<anavi::Temperature> topic="workgroup/3765653003a76f301ad767b4676d7065/water/temperature"/>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
 
             <h2>{"Switches"}</h2>
             <div class="buttons">

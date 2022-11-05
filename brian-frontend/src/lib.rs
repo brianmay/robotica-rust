@@ -16,8 +16,6 @@ use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
 
-mod zigbee2mqtt;
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
 pub enum Route {
     #[at("/welcome")]

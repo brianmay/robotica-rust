@@ -1,7 +1,9 @@
+//! Structures and functions for `Zigbee2MQTT` devices.
 use std::fmt::Display;
 
 use serde::Deserialize;
 
+/// The `Zigbee2MQTT` door.
 #[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct Door {
