@@ -1,6 +1,6 @@
 //! Get information from Amber electricity supplier
 
-use chrono::{TimeZone, Utc};
+use chrono::{FixedOffset, Utc};
 use influxdb::InfluxDbWriteable;
 use log::debug;
 use serde::Deserialize;
@@ -49,10 +49,7 @@ struct UsageReading {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run<T>(timezone: T) -> Result<(), AmberError>
-where
-    T: TimeZone + Send + 'static,
-{
+pub fn run() -> Result<(), AmberError> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -65,6 +62,8 @@ where
     };
 
     spawn(async move {
+        let nem_timezone = FixedOffset::east(10 * 3600);
+
         // Update prices every 5 minutes
         let mut price_interval = interval(tokio::time::Duration::from_secs(300));
         price_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -77,14 +76,14 @@ where
             tokio::select! {
                 _ = price_interval.tick() => {
                     let now = utc_now();
-                    let today = now.with_timezone::<T>(&timezone).date();
+                    let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
                         process_prices(&config, yesterday, tomorrow).await;
                 }
                 _ = usage_interval.tick() => {
                     let now = utc_now();
-                    let today = now.with_timezone::<T>(&timezone).date();
+                    let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
                     process_usage(&config, yesterday, tomorrow).await;

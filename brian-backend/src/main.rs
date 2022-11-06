@@ -44,7 +44,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         message_sink,
     };
 
-    amber::run(chrono::Local).unwrap_or_else(|e| {
+    amber::run().unwrap_or_else(|e| {
         panic!("Error running amber: {}", e);
     });
 
