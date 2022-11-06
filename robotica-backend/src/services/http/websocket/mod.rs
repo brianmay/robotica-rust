@@ -11,7 +11,7 @@ use axum::{
 use axum_sessions::extractors::ReadableSession;
 use futures::{SinkExt, StreamExt};
 use tokio::{select, sync::mpsc};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use robotica_common::{
     mqtt::MqttMessage,
@@ -31,7 +31,7 @@ pub(super) async fn websocket_handler(
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
     if let Some(user) = get_user(&session) {
-        info!("Accessing websocket");
+        debug!("Accessing websocket");
         ws.on_upgrade(|socket| websocket(socket, config, user))
             .into_response()
     } else {
@@ -209,7 +209,7 @@ async fn process_subscribe(
     config: &Arc<HttpConfig>,
     sender: mpsc::UnboundedSender<MqttMessage>,
 ) {
-    info!("Subscribing to {}", topic);
+    debug!("Subscribing to {}", topic);
     let rc = config.mqtt.subscribe(&topic).await;
     let rx = match rc {
         Ok(rx) => rx,

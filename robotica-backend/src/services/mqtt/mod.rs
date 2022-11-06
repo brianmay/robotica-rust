@@ -353,7 +353,7 @@ fn process_subscribe(
     topic: &str,
     tx: oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
 ) {
-    info!("Subscribing to topic: {}.", topic);
+    debug!("Subscribing to topic: {}.", topic);
     let response = if let Some(subscription) = subscriptions.0.get(topic) {
         Ok(subscription.rx.clone())
     } else {
@@ -368,7 +368,7 @@ fn process_subscribe(
         let filter = topic_to_filter(topic);
         match client.try_subscribe_many([filter]) {
             Ok(_) => {
-                info!("Subscribed to topic: {:?}.", topic);
+                debug!("Subscribed to topic: {:?}.", topic);
                 subscriptions.0.insert(topic.to_string(), subscription);
                 Ok(rx)
             }

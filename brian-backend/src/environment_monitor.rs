@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use influxdb::{Client, InfluxDbWriteable};
-use log::error;
+use log::{debug, error};
 
-use robotica_backend::{get_env, spawn, EnvironmentError};
+use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
 use robotica_common::anavi_thermometer::{self as anavi, GetReading};
 use robotica_common::mqtt::MqttMessage;
 
@@ -36,7 +36,9 @@ where
             }
             .into_query(&topic);
 
-            if let Err(e) = client.query(&reading).await {
+            if is_debug_mode() {
+                debug!("would send {:?}", reading);
+            } else if let Err(e) = client.query(&reading).await {
                 error!("Failed to write to influxdb: {}", e);
             }
         }
