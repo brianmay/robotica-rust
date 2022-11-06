@@ -63,29 +63,31 @@ where
         influx_url,
         influx_database,
     };
-    let mut date = None;
 
     spawn(async move {
-        let mut interval = interval(tokio::time::Duration::from_secs(300));
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        // Update prices every 5 minutes
+        let mut price_interval = interval(tokio::time::Duration::from_secs(300));
+        price_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        // Update usage once an hour
+        let mut usage_interval = interval(tokio::time::Duration::from_secs(3600));
+        usage_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
             tokio::select! {
-                _ = interval.tick() => {
+                _ = price_interval.tick() => {
                     let now = utc_now();
                     let today = now.with_timezone::<T>(&timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
-
-                    if !is_debug_mode() {
                         process_prices(&config, yesterday, tomorrow).await;
-                        if date != Some(today) {
-                            process_usage(&config, yesterday, tomorrow).await;
-                            date = Some(today);
-                        }
-                    } else {
-                        debug!("Skipping Amber update in debug mode");
-                    }
+                }
+                _ = usage_interval.tick() => {
+                    let now = utc_now();
+                    let today = now.with_timezone::<T>(&timezone).date();
+                    let yesterday = today - Duration::days(1);
+                    let tomorrow = today + Duration::days(1);
+                    process_usage(&config, yesterday, tomorrow).await;
                 }
             }
         }
@@ -256,6 +258,11 @@ async fn process_prices(config: &Config, start_date: Date, end_date: Date) {
         Ok(prices) => {
             let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
 
+            if is_debug_mode() {
+                debug!("Skipping writing prices to influxdb in debug mode");
+                return;
+            }
+
             for data in prices {
                 let reading = PriceReading {
                     duration: data.duration,
@@ -281,6 +288,11 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
     match usage {
         Ok(usage) => {
             let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+
+            if is_debug_mode() {
+                debug!("Skipping writing usage to influxdb in debug mode");
+                return;
+            }
 
             for data in usage {
                 let name = format!("amber/usage/{}", data.channel_identifier);
