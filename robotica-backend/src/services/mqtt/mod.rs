@@ -39,82 +39,6 @@ const fn qos_from_rumqttc(qos: rumqttc::v5::mqttbytes::QoS) -> QoS {
     }
 }
 
-// /// A received/sent MQTT message
-// #[derive(Clone, PartialEq, Eq)]
-// pub struct Message {
-//     /// The topic of the message
-//     pub topic: String,
-
-//     /// The raw unparsed payload of the message
-//     pub payload: Bytes,
-
-//     /// Was/Is this message retained?
-//     pub retain: bool,
-
-//     /// What is the QoS of this message?
-//     qos: QoS,
-
-//     /// What was the instant this message was created?
-//     instant: Instant,
-// }
-
-// impl Message {
-//     /// Create a new message.
-//     pub fn new(topic: &str, payload: Bytes, retain: bool, qos: QoS) -> Self {
-//         Self {
-//             topic: topic.to_string(),
-//             payload,
-//             retain,
-//             qos,
-//             instant: Instant::now(),
-//         }
-//     }
-
-//     /// Create a message from a string.
-//     #[must_use]
-//     pub fn from_string(topic: &str, payload: &str, retain: bool, qos: QoS) -> Message {
-//         Message {
-//             topic: topic.to_string(),
-//             payload: payload.to_string().into(),
-//             retain,
-//             qos,
-//             instant: Instant::now(),
-//         }
-//     }
-
-//     /// Turn the payload into a string.
-//     ///
-//     /// # Errors
-//     ///
-//     /// If the payload is not valid UTF-8.
-//     pub fn payload_into_string(&self) -> Result<String, Utf8Error> {
-//         Ok(str::from_utf8(&self.payload)?.to_string())
-//     }
-// }
-
-// fn truncate(s: &[u8], max_chars: usize) -> &[u8] {
-//     if s.len() > max_chars {
-//         &s[..max_chars]
-//     } else {
-//         s
-//     }
-// }
-
-// impl fmt::Debug for Message {
-//     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//         let payload = truncate(&self.payload, 20);
-
-//         formatter
-//             .debug_struct("Message")
-//             .field("topic", &self.topic)
-//             .field("payload", &payload)
-//             .field("retain", &self.retain)
-//             .field("qos", &self.qos)
-//             .field("instant", &self.instant)
-//             .finish()
-//     }
-// }
-
 fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
     let topic = str::from_utf8(&msg.topic)?.to_string();
     let payload = str::from_utf8(&msg.payload)?.to_string();
@@ -126,39 +50,6 @@ fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
         instant: utc_now(),
     })
 }
-
-// /// An error when translating a message into a boolean.
-// #[derive(Error, Debug)]
-// pub enum BoolError {
-//     /// The payload was not a valid boolean string.
-//     #[error("Invalid value: {0}")]
-//     InvalidValue(String),
-
-//     /// The payload was not valid UTF8.
-//     #[error("Invalid UTF8")]
-//     Utf8Error(#[from] std::str::Utf8Error),
-// }
-
-// impl TryFrom<Message> for bool {
-//     type Error = BoolError;
-
-//     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-//         let payload: String = msg.payload_into_string()?;
-//         match payload.as_str() {
-//             "true" => Ok(true),
-//             "false" => Ok(false),
-//             value => Err(BoolError::InvalidValue(value.to_string())),
-//         }
-//     }
-// }
-
-// impl TryFrom<Message> for serde_json::Value {
-//     type Error = serde_json::Error;
-
-//     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-//         serde_json::from_slice(&msg.payload)
-//     }
-// }
 
 /// An error occurred during a `Mqtt` subscribe operation.
 #[derive(Error, Debug)]
