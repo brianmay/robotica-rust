@@ -39,6 +39,7 @@
         "onclick",
         "oneshot",
         "paho",
+        "renewables",
         "reqwasm",
         "reqwest",
         "Retryable",

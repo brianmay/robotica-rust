@@ -211,6 +211,12 @@ impl<T: TimeZone> From<chrono::DateTime<T>> for DateTime<T> {
     }
 }
 
+impl<T: TimeZone> From<DateTime<T>> for chrono::DateTime<T> {
+    fn from(dt: DateTime<T>) -> Self {
+        dt.0
+    }
+}
+
 impl FromStr for DateTime<Utc> {
     type Err = chrono::ParseError;
 

@@ -1,3 +1,4 @@
+mod amber;
 mod delays;
 mod environment_monitor;
 mod hdmi;
@@ -42,6 +43,10 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         mqtt,
         message_sink,
     };
+
+    amber::run(chrono::Local).unwrap_or_else(|e| {
+        panic!("Error running amber: {}", e);
+    });
 
     http::run(state.mqtt.clone())
         .await

@@ -328,6 +328,7 @@ dependencies = [
  "color-backtrace",
  "influxdb",
  "log",
+ "reqwest",
  "robotica-backend",
  "robotica-common",
  "serde",
