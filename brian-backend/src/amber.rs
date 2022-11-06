@@ -2,11 +2,12 @@
 
 use chrono::{TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
+use log::debug;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::time::{interval, MissedTickBehavior};
 
-use robotica_backend::{get_env, spawn, EnvironmentError};
+use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 
 /// Error when starting the Amber service
@@ -20,6 +21,8 @@ pub enum AmberError {
 struct Config {
     token: String,
     site_id: String,
+    influx_url: String,
+    influx_database: String,
 }
 
 #[derive(InfluxDbWriteable)]
@@ -54,7 +57,12 @@ where
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
     let influx_database = get_env("INFLUXDB_DATABASE")?;
-    let config = Config { token, site_id };
+    let config = Config {
+        token,
+        site_id,
+        influx_url,
+        influx_database,
+    };
     let mut date = None;
 
     spawn(async move {
@@ -69,61 +77,14 @@ where
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
 
-                    let prices = get_prices(&config, today, tomorrow).await;
-                    match prices {
-                        Ok(prices) => {
-                            let client = influxdb::Client::new(&influx_url, &influx_database);
-
-                            for data in prices {
-                                let reading = PriceReading {
-                                    duration: data.duration,
-                                    per_kwh: data.per_kwh,
-                                    renewables: data.renewables,
-                                    time: data.start_time.into(),
-                                }
-                                .into_query("amber/price");
-
-                                if let Err(e) = client.query(&reading).await {
-                                    log::error!("Failed to write to influxdb: {}", e);
-                                }
-                            }
+                    if !is_debug_mode() {
+                        process_prices(&config, yesterday, tomorrow).await;
+                        if date != Some(today) {
+                            process_usage(&config, yesterday, tomorrow).await;
+                            date = Some(today);
                         }
-                        Err(e) => {
-                            log::error!("Failed to get prices: {}", e);
-                        }
-                    }
-
-                    // Only get usage once a day
-                    if date == Some(today) {
-                        continue
-                    }
-                    date = Some(today);
-
-                    let usage = get_usage(&config, yesterday, today).await;
-                    match usage {
-                        Ok(usage) => {
-                            let client = influxdb::Client::new(&influx_url, &influx_database);
-
-                            for data in usage {
-                                let name = format!("amber/usage/{}", data.channel_identifier);
-                                let reading = UsageReading {
-                                    duration: data.duration,
-                                    per_kwh: data.per_kwh,
-                                    renewables: data.renewables,
-                                    kwh: data.kwh,
-                                    cost: data.cost,
-                                    time: data.start_time.into(),
-                                }
-                                .into_query(name);
-
-                                if let Err(e) = client.query(&reading).await {
-                                    log::error!("Failed to write to influxdb: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("Failed to get usage: {}", e);
-                        }
+                    } else {
+                        debug!("Skipping Amber update in debug mode");
                     }
                 }
             }
@@ -287,4 +248,59 @@ async fn get_usage(
         .await?;
 
     response.json().await
+}
+
+async fn process_prices(config: &Config, start_date: Date, end_date: Date) {
+    let prices = get_prices(config, start_date, end_date).await;
+    match prices {
+        Ok(prices) => {
+            let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+
+            for data in prices {
+                let reading = PriceReading {
+                    duration: data.duration,
+                    per_kwh: data.per_kwh,
+                    renewables: data.renewables,
+                    time: data.start_time.into(),
+                }
+                .into_query("amber/price");
+
+                if let Err(e) = client.query(&reading).await {
+                    log::error!("Failed to write to influxdb: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get prices: {}", e);
+        }
+    }
+}
+
+async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
+    let usage = get_usage(config, start_date, end_date).await;
+    match usage {
+        Ok(usage) => {
+            let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+
+            for data in usage {
+                let name = format!("amber/usage/{}", data.channel_identifier);
+                let reading = UsageReading {
+                    duration: data.duration,
+                    per_kwh: data.per_kwh,
+                    renewables: data.renewables,
+                    kwh: data.kwh,
+                    cost: data.cost,
+                    time: data.start_time.into(),
+                }
+                .into_query(name);
+
+                if let Err(e) = client.query(&reading).await {
+                    log::error!("Failed to write to influxdb: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get usage: {}", e);
+        }
+    }
 }
