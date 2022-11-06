@@ -1,7 +1,7 @@
 //! Common structs shared between robotica-backend and robotica-frontend for websockets
 use serde::{Deserialize, Serialize};
 
-use crate::{user::User, version::Version};
+use crate::{mqtt::MqttMessage, user::User, version::Version};
 
 /// Error message sent from the backend to the frontend
 #[derive(Debug, Deserialize, Serialize)]
@@ -43,14 +43,4 @@ pub enum WsCommand {
 
     /// Keep alive message.
     KeepAlive,
-}
-
-/// A MQTT message.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MqttMessage {
-    /// MQTT topic to send the message to.
-    pub topic: String,
-
-    /// MQTT message to send.
-    pub payload: String,
 }

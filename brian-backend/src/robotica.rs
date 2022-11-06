@@ -3,9 +3,9 @@ use std::fmt::Display;
 use log::info;
 use robotica_backend::entities::create_stateless_entity;
 use robotica_backend::entities::Sender;
-use robotica_backend::services::mqtt::Message;
 use robotica_backend::services::mqtt::Mqtt;
 use robotica_backend::services::mqtt::Subscriptions;
+use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -64,16 +64,15 @@ pub enum PowerErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-impl TryFrom<Message> for Power {
+impl TryFrom<MqttMessage> for Power {
     type Error = PowerErr;
 
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.payload_into_string()?;
-        match payload.as_str() {
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        match msg.payload.as_str() {
             "ON" => Ok(Power::On),
             "OFF" => Ok(Power::Off),
             "HARD_OFF" => Ok(Power::HardOff),
-            _ => Err(PowerErr::InvalidPowerState(payload)),
+            _ => Err(PowerErr::InvalidPowerState(msg.payload)),
         }
     }
 }
@@ -134,7 +133,7 @@ struct AudioMessage {
 }
 
 #[allow(dead_code)]
-pub fn string_to_message(str: &str, location: &str) -> Message {
+pub fn string_to_message(str: &str, location: &str) -> MqttMessage {
     let id = Id::new(location, "Robotica");
 
     let msg = AudioMessage {
@@ -142,12 +141,7 @@ pub fn string_to_message(str: &str, location: &str) -> Message {
         message: str.to_string(),
     };
     let payload = serde_json::to_string(&msg).unwrap();
-    Message::from_string(
-        &id.get_command_topic(&[]),
-        &payload,
-        false,
-        QoS::ExactlyOnce,
-    )
+    MqttMessage::new(&id.get_command_topic(&[]), payload, false, QoS::ExactlyOnce)
 }
 
 pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Sender<String> {

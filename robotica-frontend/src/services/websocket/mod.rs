@@ -17,9 +17,10 @@ use web_sys::window;
 use yew::Callback;
 
 use robotica_common::{
+    mqtt::MqttMessage,
     user::User,
     version::Version,
-    websocket::{MqttMessage, WsCommand, WsConnect, WsError},
+    websocket::{WsCommand, WsConnect, WsError},
 };
 
 /// A websocket command, sent to the websocket service.

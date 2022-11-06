@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use yew::prelude::*;
 
-use robotica_common::websocket::MqttMessage;
+use robotica_common::mqtt::MqttMessage;
 use yew_agent::Bridged;
 
 use crate::services::websocket::event_bus::{Command, EventBus};
@@ -20,7 +20,7 @@ pub struct Props {
 #[function_component(MqttLast)]
 pub fn mqtt_last<T>(props: &Props) -> Html
 where
-    T: TryFrom<String> + Display + 'static,
+    T: TryFrom<MqttMessage> + Display + 'static,
     T::Error: std::fmt::Debug + std::fmt::Display,
 {
     let message = use_state::<Option<T>, _>(|| None);
@@ -32,7 +32,7 @@ where
     let callback = {
         let message = message.clone();
         Callback::from(move |msg: MqttMessage| {
-            T::try_from(msg.payload).map_or_else(
+            T::try_from(msg).map_or_else(
                 |e| {
                     log::error!("Failed to parse message: {}", e);
                 },

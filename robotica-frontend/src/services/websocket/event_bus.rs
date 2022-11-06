@@ -1,5 +1,5 @@
 //! Event bus wrapper for `WebSocketService`
-use robotica_common::websocket::MqttMessage;
+use robotica_common::mqtt::MqttMessage;
 use std::collections::HashMap;
 use yew::Callback;
 use yew_agent::{Agent, AgentLink, Context, HandlerId};

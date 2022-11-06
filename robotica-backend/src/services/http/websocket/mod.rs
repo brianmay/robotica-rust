@@ -1,4 +1,4 @@
-use std::{str::Utf8Error, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::{
@@ -14,32 +14,14 @@ use tokio::{select, sync::mpsc};
 use tracing::{debug, error, info};
 
 use robotica_common::{
-    mqtt::QoS,
+    mqtt::MqttMessage,
     version::Version,
-    websocket::{MqttMessage, WsCommand, WsConnect, WsError},
+    websocket::{WsCommand, WsConnect, WsError},
 };
 
-use crate::services::mqtt::{self, topics::topic_matches_any};
+use crate::services::mqtt::topics::topic_matches_any;
 
 use super::{get_user, HttpConfig, User};
-
-impl From<MqttMessage> for mqtt::Message {
-    fn from(msg: MqttMessage) -> Self {
-        mqtt::Message::from_string(&msg.topic, &msg.payload, false, QoS::ExactlyOnce)
-    }
-}
-
-impl TryFrom<mqtt::Message> for MqttMessage {
-    type Error = Utf8Error;
-
-    fn try_from(msg: mqtt::Message) -> Result<Self, Self::Error> {
-        let payload = msg.payload_into_string()?;
-        Ok(MqttMessage {
-            topic: msg.topic,
-            payload,
-        })
-    }
-}
 
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(
@@ -160,8 +142,7 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
                         Ok(WsCommand::Send(msg)) => {
                             if check_topic_send_allowed(&msg.topic, &user, &config) {
                                 tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
-                                let message: mqtt::Message = msg.into();
-                                config.mqtt.try_send(message);
+                                config.mqtt.try_send(msg);
                             }
                         }
                         Ok(WsCommand::KeepAlive) => {
@@ -246,13 +227,6 @@ async fn process_subscribe(
         loop {
             select! {
                 Ok(msg) = rx_s.recv() => {
-                    let msg: MqttMessage = match msg.try_into() {
-                        Ok(msg) => msg,
-                        Err(e) => {
-                            error!("topic_task: Error converting message: {}", e);
-                            continue
-                        }
-                    };
                     if let Err(err) = sender.send(msg) {
                         error!("topic_task: Error sending MQTT message: {}, unsubscribing from {}", err, topic_clone);
                         break;

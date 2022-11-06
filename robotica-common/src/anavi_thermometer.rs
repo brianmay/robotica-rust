@@ -3,10 +3,18 @@ use std::fmt::Display;
 
 use serde::Deserialize;
 
+use crate::mqtt::MqttMessage;
+
+/// Get the reading for a measurement
+pub trait GetReading {
+    /// Get the reading for a measurement
+    fn get_reading(&self) -> f64;
+}
+
 /// A temperature reading from the Anavi Thermometer.
-#[derive(Deserialize)]
+#[derive(Deserialize, Copy, Clone)]
 pub struct Temperature {
-    temperature: f32,
+    temperature: f64,
 }
 
 impl Display for Temperature {
@@ -15,18 +23,24 @@ impl Display for Temperature {
     }
 }
 
-impl TryFrom<String> for Temperature {
+impl TryFrom<MqttMessage> for Temperature {
     type Error = serde_json::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        serde_json::from_str(&s)
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        serde_json::from_str(&msg.payload)
+    }
+}
+
+impl GetReading for Temperature {
+    fn get_reading(&self) -> f64 {
+        self.temperature
     }
 }
 
 /// A humidity reading from the Anavi Thermometer.
-#[derive(Deserialize)]
+#[derive(Deserialize, Copy, Clone)]
 pub struct Humidity {
-    humidity: f32,
+    humidity: f64,
 }
 
 impl Display for Humidity {
@@ -35,10 +49,16 @@ impl Display for Humidity {
     }
 }
 
-impl TryFrom<String> for Humidity {
+impl TryFrom<MqttMessage> for Humidity {
     type Error = serde_json::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        serde_json::from_str(&s)
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        serde_json::from_str(&msg.payload)
+    }
+}
+
+impl GetReading for Humidity {
+    fn get_reading(&self) -> f64 {
+        self.humidity
     }
 }

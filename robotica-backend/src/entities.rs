@@ -124,7 +124,7 @@ impl<T: Send + Clone> Receiver<T> {
     pub fn translate_into_stateless<U>(self) -> Receiver<U>
     where
         T: Send + 'static,
-        U: TryFrom<T> + Clone + Eq + Send + 'static,
+        U: TryFrom<T> + Clone + Send + 'static,
         <U as TryFrom<T>>::Error: Send + std::error::Error,
     {
         let name = format!("{} (translate_into_stateless)", self.name);

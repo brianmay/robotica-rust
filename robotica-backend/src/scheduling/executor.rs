@@ -12,10 +12,11 @@ use tokio::select;
 use tokio::time::Instant;
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
+use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::{Mark, Payload, Task};
 
 use crate::scheduling::sequencer::check_schedule;
-use crate::services::mqtt::{Message, Mqtt, Subscriptions};
+use crate::services::mqtt::{Mqtt, Subscriptions};
 use crate::spawn;
 
 use super::sequencer::Sequence;
@@ -23,14 +24,14 @@ use super::{classifier, scheduler, sequencer};
 
 /// Get the MQTT message for this task.
 #[must_use]
-pub fn get_task_messages(task: &Task) -> Vec<Message> {
+pub fn get_task_messages(task: &Task) -> Vec<MqttMessage> {
     let mut messages = Vec::with_capacity(task.topics.len());
     for topic in &task.topics {
         let payload = match &task.payload {
             Payload::String(s) => s.to_string(),
             Payload::Json(v) => v.to_string(),
         };
-        let message = Message::from_string(topic, &payload, task.retain, task.qos);
+        let message = MqttMessage::new(topic, payload, task.retain, task.qos);
         messages.push(message);
     }
     messages
@@ -107,14 +108,14 @@ impl<T: TimeZone + Debug> State<T> {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.hostname);
         let message = serde_json::to_string(&tags).unwrap();
-        let message = Message::from_string(&topic, &message, true, QoS::ExactlyOnce);
+        let message = MqttMessage::new(&topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
         let message = serde_json::to_string(&sequences).unwrap();
-        let message = Message::from_string(&topic, &message, true, QoS::ExactlyOnce);
+        let message = MqttMessage::new(&topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 

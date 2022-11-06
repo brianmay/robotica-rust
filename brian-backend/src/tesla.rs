@@ -1,14 +1,16 @@
 use crate::delays::{delay_input, IsActive};
 
-use super::State;
 use log::debug;
-use robotica_backend::entities::create_stateless_entity;
-use robotica_backend::services::mqtt::Message;
-use robotica_backend::spawn;
 use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
+
+use robotica_backend::entities::create_stateless_entity;
+use robotica_backend::spawn;
+use robotica_common::mqtt::MqttMessage;
+
+use super::State;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum TeslaDoorState {
@@ -25,14 +27,13 @@ impl Display for TeslaDoorState {
     }
 }
 
-impl TryFrom<Message> for TeslaDoorState {
+impl TryFrom<MqttMessage> for TeslaDoorState {
     type Error = TeslaStateErr;
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.payload_into_string()?;
-        match payload.as_str() {
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        match msg.payload.as_str() {
             "true" => Ok(TeslaDoorState::Open),
             "false" => Ok(TeslaDoorState::Closed),
-            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
+            _ => Err(TeslaStateErr::InvalidDoorState(msg.payload)),
         }
     }
 }
@@ -52,14 +53,13 @@ impl Display for TeslaUserIsPresent {
     }
 }
 
-impl TryFrom<Message> for TeslaUserIsPresent {
+impl TryFrom<MqttMessage> for TeslaUserIsPresent {
     type Error = TeslaStateErr;
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.payload_into_string()?;
-        match payload.as_str() {
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        match msg.payload.as_str() {
             "true" => Ok(TeslaUserIsPresent::UserPresent),
             "false" => Ok(TeslaUserIsPresent::UserNotPresent),
-            _ => Err(TeslaStateErr::InvalidDoorState(payload)),
+            _ => Err(TeslaStateErr::InvalidDoorState(msg.payload)),
         }
     }
 }

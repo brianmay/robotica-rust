@@ -4,8 +4,8 @@ use log::error;
 use yew::prelude::*;
 use yew_agent::Bridged;
 
+use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Tags;
-use robotica_common::websocket::MqttMessage;
 use robotica_frontend::services::websocket::event_bus::{Command, EventBus};
 
 use super::require_connection::RequireConnection;

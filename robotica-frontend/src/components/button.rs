@@ -1,7 +1,7 @@
 //! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
-use robotica_common::websocket::MqttMessage;
+use robotica_common::mqtt::MqttMessage;
 use yew_agent::{Bridge, Bridged};
 
 use crate::services::{
@@ -279,6 +279,7 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
                     let msg = MqttMessage {
                         topic: c.get_topic().to_string(),
                         payload: c.get_payload().to_string(),
+                        ..Default::default()
                     };
                     self.events.send(Command::Send(msg));
                 }

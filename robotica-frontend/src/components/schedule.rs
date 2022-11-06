@@ -2,7 +2,7 @@
 use log::error;
 use yew::prelude::*;
 
-use robotica_common::{scheduler::Sequence, websocket::MqttMessage};
+use robotica_common::{mqtt::MqttMessage, scheduler::Sequence};
 use yew_agent::Bridged;
 
 use crate::services::websocket::event_bus::{Command, EventBus};

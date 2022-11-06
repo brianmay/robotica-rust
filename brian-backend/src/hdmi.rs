@@ -3,8 +3,8 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::select;
 
-use robotica_backend::{devices::hdmi::Command, entities, services::mqtt::Message, spawn};
-use robotica_common::mqtt::QoS;
+use robotica_backend::{devices::hdmi::Command, entities, spawn};
+use robotica_common::mqtt::{MqttMessage, QoS};
 
 use crate::{robotica::Id, State};
 
@@ -25,12 +25,11 @@ pub enum CommandErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-impl TryFrom<Message> for RoboticaCommand {
+impl TryFrom<MqttMessage> for RoboticaCommand {
     type Error = CommandErr;
 
-    fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let payload: String = msg.payload_into_string()?;
-        let mark: RoboticaCommand = serde_json::from_str(&payload)?;
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let mark: RoboticaCommand = serde_json::from_str(&msg.payload)?;
         Ok(mark)
     }
 }
@@ -82,7 +81,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
                         let output = format!("output{}", output + 1);
                         let topic = id.get_state_topic(&output.to_string());
                         let payload = input;
-                        let message = Message::from_string(&topic, &payload, true, QoS::AtLeastOnce);
+                        let message = MqttMessage::new(&topic, payload, true, QoS::AtLeastOnce);
                         mqtt.try_send(message);
                     }
                 },

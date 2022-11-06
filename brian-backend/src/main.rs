@@ -1,4 +1,5 @@
 mod delays;
+mod environment_monitor;
 mod hdmi;
 mod robotica;
 mod tesla;
@@ -47,6 +48,10 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         .expect("HTTP server failed");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
+
+    environment_monitor::run(&mut state).unwrap_or_else(|err| {
+        panic!("Environment monitor failed: {err}");
+    });
 
     executor(&mut state.subscriptions, state.mqtt).unwrap_or_else(|err| {
         panic!("Failed to start executor: {}", err);
