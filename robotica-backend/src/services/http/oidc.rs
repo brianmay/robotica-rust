@@ -8,7 +8,7 @@ pub struct Config {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_uri: String,
-    pub scopes: Vec<String>,
+    pub scopes: String,
 }
 
 pub struct Client {
@@ -55,10 +55,8 @@ impl Client {
     }
 
     pub fn get_auth_url(&self, origin_url: &str) -> String {
-        let scopes = self.config.scopes.join(" ");
-
         let auth_url = self.oidc_client.auth_url(&Options {
-            scope: Some(scopes),
+            scope: Some(self.config.scopes.to_string()),
             state: Some(origin_url.to_string()),
             ..Default::default()
         });

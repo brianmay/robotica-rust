@@ -93,7 +93,7 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
         client_id: get_env("OIDC_CLIENT_ID")?,
         client_secret: get_env("OIDC_CLIENT_SECRET")?,
         redirect_uri: redirect,
-        scopes: vec!["openid".to_string(), "profile".to_string()],
+        scopes: get_env("OIDC_SCOPES")?,
     };
 
     let client = Client::new(config).await?;
