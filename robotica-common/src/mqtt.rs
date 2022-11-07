@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::datetime::{utc_now, DateTime};
 
 /// The `QoS` level for a MQTT message.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum QoS {
     /// At most once
     AtMostOnce,
@@ -16,6 +16,37 @@ pub enum QoS {
 
     /// Exactly once
     ExactlyOnce,
+}
+
+impl Serialize for QoS {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            QoS::AtMostOnce => serializer.serialize_u8(0),
+            QoS::AtLeastOnce => serializer.serialize_u8(1),
+            QoS::ExactlyOnce => serializer.serialize_u8(2),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for QoS {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u8::deserialize(deserializer)?;
+        match value {
+            0 => Ok(QoS::AtMostOnce),
+            1 => Ok(QoS::AtLeastOnce),
+            2 => Ok(QoS::ExactlyOnce),
+            _ => Err(serde::de::Error::custom(format!(
+                "Invalid QoS value: {}",
+                value
+            ))),
+        }
+    }
 }
 
 /// A MQTT message.
@@ -101,5 +132,41 @@ impl MqttMessage {
             qos,
             instant: utc_now(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn test_serialize_qos() {
+        let qos = QoS::AtMostOnce;
+        let serialized = serde_json::to_string(&qos).unwrap();
+        assert_eq!(serialized, "0");
+
+        let qos = QoS::AtLeastOnce;
+        let serialized = serde_json::to_string(&qos).unwrap();
+        assert_eq!(serialized, "1");
+
+        let qos = QoS::ExactlyOnce;
+        let serialized = serde_json::to_string(&qos).unwrap();
+        assert_eq!(serialized, "2");
+    }
+
+    #[test]
+    fn test_deserialize_qos() {
+        let qos: QoS = serde_json::from_str("0").unwrap();
+        assert_eq!(qos, QoS::AtMostOnce);
+
+        let qos: QoS = serde_json::from_str("1").unwrap();
+        assert_eq!(qos, QoS::AtLeastOnce);
+
+        let qos: QoS = serde_json::from_str("2").unwrap();
+        assert_eq!(qos, QoS::ExactlyOnce);
+
+        let err: Result<QoS, _> = serde_json::from_str("3");
+        assert!(err.is_err());
     }
 }
