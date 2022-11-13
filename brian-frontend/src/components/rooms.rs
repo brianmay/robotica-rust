@@ -17,6 +17,7 @@ pub fn brian_room() -> Html {
     let speaker_icon = Icon::new("speaker");
     let fan_icon = Icon::new("fan");
     let night_icon = Icon::new("night");
+    let trumpet_icon = Icon::new("trumpet");
 
     html!(
         <RequireConnection>
@@ -43,6 +44,7 @@ pub fn brian_room() -> Html {
             <div class="buttons">
                 <Button<SwitchProps> name={"Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
                 <Button<SwitchProps> name={"Night"} topic_substr={"Brian/Night"} action={Action::Toggle} icon={night_icon} />
+                <Button<SwitchProps> name={"MSG"} topic_substr={"Brian/Messages"} action={Action::Toggle} icon={trumpet_icon} />
             </div>
         </RequireConnection>
     )
@@ -147,6 +149,7 @@ pub fn dining_room() -> Html {
     let light_icon = Icon::new("light");
     let tv_icon = Icon::new("tv");
     let select_icon = Icon::new("select");
+    let trumpet_icon = Icon::new("trumpet");
 
     html!(
         <RequireConnection>
@@ -159,6 +162,7 @@ pub fn dining_room() -> Html {
             <h2>{"Switches"}</h2>
             <div class="buttons">
                 <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
+                <Button<SwitchProps> name={"MSG"} topic_substr={"Dining/Messages"} action={Action::Toggle} icon={trumpet_icon} />
             </div>
 
             <h2>{"TV"}</h2>

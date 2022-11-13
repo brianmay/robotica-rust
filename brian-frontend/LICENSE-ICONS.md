@@ -14,3 +14,4 @@ assets/static/images/tv\* - [television](https://www.svgrepo.com/svg/158744/tele
 assets/static/images/speaker\* - [music-speaker-with-sound](https://www.svgrepo.com/svg/98091/music-speaker-with-sound)
 assets/static/images/night\* - [night](https://www.svgrepo.com/svg/115325/night)
 assets/static/images/schedule\* - [schedule](https://www.svgrepo.com/svg/332531/schedule)
+assets/static/images/trumpet\* - [fanfare](https://www.svgrepo.com/svg/224457/fanfare)
