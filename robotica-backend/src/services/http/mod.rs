@@ -18,6 +18,7 @@ use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::StatusCode;
+use serde::de::Error;
 use thiserror::Error;
 use tokio::fs;
 use tower::{ServiceBuilder, ServiceExt};
@@ -139,11 +140,20 @@ fn set_user(
     session: &mut WritableSession,
     user_info: &openid::Userinfo,
 ) -> Result<(), serde_json::Error> {
-    session.insert("user", &user_info.name)
+    let closure = || {
+        let sub = user_info.sub.clone()?;
+        let name = user_info.name.clone()?;
+        let email = user_info.email.clone()?;
+        let user = User { sub, name, email };
+        Some(user)
+    };
+
+    let user = closure().ok_or_else(|| serde_json::Error::custom("Missing user info"))?;
+    session.insert("user", &user)
 }
 
 fn get_user(session: &ReadableSession) -> Option<User> {
-    session.get::<String>("user").map(|name| User { name })
+    session.get::<User>("user")
 }
 
 const ALLOWED_SUFFIXES: [&str; 8] = [

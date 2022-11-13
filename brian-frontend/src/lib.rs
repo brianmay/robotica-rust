@@ -1,7 +1,5 @@
 #![allow(clippy::let_unit_value)]
 
-use std::{cell::RefCell, rc::Rc};
-
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -89,42 +87,13 @@ fn footer() -> Html {
     }
 }
 
-pub type User = Rc<UserInner>;
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct UserInner {
-    pub name: RefCell<String>,
-}
-
-#[function_component(Test)]
-fn test() -> Html {
-    let user = use_context::<User>().expect("No context found.");
-    let name = user.name.borrow();
-
-    html! {
-        <div>
-        <h1>{ format!("Hello {}", name) }</h1>
-        <p>{ "It is me again!"}</p>
-        <p>{ "I am a paragraph."}</p>
-        </div>
-    }
-}
-
 #[function_component(App)]
 fn app() -> Html {
-    let ctx = use_state(|| {
-        Rc::new(UserInner {
-            name: RefCell::new("Anonymous".into()),
-        })
-    });
-
     html! {
         <>
-            <ContextProvider<User> context={(*ctx).clone()}>
-                <BrowserRouter>
-                   <Switch<Route> render={Switch::render(switch)}/>
-                </BrowserRouter>
-            </ContextProvider<User>>
+            <BrowserRouter>
+                <Switch<Route> render={Switch::render(switch)}/>
+            </BrowserRouter>
         </>
     }
 }
