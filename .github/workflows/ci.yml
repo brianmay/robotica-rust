@@ -38,3 +38,5 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
     needs:
       - test
+    with:
+      deploy_iot: true
