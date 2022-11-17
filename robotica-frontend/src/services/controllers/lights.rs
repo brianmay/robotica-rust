@@ -2,24 +2,16 @@
 
 use log::error;
 
-use super::{
-    Action, Command, ConfigTrait, ControllerTrait, DisplayState, Icon, Label, Subscription,
-};
+use super::{Action, Command, ConfigTrait, ControllerTrait, DisplayState, Label, Subscription};
 
 /// The configuration for a light controller
 #[derive(Clone)]
 pub struct Config {
-    /// The name of the light
-    pub name: String,
-
     /// The topic substring for the light
     pub topic_substr: String,
 
     /// The action to take when the light is clicked
     pub action: Action,
-
-    /// The icon to display for the light
-    pub icon: Icon,
 
     /// The scene to use for the light
     pub scene: String,
@@ -140,14 +132,6 @@ impl ControllerTrait for Controller {
         };
 
         vec![command]
-    }
-
-    fn get_icon(&self) -> Icon {
-        self.config.icon.clone()
-    }
-
-    fn get_name(&self) -> String {
-        self.config.name.clone()
     }
 
     fn get_action(&self) -> Action {

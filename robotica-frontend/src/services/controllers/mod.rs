@@ -53,7 +53,7 @@ pub struct Subscription {
     pub label: Label,
 }
 
-/// The ddisplay state of a button
+/// The display state of a button
 #[allow(dead_code)]
 #[derive(std::cmp::Eq, std::cmp::PartialEq, Clone, Debug)]
 pub enum DisplayState {
@@ -98,34 +98,6 @@ pub trait ConfigTrait {
     fn create_controller(&self) -> Self::Controller;
 }
 
-/// Define an Icon for a button
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Icon {
-    name: String,
-}
-
-impl Icon {
-    /// Create a new icon
-    #[must_use]
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-        }
-    }
-
-    /// Get the URL to the icon
-    #[must_use]
-    pub fn to_href(&self, state: &DisplayState) -> String {
-        let version = match state {
-            DisplayState::HardOff | DisplayState::Error | DisplayState::Unknown => "error",
-            DisplayState::On => "on",
-            DisplayState::Off => "off",
-            DisplayState::OnOther => "other",
-        };
-        format!("/images/{}_{}.svg", self.name, version)
-    }
-}
-
 /// The trait to define a controller
 pub trait ControllerTrait {
     /// Get the subscriptions for this controller
@@ -143,11 +115,8 @@ pub trait ControllerTrait {
     /// Get the commands to be executed when button is pressed
     fn get_press_commands(&self) -> Vec<Command>;
 
-    /// Get the icon for this controller
-    fn get_icon(&self) -> Icon;
-
     /// Get the name of this controller
-    fn get_name(&self) -> String;
+    // fn get_name(&self) -> String;
 
     /// Get the action to perform when the button is pressed
     fn get_action(&self) -> Action;

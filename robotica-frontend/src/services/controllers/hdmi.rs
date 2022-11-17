@@ -1,23 +1,17 @@
 //! A robotica HDMI controller
 use super::{
     get_display_state_for_action, Action, Command, ConfigTrait, ControllerTrait, DisplayState,
-    Icon, Label, Subscription,
+    Label, Subscription,
 };
 
 /// The configuration for a switch controller
 #[derive(Clone)]
 pub struct Config {
-    /// The name of the switch
-    pub name: String,
-
     /// The topic substring for the switch
     pub topic_substr: String,
 
     /// The action to take when the switch is clicked
     pub action: Action,
-
-    /// The icon to display for the switch
-    pub icon: Icon,
 
     /// The input of the switch
     pub input: u8,
@@ -117,14 +111,6 @@ impl ControllerTrait for Controller {
         let command = Command { topic, payload };
 
         vec![command]
-    }
-
-    fn get_icon(&self) -> Icon {
-        self.config.icon.clone()
-    }
-
-    fn get_name(&self) -> String {
-        self.config.name.clone()
     }
 
     fn get_action(&self) -> Action {

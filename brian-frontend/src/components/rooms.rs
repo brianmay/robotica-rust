@@ -1,10 +1,11 @@
+use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
     Button, HdmiProps, LightProps, MusicProps, SwitchProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
-use robotica_frontend::services::controllers::{Action, Icon};
+use robotica_frontend::services::controllers::Action;
 
 use robotica_common::anavi_thermometer as anavi;
 use robotica_common::zigbee2mqtt;

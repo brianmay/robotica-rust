@@ -8,13 +8,19 @@ use crate::services::{
     controllers::{
         get_display_state_for_action, hdmi,
         lights::{self, Priority},
-        music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Icon, Label,
+        music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
+    icons::Icon,
     websocket::{
         event_bus::{Command, EventBus},
         WsEvent,
     },
 };
+
+trait ButtonPropsTrait {
+    fn get_icon(&self) -> &Icon;
+    fn get_name(&self) -> &str;
+}
 
 /// The yew properties for a light button.
 #[derive(Clone, Properties, Eq, PartialEq)]
@@ -44,15 +50,23 @@ impl ConfigTrait for LightProps {
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
         let config = lights::Config {
-            name: props.name,
             topic_substr: props.topic_substr,
             action: props.action,
-            icon: props.icon,
             scene: props.scene,
             priority: props.priority,
         };
 
         config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for LightProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 }
 
@@ -81,14 +95,22 @@ impl ConfigTrait for MusicProps {
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
         let config = music::Config {
-            name: props.name,
             topic_substr: props.topic_substr,
             action: props.action,
-            icon: props.icon,
             play_list: props.play_list,
         };
 
         config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for MusicProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 }
 
@@ -114,13 +136,21 @@ impl ConfigTrait for SwitchProps {
     fn create_controller(&self) -> Self::Controller {
         let config = (*self).clone();
         let config = switch::Config {
-            name: config.name,
             topic_substr: config.topic_substr,
             action: config.action,
-            icon: config.icon,
         };
 
         config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for SwitchProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 }
 
@@ -152,15 +182,23 @@ impl ConfigTrait for HdmiProps {
     fn create_controller(&self) -> Self::Controller {
         let config = (*self).clone();
         let config = hdmi::Config {
-            name: config.name,
             topic_substr: config.topic_substr,
             action: config.action,
-            icon: config.icon,
             input: config.input,
             output: config.output,
         };
 
         config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for HdmiProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 }
 
@@ -185,17 +223,15 @@ pub enum Message {
 impl From<LightProps> for lights::Config {
     fn from(props: LightProps) -> Self {
         Self {
-            name: props.name.clone(),
             topic_substr: props.topic_substr,
             action: props.action,
-            icon: props.icon,
             scene: props.scene,
             priority: props.priority,
         }
     }
 }
 
-impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
+impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component for Button<T> {
     type Message = Message;
     type Properties = T;
 
@@ -229,8 +265,8 @@ impl<T: yew::Properties + ConfigTrait + 'static> Component for Button<T> {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let click_callback = ctx.link().callback(|_| Message::Click);
 
-        let icon = self.controller.get_icon();
-        let name = self.controller.get_name();
+        let icon = ctx.props().get_icon();
+        let name = ctx.props().get_name();
         let action = self.controller.get_action();
         let display_state = self.controller.get_display_state();
         let display_state = get_display_state_for_action(display_state, &action);
