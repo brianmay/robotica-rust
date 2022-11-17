@@ -12,6 +12,7 @@
    x="0px"
    y="0px"
    viewBox="0 0 226.081 226.081"
+   preserveAspectRatio="xMidYMid meet"
    style="enable-background:new 0 0 226.081 226.081;"
    xml:space="preserve"
    sodipodi:docname="night_error.svg"
@@ -47,8 +48,8 @@
    id="path2"
    style="fill:#ffffff;fill-opacity:1"
    sodipodi:nodetypes="cscscsssccc" />
-	
-	
+
+
 </g>
 <g
    id="g10">

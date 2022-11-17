@@ -12,6 +12,7 @@
    x="0px"
    y="0px"
    viewBox="0 0 512.349 512.349"
+   preserveAspectRatio="xMidYMid meet"
    style="enable-background:new 0 0 512.349 512.349;"
    xml:space="preserve"
    sodipodi:docname="trumpet_other.svg"
@@ -55,7 +56,7 @@
    id="path3878"
    style="fill:#ffffff;fill-opacity:1"
    sodipodi:nodetypes="cccccssssccccssssccccsscscccccscccccscccccccccsccccccccccccccccccccccccccccssssccscscsccssssccccccccccc" />
-			
+
 		</g>
 	</g>
 </g>

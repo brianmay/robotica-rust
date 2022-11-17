@@ -10,6 +10,7 @@
    class="h-6 w-6"
    fill="none"
    viewBox="0 0 24 24"
+   preserveAspectRatio="xMidYMid meet"
    stroke="currentColor"
    version="1.1"
    id="svg2212"
