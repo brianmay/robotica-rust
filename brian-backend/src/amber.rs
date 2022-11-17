@@ -43,6 +43,11 @@ struct UsageReading {
     time: chrono::DateTime<Utc>,
 }
 
+const HOURS_TO_SECONDS: u16 = 3600;
+fn hours(num: u16) -> u16 {
+    num * HOURS_TO_SECONDS
+}
+
 /// Get the current electricity price from Amber
 ///
 /// # Errors
@@ -62,14 +67,14 @@ pub fn run() -> Result<(), AmberError> {
     };
 
     spawn(async move {
-        let nem_timezone = FixedOffset::east(10 * 3600);
+        let nem_timezone = FixedOffset::east(hours(10).into());
 
         // Update prices every 5 minutes
         let mut price_interval = interval(tokio::time::Duration::from_secs(300));
         price_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         // Update usage once an hour
-        let mut usage_interval = interval(tokio::time::Duration::from_secs(3600));
+        let mut usage_interval = interval(tokio::time::Duration::from_secs(hours(1).into()));
         usage_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
