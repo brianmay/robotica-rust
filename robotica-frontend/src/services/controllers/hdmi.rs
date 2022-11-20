@@ -1,7 +1,7 @@
 //! A robotica HDMI controller
 use super::{
-    get_display_state_for_action, Action, Command, ConfigTrait, ControllerTrait, DisplayState,
-    Label, Subscription,
+    get_display_state_for_action, get_press_on_or_off, Action, Command, ConfigTrait,
+    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
 /// The configuration for a switch controller
@@ -107,10 +107,15 @@ impl ControllerTrait for Controller {
             "output": self.config.output,
         });
 
-        let topic = format!("command/{}", self.config.topic_substr);
-        let command = Command { topic, payload };
-
-        vec![command]
+        let display_state = self.get_display_state();
+        if let TurnOnOff::TurnOn = get_press_on_or_off(display_state, self.config.action) {
+            let topic = format!("command/{}", self.config.topic_substr);
+            let command = Command { topic, payload };
+            vec![command]
+        } else {
+            // Not possible to turn off an input, so do nothing.
+            vec![]
+        }
     }
 
     fn get_action(&self) -> Action {

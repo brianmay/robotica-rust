@@ -2,7 +2,10 @@
 
 use log::error;
 
-use super::{Action, Command, ConfigTrait, ControllerTrait, DisplayState, Label, Subscription};
+use super::{
+    get_press_on_or_off, Action, Command, ConfigTrait, ControllerTrait, DisplayState, Label,
+    Subscription, TurnOnOff,
+};
 
 /// The configuration for a light controller
 #[derive(Clone)]
@@ -113,16 +116,15 @@ impl ControllerTrait for Controller {
             "priority": self.config.priority,
         });
 
-        match self.config.action {
-            Action::TurnOn => {}
-            Action::TurnOff => message["action"] = serde_json::json!("turn_off"),
-            Action::Toggle => {
-                let display_state = self.get_display_state();
-                if display_state == DisplayState::On {
-                    message["action"] = serde_json::json!("turn_off");
-                };
-            }
+        let display_state = self.get_display_state();
+        let action = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => None,
+            TurnOnOff::TurnOff => Some("turn_off"),
         };
+
+        if let Some(action) = action {
+            message["action"] = serde_json::json!(action);
+        }
 
         let topic = format!("command/{}", self.config.topic_substr);
         let command = Command {

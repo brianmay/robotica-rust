@@ -2,8 +2,8 @@
 use log::error;
 
 use super::{
-    get_display_state_for_action, Action, Command, ConfigTrait, ControllerTrait, DisplayState,
-    Label, Subscription,
+    get_display_state_for_action, get_press_on_or_off, Action, Command, ConfigTrait,
+    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
 /// The configuration for a switch controller
@@ -80,22 +80,14 @@ impl ControllerTrait for Controller {
     }
 
     fn get_press_commands(&self) -> Vec<Command> {
-        let mut payload = serde_json::json!({});
-
-        match self.config.action {
-            Action::TurnOn => payload["action"] = serde_json::json!("turn_on"),
-            Action::TurnOff => payload["action"] = serde_json::json!("turn_off"),
-            Action::Toggle => {
-                let display_state = self.get_display_state();
-                if display_state == DisplayState::On {
-                    payload["action"] = serde_json::json!("turn_off");
-                } else {
-                    payload["action"] = serde_json::json!("turn_on");
-                }
-            }
+        let display_state = self.get_display_state();
+        let action = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => "turn_off",
+            TurnOnOff::TurnOff => "turn_on",
         };
 
         let topic = format!("command/{}", self.config.topic_substr);
+        let payload = serde_json::json!({ action: action });
         let command = Command { topic, payload };
 
         vec![command]

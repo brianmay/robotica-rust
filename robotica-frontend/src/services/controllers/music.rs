@@ -2,8 +2,8 @@
 use log::error;
 
 use super::{
-    get_display_state_for_action, Action, Command, ConfigTrait, ControllerTrait, DisplayState,
-    Label, Subscription,
+    get_display_state_for_action, get_press_on_or_off, Action, Command, ConfigTrait,
+    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
 /// The configuration for a music controller
@@ -93,23 +93,18 @@ impl ControllerTrait for Controller {
     }
 
     fn get_press_commands(&self) -> Vec<Command> {
-        let play = match self.config.action {
-            Action::TurnOn => true,
-            Action::TurnOff => false,
-            Action::Toggle => {
-                let display_state = self.get_display_state();
-                !matches!(display_state, DisplayState::On)
+        let display_state = self.get_display_state();
+        let payload = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => {
+                serde_json::json!({
+                    "music": {"play_list": self.config.play_list}
+                })
             }
-        };
-
-        let payload = if play {
-            serde_json::json!({
-                "music": {"play_list": self.config.play_list}
-            })
-        } else {
-            serde_json::json!({
-                "music": {"stop": true}
-            })
+            TurnOnOff::TurnOff => {
+                serde_json::json!({
+                    "music": {"stop": true}
+                })
+            }
         };
 
         let topic = format!("command/{}", self.config.topic_substr);

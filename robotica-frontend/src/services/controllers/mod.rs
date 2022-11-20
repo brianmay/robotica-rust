@@ -55,7 +55,7 @@ pub struct Subscription {
 
 /// The display state of a button
 #[allow(dead_code)]
-#[derive(std::cmp::Eq, std::cmp::PartialEq, Clone, Debug)]
+#[derive(std::cmp::Eq, std::cmp::PartialEq, Copy, Clone, Debug)]
 pub enum DisplayState {
     /// The device is off and cannot be turned on
     HardOff,
@@ -133,6 +133,26 @@ const fn get_display_state_for_action(state: DisplayState, action: Action) -> Di
             DisplayState::Unknown => DisplayState::Unknown,
             DisplayState::On | DisplayState::AutoOff => DisplayState::Off,
             DisplayState::Off => DisplayState::On,
+        },
+    }
+}
+
+enum TurnOnOff {
+    TurnOn,
+    TurnOff,
+}
+
+#[must_use]
+const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
+    match action {
+        Action::TurnOn => TurnOnOff::TurnOn,
+        Action::TurnOff => TurnOnOff::TurnOff,
+        Action::Toggle => match state {
+            DisplayState::HardOff
+            | DisplayState::Error
+            | DisplayState::Unknown
+            | DisplayState::Off => TurnOnOff::TurnOn,
+            DisplayState::On | DisplayState::AutoOff => TurnOnOff::TurnOff,
         },
     }
 }
