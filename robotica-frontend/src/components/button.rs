@@ -8,7 +8,7 @@ use crate::services::{
     controllers::{
         hdmi,
         lights::{self, Priority},
-        music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
+        music, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
     icons::Icon,
     websocket::{
@@ -145,6 +145,51 @@ impl ConfigTrait for SwitchProps {
 }
 
 impl ButtonPropsTrait for SwitchProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+/// The yew properties for a switch button.
+#[derive(Clone, Properties, Eq, PartialEq)]
+pub struct TasmotaProps {
+    /// The name of the switch button.
+    pub name: String,
+
+    /// The base string that all topics are derived from.
+    pub topic_substr: String,
+
+    /// The action that the button should perform.
+    pub action: Action,
+
+    /// The icon to display on the button.
+    pub icon: Icon,
+
+    /// The postfix to append to the power topic.
+    #[prop_or_default]
+    pub power_postfix: String,
+}
+
+impl ConfigTrait for TasmotaProps {
+    type Controller = tasmota::Controller;
+
+    fn create_controller(&self) -> Self::Controller {
+        let config = (*self).clone();
+        let config = tasmota::Config {
+            topic_substr: config.topic_substr,
+            action: config.action,
+            power_postfix: config.power_postfix,
+        };
+
+        config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for TasmotaProps {
     fn get_icon(&self) -> &Icon {
         &self.icon
     }
@@ -308,12 +353,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
         match msg {
             Message::Click => {
                 let commands = self.controller.get_press_commands();
-                for c in commands {
-                    let msg = MqttMessage {
-                        topic: c.get_topic().to_string(),
-                        payload: c.get_payload().to_string(),
-                        ..Default::default()
-                    };
+                for msg in commands {
                     self.events.send(Command::Send(msg));
                 }
             }

@@ -169,12 +169,14 @@ async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
 
 const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
     "state/#",
+    "stat/#",
+    "tele/#",
     "schedule/#",
     "robotica/#",
     "zigbee2mqtt/#",
     "workgroup/#",
 ];
-const ALLOWED_SEND_TOPICS: &[&str] = &["command/#"];
+const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#"];
 
 #[must_use]
 fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {

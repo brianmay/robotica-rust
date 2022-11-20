@@ -133,6 +133,21 @@ impl MqttMessage {
             instant: utc_now(),
         }
     }
+
+    /// Create a new message from a json payload.
+    ///
+    /// # Errors
+    ///
+    /// This function will fail if the payload cannot be serialized to json.
+    pub fn from_json(
+        topic: &str,
+        payload: &serde_json::Value,
+        retain: bool,
+        qos: QoS,
+    ) -> Result<Self, serde_json::Error> {
+        let payload = serde_json::to_string(payload)?;
+        Ok(Self::new(topic, payload, retain, qos))
+    }
 }
 
 #[cfg(test)]

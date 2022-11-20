@@ -2,7 +2,7 @@ use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
-    Button, HdmiProps, LightProps, MusicProps, SwitchProps,
+    Button, HdmiProps, LightProps, MusicProps, SwitchProps, TasmotaProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
 use robotica_frontend::services::controllers::Action;
@@ -162,7 +162,7 @@ pub fn dining_room() -> Html {
 
             <h2>{"Switches"}</h2>
             <div class="buttons">
-                <Button<SwitchProps> name={"TV"} topic_substr={"Dining/TvSwitch"} action={Action::Toggle} icon={tv_icon} />
+                <Button<TasmotaProps> name={"TV"} topic_substr={"tasmota_31E56F"} action={Action::Toggle} icon={tv_icon} />
                 <Button<SwitchProps> name={"MSG"} topic_substr={"Dining/Messages"} action={Action::Toggle} icon={trumpet_icon} />
             </div>
 

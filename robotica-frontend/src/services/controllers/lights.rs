@@ -1,9 +1,10 @@
 //! A robotica light controller
 
 use log::error;
+use robotica_common::mqtt::MqttMessage;
 
 use super::{
-    get_press_on_or_off, Action, Command, ConfigTrait, ControllerTrait, DisplayState, Label,
+    get_press_on_or_off, json_command, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
     Subscription, TurnOnOff,
 };
 
@@ -110,8 +111,8 @@ impl ControllerTrait for Controller {
         }
     }
 
-    fn get_press_commands(&self) -> Vec<Command> {
-        let mut message = serde_json::json!({
+    fn get_press_commands(&self) -> Vec<MqttMessage> {
+        let mut payload = serde_json::json!({
             "scene": self.config.scene,
             "priority": self.config.priority,
         });
@@ -123,16 +124,11 @@ impl ControllerTrait for Controller {
         };
 
         if let Some(action) = action {
-            message["action"] = serde_json::json!(action);
+            payload["action"] = serde_json::json!(action);
         }
 
         let topic = format!("command/{}", self.config.topic_substr);
-        let command = Command {
-            topic,
-            payload: message,
-        };
-
-        vec![command]
+        json_command(&topic, &payload).map_or_else(Vec::new, |command| vec![command])
     }
 
     fn get_action(&self) -> Action {

@@ -1,33 +1,17 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
+use log::error;
+use robotica_common::mqtt::MqttMessage;
+
 pub mod hdmi;
 pub mod lights;
 pub mod music;
 pub mod switch;
+pub mod tasmota;
 
 /// A label is used to identity an incoming MQTT message
 pub type Label = u32;
-
-/// An outgoing MQTT message from a controller
-pub struct Command {
-    topic: String,
-    payload: serde_json::Value,
-}
-
-impl Command {
-    /// Get the topic of a command
-    #[must_use]
-    pub fn get_topic(&self) -> &str {
-        &self.topic
-    }
-
-    /// Get the payload of a command
-    #[must_use]
-    pub fn get_payload(&self) -> String {
-        self.payload.to_string()
-    }
-}
 
 /// The action to happen when a button is pressed.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -113,7 +97,7 @@ pub trait ControllerTrait {
     fn get_display_state(&self) -> DisplayState;
 
     /// Get the commands to be executed when button is pressed
-    fn get_press_commands(&self) -> Vec<Command>;
+    fn get_press_commands(&self) -> Vec<MqttMessage>;
 
     /// Get the action to perform when the button is pressed
     fn get_action(&self) -> Action;
@@ -152,4 +136,22 @@ const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
             DisplayState::On | DisplayState::AutoOff => TurnOnOff::TurnOff,
         },
     }
+}
+
+#[must_use]
+fn json_command(topic: &str, payload: &serde_json::Value) -> Option<MqttMessage> {
+    let Ok(msg) = MqttMessage::from_json(topic, payload, false, robotica_common::mqtt::QoS::ExactlyOnce) else {
+        error!("Failed to create MQTT message for topic {}", topic);
+        return None;
+    };
+    Some(msg)
+}
+
+fn string_command(topic: &str, payload: &str) -> MqttMessage {
+    MqttMessage::new(
+        topic,
+        payload.to_string(),
+        false,
+        robotica_common::mqtt::QoS::ExactlyOnce,
+    )
 }

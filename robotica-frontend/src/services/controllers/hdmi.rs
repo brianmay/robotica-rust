@@ -1,6 +1,8 @@
 //! A robotica HDMI controller
+use robotica_common::mqtt::MqttMessage;
+
 use super::{
-    get_display_state_for_action, get_press_on_or_off, Action, Command, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, json_command, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -101,7 +103,7 @@ impl ControllerTrait for Controller {
         get_display_state_for_action(state, action)
     }
 
-    fn get_press_commands(&self) -> Vec<Command> {
+    fn get_press_commands(&self) -> Vec<MqttMessage> {
         let payload = serde_json::json!({
             "input": self.config.input,
             "output": self.config.output,
@@ -110,8 +112,7 @@ impl ControllerTrait for Controller {
         let display_state = self.get_display_state();
         if let TurnOnOff::TurnOn = get_press_on_or_off(display_state, self.config.action) {
             let topic = format!("command/{}", self.config.topic_substr);
-            let command = Command { topic, payload };
-            vec![command]
+            json_command(&topic, &payload).map_or_else(Vec::new, |command| vec![command])
         } else {
             // Not possible to turn off an input, so do nothing.
             vec![]
