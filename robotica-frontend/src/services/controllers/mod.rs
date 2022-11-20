@@ -124,7 +124,7 @@ pub trait ControllerTrait {
 
 /// Change the display state based on the action for this controller
 #[must_use]
-const fn get_display_state_for_action(state: DisplayState, action: &Action) -> DisplayState {
+const fn get_display_state_for_action(state: DisplayState, action: Action) -> DisplayState {
     match action {
         Action::TurnOn | Action::Toggle => state,
         Action::TurnOff => match state {

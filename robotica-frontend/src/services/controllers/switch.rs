@@ -75,7 +75,7 @@ impl ControllerTrait for Controller {
             _ => DisplayState::Error,
         };
 
-        let action = &self.config.action;
+        let action = self.config.action;
         get_display_state_for_action(state, action)
     }
 
