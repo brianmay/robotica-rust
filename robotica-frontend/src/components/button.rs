@@ -269,15 +269,14 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
         let name = ctx.props().get_name();
         let display_state = self.controller.get_display_state();
 
-        let mut classes = classes!("button");
-
-        match display_state {
-            DisplayState::HardOff => classes.push("btn-light"),
-            DisplayState::Error => classes.push("btn-danger"),
-            DisplayState::Unknown => classes.push("btn-warning"),
-            DisplayState::Off | DisplayState::OnOther => classes.push("btn-dark"),
-            DisplayState::On => classes.push("btn-success"),
-        }
+        let state_class = match display_state {
+            DisplayState::HardOff => "btn-light",
+            DisplayState::Error => "btn-danger",
+            DisplayState::Unknown => "btn-warning",
+            DisplayState::Off | DisplayState::OnOther => "btn-dark",
+            DisplayState::On | DisplayState::AutoOff => "btn-success",
+        };
+        let classes = classes!("button", state_class);
 
         #[allow(clippy::match_same_arms)]
         let disabled = match display_state {
@@ -286,6 +285,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
             DisplayState::Error => false,
             DisplayState::Unknown => false,
             DisplayState::On => false,
+            DisplayState::AutoOff => false,
             DisplayState::OnOther => false,
         };
 

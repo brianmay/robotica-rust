@@ -102,9 +102,8 @@ impl ControllerTrait for Controller {
         let action = &self.config.action;
 
         match action {
-            Action::TurnOn => get_display_state_turn_on(self),
+            Action::Toggle | Action::TurnOn => get_display_state_turn_on(self),
             Action::TurnOff => get_display_state_turn_off(self),
-            Action::Toggle => get_display_state_toggle(self),
         }
     }
 
@@ -149,14 +148,17 @@ fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
         Some(_) | None => true,
     };
 
+    let scenes_contains = scenes.map_or(false, |scenes| scenes.contains(scene));
+
     match power {
         None => DisplayState::Unknown,
         Some("HARD_OFF") => DisplayState::HardOff,
         Some("ON") if scenes_empty => DisplayState::OnOther,
         Some("OFF") if scenes_empty => DisplayState::Off,
+        Some("OFF") if scenes_contains => DisplayState::AutoOff,
         _ => match scenes {
             None => DisplayState::Unknown,
-            Some(scenes) if scenes.contains(scene) => DisplayState::On,
+            Some(_) if scenes_contains => DisplayState::On,
             Some(_) if !scenes_empty => DisplayState::OnOther,
             Some(_) => DisplayState::Off,
         },
@@ -183,30 +185,6 @@ fn get_display_state_turn_off(lb: &Controller) -> DisplayState {
             None => DisplayState::Unknown,
             Some(priorities) if priorities.contains(&priority) => DisplayState::Off,
             Some(_) => DisplayState::On,
-        },
-    }
-}
-
-fn get_display_state_toggle(lb: &Controller) -> DisplayState {
-    let power = lb.power.as_deref();
-    let scenes = lb.scenes.as_deref();
-    let scene = &lb.config.scene;
-
-    let scenes_empty = match scenes {
-        Some(scenes) if !scenes.is_empty() => false,
-        Some(_) | None => true,
-    };
-
-    match power {
-        None => DisplayState::Unknown,
-        Some("HARD_OFF") => DisplayState::HardOff,
-        Some("ON") if scenes_empty => DisplayState::OnOther,
-        Some("OFF") if scenes_empty => DisplayState::Off,
-        _ => match scenes {
-            None => DisplayState::Unknown,
-            Some(scenes) if scenes.contains(scene) => DisplayState::On,
-            Some(_) if !scenes_empty => DisplayState::OnOther,
-            Some(_) => DisplayState::Off,
         },
     }
 }

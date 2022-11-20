@@ -23,6 +23,7 @@ impl Icon {
         let version = match state {
             DisplayState::HardOff | DisplayState::Error | DisplayState::Unknown => "error",
             DisplayState::On => "on",
+            DisplayState::AutoOff => "auto",
             DisplayState::Off => "off",
             DisplayState::OnOther => "other",
         };

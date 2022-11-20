@@ -69,6 +69,9 @@ pub enum DisplayState {
     /// The device is On
     On,
 
+    /// The device in on auto, but currently off
+    AutoOff,
+
     /// The device if Off
     Off,
 
@@ -83,6 +86,7 @@ impl Display for DisplayState {
             DisplayState::Error => write!(f, "Error"),
             DisplayState::Unknown => write!(f, "Unknown"),
             DisplayState::On => write!(f, "On"),
+            DisplayState::AutoOff => write!(f, "Auto Off"),
             DisplayState::Off => write!(f, "Off"),
             DisplayState::OnOther => write!(f, "Other"),
         }
@@ -131,7 +135,7 @@ const fn get_display_state_for_action(state: DisplayState, action: Action) -> Di
             DisplayState::HardOff => DisplayState::HardOff,
             DisplayState::Error => DisplayState::Error,
             DisplayState::Unknown => DisplayState::Unknown,
-            DisplayState::On | DisplayState::OnOther => DisplayState::Off,
+            DisplayState::On | DisplayState::OnOther | DisplayState::AutoOff => DisplayState::Off,
             DisplayState::Off => DisplayState::On,
         },
     }
