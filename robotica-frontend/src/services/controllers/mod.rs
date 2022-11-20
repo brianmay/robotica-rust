@@ -147,6 +147,13 @@ fn json_command(topic: &str, payload: &serde_json::Value) -> Option<MqttMessage>
     Some(msg)
 }
 
+#[must_use]
+fn json_command_vec(topic: &str, payload: &serde_json::Value) -> Vec<MqttMessage> {
+    let msg = json_command(topic, payload);
+    msg.map_or_else(std::vec::Vec::new, |msg| vec![msg])
+}
+
+#[must_use]
 fn string_command(topic: &str, payload: &str) -> MqttMessage {
     MqttMessage::new(
         topic,
@@ -154,4 +161,9 @@ fn string_command(topic: &str, payload: &str) -> MqttMessage {
         false,
         robotica_common::mqtt::QoS::ExactlyOnce,
     )
+}
+
+#[must_use]
+fn string_command_vec(topic: &str, payload: &str) -> Vec<MqttMessage> {
+    vec![string_command(topic, payload)]
 }

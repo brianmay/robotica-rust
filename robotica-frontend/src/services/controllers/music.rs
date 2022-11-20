@@ -3,7 +3,7 @@ use log::error;
 use robotica_common::mqtt::MqttMessage;
 
 use super::{
-    get_display_state_for_action, get_press_on_or_off, json_command, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -109,7 +109,7 @@ impl ControllerTrait for Controller {
         };
 
         let topic = format!("command/{}", self.config.topic_substr);
-        json_command(&topic, &payload).map_or_else(Vec::new, |command| vec![command])
+        json_command_vec(&topic, &payload)
     }
 
     fn get_action(&self) -> Action {
