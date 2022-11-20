@@ -115,9 +115,6 @@ pub trait ControllerTrait {
     /// Get the commands to be executed when button is pressed
     fn get_press_commands(&self) -> Vec<Command>;
 
-    /// Get the name of this controller
-    // fn get_name(&self) -> String;
-
     /// Get the action to perform when the button is pressed
     fn get_action(&self) -> Action;
 }
