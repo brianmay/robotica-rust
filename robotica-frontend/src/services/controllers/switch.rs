@@ -82,8 +82,8 @@ impl ControllerTrait for Controller {
     fn get_press_commands(&self) -> Vec<Command> {
         let display_state = self.get_display_state();
         let action = match get_press_on_or_off(display_state, self.config.action) {
-            TurnOnOff::TurnOn => "turn_off",
-            TurnOnOff::TurnOff => "turn_on",
+            TurnOnOff::TurnOn => "turn_on",
+            TurnOnOff::TurnOff => "turn_off",
         };
 
         let topic = format!("command/{}", self.config.topic_substr);
