@@ -6,7 +6,7 @@ use yew_agent::{Bridge, Bridged};
 
 use crate::services::{
     controllers::{
-        get_display_state_for_action, hdmi,
+        hdmi,
         lights::{self, Priority},
         music, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
@@ -267,9 +267,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
 
         let icon = ctx.props().get_icon();
         let name = ctx.props().get_name();
-        let action = self.controller.get_action();
         let display_state = self.controller.get_display_state();
-        let display_state = get_display_state_for_action(display_state, &action);
 
         let mut classes = classes!("button");
 
