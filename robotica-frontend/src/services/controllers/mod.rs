@@ -74,9 +74,6 @@ pub enum DisplayState {
 
     /// The device if Off
     Off,
-
-    /// The device is On, but not for another function
-    OnOther,
 }
 
 impl Display for DisplayState {
@@ -88,7 +85,6 @@ impl Display for DisplayState {
             DisplayState::On => write!(f, "On"),
             DisplayState::AutoOff => write!(f, "Auto Off"),
             DisplayState::Off => write!(f, "Off"),
-            DisplayState::OnOther => write!(f, "Other"),
         }
     }
 }
@@ -135,7 +131,7 @@ const fn get_display_state_for_action(state: DisplayState, action: Action) -> Di
             DisplayState::HardOff => DisplayState::HardOff,
             DisplayState::Error => DisplayState::Error,
             DisplayState::Unknown => DisplayState::Unknown,
-            DisplayState::On | DisplayState::OnOther | DisplayState::AutoOff => DisplayState::Off,
+            DisplayState::On | DisplayState::AutoOff => DisplayState::Off,
             DisplayState::Off => DisplayState::On,
         },
     }

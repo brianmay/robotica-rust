@@ -25,7 +25,6 @@ impl Icon {
             DisplayState::On => "on",
             DisplayState::AutoOff => "auto",
             DisplayState::Off => "off",
-            DisplayState::OnOther => "other",
         };
         format!("/images/{}_{}.svg", self.name, version)
     }

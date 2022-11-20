@@ -14,7 +14,7 @@ do_images() {
     do_image "$prefix"_off black
     do_image "$prefix"_error black
     do_image "$prefix"_on white
-    do_image "$prefix"_other black
+    do_image "$prefix"_auto white
 }
 
 do_images light

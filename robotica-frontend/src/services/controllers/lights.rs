@@ -143,23 +143,15 @@ fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
     let scenes = lb.scenes.as_deref();
     let scene = &lb.config.scene;
 
-    let scenes_empty = match scenes {
-        Some(scenes) if !scenes.is_empty() => false,
-        Some(_) | None => true,
-    };
-
     let scenes_contains = scenes.map_or(false, |scenes| scenes.contains(scene));
 
     match power {
         None => DisplayState::Unknown,
         Some("HARD_OFF") => DisplayState::HardOff,
-        Some("ON") if scenes_empty => DisplayState::OnOther,
-        Some("OFF") if scenes_empty => DisplayState::Off,
         Some("OFF") if scenes_contains => DisplayState::AutoOff,
         _ => match scenes {
             None => DisplayState::Unknown,
             Some(_) if scenes_contains => DisplayState::On,
-            Some(_) if !scenes_empty => DisplayState::OnOther,
             Some(_) => DisplayState::Off,
         },
     }

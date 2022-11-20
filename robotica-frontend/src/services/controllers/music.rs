@@ -85,7 +85,7 @@ impl ControllerTrait for Controller {
             Some("ERROR") => DisplayState::Error,
             Some("STOP") => DisplayState::Off,
             Some(pl) if pl == self.config.play_list => DisplayState::On,
-            _ => DisplayState::OnOther,
+            _ => DisplayState::Off,
         };
 
         let action = self.config.action;

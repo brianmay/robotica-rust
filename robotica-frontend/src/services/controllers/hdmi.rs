@@ -93,7 +93,7 @@ impl ControllerTrait for Controller {
             DeviceState::Unknown => DisplayState::Unknown,
             DeviceState::HardOff => DisplayState::HardOff,
             DeviceState::SelectedInput(i) if i == input => DisplayState::On,
-            DeviceState::SelectedInput(_) => DisplayState::OnOther,
+            DeviceState::SelectedInput(_) => DisplayState::Off,
             DeviceState::Error => DisplayState::Error,
         };
 

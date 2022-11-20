@@ -273,7 +273,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
             DisplayState::HardOff => "btn-light",
             DisplayState::Error => "btn-danger",
             DisplayState::Unknown => "btn-warning",
-            DisplayState::Off | DisplayState::OnOther => "btn-dark",
+            DisplayState::Off => "btn-dark",
             DisplayState::On | DisplayState::AutoOff => "btn-success",
         };
         let classes = classes!("button", state_class);
@@ -286,7 +286,6 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
             DisplayState::Unknown => false,
             DisplayState::On => false,
             DisplayState::AutoOff => false,
-            DisplayState::OnOther => false,
         };
 
         html! {
