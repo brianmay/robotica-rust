@@ -49,8 +49,6 @@ COPY --from=builder /brian-backend/target/release/brian-backend ${APP}/brian-bac
 COPY --from=builder /brian-backend/brian-frontend/dist ${APP}/brian-frontend/dist
 RUN ls -l ${APP}/brian-frontend/dist
 
-RUN chown -R $APP_USER:$APP_USER ${APP}
-
 USER $APP_USER
 WORKDIR ${APP}
 
