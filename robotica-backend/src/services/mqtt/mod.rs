@@ -11,13 +11,11 @@ use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str;
 use std::str::Utf8Error;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::sleep;
+use tokio::time::{sleep, Duration, Instant};
 
-use robotica_common::datetime::{self, utc_now};
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use crate::entities::{self, Receiver, StatefulData};
@@ -47,7 +45,6 @@ fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
         payload,
         retain: msg.retain,
         qos: qos_from_rumqttc(msg.qos),
-        instant: utc_now(),
     })
 }
 
@@ -67,9 +64,15 @@ pub enum SubscribeError {
     ClientError(#[from] ClientError),
 }
 
+#[derive(Clone, Debug)]
+struct MqttMessageTime {
+    msg: MqttMessage,
+    instant: Instant,
+}
+
 #[derive(Debug)]
 enum MqttCommand {
-    MqttOut(MqttMessage),
+    MqttOut(MqttMessageTime),
     Subscribe(
         String,
         oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
@@ -83,6 +86,11 @@ pub struct Mqtt(mpsc::Sender<MqttCommand>);
 impl Mqtt {
     /// Send a message to the MQTT broker.
     pub fn try_send(&self, msg: MqttMessage) {
+        let msg = MqttMessageTime {
+            msg,
+            instant: Instant::now(),
+        };
+
         let _ = self
             .0
             .try_send(MqttCommand::MqttOut(msg))
@@ -202,11 +210,12 @@ impl MqttClient {
                 },
                 Some(msg) = rx.recv() => {
                     match msg {
-                        MqttCommand::MqttOut(msg) if message_expired(&msg) => {
+                        MqttCommand::MqttOut(msg_time) if message_expired(&msg_time) => {
                             warn!("Discarding outgoing message as too old.");
                         },
-                        MqttCommand::MqttOut(msg) => {
+                        MqttCommand::MqttOut(msg_time) => {
                             let debug_mode: bool = is_debug_mode();
+                            let msg = msg_time.msg;
 
                             info!(
                                 "Outgoing mqtt {} {} {}.",
@@ -275,8 +284,8 @@ fn process_subscribe(
     }
 }
 
-fn message_expired(msg: &MqttMessage) -> bool {
-    let threshold = datetime::utc_now() - datetime::Duration::seconds(300);
+fn message_expired(msg: &MqttMessageTime) -> bool {
+    let threshold = Instant::now() - Duration::from_secs(300);
     msg.instant < threshold
 }
 
@@ -390,22 +399,21 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_message_to_string() {
+    #[test]
+    fn test_message_to_string() {
         let msg = MqttMessage {
             topic: "test".to_string(),
             payload: "test".into(),
             qos: QoS::AtLeastOnce,
             retain: false,
-            instant: utc_now(),
         };
 
         let data: String = msg.payload;
         assert_eq!(data, "test");
     }
 
-    #[tokio::test]
-    async fn test_string_to_message() {
+    #[test]
+    fn test_string_to_message() {
         let msg = MqttMessage::new("test", "test".to_string(), false, QoS::AtLeastOnce);
         assert_eq!(msg.topic, "test");
         assert_eq!(msg.payload, "test");
@@ -413,17 +421,66 @@ mod tests {
         assert!(!msg.retain);
     }
 
-    #[tokio::test]
-    async fn test_message_to_bool() {
+    #[test]
+    fn test_message_to_bool() {
         let msg = MqttMessage {
             topic: "test".to_string(),
             payload: "true".into(),
             qos: QoS::AtLeastOnce,
             retain: false,
-            instant: utc_now(),
         };
 
         let data: bool = msg.try_into().unwrap();
         assert!(data);
+    }
+
+    #[test]
+    fn test_message_expired() {
+        let msg = MqttMessage {
+            topic: "test".to_string(),
+            payload: "test".into(),
+            qos: QoS::AtLeastOnce,
+            retain: false,
+        };
+
+        let msg_time = MqttMessageTime {
+            instant: Instant::now(),
+            msg,
+        };
+
+        assert!(!message_expired(&msg_time));
+    }
+
+    #[test]
+    fn test_message_expired_from_past() {
+        let msg = MqttMessage {
+            topic: "test".to_string(),
+            payload: "test".into(),
+            qos: QoS::AtLeastOnce,
+            retain: false,
+        };
+
+        let msg_time = MqttMessageTime {
+            instant: Instant::now() - Duration::from_secs(600),
+            msg,
+        };
+
+        assert!(message_expired(&msg_time));
+    }
+
+    #[test]
+    fn test_message_expired_from_future() {
+        let msg = MqttMessage {
+            topic: "test".to_string(),
+            payload: "test".into(),
+            qos: QoS::AtLeastOnce,
+            retain: false,
+        };
+
+        let msg_time = MqttMessageTime {
+            instant: Instant::now() + Duration::from_secs(600),
+            msg,
+        };
+        assert!(!message_expired(&msg_time));
     }
 }

@@ -1,9 +1,7 @@
 //! Common Mqtt stuff
-use chrono::Utc;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use crate::datetime::{utc_now, DateTime};
 
 /// The `QoS` level for a MQTT message.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -63,9 +61,6 @@ pub struct MqttMessage {
 
     /// What is the QoS of this message?
     pub qos: QoS,
-
-    /// What was the instant this message was created?
-    pub instant: DateTime<Utc>,
 }
 
 impl Default for MqttMessage {
@@ -75,7 +70,6 @@ impl Default for MqttMessage {
             payload: String::new(),
             retain: false,
             qos: QoS::ExactlyOnce,
-            instant: utc_now(),
         }
     }
 }
@@ -124,13 +118,17 @@ impl TryFrom<MqttMessage> for String {
 impl MqttMessage {
     /// Create a new message.
     #[must_use]
-    pub fn new(topic: &str, payload: String, retain: bool, qos: QoS) -> Self {
+    pub fn new(
+        topic: impl Into<String>,
+        payload: impl Into<String>,
+        retain: bool,
+        qos: QoS,
+    ) -> Self {
         Self {
-            topic: topic.to_string(),
-            payload,
+            topic: topic.into(),
+            payload: payload.into(),
             retain,
             qos,
-            instant: utc_now(),
         }
     }
 
@@ -140,7 +138,7 @@ impl MqttMessage {
     ///
     /// This function will fail if the payload cannot be serialized to json.
     pub fn from_json(
-        topic: &str,
+        topic: impl Into<String>,
         payload: &serde_json::Value,
         retain: bool,
         qos: QoS,

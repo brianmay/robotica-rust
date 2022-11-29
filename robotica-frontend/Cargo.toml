@@ -19,7 +19,7 @@ wasm-bindgen-futures = "0.4.27"
 web-sys = "0.3.60"
 yew = "0.19"
 yew-agent = "0.1.0"
-robotica-common = { path = "../robotica-common" }
+robotica-common = { path = "../robotica-common", features = ["chrono"] }
 
 [dev-dependencies]
 # futures = "0.3.25"
