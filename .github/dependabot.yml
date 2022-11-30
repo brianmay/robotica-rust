@@ -10,7 +10,7 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/roobotica-backend"
+    directory: "/robotica-backend"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
