@@ -8,8 +8,8 @@
 #![allow(clippy::use_self)]
 
 pub mod anavi_thermometer;
+pub mod controllers;
 pub mod mqtt;
-
 pub mod user;
 pub mod version;
 pub mod websocket;

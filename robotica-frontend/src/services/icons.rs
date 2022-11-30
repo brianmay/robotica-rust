@@ -1,6 +1,6 @@
 //! Define button icons
 
-use super::controllers::DisplayState;
+use robotica_common::controllers::DisplayState;
 
 /// Define an Icon for a button
 #[derive(Clone, Debug, Eq, PartialEq)]

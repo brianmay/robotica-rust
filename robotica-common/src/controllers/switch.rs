@@ -1,23 +1,20 @@
-//! A robotica music controller
+//! A robotica switch controller
+use crate::mqtt::MqttMessage;
 use log::error;
-use robotica_common::mqtt::MqttMessage;
 
 use super::{
     get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
-/// The configuration for a music controller
+/// The configuration for a switch controller
 #[derive(Clone)]
 pub struct Config {
-    /// The topic substring for the music
+    /// The topic substring for the switch
     pub topic_substr: String,
 
-    /// The action to take when the music is clicked
+    /// The action to take when the switch is clicked
     pub action: Action,
-
-    /// The playlist to use for the music
-    pub play_list: String,
 }
 
 impl ConfigTrait for Config {
@@ -26,26 +23,15 @@ impl ConfigTrait for Config {
     fn create_controller(&self) -> Controller {
         Controller {
             config: self.clone(),
-            play_list: None,
+            power: None,
         }
     }
 }
 
-/// The controller for a music
+/// The controller for a switch
 pub struct Controller {
     config: Config,
-    play_list: Option<String>,
-}
-
-impl Controller {
-    /// Create a new music controller
-    #[must_use]
-    pub fn new(config: &Config) -> Self {
-        Self {
-            config: config.clone(),
-            play_list: None,
-        }
-    }
+    power: Option<String>,
 }
 
 fn topic(parts: &[&str]) -> String {
@@ -57,10 +43,10 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr, "play_list"];
+        let p = ["state", &config.topic_substr, "power"];
         let s = Subscription {
             topic: topic(&p),
-            label: ButtonStateMsgType::PlayList as u32,
+            label: ButtonStateMsgType::Power as u32,
         };
         result.push(s);
 
@@ -68,25 +54,26 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        if let Ok(ButtonStateMsgType::PlayList) = label.try_into() {
-            self.play_list = Some(data);
+        if let Ok(ButtonStateMsgType::Power) = label.try_into() {
+            self.power = Some(data);
         } else {
             error!("Invalid message label {}", label);
         }
     }
 
     fn process_disconnected(&mut self) {
-        self.play_list = None;
+        self.power = None;
     }
 
     fn get_display_state(&self) -> DisplayState {
-        let play_list = self.play_list.as_deref();
-        let state = match play_list {
+        let power = self.power.as_deref();
+
+        let state = match power {
             None => DisplayState::Unknown,
-            Some("ERROR") => DisplayState::Error,
-            Some("STOP") => DisplayState::Off,
-            Some(pl) if pl == self.config.play_list => DisplayState::On,
-            _ => DisplayState::Off,
+            Some("HARD_OFF") => DisplayState::HardOff,
+            Some("ON") => DisplayState::On,
+            Some("OFF") => DisplayState::Off,
+            _ => DisplayState::Error,
         };
 
         let action = self.config.action;
@@ -95,20 +82,13 @@ impl ControllerTrait for Controller {
 
     fn get_press_commands(&self) -> Vec<MqttMessage> {
         let display_state = self.get_display_state();
-        let payload = match get_press_on_or_off(display_state, self.config.action) {
-            TurnOnOff::TurnOn => {
-                serde_json::json!({
-                    "music": {"play_list": self.config.play_list}
-                })
-            }
-            TurnOnOff::TurnOff => {
-                serde_json::json!({
-                    "music": {"stop": true}
-                })
-            }
+        let action = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => "turn_on",
+            TurnOnOff::TurnOff => "turn_off",
         };
 
         let topic = format!("command/{}", self.config.topic_substr);
+        let payload = serde_json::json!({ "action": action });
         json_command_vec(&topic, &payload)
     }
 
@@ -118,7 +98,7 @@ impl ControllerTrait for Controller {
 }
 
 enum ButtonStateMsgType {
-    PlayList,
+    Power,
 }
 
 impl TryFrom<u32> for ButtonStateMsgType {
@@ -126,7 +106,7 @@ impl TryFrom<u32> for ButtonStateMsgType {
 
     fn try_from(v: u32) -> Result<Self, Self::Error> {
         match v {
-            x if x == ButtonStateMsgType::PlayList as u32 => Ok(ButtonStateMsgType::PlayList),
+            x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
             _ => Err(()),
         }
     }

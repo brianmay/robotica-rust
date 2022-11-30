@@ -1,9 +1,9 @@
-//! A robotica switch controller
+//! A Tasmota switch controller
+use crate::mqtt::MqttMessage;
 use log::error;
-use robotica_common::mqtt::MqttMessage;
 
 use super::{
-    get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, string_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -15,6 +15,9 @@ pub struct Config {
 
     /// The action to take when the switch is clicked
     pub action: Action,
+
+    /// The postfix for the power topic
+    pub power_postfix: String,
 }
 
 impl ConfigTrait for Config {
@@ -24,6 +27,7 @@ impl ConfigTrait for Config {
         Controller {
             config: self.clone(),
             power: None,
+            online: false,
         }
     }
 }
@@ -32,10 +36,7 @@ impl ConfigTrait for Config {
 pub struct Controller {
     config: Config,
     power: Option<String>,
-}
-
-fn topic(parts: &[&str]) -> String {
-    parts.join("/")
+    online: bool,
 }
 
 impl ControllerTrait for Controller {
@@ -43,10 +44,17 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr, "power"];
+        let topic = format!("stat/{}/POWER{}", config.topic_substr, config.power_postfix);
         let s = Subscription {
-            topic: topic(&p),
+            topic,
             label: ButtonStateMsgType::Power as u32,
+        };
+        result.push(s);
+
+        let topic = format!("tele/{}/LWT", config.topic_substr);
+        let s = Subscription {
+            topic,
+            label: ButtonStateMsgType::Lwt as u32,
         };
         result.push(s);
 
@@ -56,6 +64,13 @@ impl ControllerTrait for Controller {
     fn process_message(&mut self, label: Label, data: String) {
         if let Ok(ButtonStateMsgType::Power) = label.try_into() {
             self.power = Some(data);
+            self.online = true;
+        } else if let Ok(ButtonStateMsgType::Lwt) = label.try_into() {
+            if data == "Online" {
+                self.online = true;
+            } else {
+                self.online = false;
+            }
         } else {
             error!("Invalid message label {}", label);
         }
@@ -63,16 +78,17 @@ impl ControllerTrait for Controller {
 
     fn process_disconnected(&mut self) {
         self.power = None;
+        self.online = false;
     }
 
     fn get_display_state(&self) -> DisplayState {
         let power = self.power.as_deref();
 
-        let state = match power {
-            None => DisplayState::Unknown,
-            Some("HARD_OFF") => DisplayState::HardOff,
-            Some("ON") => DisplayState::On,
-            Some("OFF") => DisplayState::Off,
+        let state = match (power, self.online) {
+            (None, _) => DisplayState::Unknown,
+            (_, false) => DisplayState::HardOff,
+            (Some("ON"), true) => DisplayState::On,
+            (Some("OFF"), true) => DisplayState::Off,
             _ => DisplayState::Error,
         };
 
@@ -81,15 +97,16 @@ impl ControllerTrait for Controller {
     }
 
     fn get_press_commands(&self) -> Vec<MqttMessage> {
+        let config = &self.config;
+
         let display_state = self.get_display_state();
-        let action = match get_press_on_or_off(display_state, self.config.action) {
-            TurnOnOff::TurnOn => "turn_on",
-            TurnOnOff::TurnOff => "turn_off",
+        let payload = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => "ON",
+            TurnOnOff::TurnOff => "OFF",
         };
 
-        let topic = format!("command/{}", self.config.topic_substr);
-        let payload = serde_json::json!({ "action": action });
-        json_command_vec(&topic, &payload)
+        let topic = format!("cmnd/{}/POWER{}", config.topic_substr, config.power_postfix);
+        string_command_vec(&topic, payload)
     }
 
     fn get_action(&self) -> Action {
@@ -99,6 +116,7 @@ impl ControllerTrait for Controller {
 
 enum ButtonStateMsgType {
     Power,
+    Lwt,
 }
 
 impl TryFrom<u32> for ButtonStateMsgType {
@@ -107,6 +125,7 @@ impl TryFrom<u32> for ButtonStateMsgType {
     fn try_from(v: u32) -> Result<Self, Self::Error> {
         match v {
             x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
+            x if x == ButtonStateMsgType::Lwt as u32 => Ok(ButtonStateMsgType::Lwt),
             _ => Err(()),
         }
     }

@@ -1,8 +1,8 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
+use crate::mqtt::MqttMessage;
 use log::error;
-use robotica_common::mqtt::MqttMessage;
 
 pub mod hdmi;
 pub mod lights;
@@ -140,7 +140,7 @@ const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
 
 #[must_use]
 fn json_command(topic: &str, payload: &serde_json::Value) -> Option<MqttMessage> {
-    let Ok(msg) = MqttMessage::from_json(topic, payload, false, robotica_common::mqtt::QoS::ExactlyOnce) else {
+    let Ok(msg) = MqttMessage::from_json(topic, payload, false, crate::mqtt::QoS::ExactlyOnce) else {
         error!("Failed to create MQTT message for topic {}", topic);
         return None;
     };
@@ -159,7 +159,7 @@ fn string_command(topic: &str, payload: &str) -> MqttMessage {
         topic,
         payload.to_string(),
         false,
-        robotica_common::mqtt::QoS::ExactlyOnce,
+        crate::mqtt::QoS::ExactlyOnce,
     )
 }
 

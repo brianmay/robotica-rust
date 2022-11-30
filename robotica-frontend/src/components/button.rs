@@ -1,15 +1,16 @@
 //! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
+use robotica_common::controllers::{
+    hdmi,
+    lights::{self, Priority},
+    music, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
+};
 use robotica_common::mqtt::MqttMessage;
+
 use yew_agent::{Bridge, Bridged};
 
 use crate::services::{
-    controllers::{
-        hdmi,
-        lights::{self, Priority},
-        music, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
-    },
     icons::Icon,
     websocket::{
         event_bus::{Command, EventBus},

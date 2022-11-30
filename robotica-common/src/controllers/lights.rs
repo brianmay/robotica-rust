@@ -1,7 +1,7 @@
 //! A robotica light controller
 
+use crate::mqtt::MqttMessage;
 use log::error;
-use robotica_common::mqtt::MqttMessage;
 
 use super::{
     get_press_on_or_off, json_command_vec, Action, ConfigTrait, ControllerTrait, DisplayState,

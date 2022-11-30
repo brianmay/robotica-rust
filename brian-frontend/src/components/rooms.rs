@@ -5,9 +5,9 @@ use robotica_frontend::components::button::{
     Button, HdmiProps, LightProps, MusicProps, SwitchProps, TasmotaProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
-use robotica_frontend::services::controllers::Action;
 
 use robotica_common::anavi_thermometer as anavi;
+use robotica_common::controllers::Action;
 use robotica_common::zigbee2mqtt;
 
 use super::require_connection::RequireConnection;
