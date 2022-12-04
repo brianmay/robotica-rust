@@ -9,7 +9,7 @@ use std::{collections::HashMap, env};
 
 use axum::body::{boxed, Body};
 use axum::http::Request;
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::{extract::Query, routing::get, Extension, Router};
 use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
@@ -17,7 +17,7 @@ use axum_sessions::extractors::WritableSession;
 use axum_sessions::{SameSite, SessionLayer};
 use base64::decode;
 use maud::{html, Markup, DOCTYPE};
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::de::Error;
 use thiserror::Error;
 use tokio::fs;
@@ -120,7 +120,7 @@ async fn server(
         .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
-        .fallback(get(fallback_handler))
+        .fallback(fallback_handler)
         .layer(Extension(config))
         .layer(Extension(oidc))
         .layer(session_layer)
@@ -165,6 +165,14 @@ async fn fallback_handler(
     oidc_client: Extension<Arc<Client>>,
     req: Request<Body>,
 ) -> Response {
+    if req.method() != Method::GET {
+        return Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Body::empty())
+            .unwrap()
+            .into_response();
+    }
+
     let asset_file = {
         let path = req.uri().path();
         ALLOWED_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
@@ -235,13 +243,14 @@ fn nav_bar() -> Markup {
 }
 
 #[allow(clippy::unused_async)]
-async fn root(session: ReadableSession) -> Markup {
+async fn root(session: ReadableSession) -> Response {
     let build_date = env::var("BUILD_DATE").unwrap_or_else(|_| "unknown".to_string());
     let vcs_ref = env::var("VCS_REF").unwrap_or_else(|_| "unknown".to_string());
 
     let user = get_user(&session);
 
-    html!(
+    Html(
+        html!(
         (DOCTYPE)
         html {
             head {
@@ -269,7 +278,7 @@ async fn root(session: ReadableSession) -> Markup {
                 }
             }
         }
-    )
+    ).into_string()).into_response()
 }
 
 async fn oidc_callback(
@@ -304,15 +313,18 @@ async fn oidc_callback(
         }
         Err(e) => {
             session.destroy();
-            html!(
-                    html {
-                        head {
-                            title { "Robotica - Login" }
+            Html(
+                html!(
+                        html {
+                            head {
+                                title { "Robotica - Login" }
+                            }
+                            body {
+                                h1 { ( format!("Login Failed: {e}") ) }
+                            }
                         }
-                        body {
-                            h1 { ( format!("Login Failed: {e}") ) }
-                        }
-                    }
+                )
+                .into_string(),
             )
             .into_response()
         }

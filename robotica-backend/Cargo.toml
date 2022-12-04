@@ -28,10 +28,11 @@ tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 
 # http server
-axum = { version = "0.5.17", features = ["ws"] }
-openid = "0.10.0"
+axum-core = "0.3.0"
+axum = { version = "0.6.1", features = ["ws"] }
+openid = "0.11.0"
 maud = { version = "0.24.0", features = ["axum"] }
-axum-sessions = "0.3.1"
+axum-sessions = "0.4.1"
 base64 = "0.13.1"
 url = "2.2.2"
 futures = "0.3.25"
