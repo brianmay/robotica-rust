@@ -283,13 +283,7 @@ pub fn monitor_charging(
                     } else {
                         log::info!("Car is disconnected");
                     }
-
-                    if let Some(true) = is_home_rx.get_current().await {
-                        match token.get_charge_state(car_id).await {
-                            Ok(new_charge_state) => charge_state = Some(new_charge_state),
-                            Err(err) => log::info!("Failed to get charge state: {err}"),
-                        }
-                    }
+                    charge_state = None;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
@@ -317,19 +311,20 @@ pub fn monitor_charging(
                 }
                 Ok((_, is_home)) = location_charge_s.recv() => {
                     log::info!("Location is home: {is_home}");
-                    if is_home {
-                        match token.get_charge_state(car_id).await {
-                            Ok(new_charge_state) => charge_state = Some(new_charge_state),
-                            Err(err) => log::info!("Failed to get charge state: {err}"),
-                        }
-                    } else {
-                        charge_state = None;
-                    }
+                    charge_state = None;
                 }
                 else => break,
             }
 
             if let Some(true) = is_home_rx.get_current().await {
+                if charge_state.is_none() {
+                    log::info!("Refreshing charge state");
+                    match token.get_charge_state(car_id).await {
+                        Ok(new_charge_state) => charge_state = Some(new_charge_state),
+                        Err(err) => log::info!("Failed to get charge state: {err}"),
+                    }
+                }
+
                 if let Some(price_summary) = &price_summary {
                     check_charge(
                         car_id,
