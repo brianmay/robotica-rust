@@ -28,6 +28,8 @@ pub struct DeviceCommand {
 pub enum DevicePower {
     /// The switch is on.
     On,
+    /// The switch is on, but automatically turned off.
+    AutoOff,
     /// The switch is off.
     Off,
     /// The switch is turned off and cannot be turned on.
@@ -42,6 +44,7 @@ impl From<DevicePower> for String {
     fn from(power: DevicePower) -> Self {
         match power {
             DevicePower::On => "ON".to_string(),
+            DevicePower::AutoOff => "AUTO_OFF".to_string(),
             DevicePower::Off => "OFF".to_string(),
             DevicePower::HardOff => "HARD_OFF".to_string(),
             DevicePower::DeviceError => "ERROR".to_string(),
@@ -67,6 +70,7 @@ impl TryFrom<MqttMessage> for DevicePower {
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
         match msg.payload.as_str() {
             "ON" => Ok(DevicePower::On),
+            "AUTO_OFF" => Ok(DevicePower::AutoOff),
             "OFF" => Ok(DevicePower::Off),
             "HARD_OFF" => Ok(DevicePower::HardOff),
             "ERROR" => Ok(DevicePower::DeviceError),
@@ -81,6 +85,12 @@ impl TryFrom<MqttMessage> for DevicePower {
 pub enum Command {
     /// A command to send to a switch.
     Device(DeviceCommand),
+
+    /// Dummy value
+    Dummy1,
+
+    /// Dummy value
+    Dummy2,
 }
 
 impl TryFrom<MqttMessage> for Command {

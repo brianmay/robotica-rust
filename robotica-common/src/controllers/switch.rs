@@ -71,6 +71,7 @@ impl ControllerTrait for Controller {
         let state = match power {
             None => DisplayState::Unknown,
             Some("HARD_OFF") => DisplayState::HardOff,
+            Some("AUTO_OFF") => DisplayState::AutoOff,
             Some("ON") => DisplayState::On,
             Some("OFF") => DisplayState::Off,
             _ => DisplayState::Error,

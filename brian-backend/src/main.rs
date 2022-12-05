@@ -6,7 +6,6 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use robotica_backend::devices::fake_switch;
 use robotica_backend::entities::Sender;
 use robotica_backend::scheduling::executor::executor;
 
@@ -86,13 +85,6 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     //         }
     //     }
     // });
-
-    fake_switch::run(
-        &mut state.subscriptions,
-        state.mqtt.clone(),
-        "Tesla/1/AutoCharge",
-    );
-    fake_switch::run(&mut state.subscriptions, state.mqtt, "Tesla/1/ForceCharge");
 
     state.subscriptions
 }

@@ -4,7 +4,7 @@ use crate::delays::{delay_input, IsActive};
 use anyhow::Result;
 use log::debug;
 use robotica_backend::services::tesla::api::{ChargeState, ChargingStateEnum, Token};
-use robotica_common::robotica::DevicePower;
+use robotica_common::robotica::{Command, DeviceAction, DevicePower};
 use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
@@ -12,7 +12,7 @@ use tokio::select;
 
 use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
 use robotica_backend::spawn;
-use robotica_common::mqtt::MqttMessage;
+use robotica_common::mqtt::{MqttMessage, QoS};
 
 use super::State;
 
@@ -196,21 +196,19 @@ pub fn monitor_charging(
     car_number: usize,
     price_summary_rx: Receiver<StatefulData<PriceSummary>>,
 ) {
+    let mqtt = state.mqtt.clone();
+
     let pi_rx = state
         .subscriptions
         .subscribe_into_stateful::<bool>(&format!("teslamate/cars/{car_number}/plugged_in"));
 
     let auto_charge_rx = state
         .subscriptions
-        .subscribe_into_stateful::<DevicePower>(&format!(
-            "state/Tesla/{car_number}/AutoCharge/power"
-        ));
+        .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/AutoCharge"));
 
     let force_charge_rx = state
         .subscriptions
-        .subscribe_into_stateful::<DevicePower>(&format!(
-            "state/Tesla/{car_number}/ForceCharge/power"
-        ));
+        .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/ForceCharge"));
 
     spawn(async move {
         let mut token = Token::get().unwrap();
@@ -224,6 +222,9 @@ pub fn monitor_charging(
         let mut charge_state = token.get_charge_state(car_id).await.ok();
         let mut pi_s = pi_rx.subscribe().await;
         let mut price_summary: Option<PriceSummary> = None;
+
+        let mut auto_charge = false;
+        let mut force_charge = false;
 
         log::info!("Initial charge state: {charge_state:?}");
 
@@ -252,44 +253,94 @@ pub fn monitor_charging(
                         Err(err) => log::info!("Failed to get charge state: {err}"),
                     }
                 }
-                Ok((_, ac)) = auto_charge_s.recv() => {
-                    if ac == DevicePower::On {
-                        log::info!("Auto charge is on");
+                Ok(cmd) = auto_charge_s.recv() => {
+                    if let Command::Device(cmd) = cmd {
+                        auto_charge = match cmd.action {
+                            DeviceAction::TurnOn => true,
+                            DeviceAction::TurnOff => false,
+                        };
+                        log::info!("Auto charge: {auto_charge}");
+                        publish_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
                     } else {
-                        log::info!("Auto charge is off");
+                        log::info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
-                Ok((_, ac)) = force_charge_s.recv() => {
-                    if ac == DevicePower::On {
-                        log::info!("Force charge is on");
+                Ok(cmd) = force_charge_s.recv() => {
+                    if let Command::Device(cmd) = cmd {
+                        force_charge = match cmd.action {
+                            DeviceAction::TurnOn => true,
+                            DeviceAction::TurnOff => false,
+                        };
+                        log::info!("Force charge: {force_charge}");
+                        publish_force_charge(&charge_state, car_number, force_charge, &mqtt);
                     } else {
-                        log::info!("Force charge is off");
+                        log::info!("Ignoring invalid force_charge command: {cmd:?}");
                     }
                 }
                 else => break,
             }
 
-            let force_charge = force_charge_rx.get_current().await == Some(DevicePower::On);
-
-            if let Some(DevicePower::On) = auto_charge_rx.get_current().await {
-                if let Some(price_summary) = &price_summary {
-                    check_charge(
-                        car_id,
-                        &token,
-                        &mut charge_state,
-                        price_summary,
-                        force_charge,
-                    )
-                    .await
-                    .unwrap_or_else(|err| {
-                        log::info!("Error checking charge: {}", err);
-                    });
-                }
-            } else {
-                log::info!("Skipping auto charge as off");
+            if let Some(price_summary) = &price_summary {
+                check_charge(
+                    car_id,
+                    &token,
+                    &mut charge_state,
+                    price_summary,
+                    auto_charge,
+                    force_charge,
+                )
+                .await
+                .unwrap_or_else(|err| {
+                    log::info!("Error checking charge: {}", err);
+                });
             }
+            publish_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
+            publish_force_charge(&charge_state, car_number, force_charge, &mqtt);
         }
     });
+}
+
+fn publish_auto_charge(
+    auto_charge: bool,
+    car_number: usize,
+    charge_state: &Option<ChargeState>,
+    mqtt: &robotica_backend::services::mqtt::Mqtt,
+) {
+    let is_charging = charge_state.as_ref().map_or_else(
+        || false,
+        |s| s.charging_state == ChargingStateEnum::Charging,
+    );
+
+    let topic = format!("state/Tesla/{car_number}/AutoCharge/power");
+    let status = match (auto_charge, is_charging) {
+        (true, false) => DevicePower::AutoOff,
+        (true, true) => DevicePower::On,
+        (false, _) => DevicePower::Off,
+    };
+    let string: String = status.into();
+    let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
+    mqtt.try_send(msg);
+}
+
+fn publish_force_charge(
+    charge_state: &Option<ChargeState>,
+    car_number: usize,
+    force_charge: bool,
+    mqtt: &robotica_backend::services::mqtt::Mqtt,
+) {
+    let is_charging = charge_state.as_ref().map_or_else(
+        || false,
+        |s| s.charging_state == ChargingStateEnum::Charging,
+    );
+    let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
+    let status = match (force_charge, is_charging) {
+        (true, false) => DevicePower::AutoOff,
+        (true, true) => DevicePower::On,
+        (false, _) => DevicePower::Off,
+    };
+    let string: String = status.into();
+    let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
+    mqtt.try_send(msg);
 }
 
 async fn get_car_id(token: &mut Token, car_n: usize) -> Result<Option<u64>> {
@@ -305,6 +356,7 @@ async fn check_charge(
     token: &Token,
     charge_state: &mut Option<ChargeState>,
     price_summary: &PriceSummary,
+    auto_charge: bool,
     force_charge: bool,
 ) -> Result<()> {
     let charging = charge_state
@@ -312,9 +364,10 @@ async fn check_charge(
         .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
 
     // Should we turn on charging?
-    let should_charge = price_summary.category == PriceCategory::SuperCheap
+    let should_charge = (price_summary.category == PriceCategory::SuperCheap
         || price_summary.category == PriceCategory::Cheap
-        || force_charge;
+        || force_charge)
+        && auto_charge;
 
     // What is the limit we should charge to?
     let charge_limit = match (should_charge, &price_summary.category) {
@@ -330,8 +383,8 @@ async fn check_charge(
         None => true,
     };
 
-    log::debug!("Current data: {price_summary:?}, {charge_state:?}, {force_charge}");
-    log::debug!("Desired State: {should_charge}, {can_charge}, {charge_limit}");
+    log::debug!("Current data: {price_summary:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
+    log::debug!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
     let set_charge_limit = if let Some(charge_state) = charge_state {

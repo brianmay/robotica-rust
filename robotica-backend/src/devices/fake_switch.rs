@@ -33,9 +33,9 @@ pub fn run(subscription: &mut Subscriptions, mqtt: Mqtt, topic_substr: impl Into
                             let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
                             mqtt.try_send(msg);
                         },
-                        // command => {
-                        //     tracing::error!("Invalid command, expected switch, got {:?}", command);
-                        // }
+                        command => {
+                            log::error!("Invalid command, expected switch, got {:?}", command);
+                        }
                     }
                 },
                 else => break,
