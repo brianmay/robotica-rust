@@ -238,7 +238,7 @@ pub fn monitor_charging(
             })
     };
 
-    let location_rx = {
+    let is_home_rx = {
         state
             .subscriptions
             .subscribe_into_stateless::<String>(&format!("command/Tesla/{car_number}/Location"))
@@ -252,7 +252,7 @@ pub fn monitor_charging(
 
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
-        let mut location_charge_s = location_rx.subscribe().await;
+        let mut location_charge_s = is_home_rx.subscribe().await;
         let mut rx_s = price_summary_rx.subscribe().await;
         let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
         let mut charge_state = token.get_charge_state(car_id).await.ok();
@@ -284,7 +284,7 @@ pub fn monitor_charging(
                         log::info!("Car is disconnected");
                     }
 
-                    if let Some(true) = location_rx.get_current().await {
+                    if let Some(true) = is_home_rx.get_current().await {
                         match token.get_charge_state(car_id).await {
                             Ok(new_charge_state) => charge_state = Some(new_charge_state),
                             Err(err) => log::info!("Failed to get charge state: {err}"),
@@ -329,7 +329,7 @@ pub fn monitor_charging(
                 else => break,
             }
 
-            if let Some(true) = location_rx.get_current().await {
+            if let Some(true) = is_home_rx.get_current().await {
                 if let Some(price_summary) = &price_summary {
                     check_charge(
                         car_id,
