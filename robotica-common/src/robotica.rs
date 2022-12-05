@@ -125,7 +125,7 @@ mod tests {
             action: DeviceAction::TurnOn,
         });
         let json = json!({
-            "type": "switch",
+            "type": "device",
             "action": "turn_on",
         });
         assert_eq!(json, serde_json::to_value(command).unwrap());
