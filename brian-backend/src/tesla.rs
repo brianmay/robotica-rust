@@ -3,7 +3,9 @@ use crate::delays::{delay_input, IsActive};
 
 use anyhow::Result;
 use log::debug;
-use robotica_backend::services::tesla::api::{ChargeState, ChargingStateEnum, Token};
+use robotica_backend::services::tesla::api::{
+    ChargeState, ChargingStateEnum, CommandSequence, Token,
+};
 use robotica_common::robotica::{Command, DeviceAction, DevicePower};
 use std::fmt::Display;
 use std::time::Duration;
@@ -11,7 +13,7 @@ use thiserror::Error;
 use tokio::select;
 
 use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
-use robotica_backend::{is_debug_mode, spawn};
+use robotica_backend::spawn;
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use super::State;
@@ -289,10 +291,7 @@ pub fn monitor_charging(
                     auto_charge,
                     force_charge,
                 )
-                .await
-                .unwrap_or_else(|err| {
-                    log::info!("Error checking charge: {}", err);
-                });
+                .await;
             }
             publish_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
             publish_force_charge(&charge_state, car_number, force_charge, &mqtt);
@@ -358,7 +357,7 @@ async fn check_charge(
     price_summary: &PriceSummary,
     auto_charge: bool,
     force_charge: bool,
-) -> Result<()> {
+) {
     let charging = charge_state
         .as_ref()
         .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
@@ -393,62 +392,42 @@ async fn check_charge(
         true
     };
 
+    // Construct sequence of commands to send to Tesla.
+    let mut sequence = CommandSequence::new();
+
     // Set the charge limit if required.
     if set_charge_limit {
         log::info!("Setting charge limit to {}", charge_limit);
-        token.wait_for_wake_up(car_id).await?;
-        token
-            .set_charge_limit(car_id, charge_limit)
-            .await
-            .unwrap_or_else(|err| {
-                log::error!("Failed to set charge limit: {}", err);
-            });
+        sequence.add_set_chart_limit(charge_limit);
     }
 
     // Start/stop charging as required.
-    let get_charge_state = if charging == ChargingStateEnum::Charging && !should_charge {
-        if !is_debug_mode() {
-            log::info!("Stopping charge");
-            token.wait_for_wake_up(car_id).await?;
-            token.charge_stop(car_id).await.unwrap_or_else(|err| {
-                log::info!("Failed to stop charge: {err}");
-            });
-        } else {
-            log::info!("Would have stopped charge");
-        }
-        true
+    if charging == ChargingStateEnum::Charging && !should_charge {
+        log::info!("Stopping charge");
+        sequence.add_charge_stop();
     } else if charging == ChargingStateEnum::Stopped && should_charge && can_charge {
-        if !is_debug_mode() {
-            log::info!("Starting charge");
-            token.wait_for_wake_up(car_id).await?;
-            token.charge_start(car_id).await.unwrap_or_else(|err| {
-                log::info!("Failed to start charge: {err}");
-            });
-        } else {
-            log::info!("Would have started charge");
-        }
-        true
+        log::info!("Starting charge");
+        sequence.add_charge_start();
     } else if charging == ChargingStateEnum::Complete && should_charge && can_charge {
-        if !is_debug_mode() {
-            log::info!("Restarting charge");
-            token.wait_for_wake_up(car_id).await?;
-            token.charge_start(car_id).await.unwrap_or_else(|err| {
-                log::info!("Failed to start charge: {err}");
-            });
-        } else {
-            log::info!("Would have restarted charge");
-        }
-        true
-    } else {
-        false
+        log::info!("Restarting charge");
+        sequence.add_charge_start();
     };
 
+    // Send the commands.
+    log::info!("Sending commands: {sequence:?}");
+    let num_executed = sequence.execute(token, car_id).await.unwrap_or_else(|err| {
+        log::info!("Error executing command sequence: {}", err);
+        0
+    });
+
     // Get the charge state again, vehicle should be awake now.
-    if set_charge_limit || get_charge_state {
-        log::info!("Getting charge state (2)");
-        *charge_state = Some(token.get_charge_state(car_id).await?);
+    if num_executed > 0 {
+        log::debug!("Getting charge state");
+        match token.get_charge_state(car_id).await {
+            Ok(new_charge_state) => *charge_state = Some(new_charge_state),
+            Err(err) => log::info!("Failed to get charge state: {err}"),
+        }
     }
 
-    log::debug!("All done.");
-    Ok(())
+    log::info!("All done.");
 }

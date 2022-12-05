@@ -5,9 +5,9 @@ use std::time::Duration;
 use reqwest::Error;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
-use tokio::time::Instant;
+use tokio::time::{sleep, Instant};
 
-use crate::{get_env, EnvironmentError};
+use crate::{get_env, is_debug_mode, EnvironmentError};
 
 async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
     log::debug!("post {}", url);
@@ -365,7 +365,7 @@ impl Token {
             if response.state == "online" {
                 return Ok(());
             }
-            std::thread::sleep(Duration::from_secs(5));
+            sleep(Duration::from_secs(5)).await;
         }
         Err(WakeupError::Timeout)
     }
@@ -429,6 +429,95 @@ impl Token {
         );
         let response: OuterChargeState = get_with_token(&url, &self.access_token).await?;
         Ok(response.response)
+    }
+}
+
+#[derive(Debug)]
+enum Command {
+    SetChargeLimit(u8),
+    ChargeStart,
+    ChargeStop,
+}
+
+impl Command {
+    async fn execute(&self, token: &Token, id: u64) -> Result<(), GenericError> {
+        match self {
+            Command::SetChargeLimit(percent) => token.set_charge_limit(id, *percent).await?,
+            Command::ChargeStart => token.charge_start(id).await?,
+            Command::ChargeStop => token.charge_stop(id).await?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+/// A sequence of commands to execute
+pub struct CommandSequence {
+    commands: Vec<Command>,
+}
+
+impl CommandSequence {
+    /// Create a new command sequence
+    #[must_use]
+    pub const fn new() -> Self {
+        CommandSequence { commands: vec![] }
+    }
+
+    /// Add a command to the sequence
+    fn add(&mut self, command: Command) {
+        self.commands.push(command);
+    }
+
+    /// Set the charge limit for the car
+    pub fn add_set_chart_limit(&mut self, percent: u8) {
+        self.add(Command::SetChargeLimit(percent));
+    }
+
+    /// Request the car start charging
+    pub fn add_charge_start(&mut self) {
+        self.add(Command::ChargeStart);
+    }
+
+    /// Request the car stop charging
+    pub fn add_charge_stop(&mut self) {
+        self.add(Command::ChargeStop);
+    }
+
+    /// Execute the sequence
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the wake up request failed.
+    /// Returns error if any of the commands failed.
+    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<usize, GenericError> {
+        if self.commands.is_empty() {
+            return Ok(0);
+        }
+
+        if is_debug_mode() {
+            log::debug!("Would execute commands: {:?}", self.commands);
+            return Ok(0);
+        }
+
+        token.wake_up(car_id).await?;
+        sleep(Duration::from_secs(60)).await;
+
+        for command in &self.commands {
+            command.execute(token, car_id).await?;
+        }
+        Ok(self.commands.len())
+    }
+
+    /// Is the sequence empty?
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
+}
+
+impl Default for CommandSequence {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
