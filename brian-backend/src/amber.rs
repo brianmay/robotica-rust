@@ -273,7 +273,7 @@ async fn get_usage(
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum PriceQuality {
+pub enum PriceCategory {
     SuperCheap,
     Cheap,
     Normal,
@@ -281,7 +281,7 @@ pub enum PriceQuality {
 }
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PriceSummary {
-    pub quality: PriceQuality,
+    pub category: PriceCategory,
 }
 
 async fn process_prices(config: &Config, start_date: Date, end_date: Date) -> Option<PriceSummary> {
@@ -301,25 +301,25 @@ async fn process_prices(config: &Config, start_date: Date, end_date: Date) -> Op
 }
 
 fn prices_to_summary(prices: &[PriceResponse]) -> PriceSummary {
-    let mut quality: PriceQuality = PriceQuality::Normal;
+    let mut quality: PriceCategory = PriceCategory::Normal;
 
     prices
         .iter()
         .filter(|p| p.interval_type == IntervalType::CurrentInterval)
         .map(|price| {
             if price.per_kwh < 10.0 {
-                PriceQuality::SuperCheap
+                PriceCategory::SuperCheap
             } else if price.per_kwh < 20.0 {
-                PriceQuality::Cheap
+                PriceCategory::Cheap
             } else if price.per_kwh < 30.0 {
-                PriceQuality::Normal
+                PriceCategory::Normal
             } else {
-                PriceQuality::Expensive
+                PriceCategory::Expensive
             }
         })
         .for_each(|new_pq| quality = new_pq);
 
-    PriceSummary { quality }
+    PriceSummary { category: quality }
 }
 
 async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse]) {

@@ -1,4 +1,4 @@
-use crate::amber::{PriceQuality, PriceSummary};
+use crate::amber::{PriceCategory, PriceSummary};
 use crate::delays::{delay_input, IsActive};
 
 use anyhow::Result;
@@ -206,12 +206,19 @@ pub fn monitor_charging(
             "state/Tesla/{car_number}/AutoCharge/power"
         ));
 
+    let force_charge_rx = state
+        .subscriptions
+        .subscribe_into_stateful::<DevicePower>(&format!(
+            "state/Tesla/{car_number}/ForceCharge/power"
+        ));
+
     spawn(async move {
         let mut token = Token::get().unwrap();
         token.check().await.unwrap();
         let car_id = get_car_id(&mut token, car_number).await.unwrap().unwrap();
 
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
+        let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut rx_s = price_summary_rx.subscribe().await;
         let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
         let mut charge_state = token.get_charge_state(car_id).await.ok();
@@ -252,16 +259,31 @@ pub fn monitor_charging(
                         log::info!("Auto charge is off");
                     }
                 }
+                Ok((_, ac)) = force_charge_s.recv() => {
+                    if ac == DevicePower::On {
+                        log::info!("Force charge is on");
+                    } else {
+                        log::info!("Force charge is off");
+                    }
+                }
                 else => break,
             }
 
+            let force_charge = force_charge_rx.get_current().await == Some(DevicePower::On);
+
             if let Some(DevicePower::On) = auto_charge_rx.get_current().await {
                 if let Some(price_summary) = &price_summary {
-                    check_charge(car_id, &token, &mut charge_state, price_summary)
-                        .await
-                        .unwrap_or_else(|err| {
-                            log::info!("Error checking charge: {}", err);
-                        });
+                    check_charge(
+                        car_id,
+                        &token,
+                        &mut charge_state,
+                        price_summary,
+                        force_charge,
+                    )
+                    .await
+                    .unwrap_or_else(|err| {
+                        log::info!("Error checking charge: {}", err);
+                    });
                 }
             } else {
                 log::info!("Skipping auto charge as off");
@@ -283,21 +305,23 @@ async fn check_charge(
     token: &Token,
     charge_state: &mut Option<ChargeState>,
     price_summary: &PriceSummary,
+    force_charge: bool,
 ) -> Result<()> {
     let charging = charge_state
         .as_ref()
         .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
 
     // Should we turn on charging?
-    let should_charge = price_summary.quality == PriceQuality::SuperCheap
-        || price_summary.quality == PriceQuality::Cheap;
+    let should_charge = price_summary.category == PriceCategory::SuperCheap
+        || price_summary.category == PriceCategory::Cheap
+        || force_charge;
 
     // What is the limit we should charge to?
-    let charge_limit = match price_summary.quality {
-        PriceQuality::Expensive => 50,
-        PriceQuality::Normal => 70,
-        PriceQuality::Cheap => 80,
-        PriceQuality::SuperCheap => 90,
+    let charge_limit = match (should_charge, &price_summary.category) {
+        (false, _) | (true, PriceCategory::Expensive) => 50,
+        (true, PriceCategory::Normal) => 70,
+        (true, PriceCategory::Cheap) => 80,
+        (true, PriceCategory::SuperCheap) => 90,
     };
 
     // Is battery level low enough that we can charge it?
@@ -306,7 +330,7 @@ async fn check_charge(
         None => true,
     };
 
-    log::debug!("Current data: {price_summary:?}, {charge_state:?}");
+    log::debug!("Current data: {price_summary:?}, {charge_state:?}, {force_charge}");
     log::debug!("Desired State: {should_charge}, {can_charge}, {charge_limit}");
 
     // Do we need to set the charge limit?

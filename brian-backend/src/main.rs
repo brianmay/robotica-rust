@@ -87,7 +87,12 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     //     }
     // });
 
-    fake_switch::run(&mut state.subscriptions, state.mqtt, "Tesla/1/AutoCharge");
+    fake_switch::run(
+        &mut state.subscriptions,
+        state.mqtt.clone(),
+        "Tesla/1/AutoCharge",
+    );
+    fake_switch::run(&mut state.subscriptions, state.mqtt, "Tesla/1/ForceCharge");
 
     state.subscriptions
 }
