@@ -211,6 +211,69 @@ impl<T: Send + Clone> Receiver<T> {
         rx
     }
 
+    /// Map this receiver into a another type using a stateless receiver.
+    #[must_use]
+    pub fn map_into_stateless<U>(self, f: impl Fn(T) -> U + Send + 'static) -> Receiver<U>
+    where
+        T: Send + 'static,
+        U: Clone + Send + 'static,
+    {
+        let name = format!("{} (map_into_stateless)", self.name);
+        let (tx, rx) = create_stateless_entity(&name);
+        self.map(tx, f);
+        rx
+    }
+
+    /// Map this receiver into a another type using a stateful receiver.
+    #[must_use]
+    pub fn map_into_stateful<U>(
+        self,
+        f: impl Fn(T) -> U + Send + 'static,
+    ) -> Receiver<StatefulData<U>>
+    where
+        T: Send + 'static,
+        U: Clone + Eq + Send + 'static,
+    {
+        let name = format!("{} (map_into_stateful)", self.name);
+        let (tx, rx) = create_stateful_entity(&name);
+        self.map(tx, f);
+        rx
+    }
+
+    /// Map this receiver into a another type using a stateless receiver.
+    fn map<U>(self, tx: Sender<U>, f: impl Fn(T) -> U + Send + 'static)
+    where
+        T: Send + 'static,
+        U: Clone + Send + 'static,
+    {
+        let name = format!("{} (map)", self.name);
+
+        spawn(async move {
+            let mut sub = self.subscribe().await;
+
+            loop {
+                select! {
+                    data = sub.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{}: map_into_stateless({}): recv failed, exiting", name, err);
+                                break;
+                            }
+                        };
+
+                        tx.try_send(f(data));
+                    }
+
+                    _ = tx.closed() => {
+                        debug!("map_into_stateless({}): source closed", name);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     /// Completes when the entity is closed.
     pub async fn closed(&self) {
         self.tx.closed().await;

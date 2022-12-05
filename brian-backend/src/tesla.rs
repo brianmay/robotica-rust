@@ -204,13 +204,46 @@ pub fn monitor_charging(
         .subscriptions
         .subscribe_into_stateful::<bool>(&format!("teslamate/cars/{car_number}/plugged_in"));
 
-    let auto_charge_rx = state
-        .subscriptions
-        .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/AutoCharge"));
+    let auto_charge_rx = {
+        let mqtt = mqtt.clone();
+        state
+            .subscriptions
+            .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/AutoCharge"))
+            .map_into_stateless(move |cmd| {
+                if let Command::Device(cmd) = &cmd {
+                    let status = match cmd.action {
+                        DeviceAction::TurnOn => DevicePower::AutoOff,
+                        DeviceAction::TurnOff => DevicePower::Off,
+                    };
+                    publish_auto_charge(car_number, status, &mqtt);
+                }
+                cmd
+            })
+    };
 
-    let force_charge_rx = state
-        .subscriptions
-        .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/ForceCharge"));
+    let force_charge_rx = {
+        let mqtt = mqtt.clone();
+        state
+            .subscriptions
+            .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/ForceCharge"))
+            .map_into_stateless(move |cmd| {
+                if let Command::Device(cmd) = &cmd {
+                    let status = match cmd.action {
+                        DeviceAction::TurnOn => DevicePower::AutoOff,
+                        DeviceAction::TurnOff => DevicePower::Off,
+                    };
+                    publish_force_change(car_number, status, &mqtt);
+                }
+                cmd
+            })
+    };
+
+    let location_rx = {
+        state
+            .subscriptions
+            .subscribe_into_stateless::<String>(&format!("command/Tesla/{car_number}/Location"))
+            .map_into_stateful(move |location| location == "home")
+    };
 
     spawn(async move {
         let mut token = Token::get().unwrap();
@@ -219,6 +252,7 @@ pub fn monitor_charging(
 
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
+        let mut location_charge_s = location_rx.subscribe().await;
         let mut rx_s = price_summary_rx.subscribe().await;
         let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
         let mut charge_state = token.get_charge_state(car_id).await.ok();
@@ -250,9 +284,11 @@ pub fn monitor_charging(
                         log::info!("Car is disconnected");
                     }
 
-                    match token.get_charge_state(car_id).await {
-                        Ok(new_charge_state) => charge_state = Some(new_charge_state),
-                        Err(err) => log::info!("Failed to get charge state: {err}"),
+                    if let Some(true) = location_rx.get_current().await {
+                        match token.get_charge_state(car_id).await {
+                            Ok(new_charge_state) => charge_state = Some(new_charge_state),
+                            Err(err) => log::info!("Failed to get charge state: {err}"),
+                        }
                     }
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
@@ -262,7 +298,7 @@ pub fn monitor_charging(
                             DeviceAction::TurnOff => false,
                         };
                         log::info!("Auto charge: {auto_charge}");
-                        publish_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
+                        update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
                     } else {
                         log::info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
@@ -274,32 +310,50 @@ pub fn monitor_charging(
                             DeviceAction::TurnOff => false,
                         };
                         log::info!("Force charge: {force_charge}");
-                        publish_force_charge(&charge_state, car_number, force_charge, &mqtt);
+                        update_force_charge(&charge_state, car_number, force_charge, &mqtt);
                     } else {
                         log::info!("Ignoring invalid force_charge command: {cmd:?}");
+                    }
+                }
+                Ok((_, is_home)) = location_charge_s.recv() => {
+                    log::info!("Location is home: {is_home}");
+                    if is_home {
+                        match token.get_charge_state(car_id).await {
+                            Ok(new_charge_state) => charge_state = Some(new_charge_state),
+                            Err(err) => log::info!("Failed to get charge state: {err}"),
+                        }
+                    } else {
+                        charge_state = None;
                     }
                 }
                 else => break,
             }
 
-            if let Some(price_summary) = &price_summary {
-                check_charge(
-                    car_id,
-                    &token,
-                    &mut charge_state,
-                    price_summary,
-                    auto_charge,
-                    force_charge,
-                )
-                .await;
+            if let Some(true) = location_rx.get_current().await {
+                if let Some(price_summary) = &price_summary {
+                    check_charge(
+                        car_id,
+                        &token,
+                        &mut charge_state,
+                        price_summary,
+                        auto_charge,
+                        force_charge,
+                    )
+                    .await;
+                } else {
+                    log::info!("No price summary available, skipping charge check");
+                }
+            } else {
+                log::info!("Location is not home, skipping charge check");
             }
-            publish_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
-            publish_force_charge(&charge_state, car_number, force_charge, &mqtt);
+
+            update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
+            update_force_charge(&charge_state, car_number, force_charge, &mqtt);
         }
     });
 }
 
-fn publish_auto_charge(
+fn update_auto_charge(
     auto_charge: bool,
     car_number: usize,
     charge_state: &Option<ChargeState>,
@@ -310,18 +364,27 @@ fn publish_auto_charge(
         |s| s.charging_state == ChargingStateEnum::Charging,
     );
 
-    let topic = format!("state/Tesla/{car_number}/AutoCharge/power");
     let status = match (auto_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
         (true, true) => DevicePower::On,
         (false, _) => DevicePower::Off,
     };
+
+    publish_auto_charge(car_number, status, mqtt);
+}
+
+fn publish_auto_charge(
+    car_number: usize,
+    status: DevicePower,
+    mqtt: &robotica_backend::services::mqtt::Mqtt,
+) {
+    let topic = format!("state/Tesla/{car_number}/AutoCharge/power");
     let string: String = status.into();
     let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
     mqtt.try_send(msg);
 }
 
-fn publish_force_charge(
+fn update_force_charge(
     charge_state: &Option<ChargeState>,
     car_number: usize,
     force_charge: bool,
@@ -331,12 +394,21 @@ fn publish_force_charge(
         || false,
         |s| s.charging_state == ChargingStateEnum::Charging,
     );
-    let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
     let status = match (force_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
         (true, true) => DevicePower::On,
         (false, _) => DevicePower::Off,
     };
+
+    publish_force_change(car_number, status, mqtt);
+}
+
+fn publish_force_change(
+    car_number: usize,
+    status: DevicePower,
+    mqtt: &robotica_backend::services::mqtt::Mqtt,
+) {
+    let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
     let string: String = status.into();
     let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
     mqtt.try_send(msg);
