@@ -383,19 +383,13 @@ async fn check_charge(
         None => true,
     };
 
-    log::debug!("Current data: {price_summary:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
-    log::debug!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
+    log::info!("Current data: {price_summary:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
+    log::info!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
     let set_charge_limit = if let Some(charge_state) = charge_state {
-        if charge_state.charge_limit_soc != charge_limit {
-            log::debug!("Charge limit is wrong, setting it");
-            true
-        } else {
-            false
-        }
+        charge_state.charge_limit_soc != charge_limit
     } else {
-        log::debug!("Charge limit is unknown, setting it");
         true
     };
 
