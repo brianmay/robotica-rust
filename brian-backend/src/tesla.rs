@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::select;
 
 use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
-use robotica_backend::spawn;
+use robotica_backend::{is_debug_mode, spawn};
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use super::State;
@@ -413,25 +413,37 @@ async fn check_charge(
 
     // Start/stop charging as required.
     let get_charge_state = if charging == ChargingStateEnum::Charging && !should_charge {
-        log::info!("Stopping charge");
-        token.wait_for_wake_up(car_id).await?;
-        token.charge_stop(car_id).await.unwrap_or_else(|err| {
-            log::info!("Failed to stop charge: {err}");
-        });
+        if !is_debug_mode() {
+            log::info!("Stopping charge");
+            token.wait_for_wake_up(car_id).await?;
+            token.charge_stop(car_id).await.unwrap_or_else(|err| {
+                log::info!("Failed to stop charge: {err}");
+            });
+        } else {
+            log::info!("Would have stopped charge");
+        }
         true
     } else if charging == ChargingStateEnum::Stopped && should_charge && can_charge {
-        log::info!("Starting charge");
-        token.wait_for_wake_up(car_id).await?;
-        token.charge_start(car_id).await.unwrap_or_else(|err| {
-            log::info!("Failed to start charge: {err}");
-        });
+        if !is_debug_mode() {
+            log::info!("Starting charge");
+            token.wait_for_wake_up(car_id).await?;
+            token.charge_start(car_id).await.unwrap_or_else(|err| {
+                log::info!("Failed to start charge: {err}");
+            });
+        } else {
+            log::info!("Would have started charge");
+        }
         true
     } else if charging == ChargingStateEnum::Complete && should_charge && can_charge {
-        log::info!("Restarting charge");
-        token.wait_for_wake_up(car_id).await?;
-        token.charge_start(car_id).await.unwrap_or_else(|err| {
-            log::info!("Failed to start charge: {err}");
-        });
+        if !is_debug_mode() {
+            log::info!("Restarting charge");
+            token.wait_for_wake_up(car_id).await?;
+            token.charge_start(car_id).await.unwrap_or_else(|err| {
+                log::info!("Failed to start charge: {err}");
+            });
+        } else {
+            log::info!("Would have restarted charge");
+        }
         true
     } else {
         false
