@@ -10,6 +10,7 @@
 pub mod anavi_thermometer;
 pub mod controllers;
 pub mod mqtt;
+pub mod robotica;
 pub mod user;
 pub mod version;
 pub mod websocket;

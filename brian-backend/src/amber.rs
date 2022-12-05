@@ -7,7 +7,10 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::time::{interval, MissedTickBehavior};
 
-use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
+use robotica_backend::{
+    entities::{self, Receiver, StatefulData},
+    get_env, is_debug_mode, spawn, EnvironmentError,
+};
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 
 /// Error when starting the Amber service
@@ -54,7 +57,7 @@ fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run() -> Result<(), AmberError> {
+pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -66,7 +69,17 @@ pub fn run() -> Result<(), AmberError> {
         influx_database,
     };
 
+    let (tx, rx) = entities::create_stateful_entity("amber_summary");
+
     spawn(async move {
+        // if is_debug_mode() {
+        //     let start_date = Date::from_ymd(2022, 1, 1);
+        //     let stop_date = Date::from_ymd(2022, 3, 1);
+        //     // process_prices(&config, start_date, stop_date).await;
+        //     process_usage(&config, start_date, stop_date).await;
+        //     println!("------------------- done -------------------");
+        // }
+
         let nem_timezone = FixedOffset::east(hours(10).into());
 
         // Update prices every 5 minutes
@@ -84,7 +97,10 @@ pub fn run() -> Result<(), AmberError> {
                     let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
-                        process_prices(&config, yesterday, tomorrow).await;
+                        let summary = process_prices(&config, yesterday, tomorrow).await;
+                        if let Some(summary) = summary {
+                            tx.try_send(summary);
+                        }
                 }
                 _ = usage_interval.tick() => {
                     let now = utc_now();
@@ -97,11 +113,11 @@ pub fn run() -> Result<(), AmberError> {
         }
     });
 
-    Ok(())
+    Ok(rx)
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 enum IntervalType {
     ActualInterval,
     ForecastInterval,
@@ -256,33 +272,75 @@ async fn get_usage(
     response.json().await
 }
 
-async fn process_prices(config: &Config, start_date: Date, end_date: Date) {
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum PriceQuality {
+    SuperCheap,
+    Cheap,
+    Normal,
+    Expensive,
+}
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PriceSummary {
+    pub quality: PriceQuality,
+}
+
+async fn process_prices(config: &Config, start_date: Date, end_date: Date) -> Option<PriceSummary> {
     let prices = get_prices(config, start_date, end_date).await;
+
     match prices {
         Ok(prices) => {
-            let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
-
-            if is_debug_mode() {
-                debug!("Skipping writing prices to influxdb in debug mode");
-                return;
-            }
-
-            for data in prices {
-                let reading = PriceReading {
-                    duration: data.duration,
-                    per_kwh: data.per_kwh,
-                    renewables: data.renewables,
-                    time: data.start_time.into(),
-                }
-                .into_query("amber/price");
-
-                if let Err(e) = client.query(&reading).await {
-                    log::error!("Failed to write to influxdb: {}", e);
-                }
-            }
+            prices_to_influxdb(config, &prices).await;
+            let summary = prices_to_summary(&prices);
+            Some(summary)
         }
         Err(e) => {
-            log::error!("Failed to get prices: {}", e);
+            log::error!("Error getting prices: {}", e);
+            None
+        }
+    }
+}
+
+fn prices_to_summary(prices: &[PriceResponse]) -> PriceSummary {
+    let mut quality: PriceQuality = PriceQuality::Normal;
+
+    prices
+        .iter()
+        .filter(|p| p.interval_type == IntervalType::CurrentInterval)
+        .map(|price| {
+            if price.per_kwh < 10.0 {
+                PriceQuality::SuperCheap
+            } else if price.per_kwh < 20.0 {
+                PriceQuality::Cheap
+            } else if price.per_kwh < 30.0 {
+                PriceQuality::Normal
+            } else {
+                PriceQuality::Expensive
+            }
+        })
+        .for_each(|new_pq| quality = new_pq);
+
+    PriceSummary { quality }
+}
+
+async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse]) {
+    let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+
+    if is_debug_mode() {
+        debug!("Skipping writing prices to influxdb in debug mode");
+        return;
+    }
+
+    for data in prices {
+        let reading = PriceReading {
+            duration: data.duration,
+            per_kwh: data.per_kwh,
+            renewables: data.renewables,
+            time: data.start_time.clone().into(),
+        }
+        .into_query("amber/price");
+
+        if let Err(e) = client.query(&reading).await {
+            log::error!("Failed to write to influxdb: {}", e);
         }
     }
 }

@@ -46,6 +46,7 @@ pub fn brian_room() -> Html {
                 <Button<SwitchProps> name={"Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
                 <Button<SwitchProps> name={"Night"} topic_substr={"Brian/Night"} action={Action::Toggle} icon={night_icon} />
                 <Button<SwitchProps> name={"MSG"} topic_substr={"Brian/Messages"} action={Action::Toggle} icon={trumpet_icon} />
+                <Button<SwitchProps> name={"TCharge"} topic_substr={"Tesla/1/AutoCharge"} action={Action::Toggle} icon={light_icon} />
             </div>
         </RequireConnection>
     )

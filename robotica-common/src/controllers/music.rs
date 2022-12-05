@@ -98,12 +98,14 @@ impl ControllerTrait for Controller {
         let payload = match get_press_on_or_off(display_state, self.config.action) {
             TurnOnOff::TurnOn => {
                 serde_json::json!({
-                    "music": {"play_list": self.config.play_list}
+                    "music": {"play_list": self.config.play_list},
+                    "type": "audio"
                 })
             }
             TurnOnOff::TurnOff => {
                 serde_json::json!({
-                    "music": {"stop": true}
+                    "music": {"stop": true},
+                    "type": "audio",
                 })
             }
         };

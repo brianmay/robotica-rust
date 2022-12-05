@@ -115,6 +115,7 @@ impl ControllerTrait for Controller {
         let mut payload = serde_json::json!({
             "scene": self.config.scene,
             "priority": self.config.priority,
+            "type": "light"
         });
 
         let display_state = self.get_display_state();

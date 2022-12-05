@@ -107,6 +107,7 @@ impl ControllerTrait for Controller {
         let payload = serde_json::json!({
             "input": self.config.input,
             "output": self.config.output,
+            "type": "hdmi",
         });
 
         let display_state = self.get_display_state();

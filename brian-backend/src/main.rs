@@ -6,9 +6,11 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
+use robotica_backend::devices::fake_switch;
 use robotica_backend::entities::Sender;
 use robotica_backend::scheduling::executor::executor;
 
+use self::tesla::monitor_charging;
 use robotica_backend::services::http;
 use robotica_backend::services::mqtt::Mqtt;
 use robotica_backend::services::mqtt::{MqttClient, Subscriptions};
@@ -44,9 +46,11 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         message_sink,
     };
 
-    amber::run().unwrap_or_else(|e| {
+    let price_summary_rx = amber::run().unwrap_or_else(|e| {
         panic!("Error running amber: {}", e);
     });
+
+    monitor_charging(&mut state, 1, price_summary_rx);
 
     http::run(state.mqtt.clone())
         .await
@@ -58,7 +62,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         panic!("Environment monitor failed: {err}");
     });
 
-    executor(&mut state.subscriptions, state.mqtt).unwrap_or_else(|err| {
+    executor(&mut state.subscriptions, state.mqtt.clone()).unwrap_or_else(|err| {
         panic!("Failed to start executor: {}", err);
     });
 
@@ -82,6 +86,8 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     //         }
     //     }
     // });
+
+    fake_switch::run(&mut state.subscriptions, state.mqtt, "Tesla/1/AutoCharge");
 
     state.subscriptions
 }

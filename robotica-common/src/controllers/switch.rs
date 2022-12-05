@@ -88,7 +88,7 @@ impl ControllerTrait for Controller {
         };
 
         let topic = format!("command/{}", self.config.topic_substr);
-        let payload = serde_json::json!({ "action": action });
+        let payload = serde_json::json!({ "action": action, "type" : "device" });
         json_command_vec(&topic, &payload)
     }
 
