@@ -241,7 +241,7 @@ pub fn monitor_charging(
     let is_home_rx = {
         state
             .subscriptions
-            .subscribe_into_stateless::<String>(&format!("command/Tesla/{car_number}/Location"))
+            .subscribe_into_stateless::<String>(&format!("state/Tesla/{car_number}/Location"))
             .map_into_stateful(move |location| location == "home")
     };
 
