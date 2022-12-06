@@ -255,7 +255,7 @@ pub fn monitor_charging(
         let mut location_charge_s = is_home_rx.subscribe().await;
         let mut rx_s = price_summary_rx.subscribe().await;
         let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
-        let mut charge_state = token.get_charge_state(car_id).await.ok();
+        let mut charge_state = None;
         let mut pi_s = pi_rx.subscribe().await;
         let mut price_summary: Option<PriceSummary> = None;
 
@@ -319,6 +319,9 @@ pub fn monitor_charging(
             if let Some(true) = is_home_rx.get_current().await {
                 if charge_state.is_none() {
                     log::info!("Refreshing charge state");
+                    token.wait_for_wake_up(car_id).await.unwrap_or_else(|err| {
+                        log::error!("Error waiting for wake up: {err}");
+                    });
                     match token.get_charge_state(car_id).await {
                         Ok(new_charge_state) => charge_state = Some(new_charge_state),
                         Err(err) => log::info!("Failed to get charge state: {err}"),
