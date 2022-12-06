@@ -261,6 +261,7 @@ pub fn monitor_charging(
 
         let mut auto_charge = false;
         let mut force_charge = false;
+        let mut is_home = false;
 
         log::info!("Initial charge state: {charge_state:?}");
 
@@ -309,14 +310,15 @@ pub fn monitor_charging(
                         log::info!("Ignoring invalid force_charge command: {cmd:?}");
                     }
                 }
-                Ok((_, is_home)) = location_charge_s.recv() => {
+                Ok((_, new_is_home)) = location_charge_s.recv() => {
+                    is_home = new_is_home;
                     log::info!("Location is home: {is_home}");
                     charge_state = None;
                 }
                 else => break,
             }
 
-            if let Some(true) = is_home_rx.get_current().await {
+            if is_home && auto_charge {
                 if charge_state.is_none() {
                     log::info!("Refreshing charge state");
                     token.wait_for_wake_up(car_id).await.unwrap_or_else(|err| {
@@ -342,7 +344,8 @@ pub fn monitor_charging(
                     log::info!("No price summary available, skipping charge check");
                 }
             } else {
-                log::info!("Location is not home, skipping charge check");
+                log::info!("Skipping charge check");
+                charge_state = None;
             }
 
             update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
