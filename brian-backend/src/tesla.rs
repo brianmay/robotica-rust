@@ -200,6 +200,8 @@ pub fn monitor_charging(
 ) {
     let mqtt = state.mqtt.clone();
 
+    let price_category_rx = price_summary_rx.map_into_stateful(|(_, ps)| ps.category);
+
     let pi_rx = state
         .subscriptions
         .subscribe_into_stateful::<bool>(&format!("teslamate/cars/{car_number}/plugged_in"));
@@ -253,11 +255,11 @@ pub fn monitor_charging(
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
-        let mut rx_s = price_summary_rx.subscribe().await;
+        let mut price_quality_rx = price_category_rx.subscribe().await;
         let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
         let mut charge_state = None;
         let mut pi_s = pi_rx.subscribe().await;
-        let mut price_summary: Option<PriceSummary> = None;
+        let mut price_category: Option<PriceCategory> = None;
 
         let mut auto_charge = false;
         let mut force_charge = false;
@@ -274,9 +276,9 @@ pub fn monitor_charging(
                     });
                     log::info!("Token expiration: {:?}", token.expires_at);
                 }
-                Ok((_, new_price_summary)) = rx_s.recv() => {
-                    log::info!("New price summary: {:?}", new_price_summary);
-                    price_summary = Some(new_price_summary);
+                Ok((_, new_price_category)) = price_quality_rx.recv() => {
+                    log::info!("New price summary: {:?}", new_price_category);
+                    price_category = Some(new_price_category);
                 }
                 Ok((_, pi)) = pi_s.recv() => {
                     if pi {
@@ -330,12 +332,12 @@ pub fn monitor_charging(
                     }
                 }
 
-                if let Some(price_summary) = &price_summary {
+                if let Some(price_category) = &price_category {
                     check_charge(
                         car_id,
                         &token,
                         &mut charge_state,
-                        price_summary,
+                        price_category,
                         auto_charge,
                         force_charge,
                     )
@@ -427,7 +429,7 @@ async fn check_charge(
     car_id: u64,
     token: &Token,
     charge_state: &mut Option<ChargeState>,
-    price_summary: &PriceSummary,
+    price_category: &PriceCategory,
     auto_charge: bool,
     force_charge: bool,
 ) {
@@ -436,13 +438,13 @@ async fn check_charge(
         .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
 
     // Should we turn on charging?
-    let should_charge = (price_summary.category == PriceCategory::SuperCheap
-        || price_summary.category == PriceCategory::Cheap
+    let should_charge = (*price_category == PriceCategory::SuperCheap
+        || *price_category == PriceCategory::Cheap
         || force_charge)
         && auto_charge;
 
     // What is the limit we should charge to?
-    let charge_limit = match (should_charge, &price_summary.category) {
+    let charge_limit = match (should_charge, &price_category) {
         (false, _) | (true, PriceCategory::Expensive) => 50,
         (true, PriceCategory::Normal) => 70,
         (true, PriceCategory::Cheap) => 80,
@@ -455,7 +457,7 @@ async fn check_charge(
         None => true,
     };
 
-    log::info!("Current data: {price_summary:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
+    log::info!("Current data: {price_category:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
     log::info!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?

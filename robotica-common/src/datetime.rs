@@ -128,6 +128,14 @@ impl<'de> Deserialize<'de> for Weekday {
 #[derive(Debug, Copy, Clone)]
 pub struct Time(chrono::NaiveTime);
 
+impl Time {
+    #[must_use]
+    /// Create a new Time.
+    pub fn new(hour: u32, minute: u32, second: u32) -> Self {
+        Self(chrono::NaiveTime::from_hms(hour, minute, second))
+    }
+}
+
 impl FromStr for Time {
     type Err = chrono::ParseError;
 
@@ -168,7 +176,7 @@ impl<T: TimeZone> DateTime<T> {
     /// Get the date of the date time.
     #[must_use]
     pub fn date(self) -> Date {
-        Date(self.0.date().naive_local())
+        Date(self.0.date_naive())
     }
 
     /// Get the time of the date time.
@@ -345,6 +353,18 @@ impl Duration {
         Self(chrono::Duration::minutes(minutes))
     }
 
+    /// Create a duration from a number of hours.
+    #[must_use]
+    pub fn hours(hours: i64) -> Self {
+        Self(chrono::Duration::hours(hours))
+    }
+
+    /// Subtract a duration from this duration.
+    #[must_use]
+    pub fn checked_sub(self, rhs: &Self) -> Option<Self> {
+        self.0.checked_sub(&rhs.0).map(Self)
+    }
+
     /// Convert the duration to a std duration.
     ///
     /// # Errors
@@ -358,6 +378,14 @@ impl Duration {
 impl From<chrono::Duration> for Duration {
     fn from(d: chrono::Duration) -> Self {
         Self(d)
+    }
+}
+
+impl Add<Duration> for Duration {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
     }
 }
 
