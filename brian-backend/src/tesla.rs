@@ -327,7 +327,6 @@ pub fn monitor_charging(
                         &token,
                         &mut charge_state,
                         price_category,
-                        auto_charge,
                         force_charge,
                     )
                     .await;
@@ -414,12 +413,28 @@ async fn get_car_id(token: &mut Token, car_n: usize) -> Result<Option<u64>> {
     Ok(number)
 }
 
+enum RequestedCharge {
+    DontCharge,
+    ChargeTo(u8),
+}
+
+impl RequestedCharge {
+    fn min_charge(self, min_charge: u8) -> Self {
+        match self {
+            RequestedCharge::DontCharge => RequestedCharge::ChargeTo(min_charge),
+            RequestedCharge::ChargeTo(limit) if limit < min_charge => {
+                RequestedCharge::ChargeTo(min_charge)
+            }
+            _ => self,
+        }
+    }
+}
+
 async fn check_charge(
     car_id: u64,
     token: &Token,
     charge_state: &mut Option<ChargeState>,
     price_category: &PriceCategory,
-    auto_charge: bool,
     force_charge: bool,
 ) {
     // true state means car is awake; false means not sure.
@@ -440,20 +455,25 @@ async fn check_charge(
         false
     };
 
-    let charging = charge_state.as_ref().map(|s| s.charging_state);
-
-    // Should we turn on charging?
-    let should_charge = (*price_category == PriceCategory::SuperCheap
-        || *price_category == PriceCategory::Cheap
-        || force_charge)
-        && auto_charge;
-
     // What is the limit we should charge to?
-    let charge_limit = match (should_charge, &price_category) {
-        (false, _) | (true, PriceCategory::Expensive) => 50,
-        (true, PriceCategory::Normal) => 70,
-        (true, PriceCategory::Cheap) => 80,
-        (true, PriceCategory::SuperCheap) => 90,
+    let requested_charge = match &price_category {
+        PriceCategory::Expensive => RequestedCharge::DontCharge,
+        PriceCategory::Normal => RequestedCharge::DontCharge,
+        PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
+        PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
+    };
+
+    // If we're forcing a charge, we should charge to at least 70%.
+    let requested_charge = if force_charge {
+        requested_charge.min_charge(70)
+    } else {
+        requested_charge
+    };
+
+    // Should we charge? If so, to what limit?
+    let (should_charge, charge_limit) = match requested_charge {
+        RequestedCharge::DontCharge => (false, 50),
+        RequestedCharge::ChargeTo(limit) => (true, limit),
     };
 
     // Is battery level low enough that we can charge it?
@@ -462,7 +482,7 @@ async fn check_charge(
         None => true,
     };
 
-    log::info!("Current data: {price_category:?}, {charge_state:?}, auto charge: {auto_charge}, force charge: {force_charge}");
+    log::info!("Current data: {price_category:?}, {charge_state:?}, force charge: {force_charge}");
     log::info!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
@@ -488,6 +508,7 @@ async fn check_charge(
     }
 
     // Start/stop charging as required.
+    let charging = charge_state.as_ref().map(|s| s.charging_state);
     if charging == Some(ChargingStateEnum::Charging) && !should_charge {
         log::info!("Stopping charge");
         sequence.add_charge_stop();
