@@ -261,6 +261,40 @@ pub enum WakeupError {
     Timeout,
 }
 
+/// An error occurred while running a sequence of commands
+#[derive(Debug, Error)]
+pub enum SequenceError {
+    /// The HTTP request failed.
+    #[error("Tesla reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    /// The HTTP request succeeded, but the response was not successful.
+    #[error("Generic tesla error: {0}")]
+    Failed(String),
+
+    /// We couldn't wake up the car before the timeout elapsed
+    #[error("Wakeup timeout error")]
+    Timeout,
+}
+
+impl From<WakeupError> for SequenceError {
+    fn from(error: WakeupError) -> Self {
+        match error {
+            WakeupError::Reqwest(e) => SequenceError::Reqwest(e),
+            WakeupError::Timeout => SequenceError::Timeout,
+        }
+    }
+}
+
+impl From<GenericError> for SequenceError {
+    fn from(error: GenericError) -> Self {
+        match error {
+            GenericError::Reqwest(e) => SequenceError::Reqwest(e),
+            GenericError::Failed(e) => SequenceError::Failed(e),
+        }
+    }
+}
+
 impl Token {
     /// Load token from file
     ///
@@ -360,13 +394,26 @@ impl Token {
     pub async fn wait_for_wake_up(&self, id: u64) -> Result<(), WakeupError> {
         let timeout = Instant::now() + Duration::from_secs(60);
 
+        log::info!("Trying to wake up (initial)");
+        let response = self.wake_up(id).await?;
+        if response.state == "online" {
+            log::info!("Car is already online");
+            return Ok(());
+        }
+
         while Instant::now() < timeout {
+            log::info!("Trying to wake up (retry)");
             let response = self.wake_up(id).await?;
             if response.state == "online" {
+                log::info!("Car is online");
+                sleep(Duration::from_secs(30)).await;
+                log::info!("Car is online (after sleep)");
                 return Ok(());
             }
+            log::info!("Car is not online");
             sleep(Duration::from_secs(5)).await;
         }
+
         Err(WakeupError::Timeout)
     }
 
@@ -434,14 +481,16 @@ impl Token {
 
 #[derive(Debug)]
 enum Command {
+    WakeUp,
     SetChargeLimit(u8),
     ChargeStart,
     ChargeStop,
 }
 
 impl Command {
-    async fn execute(&self, token: &Token, id: u64) -> Result<(), GenericError> {
+    async fn execute(&self, token: &Token, id: u64) -> Result<(), SequenceError> {
         match self {
+            Command::WakeUp => token.wait_for_wake_up(id).await?,
             Command::SetChargeLimit(percent) => token.set_charge_limit(id, *percent).await?,
             Command::ChargeStart => token.charge_start(id).await?,
             Command::ChargeStop => token.charge_stop(id).await?,
@@ -453,6 +502,9 @@ impl Command {
 #[derive(Debug)]
 /// A sequence of commands to execute
 pub struct CommandSequence {
+    /// prefix commands are not executed unless there is at least one real command.
+    prefix_commands: Vec<Command>,
+    /// The commands to execute
     commands: Vec<Command>,
 }
 
@@ -460,12 +512,20 @@ impl CommandSequence {
     /// Create a new command sequence
     #[must_use]
     pub const fn new() -> Self {
-        CommandSequence { commands: vec![] }
+        CommandSequence {
+            prefix_commands: vec![],
+            commands: vec![],
+        }
     }
 
     /// Add a command to the sequence
     fn add(&mut self, command: Command) {
         self.commands.push(command);
+    }
+
+    /// Wake up the car
+    pub fn add_wake_up(&mut self) {
+        self.prefix_commands.push(Command::WakeUp);
     }
 
     /// Set the charge limit for the car
@@ -485,11 +545,17 @@ impl CommandSequence {
 
     /// Execute the sequence
     ///
+    /// # Returns
+    ///
+    /// The number of commands executed.
+    ///
     /// # Errors
     ///
     /// Returns error if the wake up request failed.
     /// Returns error if any of the commands failed.
-    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<usize, GenericError> {
+    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<usize, SequenceError> {
+        let mut num_executed = 0;
+
         if self.commands.is_empty() {
             return Ok(0);
         }
@@ -499,13 +565,17 @@ impl CommandSequence {
             return Ok(0);
         }
 
-        token.wake_up(car_id).await?;
-        sleep(Duration::from_secs(60)).await;
+        for command in &self.prefix_commands {
+            command.execute(token, car_id).await?;
+            num_executed += 1;
+        }
 
         for command in &self.commands {
             command.execute(token, car_id).await?;
+            num_executed += 1;
         }
-        Ok(self.commands.len())
+
+        Ok(num_executed)
     }
 
     /// Is the sequence empty?
