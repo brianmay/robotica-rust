@@ -440,9 +440,7 @@ async fn check_charge(
         false
     };
 
-    let charging = charge_state
-        .as_ref()
-        .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
+    let charging = charge_state.as_ref().map(|s| s.charging_state);
 
     // Should we turn on charging?
     let should_charge = (*price_category == PriceCategory::SuperCheap
@@ -490,14 +488,20 @@ async fn check_charge(
     }
 
     // Start/stop charging as required.
-    if charging == ChargingStateEnum::Charging && !should_charge {
+    if charging == Some(ChargingStateEnum::Charging) && !should_charge {
         log::info!("Stopping charge");
         sequence.add_charge_stop();
-    } else if charging == ChargingStateEnum::Stopped && should_charge && can_charge {
+    } else if charging.is_none() && !should_charge {
+        log::info!("Charging unknown, stopping charge");
+        sequence.add_charge_stop();
+    } else if charging == Some(ChargingStateEnum::Stopped) && should_charge && can_charge {
         log::info!("Starting charge");
         sequence.add_charge_start();
-    } else if charging == ChargingStateEnum::Complete && should_charge && can_charge {
+    } else if charging == Some(ChargingStateEnum::Complete) && should_charge && can_charge {
         log::info!("Restarting charge");
+        sequence.add_charge_start();
+    } else if charging.is_none() && should_charge && can_charge {
+        log::info!("Charging unknown, starting charge");
         sequence.add_charge_start();
     };
 
