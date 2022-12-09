@@ -274,6 +274,23 @@ impl<T: Send + Clone> Receiver<T> {
         });
     }
 
+    /// Run a function for every value received.
+    pub fn for_each<F>(self, f: F)
+    where
+        F: Fn(T) + Send + 'static,
+        T: Send + 'static,
+    {
+        spawn(async move {
+            let mut sub = self.subscribe().await;
+
+            loop {
+                while let Ok(data) = sub.recv().await {
+                    f(data);
+                }
+            }
+        });
+    }
+
     /// Completes when the entity is closed.
     pub async fn closed(&self) {
         self.tx.closed().await;

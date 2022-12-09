@@ -49,6 +49,24 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         panic!("Error running amber: {}", e);
     });
 
+    {
+        let message_sink = state.message_sink.clone();
+
+        price_summary_rx
+            .clone()
+            .map_into_stateful(|(_, current)| current.is_cheap_2hr)
+            .for_each(move |(old, current)| {
+                if old.is_some() {
+                    let message = if current {
+                        "2 hour cheap price has started"
+                    } else {
+                        "2 hour cheap price has ended"
+                    };
+                    message_sink.try_send(message.to_string());
+                }
+            });
+    }
+
     monitor_charging(&mut state, 1, price_summary_rx);
 
     http::run(state.mqtt.clone())

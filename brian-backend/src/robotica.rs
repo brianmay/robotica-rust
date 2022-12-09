@@ -148,13 +148,19 @@ pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt)
     let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
     let gate_in = subscriptions.subscribe_into_stateless::<Power>(&gate_topic);
 
+    let night_topic = Id::new("Brian", "Night").get_state_topic("power");
+    let night_in = subscriptions.subscribe_into_stateless::<Power>(&night_topic);
+
     let (tx, rx) = create_stateless_entity::<String>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
             info!("Sending message {}", msg);
 
-            if let Some(Power::On) = gate_in.get().await {
+            let gate = gate_in.get().await == Some(Power::On);
+            let night = night_in.get().await == Some(Power::On);
+
+            if gate && !night {
                 let msg = string_to_message(&msg, "Brian");
                 mqtt.try_send(msg);
             }
