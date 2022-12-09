@@ -393,7 +393,6 @@ struct PriceProcessor {
     date: Option<Date>,
     cheap_power_for_day: Duration,
     current_cheap_update: Option<DateTime<Utc>>,
-    current_cheap_price: f32,
 }
 
 impl PriceProcessor {
@@ -402,7 +401,6 @@ impl PriceProcessor {
             date: None,
             cheap_power_for_day: Duration::new(0, 0, 0),
             current_cheap_update: None,
-            current_cheap_price: 10.0,
         }
     }
 
@@ -456,14 +454,10 @@ impl PriceProcessor {
         // );
         let cheapest_price =
             get_price_for_cheapest_period(prices, number_of_intervals, start_time, end_time)
-                .unwrap_or(self.current_cheap_price);
-        self.current_cheap_price = cheapest_price;
+                .unwrap_or(10.0);
 
         let is_cheap = current_price.per_kwh <= cheapest_price;
-        // println!(
-        //     "Cheapest price: {:?} {cheapest_price:?} {is_cheap}",
-        //     current_price.per_kwh
-        // );
+        log::info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
 
         if is_cheap {
             self.current_cheap_update = Some(now.clone());
