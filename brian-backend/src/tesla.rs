@@ -321,17 +321,6 @@ pub fn monitor_charging(
             }
 
             if is_home && auto_charge {
-                if charge_state.is_none() {
-                    log::info!("Refreshing charge state");
-                    token.wait_for_wake_up(car_id).await.unwrap_or_else(|err| {
-                        log::error!("Error waiting for wake up: {err}");
-                    });
-                    match token.get_charge_state(car_id).await {
-                        Ok(new_charge_state) => charge_state = Some(new_charge_state),
-                        Err(err) => log::info!("Failed to get charge state: {err}"),
-                    }
-                }
-
                 if let Some(price_category) = &price_category {
                     check_charge(
                         car_id,
@@ -433,6 +422,24 @@ async fn check_charge(
     auto_charge: bool,
     force_charge: bool,
 ) {
+    // true state means car is awake; false means not sure.
+    let car_is_awake = if charge_state.is_none() {
+        log::info!("Waking up car");
+        match token.wake_up(car_id).await {
+            Ok(_) => {
+                log::info!("Car is awake; getting charge state");
+                *charge_state = get_charge_state(token, car_id).await;
+                true
+            }
+            Err(err) => {
+                log::error!("Error waking up car: {err}");
+                false
+            }
+        }
+    } else {
+        false
+    };
+
     let charging = charge_state
         .as_ref()
         .map_or_else(|| ChargingStateEnum::Stopped, |s| s.charging_state);
@@ -470,6 +477,12 @@ async fn check_charge(
     // Construct sequence of commands to send to Tesla.
     let mut sequence = CommandSequence::new();
 
+    // Wake up the car if it's not already awake.
+    if !car_is_awake {
+        log::info!("Waking up car");
+        sequence.add_wake_up();
+    }
+
     // Set the charge limit if required.
     if set_charge_limit {
         log::info!("Setting charge limit to {}", charge_limit);
@@ -497,12 +510,22 @@ async fn check_charge(
 
     // Get the charge state again, vehicle should be awake now.
     if num_executed > 0 {
-        log::debug!("Getting charge state");
-        match token.get_charge_state(car_id).await {
-            Ok(new_charge_state) => *charge_state = Some(new_charge_state),
-            Err(err) => log::info!("Failed to get charge state: {err}"),
-        }
+        *charge_state = get_charge_state(token, car_id).await;
     }
 
     log::info!("All done.");
+}
+
+async fn get_charge_state(token: &Token, car_id: u64) -> Option<ChargeState> {
+    log::info!("Getting charge state");
+    let charge_state = token
+        .get_charge_state(car_id)
+        .await
+        .map_err(|err| {
+            log::info!("Failed to get charge state: {err}");
+            err
+        })
+        .ok();
+    log::info!("Got charge state: {charge_state:?}");
+    charge_state
 }
