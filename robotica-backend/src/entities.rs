@@ -257,7 +257,7 @@ impl<T: Send + Clone> Receiver<T> {
                         let data = match data {
                             Ok(data) => data,
                             Err(err) => {
-                                debug!("{}: map_into_stateless({}): recv failed, exiting", name, err);
+                                debug!("{}: map({}): recv failed, exiting", name, err);
                                 break;
                             }
                         };
@@ -266,7 +266,69 @@ impl<T: Send + Clone> Receiver<T> {
                     }
 
                     _ = tx.closed() => {
-                        debug!("map_into_stateless({}): source closed", name);
+                        debug!("map({}): dest closed", name);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Map this receiver into a another type using a stateless receiver.
+    #[must_use]
+    pub fn filter_into_stateless(self, f: impl Fn(&T) -> bool + Send + 'static) -> Receiver<T>
+    where
+        T: Send + 'static,
+    {
+        let name = format!("{} (map_into_stateless)", self.name);
+        let (tx, rx) = create_stateless_entity(&name);
+        self.filter(tx, f);
+        rx
+    }
+
+    /// Map this receiver into a another type using a stateful receiver.
+    #[must_use]
+    pub fn filter_into_stateful(
+        self,
+        f: impl Fn(&T) -> bool + Send + 'static,
+    ) -> Receiver<StatefulData<T>>
+    where
+        T: Send + Eq + 'static,
+    {
+        let name = format!("{} (map_into_stateful)", self.name);
+        let (tx, rx) = create_stateful_entity(&name);
+        self.filter(tx, f);
+        rx
+    }
+
+    /// Filter this receiver based on function result
+    fn filter(self, tx: Sender<T>, f: impl Fn(&T) -> bool + Send + 'static)
+    where
+        T: Send + 'static,
+    {
+        let name = format!("{} (filter)", self.name);
+
+        spawn(async move {
+            let mut sub = self.subscribe().await;
+
+            loop {
+                select! {
+                    data = sub.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{}: map_into_stateless({}): recv failed, exiting", name, err);
+                                break;
+                            }
+                        };
+
+                        if f(&data) {
+                            tx.try_send(data);
+                        }
+                    }
+
+                    _ = tx.closed() => {
+                        debug!("map_into_stateless({}): dest closed", name);
                         break;
                     }
                 }

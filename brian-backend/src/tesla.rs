@@ -1,5 +1,5 @@
 use crate::amber::{PriceCategory, PriceSummary};
-use crate::delays::{delay_input, IsActive};
+use crate::delays::{delay_input, delay_repeat, IsActive};
 
 use anyhow::Result;
 use log::debug;
@@ -172,15 +172,24 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     });
 
     let duration = Duration::from_secs(60);
-    let rx2 = delay_input("tesla_doors (delayed)", duration, rx);
 
+    // Discard initial [] value.
+    let rx = rx
+        .map_into_stateful(|f| f)
+        .filter_into_stateless(|(p, c)| p.is_some() || c.is_active())
+        .map_into_stateless(|(_, c)| c);
+
+    // We only care if doors open for at least duration.
+    let rx = delay_input("tesla_doors (delayed)", duration, rx);
+
+    // Repeat the last value duration time.
+    let rx = delay_repeat("tesla_doors (repeat)", duration, rx);
+
+    // Output the message.
     spawn(async move {
-        let mut s = rx2.subscribe().await;
-        while let Ok((prev, open)) = s.recv().await {
-            debug!("out received: {:?} {:?}", prev, open);
-            if prev.is_none() {
-                continue;
-            }
+        let mut s = rx.subscribe().await;
+        while let Ok(open) = s.recv().await {
+            debug!("open received: {:?}", open);
             let msg = if open.is_empty() {
                 "The Tesla is secure".to_string()
             } else if open.len() == 1 {
