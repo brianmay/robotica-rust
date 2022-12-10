@@ -150,6 +150,9 @@ pub struct Vehicle {
 /// Is the car currently charging?
 #[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq)]
 pub enum ChargingStateEnum {
+    /// Charging is starting
+    Starting,
+
     /// Charging is complete
     Complete,
 

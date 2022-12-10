@@ -418,6 +418,13 @@ enum RequestedCharge {
     ChargeTo(u8),
 }
 
+enum ChargingSummary {
+    Charging,
+    NotCharging,
+    Disconnected,
+    Unknown,
+}
+
 impl RequestedCharge {
     fn min_charge(self, min_charge: u8) -> Self {
         match self {
@@ -507,24 +514,40 @@ async fn check_charge(
         sequence.add_set_chart_limit(charge_limit);
     }
 
-    // Start/stop charging as required.
+    // Get charging state
     let charging = charge_state.as_ref().map(|s| s.charging_state);
-    if charging == Some(ChargingStateEnum::Charging) && !should_charge {
-        log::info!("Stopping charge");
-        sequence.add_charge_stop();
-    } else if charging.is_none() && !should_charge {
-        log::info!("Charging unknown, stopping charge");
-        sequence.add_charge_stop();
-    } else if charging == Some(ChargingStateEnum::Stopped) && should_charge && can_charge {
-        log::info!("Starting charge");
-        sequence.add_charge_start();
-    } else if charging == Some(ChargingStateEnum::Complete) && should_charge && can_charge {
-        log::info!("Restarting charge");
-        sequence.add_charge_start();
-    } else if charging.is_none() && should_charge && can_charge {
-        log::info!("Charging unknown, starting charge");
-        sequence.add_charge_start();
+    let charging_summary = match charging {
+        Some(ChargingStateEnum::Starting) => ChargingSummary::Charging,
+        Some(ChargingStateEnum::Charging) => ChargingSummary::Charging,
+        Some(ChargingStateEnum::Complete) => ChargingSummary::NotCharging,
+        Some(ChargingStateEnum::Stopped) => ChargingSummary::NotCharging,
+        Some(ChargingStateEnum::Disconnected) => ChargingSummary::Disconnected,
+        None => ChargingSummary::Unknown,
     };
+
+    // Start/stop charging as required.
+    match charging_summary {
+        ChargingSummary::Charging if !should_charge => {
+            log::info!("Stopping charge");
+            sequence.add_charge_stop();
+        }
+        ChargingSummary::Charging => {}
+        ChargingSummary::NotCharging if should_charge && can_charge => {
+            log::info!("Starting charge");
+            sequence.add_charge_start();
+        }
+        ChargingSummary::NotCharging => {}
+        ChargingSummary::Unknown if !should_charge => {
+            log::info!("Stopping charge (unknown)");
+            sequence.add_charge_stop();
+        }
+        ChargingSummary::Unknown if should_charge && can_charge => {
+            log::info!("Starting charge (unknown)");
+            sequence.add_charge_start();
+        }
+        ChargingSummary::Unknown => {}
+        ChargingSummary::Disconnected => log::info!("Car is disconnected"),
+    }
 
     // Send the commands.
     log::info!("Sending commands: {sequence:?}");
