@@ -504,7 +504,6 @@ async fn check_charge(
 
     // Wake up the car if it's not already awake.
     if !car_is_awake {
-        log::info!("Waking up car");
         sequence.add_wake_up();
     }
 
