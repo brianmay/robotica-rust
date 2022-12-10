@@ -1,6 +1,6 @@
 //! Get information from Amber electricity supplier
 
-use chrono::{FixedOffset, Local, Utc};
+use chrono::{FixedOffset, Local, TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
 use log::debug;
 use serde::Deserialize;
@@ -417,7 +417,7 @@ impl PriceProcessor {
             .unwrap();
 
         let time = Time::new(5, 0, 0);
-        let (start_day, end_day) = get_day(now, time);
+        let (start_day, end_day) = get_day(now, time, &Local);
 
         let new_day = || DayState {
             start: start_day.clone(),
@@ -491,8 +491,12 @@ impl PriceProcessor {
     }
 }
 
-fn get_day(now: &DateTime<Utc>, time: Time) -> (DateTime<Utc>, DateTime<Utc>) {
-    let today = now.with_timezone(&Local).date();
+fn get_day<T: TimeZone>(
+    now: &DateTime<Utc>,
+    time: Time,
+    local: &T,
+) -> (DateTime<Utc>, DateTime<Utc>) {
+    let today = now.with_timezone(local).date();
     let tomorrow = today + Duration::days(1);
     // FIXME: Don't use unwrap here.
     let mut start_day = convert_date_time_to_utc(today, time, &Local).unwrap();
@@ -823,10 +827,11 @@ mod tests {
 
     #[test]
     fn test_get_day() {
+        let timezone = FixedOffset::east(60 * 60 * 11);
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T00:00:00Z".parse().unwrap();
-            let (start, stop) = get_day(&now, time);
+            let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
             assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
         }
@@ -834,7 +839,7 @@ mod tests {
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T17:59:59Z".parse().unwrap();
-            let (start, stop) = get_day(&now, time);
+            let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
             assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
         }
@@ -842,7 +847,7 @@ mod tests {
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T18:00:00Z".parse().unwrap();
-            let (start, stop) = get_day(&now, time);
+            let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
             assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
         }
@@ -850,7 +855,7 @@ mod tests {
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T18:00:01Z".parse().unwrap();
-            let (start, stop) = get_day(&now, time);
+            let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
             assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
         }
