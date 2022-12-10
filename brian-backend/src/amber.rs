@@ -389,19 +389,21 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
 }
 
 #[derive(Debug, Clone)]
-struct PriceProcessor {
-    date: Option<Date>,
+struct DayState {
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
     cheap_power_for_day: Duration,
-    current_cheap_update: Option<DateTime<Utc>>,
+    last_cheap_update: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+struct PriceProcessor {
+    day: Option<DayState>,
 }
 
 impl PriceProcessor {
     pub fn new() -> Self {
-        Self {
-            date: None,
-            cheap_power_for_day: Duration::new(0, 0, 0),
-            current_cheap_update: None,
-        }
+        Self { day: None }
     }
 
     pub fn prices_to_summary(
@@ -414,33 +416,45 @@ impl PriceProcessor {
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
             .unwrap();
 
-        let today = now.with_timezone(&Local).date();
+        let time = Time::new(5, 0, 0);
+        let (start_day, end_day) = get_day(now, time);
 
-        if Some(today) != self.date {
-            self.date = Some(today);
-            self.cheap_power_for_day = Duration::new(0, 0, 0);
-            self.current_cheap_update = None;
-        }
+        let new_day = || DayState {
+            start: start_day.clone(),
+            end: end_day.clone(),
+            cheap_power_for_day: Duration::new(0, 0, 0),
+            last_cheap_update: None,
+        };
 
-        if let Some(current_cheap_update) = &self.current_cheap_update {
-            let duration = now.clone() - current_cheap_update.clone();
+        let mut ds = if let Some(ds) = &self.day {
+            if *now < ds.start || *now >= ds.end {
+                new_day()
+            } else {
+                ds.clone()
+            }
+        } else {
+            new_day()
+        };
+
+        if let Some(last_cheap_update) = &ds.last_cheap_update {
+            let duration = now.clone() - last_cheap_update.clone();
             // println!(
             //     "Adding {:?} to cheap power for day {now:?} - {current_cheap_update:?}",
             //     duration
             // );
-            self.cheap_power_for_day = self.cheap_power_for_day + duration;
+            ds.cheap_power_for_day = ds.cheap_power_for_day + duration;
         }
 
         // println!("Cheap power for day: {:?}", self.cheap_power_for_day);
 
-        let start_time = convert_date_time_to_utc(today, Time::new(0, 0, 0), &Local).unwrap();
-        let end_time =
-            convert_date_time_to_utc(today + Duration::days(1), Time::new(0, 0, 0), &Local)
-                .unwrap();
+        // let start_time = convert_date_time_to_utc(today, Time::new(0, 0, 0), &Local).unwrap();
+        // let end_time =
+        //     convert_date_time_to_utc(today + Duration::days(1), Time::new(0, 0, 0), &Local)
+        //         .unwrap();
 
         let interval_duration = Duration::minutes(30);
         let duration = Duration::hours(2)
-            .checked_sub(&self.cheap_power_for_day)
+            .checked_sub(&ds.cheap_power_for_day)
             .unwrap_or_else(|| Duration::new(0, 0, 0));
 
         let number_of_intervals =
@@ -453,17 +467,19 @@ impl PriceProcessor {
         //     number_of_intervals
         // );
         let cheapest_price =
-            get_price_for_cheapest_period(prices, number_of_intervals, start_time, end_time)
+            get_price_for_cheapest_period(prices, number_of_intervals, start_day, end_day)
                 .unwrap_or(10.0);
 
         let is_cheap = current_price.per_kwh <= cheapest_price;
         log::info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
 
         if is_cheap {
-            self.current_cheap_update = Some(now.clone());
+            ds.last_cheap_update = Some(now.clone());
         } else {
-            self.current_cheap_update = None;
+            ds.last_cheap_update = None;
         }
+
+        self.day = Some(ds);
 
         let ps = PriceSummary {
             category: prices_to_category(prices),
@@ -473,6 +489,19 @@ impl PriceProcessor {
         log::info!("Price summary: {:?}", ps);
         ps
     }
+}
+
+fn get_day(now: &DateTime<Utc>, time: Time) -> (DateTime<Utc>, DateTime<Utc>) {
+    let today = now.with_timezone(&Local).date();
+    let tomorrow = today + Duration::days(1);
+    // FIXME: Don't use unwrap here.
+    let mut start_day = convert_date_time_to_utc(today, time, &Local).unwrap();
+    let mut end_day = convert_date_time_to_utc(tomorrow, time, &Local).unwrap();
+    if *now < start_day {
+        start_day = start_day - Duration::days(1);
+        end_day = end_day - Duration::days(1);
+    }
+    (start_day, end_day)
 }
 
 /// Divide two numbers and round up
@@ -708,9 +737,9 @@ mod tests {
                 per_kwh: 0,
             }
         );
-        assert_eq!(pp.date, Some("2020-01-01".parse().unwrap()));
-        assert_eq!(pp.cheap_power_for_day, Duration::minutes(0));
-        let cp = pp.current_cheap_update.clone().unwrap();
+        let ds = pp.day.clone().unwrap();
+        assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
+        let cp = ds.last_cheap_update.unwrap();
         assert_eq!(cp, now);
 
         let prices = vec![
@@ -776,9 +805,9 @@ mod tests {
                 per_kwh: 0,
             }
         );
-        assert_eq!(pp.date, Some("2020-01-01".parse().unwrap()));
-        assert_eq!(pp.cheap_power_for_day, Duration::minutes(45));
-        let cp = pp.current_cheap_update.clone();
+        let ds = pp.day.unwrap();
+        assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
+        let cp = ds.last_cheap_update;
         assert_eq!(cp, None);
     }
 
@@ -790,5 +819,40 @@ mod tests {
         assert_eq!(divide_round_up(3, 4), 1);
         assert_eq!(divide_round_up(4, 4), 1);
         assert_eq!(divide_round_up(5, 4), 2);
+    }
+
+    #[test]
+    fn test_get_day() {
+        {
+            let time = Time::new(5, 0, 0);
+            let now = "2020-01-02T00:00:00Z".parse().unwrap();
+            let (start, stop) = get_day(&now, time);
+            assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
+            assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
+        }
+
+        {
+            let time = Time::new(5, 0, 0);
+            let now = "2020-01-02T17:59:59Z".parse().unwrap();
+            let (start, stop) = get_day(&now, time);
+            assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
+            assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
+        }
+
+        {
+            let time = Time::new(5, 0, 0);
+            let now = "2020-01-02T18:00:00Z".parse().unwrap();
+            let (start, stop) = get_day(&now, time);
+            assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
+            assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
+        }
+
+        {
+            let time = Time::new(5, 0, 0);
+            let now = "2020-01-02T18:00:01Z".parse().unwrap();
+            let (start, stop) = get_day(&now, time);
+            assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
+            assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
+        }
     }
 }
