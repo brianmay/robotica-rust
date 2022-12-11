@@ -548,37 +548,29 @@ impl CommandSequence {
 
     /// Execute the sequence
     ///
-    /// # Returns
-    ///
-    /// The number of commands executed.
-    ///
     /// # Errors
     ///
     /// Returns error if the wake up request failed.
     /// Returns error if any of the commands failed.
-    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<usize, SequenceError> {
-        let mut num_executed = 0;
-
+    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<(), SequenceError> {
         if self.commands.is_empty() {
-            return Ok(0);
+            return Ok(());
         }
 
         if is_debug_mode() {
             log::debug!("Would execute commands: {:?}", self.commands);
-            return Ok(0);
+            return Ok(());
         }
 
         for command in &self.prefix_commands {
             command.execute(token, car_id).await?;
-            num_executed += 1;
         }
 
         for command in &self.commands {
             command.execute(token, car_id).await?;
-            num_executed += 1;
         }
 
-        Ok(num_executed)
+        Ok(())
     }
 
     /// Is the sequence empty?

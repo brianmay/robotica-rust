@@ -559,13 +559,15 @@ async fn check_charge(
 
     // Send the commands.
     log::info!("Sending commands: {sequence:?}");
-    let num_executed = sequence.execute(token, car_id).await.unwrap_or_else(|err| {
+    sequence.execute(token, car_id).await.unwrap_or_else(|err| {
         log::info!("Error executing command sequence: {}", err);
-        0
     });
 
     // Get the charge state again, vehicle should be awake now.
-    if num_executed > 0 {
+    //
+    // We do this even if the execute failed, because the execute may have
+    // changed the cars state regardless.
+    if !sequence.is_empty() || charge_state.is_none() {
         *charge_state = get_charge_state(token, car_id).await;
     }
 
