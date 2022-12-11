@@ -220,7 +220,7 @@ pub fn monitor_charging(
         state
             .subscriptions
             .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/AutoCharge"))
-            .map_into_stateful(move |cmd| {
+            .map_into_stateless(move |cmd| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,
@@ -237,7 +237,7 @@ pub fn monitor_charging(
         state
             .subscriptions
             .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/ForceCharge"))
-            .map_into_stateful(move |cmd| {
+            .map_into_stateless(move |cmd| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,
@@ -297,7 +297,7 @@ pub fn monitor_charging(
                     }
                     charge_state = None;
                 }
-                Ok((_, cmd)) = auto_charge_s.recv() => {
+                Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
                         auto_charge = match cmd.action {
                             DeviceAction::TurnOn => true,
@@ -309,7 +309,7 @@ pub fn monitor_charging(
                         log::info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
-                Ok((_, cmd)) = force_charge_s.recv() => {
+                Ok(cmd) = force_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
                         force_charge = match cmd.action {
                             DeviceAction::TurnOn => true,

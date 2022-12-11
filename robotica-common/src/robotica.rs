@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::mqtt::MqttMessage;
 
 /// An action to send to a switch.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceAction {
     /// Turn the switch on.
@@ -17,7 +17,7 @@ pub enum DeviceAction {
 }
 
 /// A command to send to a switch
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCommand {
     /// The action to perform.
     pub action: DeviceAction,
@@ -80,7 +80,7 @@ impl TryFrom<MqttMessage> for DevicePower {
 }
 
 /// An audio command.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCommand {
     /// The title of the message.
     pub title: String,
@@ -90,7 +90,7 @@ pub struct AudioCommand {
 }
 
 /// A command to send to any device.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum Command {
