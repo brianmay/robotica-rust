@@ -98,16 +98,23 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                     let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
+
+                    // Get prices for the current interval.
                     let prices = process_prices(&config, yesterday, tomorrow).await;
+
+                    // Process the results.
                     let next_delay = if let Some(prices) = prices {
-                        let now = utc_now();
+                        // Update the summary and transmit it.
                         let summary = pp.prices_to_summary(&now, &prices);
                         let update_time = summary.next_update.clone();
                         tx.try_send(summary);
 
+                        // How long to the current interval expires?
                         let now = utc_now();
                         let duration = update_time.clone() - now;
                         log::info!("Next price update: {update_time:?} in {duration}");
+
+                        // Ensure we update prices at least once once every 5 minutes.
                         let max_duration = Duration::minutes(5);
                         if duration > max_duration {
                             Duration::minutes(5)
@@ -115,13 +122,17 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                             duration
                         }
                     } else {
-                        Duration::minutes(5)
+                        // If we failed to get prices, try again in 1 minute
+                        Duration::minutes(1)
                     };
+
+                    // Schedule the next update
                     log::info!("Next poll in {}", next_delay);
                     let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_secs(300));
                     price_instant = Instant::now() + next_delay;
                 }
                 _ = usage_interval.tick() => {
+                    // Update the amber usage once an hour.
                     let now = utc_now();
                     let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
