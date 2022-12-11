@@ -82,6 +82,9 @@ impl TryFrom<MqttMessage> for DevicePower {
 /// An audio command.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCommand {
+    /// The title of the message.
+    pub title: String,
+
     /// The message to send.
     pub message: String,
 }
