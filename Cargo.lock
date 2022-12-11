@@ -2072,7 +2072,7 @@ checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
 [[package]]
 name = "rumqttc"
 version = "0.17.0"
-source = "git+https://github.com/bytebeamio/rumqtt?branch=hotfix-v5-fields#57da1da82c78c54613ac676ac2d6a43ce48cdb2f"
+source = "git+https://github.com/brianmay/rumqtt?branch=fixes#6500eb52cccfeabf4e40565a3e590bb97cf41ffa"
 dependencies = [
  "bytes",
  "flume",

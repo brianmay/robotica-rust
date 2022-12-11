@@ -4,7 +4,7 @@ pub mod topics;
 use log::{debug, error, info, warn};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
-use rumqttc::v5::mqttbytes::{Filter, Publish};
+use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
 use std::collections::HashMap;
@@ -380,6 +380,7 @@ fn topic_to_filter(topic: &str) -> Filter {
         path: topic.to_string(),
         qos: rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
         nolocal: true,
+        retain_forward_rule: RetainForwardRule::OnEverySubscribe,
         ..Default::default()
     }
 }
