@@ -5,7 +5,7 @@ use influxdb::InfluxDbWriteable;
 use log::debug;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 
 use robotica_backend::{
     entities::{self, Receiver, StatefulData},
@@ -84,9 +84,8 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
         let mut pp = PriceProcessor::new();
         let nem_timezone = FixedOffset::east(hours(10).into());
 
-        // Update prices every 5 minutes
-        let mut price_interval = interval(tokio::time::Duration::from_secs(300));
-        price_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        // Update prices maximum every 5 minutes
+        let mut price_instant = Instant::now() + tokio::time::Duration::from_secs(0);
 
         // Update usage once an hour
         let mut usage_interval = interval(tokio::time::Duration::from_secs(hours(1).into()));
@@ -94,17 +93,33 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
 
         loop {
             tokio::select! {
-                _ = price_interval.tick() => {
+                _ = sleep_until(price_instant) => {
                     let now = utc_now();
                     let today = now.with_timezone(&nem_timezone).date();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
-                        let prices = process_prices(&config, yesterday, tomorrow).await;
-                        if let Some(prices) = prices {
-                            let now = utc_now();
-                            let summary = pp.prices_to_summary(&now, &prices);
-                            tx.try_send(summary);
+                    let prices = process_prices(&config, yesterday, tomorrow).await;
+                    let next_delay = if let Some(prices) = prices {
+                        let now = utc_now();
+                        let summary = pp.prices_to_summary(&now, &prices);
+                        let update_time = summary.next_update.clone();
+                        tx.try_send(summary);
+
+                        let now = utc_now();
+                        let duration = update_time.clone() - now;
+                        log::info!("Next price update: {update_time:?} in {duration}");
+                        let max_duration = Duration::minutes(5);
+                        if duration > max_duration {
+                            Duration::minutes(5)
+                        } else {
+                            duration
                         }
+                    } else {
+                        Duration::minutes(5)
+                    };
+                    log::info!("Next poll in {}", next_delay);
+                    let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_secs(300));
+                    price_instant = Instant::now() + next_delay;
                 }
                 _ = usage_interval.tick() => {
                     let now = utc_now();
@@ -288,6 +303,7 @@ pub struct PriceSummary {
     pub category: PriceCategory,
     pub is_cheap_2hr: bool,
     pub per_kwh: u32,
+    pub next_update: DateTime<Utc>,
 }
 
 async fn process_prices(
@@ -485,6 +501,7 @@ impl PriceProcessor {
             category: prices_to_category(prices),
             is_cheap_2hr: is_cheap,
             per_kwh: current_price.per_kwh.round() as u32,
+            next_update: current_price.end_time.clone(),
         };
         log::info!("Price summary: {:?}", ps);
         ps
@@ -739,6 +756,7 @@ mod tests {
                 category: PriceCategory::SuperCheap,
                 is_cheap_2hr: true,
                 per_kwh: 0,
+                next_update: "2020-01-01T01:00:00Z".parse().unwrap(),
             }
         );
         let ds = pp.day.clone().unwrap();
@@ -807,6 +825,7 @@ mod tests {
                 category: PriceCategory::SuperCheap,
                 is_cheap_2hr: false,
                 per_kwh: 0,
+                next_update: "2020-01-01T01:30:00Z".parse().unwrap(),
             }
         );
         let ds = pp.day.unwrap();

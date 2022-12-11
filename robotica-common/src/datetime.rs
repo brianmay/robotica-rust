@@ -389,6 +389,12 @@ impl Add<Duration> for Duration {
     }
 }
 
+impl std::fmt::Display for Duration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 const fn div_rem(a: u64, b: u64) -> (u64, u64) {
     (a / b, a % b)
 }
