@@ -456,7 +456,7 @@ async fn check_charge(
     // true state means car is awake; false means not sure.
     let car_is_awake = if charge_state.is_none() {
         log::info!("Waking up car");
-        match token.wake_up(car_id).await {
+        match token.wait_for_wake_up(car_id).await {
             Ok(_) => {
                 log::info!("Car is awake; getting charge state");
                 *charge_state = get_charge_state(token, car_id).await;
