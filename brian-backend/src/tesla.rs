@@ -173,14 +173,14 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
     let duration = Duration::from_secs(60);
 
-    // Discard initial [] value.
+    // We only care if doors open for at least duration.
+    let rx = delay_input("tesla_doors (delayed)", duration, rx);
+
+    // Discard initial [] value and duplicate events.
     let rx = rx
         .map_into_stateful(|f| f)
         .filter_into_stateless(|(p, c)| p.is_some() || c.is_active())
         .map_into_stateless(|(_, c)| c);
-
-    // We only care if doors open for at least duration.
-    let rx = delay_input("tesla_doors (delayed)", duration, rx);
 
     // Repeat the last value duration time.
     let rx = delay_repeat("tesla_doors (repeat)", duration, rx);
