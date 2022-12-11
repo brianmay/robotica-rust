@@ -109,6 +109,9 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                         let update_time = summary.next_update.clone();
                         tx.try_send(summary);
 
+                        // Add margin to allow time for Amber to update.
+                        let update_time = update_time + Duration::seconds(5);
+
                         // How long to the current interval expires?
                         let now = utc_now();
                         let duration = update_time.clone() - now;
