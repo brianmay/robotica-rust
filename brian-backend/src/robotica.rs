@@ -7,7 +7,9 @@ use robotica_backend::services::mqtt::Mqtt;
 use robotica_backend::services::mqtt::Subscriptions;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
-use serde::{Deserialize, Serialize};
+use robotica_common::robotica::AudioCommand;
+use robotica_common::robotica::Command;
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -125,23 +127,15 @@ pub struct RoboticaAutoColor {
     pub color: RoboticaAutoColorOut,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct AudioMessage {
-    #[serde(rename = "type")]
-    msg_type: String,
-    message: String,
-}
-
 #[allow(dead_code)]
-pub fn string_to_message(str: &str, location: &str) -> MqttMessage {
-    let id = Id::new(location, "Robotica");
+pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
+    let topic = "ha/event/message/everyone";
+    let msg = Command::Audio(AudioCommand {
+        message: str.into(),
+    });
 
-    let msg = AudioMessage {
-        msg_type: "audio".to_string(),
-        message: str.to_string(),
-    };
     let payload = serde_json::to_string(&msg).unwrap();
-    MqttMessage::new(&id.get_command_topic(&[]), payload, false, QoS::ExactlyOnce)
+    MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
 pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Sender<String> {
@@ -161,7 +155,7 @@ pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt)
             let night = night_in.get().await == Some(Power::On);
 
             if gate && !night {
-                let msg = string_to_message(&msg, "Brian");
+                let msg = string_to_message(msg);
                 mqtt.try_send(msg);
             }
         }

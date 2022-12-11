@@ -78,6 +78,14 @@ impl TryFrom<MqttMessage> for DevicePower {
         }
     }
 }
+
+/// An audio command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCommand {
+    /// The message to send.
+    pub message: String,
+}
+
 /// A command to send to any device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -87,7 +95,7 @@ pub enum Command {
     Device(DeviceCommand),
 
     /// Dummy value
-    Dummy1,
+    Audio(AudioCommand),
 
     /// Dummy value
     Dummy2,
