@@ -202,6 +202,28 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     });
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PollInterval {
+    Short,
+    Long,
+}
+
+impl From<PollInterval> for Duration {
+    fn from(pi: PollInterval) -> Self {
+        match pi {
+            PollInterval::Short => Duration::from_secs(30),
+            PollInterval::Long => Duration::from_secs(5 * 60),
+        }
+    }
+}
+
+impl From<PollInterval> for Interval {
+    fn from(pi: PollInterval) -> Self {
+        let duration: Duration = pi.into();
+        tokio::time::interval(duration)
+    }
+}
+
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
@@ -265,7 +287,9 @@ pub fn monitor_charging(
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
         let mut price_quality_rx = price_category_rx.subscribe().await;
-        let mut timer = tokio::time::interval(Duration::from_secs(5 * 60));
+
+        let mut interval = PollInterval::Long;
+        let mut timer: Interval = interval.into();
         let mut charge_state = None;
         let mut pi_s = pi_rx.subscribe().await;
         let mut price_category: Option<PriceCategory> = None;
@@ -329,9 +353,9 @@ pub fn monitor_charging(
                 else => break,
             }
 
-            if is_home && auto_charge {
+            let new_interval = if is_home && auto_charge {
                 if let Some(price_category) = &price_category {
-                    check_charge(
+                    let result = check_charge(
                         car_id,
                         &token,
                         &mut charge_state,
@@ -339,13 +363,27 @@ pub fn monitor_charging(
                         force_charge,
                     )
                     .await;
+                    match result {
+                        Ok(()) => PollInterval::Long,
+                        Err(CheckChargeError::ScheduleRetry) => PollInterval::Short,
+                    }
                 } else {
                     log::info!("No price summary available, skipping charge check");
+                    PollInterval::Long
                 }
             } else {
                 log::info!("Skipping charge check");
                 charge_state = None;
+                PollInterval::Long
+            };
+
+            if interval != new_interval {
+                interval = new_interval;
+                timer = interval.into();
+                log::info!("Resetting poll timer to {interval:?} {:?}", timer.period())
             }
+
+            log::info!("Next poll {interval:?} {:?}", timer.period());
 
             update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
             update_force_charge(&charge_state, car_number, force_charge, &mqtt);
@@ -446,13 +484,22 @@ impl RequestedCharge {
     }
 }
 
+#[derive(Error, Debug)]
+enum CheckChargeError {
+    #[error("Error getting charge state")]
+    ScheduleRetry,
+}
+
 async fn check_charge(
     car_id: u64,
     token: &Token,
     charge_state: &mut Option<ChargeState>,
     price_category: &PriceCategory,
     force_charge: bool,
-) {
+) -> Result<(), CheckChargeError> {
+    log::info!("Checking charge");
+    let mut result = Ok(());
+
     // true state means car is awake; false means not sure.
     let car_is_awake = if charge_state.is_none() {
         log::info!("Waking up car");
@@ -460,10 +507,15 @@ async fn check_charge(
             Ok(_) => {
                 log::info!("Car is awake; getting charge state");
                 *charge_state = get_charge_state(token, car_id).await;
+                if charge_state.is_none() {
+                    log::error!("Error getting charge state");
+                    result = Err(CheckChargeError::ScheduleRetry);
+                }
                 true
             }
             Err(err) => {
                 log::error!("Error waking up car: {err}");
+                result = Err(CheckChargeError::ScheduleRetry);
                 false
             }
         }
@@ -561,6 +613,7 @@ async fn check_charge(
     log::info!("Sending commands: {sequence:?}");
     sequence.execute(token, car_id).await.unwrap_or_else(|err| {
         log::info!("Error executing command sequence: {}", err);
+        result = Err(CheckChargeError::ScheduleRetry);
     });
 
     // Get the charge state again, vehicle should be awake now.
@@ -569,9 +622,14 @@ async fn check_charge(
     // changed the cars state regardless.
     if !sequence.is_empty() || charge_state.is_none() {
         *charge_state = get_charge_state(token, car_id).await;
+        if charge_state.is_none() {
+            log::error!("Error getting charge state");
+            result = Err(CheckChargeError::ScheduleRetry);
+        }
     }
 
-    log::info!("All done.");
+    log::info!("All done. {result:?}");
+    result
 }
 
 async fn get_charge_state(token: &Token, car_id: u64) -> Option<ChargeState> {
