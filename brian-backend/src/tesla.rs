@@ -11,6 +11,7 @@ use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
+use tokio::time::Interval;
 
 use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
 use robotica_backend::spawn;
@@ -283,17 +284,17 @@ pub fn monitor_charging(
         token.check().await.unwrap();
         let car_id = get_car_id(&mut token, car_number).await.unwrap().unwrap();
 
+        let mut interval = PollInterval::Long;
+        let mut timer: Interval = interval.into();
+
+        let mut price_category_s = price_category_rx.subscribe().await;
+        let mut plugged_in_s = pi_rx.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
-        let mut price_quality_rx = price_category_rx.subscribe().await;
 
-        let mut interval = PollInterval::Long;
-        let mut timer: Interval = interval.into();
         let mut charge_state = None;
-        let mut pi_s = pi_rx.subscribe().await;
         let mut price_category: Option<PriceCategory> = None;
-
         let mut auto_charge = false;
         let mut force_charge = false;
         let mut is_home = false;
@@ -309,16 +310,17 @@ pub fn monitor_charging(
                     });
                     log::info!("Token expiration: {:?}", token.expires_at);
                 }
-                Ok((_, new_price_category)) = price_quality_rx.recv() => {
+                Ok((_, new_price_category)) = price_category_s.recv() => {
                     log::info!("New price summary: {:?}", new_price_category);
                     price_category = Some(new_price_category);
                 }
-                Ok((_, pi)) = pi_s.recv() => {
-                    if pi {
+                Ok((_, plugged_in)) = plugged_in_s.recv() => {
+                    if plugged_in {
                         log::info!("Car is plugged in");
                     } else {
                         log::info!("Car is disconnected");
                     }
+                    // The charge state must be refreshed now.
                     charge_state = None;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
@@ -348,6 +350,8 @@ pub fn monitor_charging(
                 Ok((_, new_is_home)) = location_charge_s.recv() => {
                     is_home = new_is_home;
                     log::info!("Location is home: {is_home}");
+                    // If we left home we don't keep track of the charge state any more.
+                    // If we arrived home we must refresh the charge state.
                     charge_state = None;
                 }
                 else => break,
