@@ -550,7 +550,10 @@ async fn check_charge(
 
     // Is battery level low enough that we can charge it?
     let can_charge = match charge_state {
-        Some(state) => state.battery_level < charge_limit,
+        Some(state) => {
+            state.battery_level < charge_limit
+                && state.charging_state != ChargingStateEnum::Complete
+        }
         None => true,
     };
 
