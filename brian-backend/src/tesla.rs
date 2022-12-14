@@ -206,6 +206,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PollInterval {
     Short,
+    Medium,
     Long,
 }
 
@@ -213,6 +214,7 @@ impl From<PollInterval> for Duration {
     fn from(pi: PollInterval) -> Self {
         match pi {
             PollInterval::Short => Duration::from_secs(30),
+            PollInterval::Medium => Duration::from_secs(60),
             PollInterval::Long => Duration::from_secs(5 * 60),
         }
     }
@@ -368,7 +370,8 @@ pub fn monitor_charging(
                     )
                     .await;
                     match result {
-                        Ok(()) => PollInterval::Long,
+                        Ok(CheckChargeState::Idle) => PollInterval::Short,
+                        Ok(CheckChargeState::Charging) => PollInterval::Medium,
                         Err(CheckChargeError::ScheduleRetry) => PollInterval::Short,
                     }
                 } else {
@@ -488,6 +491,12 @@ impl RequestedCharge {
     }
 }
 
+#[derive(Debug)]
+enum CheckChargeState {
+    Idle,
+    Charging,
+}
+
 #[derive(Error, Debug)]
 enum CheckChargeError {
     #[error("Error getting charge state")]
@@ -500,12 +509,17 @@ async fn check_charge(
     charge_state: &mut Option<ChargeState>,
     price_category: &PriceCategory,
     force_charge: bool,
-) -> Result<(), CheckChargeError> {
+) -> Result<CheckChargeState, CheckChargeError> {
     log::info!("Checking charge");
-    let mut result = Ok(());
+    let mut rc_err = None;
+
+    // should refresh charge state if we don't have it, or if we're charging.
+    let should_refresh = charge_state
+        .as_ref()
+        .map_or_else(|| true, |s| s.charging_state == ChargingStateEnum::Charging);
 
     // true state means car is awake; false means not sure.
-    let car_is_awake = if charge_state.is_none() {
+    let car_is_awake = if should_refresh {
         log::info!("Waking up car");
         match token.wait_for_wake_up(car_id).await {
             Ok(_) => {
@@ -513,13 +527,13 @@ async fn check_charge(
                 *charge_state = get_charge_state(token, car_id).await;
                 if charge_state.is_none() {
                     log::error!("Error getting charge state");
-                    result = Err(CheckChargeError::ScheduleRetry);
+                    rc_err = Some(CheckChargeError::ScheduleRetry);
                 }
                 true
             }
             Err(err) => {
                 log::error!("Error waking up car: {err}");
-                result = Err(CheckChargeError::ScheduleRetry);
+                rc_err = Some(CheckChargeError::ScheduleRetry);
                 false
             }
         }
@@ -549,7 +563,7 @@ async fn check_charge(
     };
 
     // Is battery level low enough that we can charge it?
-    let can_charge = match charge_state {
+    let can_start_charge = match charge_state {
         Some(state) => {
             state.battery_level < charge_limit
                 && state.charging_state != ChargingStateEnum::Complete
@@ -558,7 +572,7 @@ async fn check_charge(
     };
 
     log::info!("Current data: {price_category:?}, {charge_state:?}, force charge: {force_charge}");
-    log::info!("Desired State: should charge: {should_charge}, can charge: {can_charge}, charge limit: {charge_limit}");
+    log::info!("Desired State: should charge: {should_charge}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
     let set_charge_limit = if let Some(charge_state) = charge_state {
@@ -599,7 +613,7 @@ async fn check_charge(
             sequence.add_charge_stop();
         }
         ChargingSummary::Charging => {}
-        ChargingSummary::NotCharging if should_charge && can_charge => {
+        ChargingSummary::NotCharging if should_charge && can_start_charge => {
             log::info!("Starting charge");
             sequence.add_charge_start();
         }
@@ -608,7 +622,7 @@ async fn check_charge(
             log::info!("Stopping charge (unknown)");
             sequence.add_charge_stop();
         }
-        ChargingSummary::Unknown if should_charge && can_charge => {
+        ChargingSummary::Unknown if should_charge && can_start_charge => {
             log::info!("Starting charge (unknown)");
             sequence.add_charge_start();
         }
@@ -620,7 +634,7 @@ async fn check_charge(
     log::info!("Sending commands: {sequence:?}");
     sequence.execute(token, car_id).await.unwrap_or_else(|err| {
         log::info!("Error executing command sequence: {}", err);
-        result = Err(CheckChargeError::ScheduleRetry);
+        rc_err = Some(CheckChargeError::ScheduleRetry);
     });
 
     // Get the charge state again, vehicle should be awake now.
@@ -631,9 +645,18 @@ async fn check_charge(
         *charge_state = get_charge_state(token, car_id).await;
         if charge_state.is_none() {
             log::error!("Error getting charge state");
-            result = Err(CheckChargeError::ScheduleRetry);
+            rc_err = Some(CheckChargeError::ScheduleRetry);
         }
     }
+
+    // Generate result.
+    let charging = charge_state.as_ref().map(|s| s.charging_state);
+    let result = match (rc_err, charging) {
+        (Some(err), _) => Err(err),
+        (None, None) => Err(CheckChargeError::ScheduleRetry),
+        (None, Some(ChargingStateEnum::Charging)) => Ok(CheckChargeState::Charging),
+        (None, _) => Ok(CheckChargeState::Idle),
+    };
 
     log::info!("All done. {result:?}");
     result
