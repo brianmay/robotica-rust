@@ -404,10 +404,9 @@ fn update_auto_charge(
     charge_state: &Option<ChargeState>,
     mqtt: &robotica_backend::services::mqtt::Mqtt,
 ) {
-    let is_charging = charge_state.as_ref().map_or_else(
-        || false,
-        |s| s.charging_state == ChargingStateEnum::Charging,
-    );
+    let is_charging = charge_state
+        .as_ref()
+        .map_or_else(|| false, |s| s.charging_state.is_charging());
 
     let status = match (auto_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
@@ -435,10 +434,9 @@ fn update_force_charge(
     force_charge: bool,
     mqtt: &robotica_backend::services::mqtt::Mqtt,
 ) {
-    let is_charging = charge_state.as_ref().map_or_else(
-        || false,
-        |s| s.charging_state == ChargingStateEnum::Charging,
-    );
+    let is_charging = charge_state
+        .as_ref()
+        .map_or_else(|| false, |s| s.charging_state.is_charging());
     let status = match (force_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
         (true, true) => DevicePower::On,
@@ -516,7 +514,7 @@ async fn check_charge(
     // should refresh charge state if we don't have it, or if we're charging.
     let should_refresh = charge_state
         .as_ref()
-        .map_or_else(|| true, |s| s.charging_state == ChargingStateEnum::Charging);
+        .map_or_else(|| true, |s| s.charging_state.is_charging());
 
     // true state means car is awake; false means not sure.
     let car_is_awake = if should_refresh {
@@ -654,7 +652,7 @@ async fn check_charge(
     let result = match (rc_err, charging) {
         (Some(err), _) => Err(err),
         (None, None) => Err(CheckChargeError::ScheduleRetry),
-        (None, Some(ChargingStateEnum::Charging)) => Ok(CheckChargeState::Charging),
+        (None, Some(s)) if s.is_charging() => Ok(CheckChargeState::Charging),
         (None, _) => Ok(CheckChargeState::Idle),
     };
 

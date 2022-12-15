@@ -166,6 +166,19 @@ pub enum ChargingStateEnum {
     Stopped,
 }
 
+impl ChargingStateEnum {
+    /// Is the car currently charging?
+    #[must_use]
+    pub const fn is_charging(self) -> bool {
+        match self {
+            ChargingStateEnum::Starting | ChargingStateEnum::Charging => true,
+            ChargingStateEnum::Complete
+            | ChargingStateEnum::Disconnected
+            | ChargingStateEnum::Stopped => false,
+        }
+    }
+}
+
 /// Charging state
 #[derive(Debug, Deserialize)]
 pub struct ChargeState {
