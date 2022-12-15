@@ -370,7 +370,7 @@ pub fn monitor_charging(
                     )
                     .await;
                     match result {
-                        Ok(CheckChargeState::Idle) => PollInterval::Short,
+                        Ok(CheckChargeState::Idle) => PollInterval::Long,
                         Ok(CheckChargeState::Charging) => PollInterval::Medium,
                         Err(CheckChargeError::ScheduleRetry) => PollInterval::Short,
                     }
