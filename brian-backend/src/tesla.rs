@@ -11,7 +11,7 @@ use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
-use tokio::time::Interval;
+use tokio::time::{sleep, Interval};
 
 use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
 use robotica_backend::spawn;
@@ -635,11 +635,18 @@ async fn check_charge(
         rc_err = Some(CheckChargeError::ScheduleRetry);
     });
 
+    // If we sent any commands, we need to wait for the car to adjust.
+    if !sequence.is_empty() {
+        log::info!("Sleeping");
+        sleep(Duration::from_secs(10)).await;
+    }
+
     // Get the charge state again, vehicle should be awake now.
     //
     // We do this even if the execute failed, because the execute may have
     // changed the cars state regardless.
     if !sequence.is_empty() || charge_state.is_none() {
+        log::info!("Getting charge state");
         *charge_state = get_charge_state(token, car_id).await;
         if charge_state.is_none() {
             log::error!("Error getting charge state");
