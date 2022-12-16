@@ -351,7 +351,7 @@ fn prices_to_category(prices: &[PriceResponse]) -> PriceCategory {
         .map(|price| {
             if price.per_kwh < 10.0 {
                 PriceCategory::SuperCheap
-            } else if price.per_kwh < 20.0 {
+            } else if price.per_kwh < 15.0 {
                 PriceCategory::Cheap
             } else if price.per_kwh < 30.0 {
                 PriceCategory::Normal
