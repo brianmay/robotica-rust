@@ -8,9 +8,10 @@ use std::sync::Arc;
 use std::{collections::HashMap, env};
 
 use axum::body::{boxed, Body};
+use axum::extract::{FromRef, State};
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Response};
-use axum::{extract::Query, routing::get, Extension, Router};
+use axum::{extract::Query, routing::get, Router};
 use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
 use axum_sessions::extractors::WritableSession;
@@ -34,6 +35,7 @@ use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
 
+#[derive(Clone)]
 struct HttpConfig {
     #[allow(dead_code)]
     mqtt: Mqtt,
@@ -47,6 +49,24 @@ impl HttpConfig {
 
     fn generate_url_or_default(&self, path: &str) -> String {
         urls::generate_url_or_default(&self.root_url, path)
+    }
+}
+
+#[derive(Clone)]
+struct HttpState {
+    http_config: HttpConfig,
+    oidc_client: Arc<Client>,
+}
+
+impl FromRef<HttpState> for HttpConfig {
+    fn from_ref(state: &HttpState) -> Self {
+        state.http_config.clone()
+    }
+}
+
+impl FromRef<HttpState> for Arc<Client> {
+    fn from_ref(state: &HttpState) -> Self {
+        state.oidc_client.clone()
     }
 }
 
@@ -109,20 +129,22 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
 }
 
 async fn server(
-    config: HttpConfig,
-    oidc: Client,
+    http_config: HttpConfig,
+    oidc_client: Client,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
-    let config = Arc::new(config);
-    let oidc = Arc::new(oidc);
+    let oidc_client = Arc::new(oidc_client);
+    let state = HttpState {
+        http_config,
+        oidc_client,
+    };
 
     let app = Router::new()
         .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
         .fallback(fallback_handler)
-        .layer(Extension(config))
-        .layer(Extension(oidc))
+        .with_state(state)
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
@@ -162,7 +184,7 @@ const ALLOWED_SUFFIXES: [&str; 8] = [
 
 async fn fallback_handler(
     session: ReadableSession,
-    oidc_client: Extension<Arc<Client>>,
+    State(oidc_client): State<Arc<Client>>,
     req: Request<Body>,
 ) -> Response {
     if req.method() != Method::GET {
@@ -282,8 +304,8 @@ async fn root(session: ReadableSession) -> Response {
 }
 
 async fn oidc_callback(
-    http_config: Extension<Arc<HttpConfig>>,
-    oidc_client: Extension<Arc<Client>>,
+    State(http_config): State<HttpConfig>,
+    State(oidc_client): State<Arc<Client>>,
     Query(params): Query<HashMap<String, String>>,
     mut session: WritableSession,
 ) -> Response {

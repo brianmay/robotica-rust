@@ -1,12 +1,9 @@
-use std::sync::Arc;
-
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     response::{IntoResponse, Response},
-    Extension,
 };
 use axum_sessions::extractors::ReadableSession;
 use futures::{SinkExt, StreamExt};
@@ -26,7 +23,7 @@ use super::{get_user, HttpConfig, User};
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
-    Extension(config): Extension<Arc<HttpConfig>>,
+    State(config): State<HttpConfig>,
     session: ReadableSession,
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
@@ -50,7 +47,7 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
     }
 }
 
-async fn websocket(stream: WebSocket, config: Arc<HttpConfig>, user: User) {
+async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
     // By splitting we can send and receive at the same time.
     let (mut sender, mut receiver) = stream.split();
 
@@ -208,7 +205,7 @@ fn check_topic_send_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> 
 
 async fn process_subscribe(
     topic: String,
-    config: &Arc<HttpConfig>,
+    config: &HttpConfig,
     sender: mpsc::UnboundedSender<MqttMessage>,
 ) {
     debug!("Subscribing to {}", topic);
