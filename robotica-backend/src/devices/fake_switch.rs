@@ -13,7 +13,7 @@ use crate::{
 /// Run a fake switch
 pub fn run(subscription: &mut Subscriptions, mqtt: Mqtt, topic_substr: impl Into<String>) {
     let topic_substr: String = topic_substr.into();
-    let topic = format!("command/{}", topic_substr);
+    let topic = format!("command/{topic_substr}");
     let rx = subscription.subscribe_into_stateless(&topic);
 
     spawn(async move {
@@ -24,13 +24,13 @@ pub fn run(subscription: &mut Subscriptions, mqtt: Mqtt, topic_substr: impl Into
                 Ok(command) = rx.recv() => {
                     match command {
                         Command::Device(command) => {
-                            let topic = format!("state/{}/power", topic_substr);
+                            let topic = format!("state/{topic_substr}/power");
                             let status = match command.action {
                                 DeviceAction::TurnOff => DevicePower::Off,
                                 DeviceAction::TurnOn => DevicePower::On,
                             };
                             let string: String = status.into();
-                            let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
+                            let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
                             mqtt.try_send(msg);
                         },
                         command => {

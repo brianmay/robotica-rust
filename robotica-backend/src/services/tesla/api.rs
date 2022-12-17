@@ -48,7 +48,7 @@ async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U
     let response = client
         .get(url)
         .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", token))
+        .header("Authorization", format!("Bearer {token}"))
         .timeout(Duration::from_secs(30))
         .send()
         .await?
@@ -74,7 +74,7 @@ async fn post_with_token<T: Serialize + Sync, U: DeserializeOwned>(
     let response = client
         .post(url)
         .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", token))
+        .header("Authorization", format!("Bearer {token}"))
         .json(body)
         .timeout(Duration::from_secs(30))
         .send()
@@ -615,10 +615,10 @@ mod tests {
         // token.charge_stop(id).await.unwrap();
         // token.set_charge_limit(id, 88).await.unwrap();
         let vehicles = token.get_vehicles().await.unwrap();
-        println!("{:#?}", vehicles);
+        println!("{vehicles:#?}");
 
         let charge_state = token.get_charge_state(id).await.unwrap();
-        println!("{:#?}", charge_state);
+        println!("{charge_state:#?}");
 
         token.put().unwrap();
     }

@@ -411,7 +411,7 @@ impl Serialize for Duration {
         let (minutes, secs) = div_rem(secs, 60);
         let (hours, minutes) = div_rem(minutes, 60);
 
-        let result = format!("{:02}:{:02}:{:02}", hours, minutes, secs);
+        let result = format!("{hours:02}:{minutes:02}:{secs:02}");
         serializer.serialize_str(&result)
     }
 }

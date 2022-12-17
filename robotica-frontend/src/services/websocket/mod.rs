@@ -452,5 +452,5 @@ fn get_websocket_url() -> String {
         "ws"
     };
     let host = location.host().unwrap();
-    format!("{}://{}/websocket", protocol, host)
+    format!("{protocol}://{host}/websocket")
 }

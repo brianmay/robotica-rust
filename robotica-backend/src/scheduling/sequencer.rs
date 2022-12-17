@@ -314,7 +314,7 @@ fn config_to_sequence(
                 src_task
                     .devices
                     .iter()
-                    .for_each(|d| topics.push(format!("command/{}/{}", l, d)));
+                    .for_each(|d| topics.push(format!("command/{l}/{d}")));
             });
             topics
         };
@@ -391,7 +391,7 @@ pub fn get_sequence_with_config(
 
     for expanded in &expanded_list {
         let id = expanded.config.id.as_ref().map_or_else(
-            || format!("{}_{}", sequence_name, expanded.number),
+            || format!("{sequence_name}_{}", expanded.number),
             std::clone::Clone::clone,
         );
         let sequence = config_to_sequence(

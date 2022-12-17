@@ -12,6 +12,7 @@ lalrpop_mod!(
     #[allow(clippy::no_effect_underscore_binding)]
     #[allow(clippy::unnested_or_patterns)]
     #[allow(clippy::option_if_let_else)]
+    #[allow(clippy::uninlined_format_args)]
     conditions,
     "/scheduling/conditions.rs"
 ); // synthesized by LALRPOP

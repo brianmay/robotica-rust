@@ -105,7 +105,7 @@ pub struct Task {
 }
 
 fn location_device_to_text(location: &str, device: &str) -> String {
-    format!("{}/{}", location, device)
+    format!("{location}/{device}")
 }
 
 fn command_to_text(command: &Value) -> String {
@@ -141,10 +141,10 @@ fn audio_command_to_text(command: &Value) -> String {
         .and_then(Value::as_u64);
     let mut results = vec![];
     if let Some(volume) = message_volume {
-        results.push(format!("set message volume {}", volume));
+        results.push(format!("set message volume {volume}"));
     }
     if let Some(message) = message {
-        results.push(format!("say {}", message));
+        results.push(format!("say {message}"));
     }
     if let Some(music_stop) = music_stop {
         if music_stop {
@@ -152,10 +152,10 @@ fn audio_command_to_text(command: &Value) -> String {
         }
     }
     if let Some(volume) = music_volume {
-        results.push(format!("set music volume {}", volume));
+        results.push(format!("set music volume {volume}"));
     }
     if let Some(play_list) = play_list {
-        results.push(format!("play {}", play_list));
+        results.push(format!("play {play_list}"));
     }
     if results.is_empty() {
         "unknown audio command".to_string()
@@ -225,7 +225,7 @@ impl Display for Task {
             } => command_to_text(payload),
         };
 
-        write!(f, "{}", action_str)?;
+        write!(f, "{action_str}")?;
 
         Ok(())
     }

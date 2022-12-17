@@ -108,14 +108,14 @@ impl<T: TimeZone + Debug> State<T> {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.hostname);
         let message = serde_json::to_string(&tags).unwrap();
-        let message = MqttMessage::new(&topic, message, true, QoS::ExactlyOnce);
+        let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
         let message = serde_json::to_string(&sequences).unwrap();
-        let message = MqttMessage::new(&topic, message, true, QoS::ExactlyOnce);
+        let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 

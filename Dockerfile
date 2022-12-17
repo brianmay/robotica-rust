@@ -1,4 +1,4 @@
-FROM docker.io/library/rust:1.65-bullseye as builder
+FROM docker.io/library/rust:1.66-bullseye as builder
 WORKDIR /brian-backend
 
 RUN apt-get update \

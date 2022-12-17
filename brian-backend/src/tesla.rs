@@ -424,7 +424,7 @@ fn publish_auto_charge(
 ) {
     let topic = format!("state/Tesla/{car_number}/AutoCharge/power");
     let string: String = status.into();
-    let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
+    let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
     mqtt.try_send(msg);
 }
 
@@ -453,7 +453,7 @@ fn publish_force_change(
 ) {
     let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
     let string: String = status.into();
-    let msg = MqttMessage::new(&topic, string, true, QoS::AtLeastOnce);
+    let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
     mqtt.try_send(msg);
 }
 

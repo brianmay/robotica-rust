@@ -263,14 +263,14 @@ async fn root(session: ReadableSession) -> Response {
                 h1 { "Robotica" }
                 p {
                     @match user {
-                        Some(user) => ( format!("Hello, {}!", user) ),
+                        Some(user) => ( format!("Hello, {user}!") ),
                         None => ( "You are not logged in!" ),
                     }
                 }
                 footer {
                     div {
-                        div { (format!("Build Date: {}", build_date)) }
-                        div { (format!("Version: {}", vcs_ref)) }
+                        div { (format!("Build Date: {build_date}")) }
+                        div { (format!("Version: {vcs_ref}")) }
                     }
                     div {
                         "Robotica"

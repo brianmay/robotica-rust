@@ -120,13 +120,7 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                         // Ensure we update prices at least once once every 5 minutes.
                         let max_duration = Duration::minutes(5);
                         let min_duration = Duration::seconds(30);
-                        if duration > max_duration {
-                            max_duration
-                        } else if duration < min_duration {
-                            min_duration
-                        } else {
-                            duration
-                        }
+                        duration.clamp(min_duration, max_duration)
                     } else {
                         // If we failed to get prices, try again in 1 minute
                         Duration::minutes(1)
