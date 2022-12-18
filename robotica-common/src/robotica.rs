@@ -24,7 +24,8 @@ pub struct DeviceCommand {
 }
 
 /// The status from a switch
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DevicePower {
     /// The switch is on.
     On,
@@ -89,6 +90,37 @@ pub struct AudioCommand {
     pub message: String,
 }
 
+/// A color for a light.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoboticaColor {
+    /// The hue of the color, 0-359.
+    pub hue: u16,
+
+    /// The saturation of the color, 0-100.
+    pub saturation: u16,
+
+    /// The brightness of the color, 0-100.
+    pub brightness: u16,
+
+    /// The kelvin of the color, 2500-9000.
+    pub kelvin: u16,
+}
+
+/// A command to send to a light.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LightCommand {
+    /// The action to perform.
+    pub action: Option<DeviceAction>,
+
+    /// The color to set.
+    pub color: Option<RoboticaColor>,
+
+    /// The scene to set.
+    pub scene: Option<String>,
+}
+
 /// A command to send to any device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -101,7 +133,7 @@ pub enum Command {
     Audio(AudioCommand),
 
     /// Dummy value
-    Dummy2,
+    LightCommand(LightCommand),
 }
 
 impl TryFrom<MqttMessage> for Command {
@@ -140,5 +172,21 @@ mod tests {
             "action": "turn_on",
         });
         assert_eq!(json, serde_json::to_value(command).unwrap());
+    }
+
+    #[test]
+    fn test_device_power() {
+        assert_eq!(
+            "HARD_OFF",
+            serde_json::to_value(DevicePower::HardOff).unwrap()
+        );
+
+        assert_eq!(
+            DevicePower::HardOff,
+            serde_json::from_value(json!("HARD_OFF")).unwrap()
+        );
+
+        let str: String = DevicePower::HardOff.into();
+        assert_eq!("HARD_OFF".to_string(), str);
     }
 }
