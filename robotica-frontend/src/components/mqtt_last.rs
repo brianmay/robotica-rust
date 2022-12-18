@@ -1,5 +1,6 @@
 //! Component that shows the most recent message from a topic
 #![allow(clippy::option_if_let_else)]
+#![allow(clippy::type_repetition_in_bounds)]
 use std::fmt::Display;
 
 use wasm_bindgen_futures::spawn_local;
@@ -21,7 +22,7 @@ pub struct Props {
 pub fn mqtt_last<T>(props: &Props) -> Html
 where
     T: TryFrom<MqttMessage> + Display + 'static,
-    T::Error: std::fmt::Debug + std::fmt::Display,
+    T::Error: std::fmt::Debug,
 {
     let wss: WebsocketService = use_context().unwrap();
     let subscription = use_mut_ref(|| None);
@@ -32,14 +33,14 @@ where
         Callback::from(move |msg: MqttMessage| {
             T::try_from(msg).map_or_else(
                 |e| {
-                    log::error!("Failed to parse message: {}", e);
+                    log::error!("Failed to parse message: {e:?}");
                 },
                 |new_message| message.set(Some(new_message)),
             );
         })
     };
 
-    use_ref(move || {
+    use_mut_ref(move || {
         let topic = props.topic.clone();
         let mut wss = wss;
         spawn_local(async move {

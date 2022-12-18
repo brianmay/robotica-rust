@@ -21,7 +21,7 @@ pub fn require_connection(props: &Props) -> Html {
         Callback::from(move |msg: WsEvent| state.set(msg))
     };
 
-    use_ref(move || {
+    use_mut_ref(move || {
         let mut wss = wss;
         spawn_local(async move {
             let sub = wss.subscribe_events(callback).await;

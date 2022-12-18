@@ -32,7 +32,7 @@ pub fn schedule(props: &Props) -> Html {
         })
     };
 
-    use_ref(move || {
+    use_mut_ref(move || {
         let topic = props.topic.clone();
         let mut wss = wss;
         spawn_local(async move {

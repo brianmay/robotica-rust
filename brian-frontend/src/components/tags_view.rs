@@ -33,7 +33,7 @@ pub fn tags_view() -> Html {
         })
     };
 
-    use_ref(move || {
+    use_mut_ref(move || {
         let topic = "robotica/robotica.linuxpenguins.xyz/tags".to_string();
         let mut wss = wss;
         spawn_local(async move {

@@ -44,8 +44,7 @@ pub enum Route {
     NotFound,
 }
 
-#[allow(clippy::let_unit_value)]
-fn switch(selected_route: &Route) -> Html {
+fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
         Route::BrianRoom => html! { <BrianRoom/> },
@@ -95,7 +94,7 @@ fn app() -> Html {
     html! {
         <ContextProvider<WebsocketService> context={wss}>
             <BrowserRouter>
-                <Switch<Route> render={Switch::render(switch)}/>
+                <Switch<Route> render={switch}/>
             </BrowserRouter>
         </ContextProvider<WebsocketService>>
     }
@@ -105,14 +104,14 @@ fn app() -> Html {
 pub fn run() -> Result<(), JsValue> {
     wasm_logger::init(wasm_logger::Config::default());
     console_error_panic_hook::set_once();
-    yew::start_app::<App>();
+    yew::Renderer::<App>::new().render();
     Ok(())
 }
 
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
     let route: Option<Route> = match use_location() {
-        Some(location) => location.route(),
+        Some(location) => location.state().map(|state| *state),
         None => None,
     };
 
