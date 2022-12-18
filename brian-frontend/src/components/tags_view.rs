@@ -1,26 +1,19 @@
 //! Component that shows the schedule
 use itertools::sorted;
-use log::error;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
-use yew_agent::Bridged;
 
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Tags;
-use robotica_frontend::services::websocket::event_bus::{Command, EventBus};
+use robotica_frontend::services::websocket::WebsocketService;
 
 use super::require_connection::RequireConnection;
 
 /// Component that shows the schedule
 #[function_component(TagsView)]
 pub fn tags_view() -> Html {
-    let callback = {
-        Callback::from(move |msg: ()| {
-            error!("Received message: {:?}", msg);
-        })
-    };
-
-    let events = use_mut_ref(|| EventBus::bridge(callback));
-
+    let wss: WebsocketService = use_context().unwrap();
+    let subscription = use_mut_ref(|| None);
     let tags = use_state(|| None);
 
     let callback = {
@@ -40,10 +33,13 @@ pub fn tags_view() -> Html {
         })
     };
 
-    use_ref(|| {
+    use_ref(move || {
         let topic = "robotica/robotica.linuxpenguins.xyz/tags".to_string();
-        let subscribe = Command::Subscribe { topic, callback };
-        events.borrow_mut().send(subscribe);
+        let mut wss = wss;
+        spawn_local(async move {
+            let sub = wss.subscribe_mqtt(topic, callback).await;
+            *subscription.borrow_mut() = Some(sub);
+        });
     });
 
     html! {

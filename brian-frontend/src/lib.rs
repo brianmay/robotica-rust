@@ -1,5 +1,6 @@
 #![allow(clippy::let_unit_value)]
 
+use robotica_frontend::services::websocket::WebsocketService;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -89,12 +90,14 @@ fn footer() -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
+    let wss = WebsocketService::new();
+
     html! {
-        <>
+        <ContextProvider<WebsocketService> context={wss}>
             <BrowserRouter>
                 <Switch<Route> render={Switch::render(switch)}/>
             </BrowserRouter>
-        </>
+        </ContextProvider<WebsocketService>>
     }
 }
 

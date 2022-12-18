@@ -2,12 +2,12 @@
 #![allow(clippy::option_if_let_else)]
 use std::fmt::Display;
 
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use robotica_common::mqtt::MqttMessage;
-use yew_agent::Bridged;
 
-use crate::services::websocket::event_bus::{Command, EventBus};
+use crate::services::websocket::WebsocketService;
 
 /// The yew properties for the websocket client
 #[derive(Properties, Eq, PartialEq)]
@@ -23,11 +23,9 @@ where
     T: TryFrom<MqttMessage> + Display + 'static,
     T::Error: std::fmt::Debug + std::fmt::Display,
 {
+    let wss: WebsocketService = use_context().unwrap();
+    let subscription = use_mut_ref(|| None);
     let message = use_state::<Option<T>, _>(|| None);
-
-    let callback = { Callback::from(move |_| {}) };
-
-    let events = use_mut_ref(|| EventBus::bridge(callback));
 
     let callback = {
         let message = message.clone();
@@ -41,10 +39,13 @@ where
         })
     };
 
-    use_ref(|| {
+    use_ref(move || {
         let topic = props.topic.clone();
-        let subscribe = Command::Subscribe { topic, callback };
-        events.borrow_mut().send(subscribe);
+        let mut wss = wss;
+        spawn_local(async move {
+            let sub = wss.subscribe_mqtt(topic, callback).await;
+            *subscription.borrow_mut() = Some(sub);
+        });
     });
 
     html! {

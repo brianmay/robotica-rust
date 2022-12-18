@@ -36,6 +36,7 @@ struct PriceReading {
     per_kwh: f32,
     renewables: f32,
     time: chrono::DateTime<Utc>,
+    interval_type: IntervalType,
 }
 
 #[derive(InfluxDbWriteable)]
@@ -152,6 +153,17 @@ enum IntervalType {
     ActualInterval,
     ForecastInterval,
     CurrentInterval,
+}
+
+impl From<IntervalType> for influxdb::Type {
+    fn from(interval_type: IntervalType) -> Self {
+        let v = match interval_type {
+            IntervalType::ActualInterval => "actual",
+            IntervalType::ForecastInterval => "forecast",
+            IntervalType::CurrentInterval => "current",
+        };
+        influxdb::Type::Text(v.to_string())
+    }
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -372,6 +384,7 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse]) {
             per_kwh: data.per_kwh,
             renewables: data.renewables,
             time: data.start_time.clone().into(),
+            interval_type: data.interval_type,
         }
         .into_query("amber/price");
 

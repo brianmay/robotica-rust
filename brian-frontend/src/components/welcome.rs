@@ -1,33 +1,27 @@
-use log::error;
-use log::info;
-use robotica_frontend::services::websocket::event_bus::Command;
-use robotica_frontend::services::websocket::event_bus::EventBus;
+use robotica_frontend::services::websocket::WebsocketService;
 use robotica_frontend::services::websocket::WsEvent;
+use wasm_bindgen_futures::spawn_local;
 use yew::functional::*;
 use yew::prelude::*;
-use yew_agent::Bridged;
 
 #[function_component(Welcome)]
 pub fn login() -> Html {
-    let callback = {
-        Callback::from(move |msg: ()| {
-            error!("Received message: {:?}", msg);
-        })
-    };
+    let wss: WebsocketService = use_context().unwrap();
+    let subscription = use_mut_ref(|| None);
 
-    let events = use_mut_ref(|| EventBus::bridge(callback));
     let state = use_state(|| WsEvent::Disconnected("Not connected yet".to_string()));
 
     let callback = {
         let state = state.clone();
-
         Callback::from(move |msg: WsEvent| state.set(msg))
     };
 
-    use_ref(|| {
-        info!("Connecting to event handler");
-        let msg = Command::EventHandler(callback);
-        events.borrow_mut().send(msg);
+    use_ref(move || {
+        let mut wss = wss;
+        spawn_local(async move {
+            let sub = wss.subscribe_events(callback).await;
+            *subscription.borrow_mut() = Some(sub);
+        });
     });
 
     match &*state {

@@ -8,14 +8,9 @@ use robotica_common::controllers::{
 };
 use robotica_common::mqtt::MqttMessage;
 
-use yew_agent::{Bridge, Bridged};
-
 use crate::services::{
     icons::Icon,
-    websocket::{
-        event_bus::{Command, EventBus},
-        WsEvent,
-    },
+    websocket::{self, WebsocketService, WsEvent},
 };
 
 trait ButtonPropsTrait {
@@ -251,7 +246,8 @@ impl ButtonPropsTrait for HdmiProps {
 /// A yew button
 pub struct Button<T: ConfigTrait> {
     controller: T::Controller,
-    events: Box<dyn Bridge<EventBus>>,
+    subscriptions: Vec<websocket::Subscription>,
+    wss: WebsocketService,
 }
 
 /// The yew message for a button.
@@ -264,6 +260,9 @@ pub enum Message {
 
     /// Button was received a WebSocket event
     Event(WsEvent),
+
+    /// We have subscribed to a topic
+    Subscribed(websocket::Subscription),
 }
 
 impl From<LightProps> for lights::Config {
@@ -283,8 +282,13 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
 
     fn create(ctx: &Context<Self>) -> Self {
         let props = ctx.props();
-        let mut events = EventBus::bridge(ctx.link().batch_callback(|_| None));
+        let (wss, _): (WebsocketService, _) = ctx
+            .link()
+            .context(ctx.link().batch_callback(|_| None))
+            .unwrap();
+
         let controller = props.create_controller();
+        let subscriptions: Vec<websocket::Subscription> = vec![];
 
         {
             controller.get_subscriptions().iter().for_each(|s| {
@@ -294,18 +298,29 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                     .link()
                     .callback(move |msg: MqttMessage| Message::Receive((s.label, msg.payload)));
 
-                let subscribe = Command::Subscribe { topic, callback };
-                events.send(subscribe);
+                let mut wss = wss.clone();
+                ctx.link().send_future(async move {
+                    let s = wss.subscribe_mqtt(topic, callback).await;
+                    Message::Subscribed(s)
+                });
             });
         }
 
         {
+            let mut wss = wss.clone();
             let callback = ctx.link().callback(Message::Event);
-            let msg = Command::EventHandler(callback);
-            events.send(msg);
+
+            ctx.link().send_future(async move {
+                let s = wss.subscribe_events(callback).await;
+                Message::Subscribed(s)
+            });
         }
 
-        Button { controller, events }
+        Button {
+            controller,
+            subscriptions,
+            wss,
+        }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
@@ -355,7 +370,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
             Message::Click => {
                 let commands = self.controller.get_press_commands();
                 for msg in commands {
-                    self.events.send(Command::Send(msg));
+                    self.wss.send_mqtt(msg);
                 }
             }
             Message::Receive((label, payload)) => {
@@ -363,6 +378,9 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
             }
             Message::Event(WsEvent::Disconnected(_)) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connected { .. }) => {}
+            Message::Subscribed(s) => {
+                self.subscriptions.push(s);
+            }
         }
         true
     }

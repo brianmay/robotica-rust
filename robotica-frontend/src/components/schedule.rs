@@ -1,11 +1,10 @@
 //! Component that shows the schedule
-use log::error;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use robotica_common::{mqtt::MqttMessage, scheduler::Sequence};
-use yew_agent::Bridged;
 
-use crate::services::websocket::event_bus::{Command, EventBus};
+use crate::services::websocket::WebsocketService;
 
 /// The yew properties for the websocket client
 #[derive(Properties, Eq, PartialEq)]
@@ -17,15 +16,9 @@ pub struct Props {
 /// Component that shows the schedule
 #[function_component(Schedule)]
 pub fn schedule(props: &Props) -> Html {
+    let wss: WebsocketService = use_context().unwrap();
+    let subscription = use_mut_ref(|| None);
     let sequence_list = use_state(std::vec::Vec::new);
-
-    let callback = {
-        Callback::from(move |msg: ()| {
-            error!("Received message: {:?}", msg);
-        })
-    };
-
-    let events = use_mut_ref(|| EventBus::bridge(callback));
 
     let callback = {
         let sequence_list = sequence_list.clone();
@@ -39,10 +32,13 @@ pub fn schedule(props: &Props) -> Html {
         })
     };
 
-    use_ref(|| {
+    use_ref(move || {
         let topic = props.topic.clone();
-        let subscribe = Command::Subscribe { topic, callback };
-        events.borrow_mut().send(subscribe);
+        let mut wss = wss;
+        spawn_local(async move {
+            let sub = wss.subscribe_mqtt(topic, callback).await;
+            *subscription.borrow_mut() = Some(sub);
+        });
     });
 
     html! {

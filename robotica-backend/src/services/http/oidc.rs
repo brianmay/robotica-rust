@@ -54,6 +54,10 @@ impl Client {
         Ok(client)
     }
 
+    pub async fn renew(&self) -> Result<Client, Error> {
+        Self::new(self.config.clone()).await
+    }
+
     pub fn get_auth_url(&self, origin_url: &str) -> String {
         let auth_url = self.oidc_client.auth_url(&Options {
             scope: Some(self.config.scopes.to_string()),
