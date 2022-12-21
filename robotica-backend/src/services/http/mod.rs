@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{collections::HashMap, env};
 
+use arc_swap::ArcSwap;
 use axum::body::{boxed, Body};
 use axum::extract::{FromRef, State};
 use axum::http::Request;
@@ -55,7 +56,7 @@ impl HttpConfig {
 #[derive(Clone)]
 struct HttpState {
     http_config: HttpConfig,
-    oidc_client: Arc<Client>,
+    oidc_client: Arc<ArcSwap<Client>>,
 }
 
 impl FromRef<HttpState> for HttpConfig {
@@ -66,7 +67,8 @@ impl FromRef<HttpState> for HttpConfig {
 
 impl FromRef<HttpState> for Arc<Client> {
     fn from_ref(state: &HttpState) -> Self {
-        state.oidc_client.clone()
+        let x = state.oidc_client.load();
+        x.clone()
     }
 }
 
@@ -117,7 +119,28 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
         scopes: get_env("OIDC_SCOPES")?,
     };
 
-    let client = Client::new(config).await?;
+    let client = Client::new(config.clone()).await?;
+    let client = Arc::new(ArcSwap::new(Arc::new(client)));
+
+    {
+        let client = client.clone();
+        spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
+
+                tracing::info!("refreshing oidc client");
+                let new_client = Client::new(config.clone()).await;
+                match new_client {
+                    Ok(new_client) => {
+                        client.store(Arc::new(new_client));
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to refresh oidc client: {}", e);
+                    }
+                }
+            }
+        });
+    }
 
     spawn(async {
         server(http_config, client, session_layer)
@@ -130,10 +153,9 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
 
 async fn server(
     http_config: HttpConfig,
-    oidc_client: Client,
+    oidc_client: Arc<ArcSwap<Client>>,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
-    let oidc_client = Arc::new(oidc_client);
     let state = HttpState {
         http_config,
         oidc_client,
