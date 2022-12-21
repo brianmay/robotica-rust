@@ -646,7 +646,7 @@ async fn check_charge(
     // We do this even if the execute failed, because the execute may have
     // changed the cars state regardless.
     if !sequence.is_empty() || charge_state.is_none() {
-        log::info!("Getting charge state");
+        log::info!("Checking charge state");
         *charge_state = get_charge_state(token, car_id).await;
         if charge_state.is_none() {
             log::error!("Error getting charge state");
