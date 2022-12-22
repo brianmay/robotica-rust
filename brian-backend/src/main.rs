@@ -50,8 +50,6 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     });
 
     {
-        let message_sink = state.message_sink.clone();
-
         price_summary_rx
             .clone()
             .map_into_stateful(|(_, current)| current.is_cheap_2hr)
@@ -62,7 +60,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
                     } else {
                         "2 hour cheap price has ended"
                     };
-                    message_sink.try_send(message.to_string());
+                    log::info!("{}", message);
                 }
             });
     }

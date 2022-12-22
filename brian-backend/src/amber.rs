@@ -40,6 +40,13 @@ struct PriceReading {
 }
 
 #[derive(InfluxDbWriteable)]
+struct PriceSummaryReading {
+    is_cheap_2hr: bool,
+    per_kwh: u32,
+    time: chrono::DateTime<Utc>,
+}
+
+#[derive(InfluxDbWriteable)]
 struct UsageReading {
     duration: u16,
     per_kwh: f32,
@@ -106,11 +113,12 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                     // Process the results.
                     let next_delay = match prices {
                         Ok(prices) => {
-                            prices_to_influxdb(&config, &prices).await;
-
-                            // Update the summary and transmit it.
+                            // Update the summary.
                             let summary = pp.prices_to_summary(&now, &prices);
                             let update_time = summary.next_update.clone();
+
+                            // Write the prices to influxdb and send
+                            prices_to_influxdb(&config, &prices, &summary).await;
                             tx.try_send(summary);
 
                             // Add margin to allow time for Amber to update.
@@ -357,7 +365,7 @@ fn prices_to_category(prices: &[PriceResponse]) -> PriceCategory {
     category
 }
 
-async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse]) {
+async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: &PriceSummary) {
     let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
 
     if is_debug_mode() {
@@ -378,6 +386,17 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse]) {
         if let Err(e) = client.query(&reading).await {
             log::error!("Failed to write to influxdb: {}", e);
         }
+    }
+
+    let reading = PriceSummaryReading {
+        is_cheap_2hr: summary.is_cheap_2hr,
+        per_kwh: summary.per_kwh,
+        time: Utc::now(),
+    }
+    .into_query("amber/price_summary");
+
+    if let Err(e) = client.query(&reading).await {
+        log::error!("Failed to write to influxdb: {}", e);
     }
 }
 
