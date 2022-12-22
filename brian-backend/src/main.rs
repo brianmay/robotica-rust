@@ -8,6 +8,7 @@ mod tesla;
 use anyhow::Result;
 use robotica_backend::entities::Sender;
 use robotica_backend::scheduling::executor::executor;
+use robotica_backend::services::persistent_state::PersistentStateDatabase;
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
@@ -32,17 +33,22 @@ pub struct State {
     #[allow(dead_code)]
     mqtt: Mqtt,
     message_sink: Sender<String>,
+    persistent_state_database: PersistentStateDatabase,
 }
 
 async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     let mut subscriptions: Subscriptions = Subscriptions::new();
 
     let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt.clone());
+    let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
+        panic!("Error getting persistent state loader: {}", e);
+    });
 
     let mut state = State {
         subscriptions,
         mqtt,
         message_sink,
+        persistent_state_database,
     };
 
     let price_summary_rx = amber::run().unwrap_or_else(|e| {
@@ -65,7 +71,9 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
             });
     }
 
-    monitor_charging(&mut state, 1, price_summary_rx);
+    monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
+        panic!("Error running tesla charging monitor: {}", e);
+    });
 
     http::run(state.mqtt.clone())
         .await

@@ -3,10 +3,12 @@ use crate::delays::{delay_input, delay_repeat, IsActive};
 
 use anyhow::Result;
 use log::debug;
+use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{
     ChargeState, ChargingStateEnum, CommandSequence, Token,
 };
 use robotica_common::robotica::{Command, DeviceAction, DevicePower};
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
@@ -228,11 +230,24 @@ impl From<PollInterval> for Interval {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct PersistentState {
+    auto_charge: bool,
+    force_charge: bool,
+}
+
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
     price_summary_rx: Receiver<StatefulData<PriceSummary>>,
-) {
+) -> Result<(), persistent_state::Error> {
+    let tesla_secret = state.persistent_state_database.for_name("tesla_token")?;
+
+    let psr = state
+        .persistent_state_database
+        .for_name::<PersistentState>(&format!("tesla_{car_number}"))?;
+    let ps = psr.load().unwrap_or_default();
+
     let mqtt = state.mqtt.clone();
 
     let price_category_rx = price_summary_rx.map_into_stateful(|(_, ps)| ps.category);
@@ -283,8 +298,8 @@ pub fn monitor_charging(
     };
 
     spawn(async move {
-        let mut token = Token::get().unwrap();
-        token.check().await.unwrap();
+        let mut token = Token::get(&tesla_secret).unwrap();
+        token.check(&tesla_secret).await.unwrap();
         let car_id = get_car_id(&mut token, car_number).await.unwrap().unwrap();
 
         let mut interval = PollInterval::Long;
@@ -298,8 +313,7 @@ pub fn monitor_charging(
 
         let mut charge_state = None;
         let mut price_category: Option<PriceCategory> = None;
-        let mut auto_charge = false;
-        let mut force_charge = false;
+        let mut ps = ps;
         let mut is_home = false;
 
         log::info!("Initial charge state: {charge_state:?}");
@@ -308,7 +322,7 @@ pub fn monitor_charging(
             select! {
                 _ = timer.tick() => {
                     log::info!("Refreshing state, token expiration: {:?}", token.expires_at);
-                    token.check().await.unwrap_or_else(|e| {
+                    token.check(&tesla_secret).await.unwrap_or_else(|e| {
                         log::error!("Error refreshing token: {}", e);
                     });
                     log::info!("Token expiration: {:?}", token.expires_at);
@@ -328,24 +342,30 @@ pub fn monitor_charging(
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
-                        auto_charge = match cmd.action {
+                        ps.auto_charge = match cmd.action {
                             DeviceAction::TurnOn => true,
                             DeviceAction::TurnOff => false,
                         };
-                        log::info!("Auto charge: {auto_charge}");
-                        update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
+                        psr.save(&ps).unwrap_or_else(|e| {
+                            log::error!("Error saving persistent state: {}", e);
+                        });
+                        log::info!("Auto charge: {}", ps.auto_charge);
+                        update_auto_charge(ps.auto_charge, car_number, &charge_state, &mqtt);
                     } else {
                         log::info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
                 Ok(cmd) = force_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
-                        force_charge = match cmd.action {
+                        ps.force_charge = match cmd.action {
                             DeviceAction::TurnOn => true,
                             DeviceAction::TurnOff => false,
                         };
-                        log::info!("Force charge: {force_charge}");
-                        update_force_charge(&charge_state, car_number, force_charge, &mqtt);
+                        psr.save(&ps).unwrap_or_else(|e| {
+                            log::error!("Error saving persistent state: {}", e);
+                        });
+                        log::info!("Force charge: {}", ps.force_charge);
+                        update_force_charge(&charge_state, car_number, ps.force_charge, &mqtt);
                     } else {
                         log::info!("Ignoring invalid force_charge command: {cmd:?}");
                     }
@@ -360,14 +380,14 @@ pub fn monitor_charging(
                 else => break,
             }
 
-            let new_interval = if is_home && auto_charge {
+            let new_interval = if is_home && ps.auto_charge {
                 if let Some(price_category) = &price_category {
                     let result = check_charge(
                         car_id,
                         &token,
                         &mut charge_state,
                         price_category,
-                        force_charge,
+                        ps.force_charge,
                     )
                     .await;
                     match result {
@@ -393,10 +413,12 @@ pub fn monitor_charging(
 
             log::info!("Next poll {interval:?} {:?}", timer.period());
 
-            update_auto_charge(auto_charge, car_number, &charge_state, &mqtt);
-            update_force_charge(&charge_state, car_number, force_charge, &mqtt);
+            update_auto_charge(ps.auto_charge, car_number, &charge_state, &mqtt);
+            update_force_charge(&charge_state, car_number, ps.force_charge, &mqtt);
         }
     });
+
+    Ok(())
 }
 
 fn update_auto_charge(

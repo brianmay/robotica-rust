@@ -7,7 +7,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{sleep, Instant};
 
-use crate::{get_env, is_debug_mode, EnvironmentError};
+use crate::{
+    is_debug_mode,
+    services::persistent_state::{self, PersistentStateRow},
+};
 
 async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
     log::debug!("post {}", url);
@@ -224,21 +227,13 @@ type OuterGenericResponse = OuterResponse<GenericResponse>;
 /// Error when something went wrong with the Token
 #[derive(Debug, Error)]
 pub enum TokenError {
-    /// The environment variable is not set
-    #[error("Token env error: {0}")]
-    Environment(#[from] EnvironmentError),
+    /// A error loading/saving the persistent token
+    #[error("Persistent state error: {0}")]
+    Error(#[from] persistent_state::Error),
 
     /// Reqwest error
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
-
-    /// IO error loading the token
-    #[error("Token IO error: {0}")]
-    Io(String, std::io::Error),
-
-    /// Error deserializing the token
-    #[error("Token JSON error: {0}")]
-    Json(#[from] serde_json::Error),
 }
 
 /// A generic error return from the API
@@ -320,22 +315,17 @@ impl Token {
     /// Returns `TokenError::Io` if the file could not be read.
     /// Returns `TokenError::Json` if the file could not be deserialized.
     /// Returns `TokenError::Reqwest` if the token could not be refreshed.
-    pub fn get() -> Result<Self, TokenError> {
-        let filename = get_env("TESLA_SECRET_FILE")?;
-        let token = std::fs::read_to_string(&filename).map_err(|e| TokenError::Io(filename, e))?;
-        let token: Token = serde_json::from_str(&token)?;
+    pub fn get(ps: &PersistentStateRow<Token>) -> Result<Self, persistent_state::Error> {
+        let token = ps.load()?;
         Ok(token)
     }
 
-    fn put(&self) -> Result<(), TokenError> {
-        let filename = get_env("TESLA_SECRET_FILE")?;
-        let token = serde_json::to_string(&self)?;
-        std::fs::write(&filename, token).map_err(|e| TokenError::Io(filename, e))?;
+    fn put(&self, ps: &PersistentStateRow<Token>) -> Result<(), persistent_state::Error> {
+        ps.save(self)?;
         Ok(())
     }
 
     async fn renew(&self) -> Result<Self, Error> {
-        // let oauth = Oauth::get().await?;
         let url = "https://auth.tesla.com/oauth2/v3/token";
         let body = TokenRenew {
             grant_type: "refresh_token".into(),
@@ -366,7 +356,7 @@ impl Token {
     /// Returns `TokenError::Json` if the response could not be deserialized.
     /// Returns `TokenError::Io` if the token could not be written to disk.
     /// Returns `TokenError::Environment` if the environment variable `TESLA_SECRET_FILE` is not set.
-    pub async fn check(&mut self) -> Result<(), TokenError> {
+    pub async fn check(&mut self, ps: &PersistentStateRow<Token>) -> Result<(), TokenError> {
         if let Some(renew_at) = self.expires_at {
             if renew_at > Instant::now() {
                 return Ok(());
@@ -374,7 +364,7 @@ impl Token {
         }
 
         let token = self.renew().await?;
-        token.put()?;
+        token.put(ps)?;
         *self = token;
         Ok(())
     }
@@ -601,14 +591,19 @@ impl Default for CommandSequence {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::similar_names)]
+    use crate::services::persistent_state::PersistentStateDatabase;
+
     use super::*;
 
     #[ignore = "requires secrets"]
     #[tokio::test]
     async fn test_get_token() {
-        let id = 1_492_931_337_154_343u64;
+        let psd = PersistentStateDatabase::new().unwrap();
+        let psr = psd.for_name("tesla_token").unwrap();
 
-        let token = Token::get().unwrap();
+        let token = Token::get(&psr).unwrap();
+
         let token = token.renew().await.unwrap();
         // token.wait_for_wake_up(&id.to_string()).await.unwrap();
         // token.charge_start(id).await.unwrap();
@@ -617,9 +612,9 @@ mod tests {
         let vehicles = token.get_vehicles().await.unwrap();
         println!("{vehicles:#?}");
 
-        let charge_state = token.get_charge_state(id).await.unwrap();
-        println!("{charge_state:#?}");
+        // let charge_state = token.get_charge_state(id).await.unwrap();
+        // println!("{charge_state:#?}");
 
-        token.put().unwrap();
+        token.put(&psr).unwrap();
     }
 }
