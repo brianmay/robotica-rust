@@ -9,7 +9,8 @@ use robotica_common::version;
 
 mod components;
 use components::rooms::{
-    AkiraRoom, Bathroom, BrianRoom, DiningRoom, JanRoom, LoungeRoom, Passage, TwinsRoom,
+    AkiraRoom, Bathroom, BrianRoom, ColinRoom, DiningRoom, JanRoom, LoungeRoom, Passage, Tesla,
+    TwinsRoom,
 };
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
@@ -25,6 +26,8 @@ pub enum Route {
     JanRoom,
     #[at("/twins")]
     TwinsRoom,
+    #[at("/colin")]
+    ColinRoom,
     #[at("/akira")]
     AkiraRoom,
     #[at("/lounge")]
@@ -35,6 +38,8 @@ pub enum Route {
     Bathroom,
     #[at("/passage")]
     Passage,
+    #[at("/tesla")]
+    Tesla,
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -50,11 +55,13 @@ fn switch(selected_route: Route) -> Html {
         Route::BrianRoom => html! { <BrianRoom/> },
         Route::JanRoom => html! { <JanRoom/> },
         Route::TwinsRoom => html! { <TwinsRoom/> },
+        Route::ColinRoom => html! { <ColinRoom/> },
         Route::AkiraRoom => html! { <AkiraRoom/> },
         Route::LoungeRoom => html! { <LoungeRoom/> },
         Route::DiningRoom => html! { <DiningRoom/> },
         Route::Bathroom => html! { <Bathroom/> },
         Route::Passage => html! { <Passage/> },
+        Route::Tesla => html! { <Tesla/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
@@ -176,6 +183,9 @@ fn nav_bar() -> Html {
                                 { dropdown_link(Route::TwinsRoom, "Twins' Room") }
                             </li>
                             <li>
+                                { dropdown_link(Route::ColinRoom, "Colin's Room") }
+                            </li>
+                            <li>
                                 { dropdown_link(Route::AkiraRoom, "Akira's Room") }
                             </li>
                           </ul>
@@ -196,6 +206,9 @@ fn nav_bar() -> Html {
                             </li>
                             <li>
                                 { dropdown_link(Route::Passage, "Passage") }
+                            </li>
+                            <li>
+                                { dropdown_link(Route::Tesla, "Tesla") }
                             </li>
                           </ul>
                         </li>

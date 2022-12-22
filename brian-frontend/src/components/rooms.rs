@@ -46,8 +46,6 @@ pub fn brian_room() -> Html {
                 <Button<SwitchProps> name={"Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
                 <Button<SwitchProps> name={"Night"} topic_substr={"Brian/Night"} action={Action::Toggle} icon={night_icon} />
                 <Button<SwitchProps> name={"MSG"} topic_substr={"Brian/Messages"} action={Action::Toggle} icon={trumpet_icon} />
-                <Button<SwitchProps> name={"TCharge"} topic_substr={"Tesla/1/AutoCharge"} action={Action::Toggle} icon={light_icon.clone()} />
-                <Button<SwitchProps> name={"TForce"} topic_substr={"Tesla/1/ForceCharge"} action={Action::Toggle} icon={light_icon} />
             </div>
         </RequireConnection>
     )
@@ -111,6 +109,25 @@ pub fn twins_room() -> Html {
                 <Button<MusicProps> name={"Doom"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"dragons_doom"} />
                 <Button<MusicProps> name={"Dragon"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
                 <Button<MusicProps> name={"Wakeup"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
+            </div>
+        </RequireConnection>
+    )
+}
+
+#[function_component(ColinRoom)]
+pub fn colin_room() -> Html {
+    let select_icon = Icon::new("select");
+
+    html!(
+        <RequireConnection>
+            <h1>{ "Colin's Room" }</h1>
+
+            <h2>{"TV"}</h2>
+            <div class="buttons">
+                <Button<HdmiProps> name={"WiiU"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=1 output=3 />
+                <Button<HdmiProps> name={"Google"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=2 output=3 />
+                <Button<HdmiProps> name={"Xbox"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon.clone()} input=3 output=3 />
+                <Button<HdmiProps> name={"MythTV"} topic_substr={"Dining/TV"} action={Action::Toggle} icon={select_icon} input=4 output=3 />
             </div>
         </RequireConnection>
     )
@@ -274,6 +291,23 @@ pub fn passage() -> Html {
                 <Button<LightProps> name={"Auto"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
                 <Button<LightProps> name={"On"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
                 <Button<LightProps> name={"Rainbow"} topic_substr={"Passage/Light"} action={Action::Toggle} icon={light_icon} scene={"rainbow"} priority={100} />
+            </div>
+        </RequireConnection>
+    )
+}
+
+#[function_component(Tesla)]
+pub fn tesla() -> Html {
+    let light_icon = Icon::new("light");
+
+    html!(
+        <RequireConnection>
+            <h1>{ "Tesla" }</h1>
+
+            <h2>{"Switches"}</h2>
+            <div class="buttons">
+                <Button<SwitchProps> name={"Charge"} topic_substr={"Tesla/1/AutoCharge"} action={Action::Toggle} icon={light_icon.clone()} />
+                <Button<SwitchProps> name={"Force"} topic_substr={"Tesla/1/ForceCharge"} action={Action::Toggle} icon={light_icon} />
             </div>
         </RequireConnection>
     )
