@@ -160,9 +160,10 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                     open.push("doors")
                 }
 
-                if let Some(TeslaDoorState::Open) = maybe_wo {
-                    open.push("windows")
-                }
+                // Ignore windows for now, as Tesla often reporting these are open when they are not.
+                // if let Some(TeslaDoorState::Open) = maybe_wo {
+                //     open.push("windows")
+                // }
             } else {
                 debug!("up: {:?}", maybe_up);
             }
