@@ -101,30 +101,36 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                     let tomorrow = today + Duration::days(1);
 
                     // Get prices for the current interval.
-                    let prices = process_prices(&config, yesterday, tomorrow).await;
+                    let prices = get_prices(&config, yesterday, tomorrow).await;
 
                     // Process the results.
-                    let next_delay = if let Some(prices) = prices {
-                        // Update the summary and transmit it.
-                        let summary = pp.prices_to_summary(&now, &prices);
-                        let update_time = summary.next_update.clone();
-                        tx.try_send(summary);
+                    let next_delay = match prices {
+                        Ok(prices) => {
+                            prices_to_influxdb(&config, &prices).await;
 
-                        // Add margin to allow time for Amber to update.
-                        let update_time = update_time + Duration::seconds(5);
+                            // Update the summary and transmit it.
+                            let summary = pp.prices_to_summary(&now, &prices);
+                            let update_time = summary.next_update.clone();
+                            tx.try_send(summary);
 
-                        // How long to the current interval expires?
-                        let now = utc_now();
-                        let duration = update_time.clone() - now;
-                        log::info!("Next price update: {update_time:?} in {duration}");
+                            // Add margin to allow time for Amber to update.
+                            let update_time = update_time + Duration::seconds(5);
 
-                        // Ensure we update prices at least once once every 5 minutes.
-                        let max_duration = Duration::minutes(5);
-                        let min_duration = Duration::seconds(30);
-                        duration.clamp(min_duration, max_duration)
-                    } else {
-                        // If we failed to get prices, try again in 1 minute
-                        Duration::minutes(1)
+                            // How long to the current interval expires?
+                            let now = utc_now();
+                            let duration = update_time.clone() - now;
+                            log::info!("Next price update: {update_time:?} in {duration}");
+
+                            // Ensure we update prices at least once once every 5 minutes.
+                            let max_duration = Duration::minutes(5);
+                            let min_duration = Duration::seconds(30);
+                            duration.clamp(min_duration, max_duration)
+                        }
+                        Err(err) => {
+                            log::error!("Failed to get prices: {}", err);
+                            // If we failed to get prices, try again in 1 minute
+                            Duration::minutes(1)
+                        }
                     };
 
                     // Schedule the next update
@@ -327,25 +333,6 @@ pub struct PriceSummary {
     pub is_cheap_2hr: bool,
     pub per_kwh: u32,
     pub next_update: DateTime<Utc>,
-}
-
-async fn process_prices(
-    config: &Config,
-    start_date: Date,
-    end_date: Date,
-) -> Option<Vec<PriceResponse>> {
-    let prices = get_prices(config, start_date, end_date).await;
-
-    match prices {
-        Ok(prices) => {
-            prices_to_influxdb(config, &prices).await;
-            Some(prices)
-        }
-        Err(e) => {
-            log::error!("Error getting prices: {}", e);
-            None
-        }
-    }
 }
 
 fn prices_to_category(prices: &[PriceResponse]) -> PriceCategory {
