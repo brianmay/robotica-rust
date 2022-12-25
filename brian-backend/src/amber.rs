@@ -3,17 +3,21 @@
 use chrono::{FixedOffset, Local, TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
 use log::debug;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 
 use robotica_backend::{
     entities::{self, Receiver, StatefulData},
-    get_env, is_debug_mode, spawn, EnvironmentError,
+    get_env, is_debug_mode,
+    services::persistent_state::{self, PersistentStateRow},
+    spawn, EnvironmentError,
 };
 use robotica_common::datetime::{
     convert_date_time_to_utc, utc_now, Date, DateTime, Duration, Time,
 };
+
+use crate::State;
 
 /// Error when starting the Amber service
 #[derive(Error, Debug)]
@@ -21,6 +25,10 @@ pub enum AmberError {
     /// Environment variable not found
     #[error("Environment variable error: {0}")]
     EnvironmentError(#[from] EnvironmentError),
+
+    /// Persistent state error
+    #[error("Persistent state error: {0}")]
+    PersistentStateError(#[from] persistent_state::Error),
 }
 
 struct Config {
@@ -67,7 +75,7 @@ fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
+pub fn run(state: &State) -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -81,6 +89,10 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
 
     let (tx, rx) = entities::create_stateful_entity("amber_summary");
 
+    let psr = state
+        .persistent_state_database
+        .for_name::<DayState>("amber")?;
+
     spawn(async move {
         // if is_debug_mode() {
         //     let start_date = Date::from_ymd(2022, 1, 1);
@@ -89,7 +101,7 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
         //     process_usage(&config, start_date, stop_date).await;
         //     println!("------------------- done -------------------");
         // }
-        let mut pp = PriceProcessor::new();
+        let mut pp = PriceProcessor::load(&psr, &utc_now());
         let nem_timezone = FixedOffset::east(hours(10).into());
 
         // Update prices maximum every 5 minutes
@@ -115,6 +127,8 @@ pub fn run() -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
                         Ok(prices) => {
                             // Update the summary.
                             let summary = pp.prices_to_summary(&now, &prices);
+                            pp.save(&psr);
+
                             let update_time = summary.next_update.clone();
 
                             // Write the prices to influxdb and send
@@ -434,7 +448,7 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DayState {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
@@ -444,12 +458,29 @@ struct DayState {
 
 #[derive(Debug, Clone)]
 struct PriceProcessor {
-    day: Option<DayState>,
+    day: DayState,
 }
 
 impl PriceProcessor {
-    pub fn new() -> Self {
-        Self { day: None }
+    #[cfg(test)]
+    pub fn new(now: &DateTime<Utc>) -> Self {
+        let day_state = new_day_state(now);
+        Self { day: day_state }
+    }
+
+    pub fn save(&self, psr: &PersistentStateRow<DayState>) {
+        psr.save(&self.day).unwrap_or_else(|err| {
+            log::error!("Failed to save day state: {}", err);
+        });
+    }
+
+    pub fn load(psr: &PersistentStateRow<DayState>, now: &DateTime<Utc>) -> Self {
+        let day = psr.load().unwrap_or_else(|err| {
+            log::error!("Failed to load day state, using defaults: {}", err);
+            new_day_state(now)
+        });
+
+        Self { day }
     }
 
     pub fn prices_to_summary(
@@ -462,24 +493,12 @@ impl PriceProcessor {
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
             .unwrap();
 
-        let time = Time::new(5, 0, 0);
-        let (start_day, end_day) = get_day(now, time, &Local);
+        let (start_day, end_day) = get_2hr_day(now);
 
-        let new_day = || DayState {
-            start: start_day.clone(),
-            end: end_day.clone(),
-            cheap_power_for_day: Duration::new(0, 0, 0),
-            last_cheap_update: None,
-        };
-
-        let mut ds = if let Some(ds) = &self.day {
-            if *now < ds.start || *now >= ds.end {
-                new_day()
-            } else {
-                ds.clone()
-            }
+        let mut ds = if *now < self.day.start || *now >= self.day.end {
+            new_day_state(now)
         } else {
-            new_day()
+            self.day.clone()
         };
 
         if let Some(last_cheap_update) = &ds.last_cheap_update {
@@ -525,7 +544,7 @@ impl PriceProcessor {
             ds.last_cheap_update = None;
         }
 
-        self.day = Some(ds);
+        self.day = ds;
 
         let ps = PriceSummary {
             category: prices_to_category(prices),
@@ -536,6 +555,22 @@ impl PriceProcessor {
         log::info!("Price summary: {:?}", ps);
         ps
     }
+}
+
+fn new_day_state(now: &DateTime<Utc>) -> DayState {
+    let (start_day, end_day) = get_2hr_day(now);
+    DayState {
+        start: start_day,
+        end: end_day,
+        cheap_power_for_day: Duration::new(0, 0, 0),
+        last_cheap_update: None,
+    }
+}
+
+fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
+    let time_2hr_cheap: Time = Time::new(5, 0, 0);
+    let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
+    (start_day, end_day)
 }
 
 fn get_day<T: TimeZone + std::fmt::Debug>(
@@ -724,7 +759,8 @@ mod tests {
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
 
-        let mut pp = PriceProcessor::new();
+        let now = "2020-01-01T00:30:00Z".parse().unwrap();
+        let mut pp = PriceProcessor::new(&now);
 
         let prices = vec![
             pr(
@@ -779,7 +815,6 @@ mod tests {
             ),
         ];
 
-        let now = "2020-01-01T00:30:00Z".parse().unwrap();
         assert_eq!(
             pp.prices_to_summary(&now, &prices),
             PriceSummary {
@@ -789,9 +824,9 @@ mod tests {
                 next_update: "2020-01-01T01:00:00Z".parse().unwrap(),
             }
         );
-        let ds = pp.day.clone().unwrap();
+        let ds = &pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
-        let cp = ds.last_cheap_update.unwrap();
+        let cp = ds.last_cheap_update.clone().unwrap();
         assert_eq!(cp, now);
 
         let prices = vec![
@@ -858,7 +893,7 @@ mod tests {
                 next_update: "2020-01-01T01:30:00Z".parse().unwrap(),
             }
         );
-        let ds = pp.day.unwrap();
+        let ds = pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
         let cp = ds.last_cheap_update;
         assert_eq!(cp, None);

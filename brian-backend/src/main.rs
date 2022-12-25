@@ -51,7 +51,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         persistent_state_database,
     };
 
-    let price_summary_rx = amber::run().unwrap_or_else(|e| {
+    let price_summary_rx = amber::run(&state).unwrap_or_else(|e| {
         panic!("Error running amber: {}", e);
     });
 
