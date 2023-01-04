@@ -3,17 +3,19 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::{protobuf::ProtobufIntoFrom, protos};
+
 /// The `QoS` level for a MQTT message.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum QoS {
     /// At most once
-    AtMostOnce,
+    AtMostOnce = 0,
 
     /// At least once
-    AtLeastOnce,
+    AtLeastOnce = 1,
 
     /// Exactly once
-    ExactlyOnce,
+    ExactlyOnce = 2,
 }
 
 impl Serialize for QoS {
@@ -48,7 +50,7 @@ impl<'de> Deserialize<'de> for QoS {
 }
 
 /// A MQTT message.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 pub struct MqttMessage {
     /// MQTT topic to send the message to.
     pub topic: String,
@@ -71,6 +73,32 @@ impl Default for MqttMessage {
             retain: false,
             qos: QoS::ExactlyOnce,
         }
+    }
+}
+
+impl ProtobufIntoFrom for MqttMessage {
+    type Protobuf = protos::EncodedMqttMessage;
+
+    fn into_protobuf(self) -> Self::Protobuf {
+        Self::Protobuf {
+            topic: self.topic,
+            payload: self.payload,
+            retain: self.retain,
+            qos: self.qos as u32,
+        }
+    }
+
+    fn from_protobuf(msg: Self::Protobuf) -> Option<Self> {
+        Some(Self {
+            topic: msg.topic,
+            payload: msg.payload,
+            retain: msg.retain,
+            qos: match msg.qos {
+                0 => QoS::AtMostOnce,
+                1 => QoS::AtLeastOnce,
+                _ => QoS::ExactlyOnce,
+            },
+        })
     }
 }
 

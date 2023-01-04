@@ -12,8 +12,9 @@ use tracing::{debug, error};
 
 use robotica_common::{
     mqtt::MqttMessage,
+    protobuf::ProtobufEncoderDecoder,
     version::Version,
-    websocket::{WsCommand, WsConnect, WsError},
+    websocket::{WsCommand, WsError, WsStatus},
 };
 
 use crate::services::mqtt::topics::topic_matches_any;
@@ -40,9 +41,15 @@ pub(super) async fn websocket_handler(
 
 async fn websocket_error(stream: WebSocket, error: WsError) {
     let mut stream = stream;
-    let message = WsConnect::Disconnected(error);
-    let message = serde_json::to_string(&message).unwrap();
-    if let Err(e) = stream.send(Message::Text(message)).await {
+    let message = WsStatus::Disconnected(error);
+    let message = match message.encode() {
+        Ok(msg) => msg,
+        Err(e) => {
+            error!("Error encoding websocket error: {}", e);
+            return;
+        }
+    };
+    if let Err(e) = stream.send(Message::Binary(message.into())).await {
         error!("Error sending websocket error: {}", e);
     }
 }
@@ -52,13 +59,21 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
     let (mut sender, mut receiver) = stream.split();
 
     // Send Connect message.
-    let message = WsConnect::Connected {
+    let message = WsStatus::Connected {
         user: user.clone(),
         version: Version::get(),
     };
-    let message = serde_json::to_string(&message).unwrap();
-    if let Err(e) = sender.send(Message::Text(message)).await {
-        error!("Error sending websocket error: {}", e);
+
+    let message = match message.encode() {
+        Ok(msg) => msg,
+        Err(e) => {
+            error!("Error encoding websocket error: {}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = sender.send(Message::Binary(message.into())).await {
+        error!("Error sending websocket status: {}", e);
     }
 
     // We can't clone sender, so we create a process that can receive from multiple threads.
@@ -68,7 +83,7 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
 
         let mut rx = rx;
         while let Some(msg) = rx.recv().await {
-            let msg = match serde_json::to_string(&msg) {
+            let msg = match msg.encode() {
                 Ok(msg) => msg,
                 Err(e) => {
                     error!("send_task: failed to serialize message: {}", e);
@@ -76,7 +91,7 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
                 }
             };
 
-            if let Err(err) = sender.send(Message::Text(msg)).await {
+            if let Err(err) = sender.send(Message::Binary(msg.into())).await {
                 error!(
                     "send_task: failed to send message to web socket, stopping: {}",
                     err
@@ -102,15 +117,12 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
             select! {
                 msg = receiver.next() => {
                     let msg = match msg {
-                        Some(Ok(Message::Text(msg))) => msg,
+                        Some(Ok(Message::Text(msg))) => {
+                            error!("recv_task: received text message, ignoring: {}", msg);
+                            continue;
+                        },
                         Some(Ok(Message::Binary(msg))) => {
-                            match String::from_utf8(msg) {
-                                Ok(msg) => msg,
-                                Err(e) => {
-                                    error!("recv_task: failed to parse binary message: {}", e);
-                                    continue;
-                                }
-                            }
+                            WsCommand::decode(&msg)
                         }
                         Some(Ok(Message::Close(_))) => {
                             debug!("recv_task: received close message, stopping");
@@ -129,7 +141,6 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
                             break;
                         }
                     };
-                    let msg: Result<WsCommand, _> = serde_json::from_str(&msg);
                     match msg {
                         Ok(WsCommand::Subscribe { topic }) => {
                             if check_topic_subscribe_allowed(&topic, &user, &config) {

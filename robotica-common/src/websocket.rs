@@ -1,20 +1,16 @@
 //! Common structs shared between robotica-backend and robotica-frontend for websockets
-use serde::{Deserialize, Serialize};
-
-use crate::{mqtt::MqttMessage, user::User, version::Version};
+use crate::{mqtt::MqttMessage, protobuf::ProtobufIntoFrom, protos, user::User, version::Version};
 
 /// Error message sent from the backend to the frontend
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "error")]
+#[derive(Debug)]
 pub enum WsError {
     /// The user is not authorized to access the websocket
     NotAuthorized,
 }
 
 /// Message sent from the backend to the frontend after websocket connected
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-pub enum WsConnect {
+#[derive(Debug)]
+pub enum WsStatus {
     /// The websocket is connected
     Connected {
         /// The user that is connected
@@ -28,9 +24,44 @@ pub enum WsConnect {
     Disconnected(WsError),
 }
 
+impl ProtobufIntoFrom for WsStatus {
+    type Protobuf = protos::WsStatus;
+
+    fn into_protobuf(self) -> protos::WsStatus {
+        protos::WsStatus {
+            status: Some(match self {
+                WsStatus::Connected { user, version } => {
+                    protos::ws_status::Status::Connected(protos::WsConnected {
+                        user: Some(user.into_protobuf()),
+                        version: Some(version.into_protobuf()),
+                    })
+                }
+                WsStatus::Disconnected(error) => {
+                    protos::ws_status::Status::Disconnected(error as i32)
+                }
+            }),
+        }
+    }
+
+    fn from_protobuf(status: protos::WsStatus) -> Option<Self> {
+        Some(match status.status? {
+            protos::ws_status::Status::Connected(connected) => WsStatus::Connected {
+                user: User::from_protobuf(connected.user?)?,
+                version: Version::from_protobuf(connected.version?)?,
+            },
+            protos::ws_status::Status::Disconnected(error) => {
+                let err = match error {
+                    x if x == protos::WsError::NotAuthorized as i32 => WsError::NotAuthorized,
+                    _ => return None,
+                };
+                WsStatus::Disconnected(err)
+            }
+        })
+    }
+}
+
 /// Message sent from the frontend to the backend.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug)]
 pub enum WsCommand {
     /// Frontend wants to subscribe to MQTT topic.
     Subscribe {
@@ -43,4 +74,38 @@ pub enum WsCommand {
 
     /// Keep alive message.
     KeepAlive,
+}
+
+impl ProtobufIntoFrom for WsCommand {
+    type Protobuf = protos::WsCommand;
+
+    fn into_protobuf(self) -> Self::Protobuf {
+        Self::Protobuf {
+            command: Some(match self {
+                WsCommand::Subscribe { topic } => {
+                    protos::ws_command::Command::Subscribe(protos::WsSubscribe { topic })
+                }
+                WsCommand::Send(message) => {
+                    crate::protos::ws_command::Command::Send(protos::WsSend {
+                        message: Some(message.into_protobuf()),
+                    })
+                }
+                WsCommand::KeepAlive => {
+                    crate::protos::ws_command::Command::KeepAlive(protos::WsKeepAlive {})
+                }
+            }),
+        }
+    }
+
+    fn from_protobuf(src: Self::Protobuf) -> Option<Self> {
+        Some(match src.command? {
+            protos::ws_command::Command::Subscribe(subscribe) => WsCommand::Subscribe {
+                topic: subscribe.topic,
+            },
+            protos::ws_command::Command::Send(protos::WsSend { message }) => {
+                WsCommand::Send(MqttMessage::from_protobuf(message?)?)
+            }
+            protos::ws_command::Command::KeepAlive(_) => WsCommand::KeepAlive,
+        })
+    }
 }

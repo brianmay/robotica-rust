@@ -1,6 +1,7 @@
 //! Websocket service for robotica frontend.
 use std::collections::HashMap;
 
+use bytes::Bytes;
 use futures::{
     channel::{mpsc::Sender, oneshot},
     future::{select, Either},
@@ -16,9 +17,10 @@ use yew::Callback;
 
 use robotica_common::{
     mqtt::MqttMessage,
+    protobuf::ProtobufEncoderDecoder,
     user::User,
     version::Version,
-    websocket::{WsCommand, WsConnect, WsError},
+    websocket::{WsCommand, WsError, WsStatus},
 };
 
 /// A websocket subscription
@@ -100,16 +102,10 @@ impl PartialEq for WebsocketService {
     }
 }
 
-fn message_to_string(msg: Message) -> Option<String> {
+fn message_to_bytes(msg: Message) -> Option<Bytes> {
     match msg {
-        Message::Text(s) => Some(s),
-        Message::Bytes(b) => match String::from_utf8(b) {
-            Ok(s) => Some(s),
-            Err(err) => {
-                error!("Failed to convert binary message to string: {:?}", err);
-                None
-            }
-        },
+        Message::Text(_) => None,
+        Message::Bytes(b) => Some(Bytes::from(b)),
     }
 }
 
@@ -409,10 +405,8 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
                     let command = WsCommand::Subscribe {
                         topic: topic.clone(),
                     };
-                    state
-                        .backend
-                        .send(Message::Text(serde_json::to_string(&command).unwrap()))
-                        .await;
+                    let message = command.encode().unwrap();
+                    state.backend.send(Message::Bytes(message.into())).await;
                     set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
                 }
             }
@@ -457,10 +451,8 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
         Some(Command::Send(msg)) => {
             debug!("ws: Sending message: {:?}", msg);
             let command = WsCommand::Send(msg);
-            state
-                .backend
-                .send(Message::Text(serde_json::to_string(&command).unwrap()))
-                .await;
+            let message = command.encode().unwrap();
+            state.backend.send(Message::Bytes(message.into())).await;
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             ProcessCommandResult::Continue
         }
@@ -471,10 +463,8 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
             if is_connected {
                 debug!("ws: Sending keep alive.");
                 let command = WsCommand::KeepAlive;
-                state
-                    .backend
-                    .send(Message::Text(serde_json::to_string(&command).unwrap()))
-                    .await;
+                let message = command.encode().unwrap();
+                state.backend.send(Message::Bytes(message.into())).await;
                 set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             } else {
                 reconnect_and_set_keep_alive(state).await;
@@ -495,8 +485,8 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
     match msg {
         Some(Ok(msg)) => {
             debug!("ws: Received message: {:?}", msg);
-            if let Some(msg) = message_to_string(msg) {
-                let msg: MqttMessage = serde_json::from_str(&msg).unwrap();
+            if let Some(msg) = message_to_bytes(msg) {
+                let msg: MqttMessage = MqttMessage::decode(&msg).unwrap();
                 state.dispatch_mqtt(&msg);
             }
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
@@ -551,19 +541,19 @@ async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, 
     debug!("ws: Waiting for connected message.");
     let (user, version) = match ws.next().await {
         Some(Ok(msg)) => {
-            if let Some(msg) = message_to_string(msg) {
-                let msg: WsConnect =
-                    serde_json::from_str(&msg).map_err(|err| FatalError::AnyError(err.into()))?;
+            if let Some(msg) = message_to_bytes(msg) {
+                let msg: WsStatus =
+                    WsStatus::decode(&msg).map_err(|err| RetryableError::AnyError(err.into()))?;
 
                 let our_version = Version::get();
                 match msg {
-                    WsConnect::Connected { user, version }
+                    WsStatus::Connected { user, version }
                         if version.vcs_ref == our_version.vcs_ref =>
                     {
                         info!("ws: Connected to websocket as user {}.", user.name);
                         (user, version)
                     }
-                    WsConnect::Connected { version, .. } => {
+                    WsStatus::Connected { version, .. } => {
                         info!(
                             "ws: Backend version {version} but frontend is {}.",
                             our_version
@@ -573,7 +563,7 @@ async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, 
                         )
                         .into());
                     }
-                    WsConnect::Disconnected(WsError::NotAuthorized) => {
+                    WsStatus::Disconnected(WsError::NotAuthorized) => {
                         info!("ws: Not authorized to connect to websocket.");
                         return Err(FatalError::Error("Not authorized".into()).into());
                     }
@@ -601,11 +591,12 @@ async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, 
         let command = WsCommand::Subscribe {
             topic: topic.to_string(),
         };
-        let msg =
-            serde_json::to_string(&command).map_err(|err| FatalError::AnyError(err.into()))?;
+        let msg = command
+            .encode()
+            .map_err(|err| FatalError::AnyError(err.into()))?;
 
         info!("ws: Resubscribing to {}", topic);
-        ws.send(Message::Text(msg))
+        ws.send(Message::Bytes(msg.into()))
             .await
             .map_err(MyWebSocketError)
             .map_err(|err| RetryableError::AnyError(err.into()))?;

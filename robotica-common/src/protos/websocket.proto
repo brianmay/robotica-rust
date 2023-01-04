@@ -1,0 +1,55 @@
+syntax = "proto3";
+package protos.websocket;
+
+message EncodedMqttMessage {
+  string topic = 1;
+  string payload = 2;
+  bool retain = 3;
+  uint32 qos = 4;
+}
+
+enum WsError {
+    NOT_AUTHORIZED = 0;
+}
+
+message User {
+    string sub = 1;
+    string name = 2;
+    string email = 3;
+}
+
+message Version {
+    string build_date = 1;
+    string vcs_ref = 2;
+}
+
+message WsConnected {
+    Version version = 1;
+    User user = 2;
+}
+
+message WsStatus {
+    oneof status {
+        WsConnected connected = 1;
+        WsError disconnected = 2;
+    }
+}
+
+message WsSubscribe {
+    string topic = 1;
+}
+
+message WsKeepAlive {
+}
+
+message WsSend {
+    EncodedMqttMessage message = 1;
+}
+
+message WsCommand {
+    oneof command {
+        WsSubscribe subscribe = 1;
+        WsSend send = 2;
+        WsKeepAlive keep_alive = 3;
+    }
+}

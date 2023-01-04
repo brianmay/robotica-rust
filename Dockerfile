@@ -2,7 +2,7 @@ FROM docker.io/library/rust:1.66-bullseye as builder
 WORKDIR /brian-backend
 
 RUN apt-get update \
-    && apt-get install -y cmake \
+    && apt-get install -y cmake protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nodejs
