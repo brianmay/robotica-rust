@@ -175,9 +175,8 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         }
     });
 
-    let duration = Duration::from_secs(60);
-
-    // We only care if doors open for at least duration.
+    // We only care if doors open for at least 120 seconds.
+    let duration = Duration::from_secs(120);
     let rx = delay_input("tesla_doors (delayed)", duration, rx);
 
     // Discard initial [] value and duplicate events.
@@ -186,7 +185,8 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         .filter_into_stateless(|(p, c)| p.is_some() || c.is_active())
         .map_into_stateless(|(_, c)| c);
 
-    // Repeat the last value duration time.
+    // Repeat the last value every 5 minutes.
+    let duration = Duration::from_secs(300);
     let rx = delay_repeat("tesla_doors (repeat)", duration, rx);
 
     // Output the message.
