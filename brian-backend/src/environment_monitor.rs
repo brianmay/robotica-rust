@@ -19,7 +19,7 @@ struct Reading {
 struct FishTankData {
     distance: u16,
     temperature: f32,
-    tds: Option<f32>,
+    tds: f32,
 }
 
 impl TryFrom<MqttMessage> for FishTankData {
@@ -34,7 +34,7 @@ impl TryFrom<MqttMessage> for FishTankData {
 struct FishTankReading {
     distance: u16,
     temperature: f32,
-    tds: Option<f32>,
+    tds: f32,
     time: DateTime<Utc>,
 }
 
