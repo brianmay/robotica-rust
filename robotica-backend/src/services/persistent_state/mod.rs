@@ -1,5 +1,5 @@
 //! Save persistent state to disk
-use std::{marker::PhantomData, path::PathBuf};
+use std::{io::Write, marker::PhantomData, path::PathBuf};
 
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
@@ -89,12 +89,18 @@ impl<T: Serialize + DeserializeOwned> PersistentStateRow<T> {
 
         let file = std::fs::File::create(&tmp_file)
             .map_err(|e| Error::IoError(tmp_file.to_string_lossy().to_string(), e))?;
-        let writer = std::io::BufWriter::new(file);
-        serde_json::to_writer(writer, value)
+
+        let mut writer = std::io::BufWriter::new(file);
+        serde_json::to_writer(&mut writer, value)
             .map_err(|e| Error::JsonError(tmp_file.to_string_lossy().to_string(), e))?;
+
+        writer
+            .flush()
+            .map_err(|e| Error::IoError(tmp_file.to_string_lossy().to_string(), e))?;
 
         std::fs::rename(tmp_file, &self.path)
             .map_err(|e| Error::IoError(self.path.to_string_lossy().to_string(), e))?;
+
         Ok(())
     }
 
