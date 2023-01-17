@@ -584,11 +584,14 @@ async fn check_charge(
     };
 
     // Is battery level low enough that we can charge it?
+    let should_charge = match charge_state {
+        Some(state) => should_charge && state.battery_level < charge_limit,
+        None => should_charge,
+    };
+
+    // We should not attempt to start charging if charging is complete.
     let can_start_charge = match charge_state {
-        Some(state) => {
-            state.battery_level < charge_limit
-                && state.charging_state != ChargingStateEnum::Complete
-        }
+        Some(state) => state.charging_state != ChargingStateEnum::Complete,
         None => true,
     };
 
@@ -680,9 +683,32 @@ async fn check_charge(
     // Generate result.
     let charging = charge_state.as_ref().map(|s| s.charging_state);
     let result = match (rc_err, charging) {
+        // Something went wrong above, we should retry.
         (Some(err), _) => Err(err),
+
+        // We don't have a valid charge state, we should retry.
         (None, None) => Err(CheckChargeError::ScheduleRetry),
+
+        // We're not charging, but we should be.
+        // We should invalidate the state - as it might be out-of-date - and retry.
+        // Note: sometimes Tesla will enter state where is refuses to start charging, this will keep it awake.
+        (None, Some(ChargingStateEnum::Complete)) if should_charge => {
+            log::info!("Charge complete, but we should be charging");
+            *charge_state = None;
+            Err(CheckChargeError::ScheduleRetry)
+        }
+
+        // We're not charging, but we should be.
+        // This might happen if we increased the charge limit but the car didn't start charging.
+        (None, Some(ChargingStateEnum::Stopped)) if should_charge => {
+            log::info!("Charge stopped, but we should be charging");
+            Err(CheckChargeError::ScheduleRetry)
+        }
+
+        // We are charging.
         (None, Some(s)) if s.is_charging() => Ok(CheckChargeState::Charging),
+
+        // We are not charging.
         (None, _) => Ok(CheckChargeState::Idle),
     };
 
