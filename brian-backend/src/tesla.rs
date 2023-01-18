@@ -627,6 +627,7 @@ async fn check_charge(
         Some(ChargingStateEnum::Complete) => ChargingSummary::NotCharging,
         Some(ChargingStateEnum::Stopped) => ChargingSummary::NotCharging,
         Some(ChargingStateEnum::Disconnected) => ChargingSummary::Disconnected,
+        Some(ChargingStateEnum::NoPower) => ChargingSummary::Disconnected,
         None => ChargingSummary::Unknown,
     };
 

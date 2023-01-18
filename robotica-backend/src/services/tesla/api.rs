@@ -167,6 +167,9 @@ pub enum ChargingStateEnum {
 
     /// Charging is not in progress
     Stopped,
+
+    /// Charger cable is connected but not getting power
+    NoPower,
 }
 
 impl ChargingStateEnum {
@@ -177,7 +180,8 @@ impl ChargingStateEnum {
             ChargingStateEnum::Starting | ChargingStateEnum::Charging => true,
             ChargingStateEnum::Complete
             | ChargingStateEnum::Disconnected
-            | ChargingStateEnum::Stopped => false,
+            | ChargingStateEnum::Stopped
+            | ChargingStateEnum::NoPower => false,
         }
     }
 }
