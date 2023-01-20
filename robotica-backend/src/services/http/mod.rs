@@ -17,7 +17,8 @@ use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
 use axum_sessions::extractors::WritableSession;
 use axum_sessions::{SameSite, SessionLayer};
-use base64::decode;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use serde::de::Error;
@@ -105,7 +106,7 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
     };
 
     let store = CookieStore::new();
-    let secret = decode(get_env("SESSION_SECRET")?)?;
+    let secret = STANDARD.decode(get_env("SESSION_SECRET")?)?;
     let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
 
     let redirect = http_config

@@ -33,7 +33,7 @@ axum = { version = "0.6.1", features = ["ws"] }
 openid = "0.11.0"
 maud = { version = "0.24.0", features = ["axum"] }
 axum-sessions = "0.4.1"
-base64 = "0.13.1"
+base64 = "0.21.0"
 url = "2.2.2"
 futures = "0.3.25"
 tower = "0.4.13"
@@ -45,4 +45,4 @@ arc-swap = "1.4.0"
 lalrpop = "0.19.3"
 
 [dev-dependencies]
-env_logger = "0.9.1"
+env_logger = "0.10.0"
