@@ -212,7 +212,7 @@ fn get_user(session: &ReadableSession) -> Option<User> {
     session.get::<User>("user")
 }
 
-const ALLOWED_SUFFIXES: [&str; 8] = [
+const ASSET_SUFFIXES: [&str; 8] = [
     ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2",
 ];
 
@@ -227,7 +227,7 @@ async fn fallback_handler(
 
     let asset_file = {
         let path = req.uri().path();
-        ALLOWED_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
+        ASSET_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
     };
 
     if !asset_file && get_user(&session).is_none() {
