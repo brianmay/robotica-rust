@@ -5,13 +5,15 @@ use log::{error, log, Level};
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::min;
-use std::{env, time::Duration};
+use std::time::Duration;
 use tokio::time::MissedTickBehavior;
 
 use tokio::time;
 
 use crate::entities;
+use crate::get_env;
 use crate::spawn;
+use crate::EnvironmentError;
 
 #[derive(Deserialize)]
 struct Login {
@@ -143,11 +145,14 @@ struct Circle {
 }
 
 /// Source of life360 member information.
-#[must_use]
-pub fn circles(name: &str) -> entities::Receiver<Vec<Member>> {
+///
+/// # Errors
+///
+/// Will return an error if the environment variables `LIFE360_USERNAME` and `LIFE360_PASSWORD` are not set.
+pub fn circles(name: &str) -> Result<entities::Receiver<Vec<Member>>, EnvironmentError> {
     let (tx, rx) = entities::create_stateless_entity(name);
-    let username = env::var("LIFE360_USERNAME").expect("LIFE360_USERNAME should be set");
-    let password = env::var("LIFE360_PASSWORD").expect("LIFE360_PASSWORD should be set");
+    let username = get_env("LIFE360_USERNAME")?;
+    let password = get_env("LIFE360_PASSWORD")?;
 
     spawn(async move {
         let login = retry_login(&username, &password).await;
@@ -175,14 +180,14 @@ pub fn circles(name: &str) -> entities::Receiver<Vec<Member>> {
         }
     });
 
-    rx
+    Ok(rx)
 }
 
 async fn retry_login(username: &str, password: &str) -> Login {
     let mut attempt: u32 = 0;
 
     loop {
-        let sleep_time = 1000 * 2u64.checked_pow(attempt).unwrap();
+        let sleep_time = 1000 * 2u64.pow(attempt);
         let sleep_time = min(60_000, sleep_time);
 
         let log_level = if attempt == 0 {

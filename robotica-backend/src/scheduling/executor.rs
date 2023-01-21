@@ -107,14 +107,20 @@ impl<T: TimeZone + Debug> State<T> {
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.hostname);
-        let message = serde_json::to_string(&tags).unwrap();
+        let Ok(message) = serde_json::to_string(&tags) else {
+            error!("Failed to serialize tags: {:?}", tags);
+            return;
+        };
         let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
-        let message = serde_json::to_string(&sequences).unwrap();
+        let Ok(message) = serde_json::to_string(&sequences) else {
+            error!("Failed to serialize sequences: {:?}", sequences);
+            return;
+        };
         let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }

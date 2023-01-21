@@ -621,6 +621,7 @@ async fn try_receive<T: Send>(rx: &mut Option<mpsc::Receiver<T>>) -> Option<Opti
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[tokio::test]

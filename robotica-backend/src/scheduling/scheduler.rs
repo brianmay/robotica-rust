@@ -246,6 +246,7 @@ pub fn get_schedule<T: TimeZone>(
 #[cfg(test)]
 #[must_use]
 pub fn create_test_config() -> Vec<Config> {
+    #![allow(clippy::unwrap_used)]
     vec![Config {
         if_cond: None,
         today: None,

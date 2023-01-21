@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use field_ref::field_ref_of;
 use lalrpop_util::ParseError;
 use std::collections::{HashMap, HashSet};

@@ -395,6 +395,7 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

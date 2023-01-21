@@ -10,8 +10,9 @@ use std::{collections::HashMap, env};
 use arc_swap::ArcSwap;
 use axum::body::{boxed, Body};
 use axum::extract::{FromRef, State};
+use axum::http::uri::PathAndQuery;
 use axum::http::Request;
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::{extract::Query, routing::get, Router};
 use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
@@ -19,6 +20,7 @@ use axum_sessions::extractors::WritableSession;
 use axum_sessions::{SameSite, SessionLayer};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use hyper::header::CONTENT_TYPE;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use serde::de::Error;
@@ -91,6 +93,14 @@ pub enum HttpError {
     /// URL Parse error
     #[error("URL Parse error: {0}")]
     UrlParse(#[from] url::ParseError),
+
+    /// Address parse error
+    #[error("Address parse error: {0}")]
+    AddrParse(#[from] std::net::AddrParseError),
+
+    /// Hyper error
+    #[error("Hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
 }
 
 /// Run the HTTP service.
@@ -146,7 +156,9 @@ pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
     spawn(async {
         server(http_config, client, session_layer)
             .await
-            .expect("http server failed");
+            .unwrap_or_else(|err| {
+                error!("http server failed: {}", err);
+            });
     });
 
     Ok(())
@@ -171,12 +183,11 @@ async fn server(
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    let addr = "[::]:4000".parse().unwrap();
+    let addr = "[::]:4000".parse()?;
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
 
     Ok(())
 }
@@ -211,11 +222,7 @@ async fn fallback_handler(
     req: Request<Body>,
 ) -> Response {
     if req.method() != Method::GET {
-        return Response::builder()
-            .status(StatusCode::METHOD_NOT_ALLOWED)
-            .body(Body::empty())
-            .unwrap()
-            .into_response();
+        return (StatusCode::METHOD_NOT_ALLOWED, "Method not allowed").into_response();
     }
 
     let asset_file = {
@@ -224,14 +231,9 @@ async fn fallback_handler(
     };
 
     if !asset_file && get_user(&session).is_none() {
-        let origin_url = req.uri().path_and_query().unwrap().as_str();
+        let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
         let auth_url = oidc_client.get_auth_url(origin_url);
-        return Response::builder()
-            .status(StatusCode::FOUND)
-            .header("Location", auth_url)
-            .body(Body::empty())
-            .unwrap()
-            .into_response();
+        return Redirect::to(&auth_url).into_response();
     }
 
     let static_path = "./brian-frontend/dist";
@@ -244,26 +246,18 @@ async fn fallback_handler(
                     let index_path = PathBuf::from(static_path).join("index.html");
                     let index_content = match fs::read_to_string(index_path).await {
                         Err(_) => {
-                            return Response::builder()
-                                .status(StatusCode::NOT_FOUND)
-                                .body(boxed(Body::from("index file not found")))
-                                .unwrap()
+                            return (StatusCode::INTERNAL_SERVER_ERROR, "index file not found")
+                                .into_response();
                         }
                         Ok(index_content) => index_content,
                     };
 
-                    Response::builder()
-                        .status(StatusCode::OK)
-                        .body(boxed(Body::from(index_content)))
-                        .unwrap()
+                    (StatusCode::OK, [(CONTENT_TYPE, "text/html")], index_content).into_response()
                 }
                 _ => response.map(boxed),
             }
         }
-        Err(err) => Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(boxed(Body::from(format!("error: {err}"))))
-            .expect("error response"),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("error: {err}")).into_response(),
     }
 }
 
@@ -348,13 +342,7 @@ async fn oidc_callback(
             });
 
             let url = http_config.generate_url_or_default(&state);
-
-            Response::builder()
-                .status(StatusCode::FOUND)
-                .header("Location", url)
-                .body(Body::empty())
-                .unwrap()
-                .into_response()
+            Redirect::to(&url).into_response()
         }
         Err(e) => {
             session.destroy();

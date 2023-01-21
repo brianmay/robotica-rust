@@ -595,6 +595,7 @@ impl Default for CommandSequence {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     #![allow(clippy::similar_names)]
     use crate::services::persistent_state::PersistentStateDatabase;
 
