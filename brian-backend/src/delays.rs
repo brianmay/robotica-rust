@@ -14,7 +14,10 @@ pub enum DelayInputState<T> {
     NoDelay,
 }
 
-async fn maybe_sleep_until<T>(state: &DelayInputState<T>) -> Option<()> {
+async fn maybe_sleep_until<T>(state: &DelayInputState<T>) -> Option<()>
+where
+    T: Sync,
+{
     if let DelayInputState::Delaying(instant, _) = state {
         sleep_until(*instant).await;
         Some(())
@@ -83,7 +86,10 @@ pub enum DelayRepeatState<T> {
     Delaying(Interval, T),
 }
 
-async fn maybe_tick<T>(state: &mut DelayRepeatState<T>) -> Option<()> {
+async fn maybe_tick<T>(state: &mut DelayRepeatState<T>) -> Option<()>
+where
+    T: Send,
+{
     if let DelayRepeatState::Delaying(interval, _) = state {
         interval.tick().await;
         Some(())

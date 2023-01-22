@@ -30,19 +30,19 @@ enum TeslaDoorState {
 impl Display for TeslaDoorState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TeslaDoorState::Open => write!(f, "open"),
-            TeslaDoorState::Closed => write!(f, "closed"),
+            Self::Open => write!(f, "open"),
+            Self::Closed => write!(f, "closed"),
         }
     }
 }
 
 impl TryFrom<MqttMessage> for TeslaDoorState {
-    type Error = TeslaStateErr;
+    type Error = StateErr;
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
         match msg.payload.as_str() {
-            "true" => Ok(TeslaDoorState::Open),
-            "false" => Ok(TeslaDoorState::Closed),
-            _ => Err(TeslaStateErr::InvalidDoorState(msg.payload)),
+            "true" => Ok(Self::Open),
+            "false" => Ok(Self::Closed),
+            _ => Err(StateErr::InvalidDoorState(msg.payload)),
         }
     }
 }
@@ -56,25 +56,25 @@ enum TeslaUserIsPresent {
 impl Display for TeslaUserIsPresent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TeslaUserIsPresent::UserPresent => write!(f, "user is present"),
-            TeslaUserIsPresent::UserNotPresent => write!(f, "user is not present"),
+            Self::UserPresent => write!(f, "user is present"),
+            Self::UserNotPresent => write!(f, "user is not present"),
         }
     }
 }
 
 impl TryFrom<MqttMessage> for TeslaUserIsPresent {
-    type Error = TeslaStateErr;
+    type Error = StateErr;
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
         match msg.payload.as_str() {
-            "true" => Ok(TeslaUserIsPresent::UserPresent),
-            "false" => Ok(TeslaUserIsPresent::UserNotPresent),
-            _ => Err(TeslaStateErr::InvalidDoorState(msg.payload)),
+            "true" => Ok(Self::UserPresent),
+            "false" => Ok(Self::UserNotPresent),
+            _ => Err(StateErr::InvalidDoorState(msg.payload)),
         }
     }
 }
 
 #[derive(Error, Debug)]
-pub enum TeslaStateErr {
+pub enum StateErr {
     #[error("Invalid door state: {0}")]
     InvalidDoorState(String),
 
@@ -89,27 +89,27 @@ impl IsActive for Vec<&str> {
 }
 
 pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
-    let fo_rx = state
+    let frunk_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
             "teslamate/cars/{car_number}/frunk_open"
         ));
-    let to_rx = state
+    let boot_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
             "teslamate/cars/{car_number}/trunk_open"
         ));
-    let do_rx = state
+    let doors_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
             "teslamate/cars/{car_number}/doors_open"
         ));
-    let wo_rx = state
+    let windows_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
             "teslamate/cars/{car_number}/windows_open"
         ));
-    let up_rx = state
+    let user_present_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaUserIsPresent>(&format!(
             "teslamate/cars/{car_number}/is_user_present"
@@ -120,46 +120,46 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     let (tx, rx) = create_stateless_entity("tesla_doors");
 
     spawn(async move {
-        let mut fo_s = fo_rx.subscribe().await;
-        let mut to_s = to_rx.subscribe().await;
-        let mut do_s = do_rx.subscribe().await;
-        let mut wo_s = wo_rx.subscribe().await;
-        let mut up_s = up_rx.subscribe().await;
+        let mut frunk_s = frunk_rx.subscribe().await;
+        let mut boot_s = boot_rx.subscribe().await;
+        let mut doors_s = doors_rx.subscribe().await;
+        let mut windows_s = windows_rx.subscribe().await;
+        let mut user_present_s = user_present_rx.subscribe().await;
 
         loop {
             select! {
-                Ok((_, _)) = fo_s.recv() => {},
-                Ok((_, _)) = to_s.recv() => {},
-                Ok((_, _)) = do_s.recv() => {},
-                Ok((_, _)) = wo_s.recv() => {},
-                Ok((_, _)) = up_s.recv() => {},
+                Ok((_, _)) = frunk_s.recv() => {},
+                Ok((_, _)) = boot_s.recv() => {},
+                Ok((_, _)) = doors_s.recv() => {},
+                Ok((_, _)) = windows_s.recv() => {},
+                Ok((_, _)) = user_present_s.recv() => {},
                 else => break,
             };
 
             let mut open: Vec<&str> = vec![];
 
-            let maybe_up = up_rx.get_current().await;
-            if let Some(TeslaUserIsPresent::UserNotPresent) = maybe_up {
-                let maybe_fo = fo_rx.get_current().await;
-                let maybe_to = to_rx.get_current().await;
-                let maybe_do = do_rx.get_current().await;
-                let maybe_wo = wo_rx.get_current().await;
+            let maybe_user_present = user_present_rx.get_current().await;
+            if Some(TeslaUserIsPresent::UserNotPresent) == maybe_user_present {
+                let maybe_frunk = frunk_rx.get_current().await;
+                let maybe_boot = boot_rx.get_current().await;
+                let maybe_doors = doors_rx.get_current().await;
+                let maybe_windows = windows_rx.get_current().await;
 
                 debug!(
                     "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
-                    maybe_fo, maybe_to, maybe_do, maybe_wo, maybe_up
+                    maybe_frunk, maybe_boot, maybe_doors, maybe_windows, maybe_user_present
                 );
 
-                if let Some(TeslaDoorState::Open) = maybe_fo {
-                    open.push("frunk")
+                if Some(TeslaDoorState::Open) == maybe_frunk {
+                    open.push("frunk");
                 }
 
-                if let Some(TeslaDoorState::Open) = maybe_to {
-                    open.push("boot")
+                if Some(TeslaDoorState::Open) == maybe_boot {
+                    open.push("boot");
                 }
 
-                if let Some(TeslaDoorState::Open) = maybe_do {
-                    open.push("door")
+                if Some(TeslaDoorState::Open) == maybe_doors {
+                    open.push("door");
                 }
 
                 // Ignore windows for now, as Tesla often reporting these are open when they are not.
@@ -167,7 +167,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 //     open.push("window")
                 // }
             } else {
-                debug!("up: {:?}", maybe_up);
+                debug!("up: {:?}", maybe_user_present);
             }
 
             debug!("open: {:?}", open);
@@ -216,9 +216,9 @@ enum PollInterval {
 impl From<PollInterval> for Duration {
     fn from(pi: PollInterval) -> Self {
         match pi {
-            PollInterval::Short => Duration::from_secs(30),
-            PollInterval::Medium => Duration::from_secs(60),
-            PollInterval::Long => Duration::from_secs(5 * 60),
+            PollInterval::Short => Self::from_secs(30),
+            PollInterval::Medium => Self::from_secs(60),
+            PollInterval::Long => Self::from_secs(5 * 60),
         }
     }
 }
@@ -236,6 +236,7 @@ struct PersistentState {
     force_charge: bool,
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
@@ -408,7 +409,7 @@ pub fn monitor_charging(
             if interval != new_interval {
                 interval = new_interval;
                 timer = interval.into();
-                log::info!("Resetting poll timer to {interval:?} {:?}", timer.period())
+                log::info!("Resetting poll timer to {interval:?} {:?}", timer.period());
             }
 
             log::info!("Next poll {interval:?} {:?}", timer.period());
@@ -501,13 +502,11 @@ enum ChargingSummary {
 }
 
 impl RequestedCharge {
-    fn min_charge(self, min_charge: u8) -> Self {
+    const fn min_charge(self, min_charge: u8) -> Self {
         match self {
-            RequestedCharge::DontCharge => RequestedCharge::ChargeTo(min_charge),
-            RequestedCharge::ChargeTo(limit) if limit < min_charge => {
-                RequestedCharge::ChargeTo(min_charge)
-            }
-            _ => self,
+            Self::DontCharge => Self::ChargeTo(min_charge),
+            Self::ChargeTo(limit) if limit < min_charge => Self::ChargeTo(min_charge),
+            Self::ChargeTo(_) => self,
         }
     }
 }
@@ -524,6 +523,7 @@ enum CheckChargeError {
     ScheduleRetry,
 }
 
+#[allow(clippy::too_many_lines)]
 async fn check_charge(
     car_id: u64,
     token: &Token,
@@ -563,6 +563,7 @@ async fn check_charge(
     };
 
     // What is the limit we should charge to?
+    #[allow(clippy::match_same_arms)]
     let requested_charge = match &price_category {
         PriceCategory::Expensive => RequestedCharge::DontCharge,
         PriceCategory::Normal => RequestedCharge::DontCharge,
@@ -621,6 +622,7 @@ async fn check_charge(
 
     // Get charging state
     let charging = charge_state.as_ref().map(|s| s.charging_state);
+    #[allow(clippy::match_same_arms)]
     let charging_summary = match charging {
         Some(ChargingStateEnum::Starting) => ChargingSummary::Charging,
         Some(ChargingStateEnum::Charging) => ChargingSummary::Charging,
@@ -632,6 +634,7 @@ async fn check_charge(
     };
 
     // Start/stop charging as required.
+    #[allow(clippy::match_same_arms)]
     match charging_summary {
         ChargingSummary::Charging if !should_charge => {
             log::info!("Stopping charge");

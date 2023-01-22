@@ -1,3 +1,9 @@
+//! Main entry point for the application.
+
+#![warn(missing_docs)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::nursery)]
+
 mod amber;
 mod delays;
 mod environment_monitor;
@@ -28,6 +34,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+/// Global state for the application.
 pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
@@ -41,7 +48,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
 
     let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt.clone());
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
-        panic!("Error getting persistent state loader: {}", e);
+        panic!("Error getting persistent state loader: {e}");
     });
 
     let mut state = State {
@@ -52,7 +59,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     };
 
     let price_summary_rx = amber::run(&state).unwrap_or_else(|e| {
-        panic!("Error running amber: {}", e);
+        panic!("Error running amber: {e}");
     });
 
     {
@@ -72,7 +79,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     }
 
     monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
-        panic!("Error running tesla charging monitor: {}", e);
+        panic!("Error running tesla charging monitor: {e}");
     });
 
     http::run(state.mqtt.clone())
@@ -86,7 +93,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     });
 
     executor(&mut state.subscriptions, state.mqtt.clone()).unwrap_or_else(|err| {
-        panic!("Failed to start executor: {}", err);
+        panic!("Failed to start executor: {err}");
     });
 
     // let message_sink_temp = state.message_sink.clone();

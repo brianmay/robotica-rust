@@ -17,29 +17,29 @@ pub struct Id {
 }
 
 impl Id {
-    pub fn new(location: &str, device: &str) -> Id {
-        Id {
+    pub fn new(location: &str, device: &str) -> Self {
+        Self {
             location: location.to_string(),
             device: device.to_string(),
         }
     }
     pub fn get_name(&self, postfix: &str) -> String {
-        format!("{}_{}_{}", self.location, self.device, postfix)
+        format!("{}_{}_{postfix}", self.location, self.device)
     }
     pub fn get_state_topic(&self, component: &str) -> String {
-        format!("state/{}/{}/{}", self.location, self.device, component)
+        format!("state/{}/{}/{component}", self.location, self.device)
     }
     pub fn get_command_topic(&self, params: &[&str]) -> String {
         match params.join("/").as_str() {
             "" => format!("command/{}/{}", self.location, self.device),
-            params => format!("command/{}/{}/{}", self.location, self.device, params),
+            params => format!("command/{}/{}/{params}", self.location, self.device),
         }
     }
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RoboticaAutoColorOut {
+struct AutoColorOut {
     pub hue: Option<u16>,
     pub saturation: Option<u16>,
     pub brightness: Option<u16>,
@@ -49,9 +49,9 @@ pub struct RoboticaAutoColorOut {
 
 #[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct RoboticaAutoColor {
+struct AutoColor {
     pub power: Option<DevicePower>,
-    pub color: RoboticaAutoColorOut,
+    pub color: AutoColorOut,
 }
 
 #[allow(dead_code)]
@@ -66,7 +66,7 @@ pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub(crate) fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Sender<String> {
+pub fn create_message_sink(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Sender<String> {
     let gate_topic = Id::new("Brian", "Messages").get_state_topic("power");
     let gate_in = subscriptions.subscribe_into_stateless::<DevicePower>(&gate_topic);
 

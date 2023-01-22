@@ -21,14 +21,14 @@ use crate::State;
 
 /// Error when starting the Amber service
 #[derive(Error, Debug)]
-pub enum AmberError {
+pub enum Error {
     /// Environment variable not found
     #[error("Environment variable error: {0}")]
-    EnvironmentError(#[from] EnvironmentError),
+    Environment(#[from] EnvironmentError),
 
     /// Persistent state error
     #[error("Persistent state error: {0}")]
-    PersistentStateError(#[from] persistent_state::Error),
+    PersistentState(#[from] persistent_state::Error),
 }
 
 struct Config {
@@ -50,7 +50,7 @@ struct PriceReading {
 #[derive(InfluxDbWriteable)]
 struct PriceSummaryReading {
     is_cheap_2hr: bool,
-    per_kwh: u32,
+    per_kwh: i32,
     time: chrono::DateTime<Utc>,
 }
 
@@ -65,7 +65,7 @@ struct UsageReading {
 }
 
 const HOURS_TO_SECONDS: u16 = 3600;
-fn hours(num: u16) -> u16 {
+const fn hours(num: u16) -> u16 {
     num * HOURS_TO_SECONDS
 }
 
@@ -75,7 +75,7 @@ fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State) -> Result<Receiver<StatefulData<PriceSummary>>, AmberError> {
+pub fn run(state: &State) -> Result<Receiver<StatefulData<PriceSummary>>, Error> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -190,7 +190,7 @@ impl From<IntervalType> for influxdb::Type {
             IntervalType::ForecastInterval => "forecast",
             IntervalType::CurrentInterval => "current",
         };
-        influxdb::Type::Text(v.to_string())
+        Self::Text(v.to_string())
     }
 }
 
@@ -353,7 +353,7 @@ pub enum PriceCategory {
 pub struct PriceSummary {
     pub category: PriceCategory,
     pub is_cheap_2hr: bool,
-    pub per_kwh: u32,
+    pub per_kwh: i32,
     pub next_update: DateTime<Utc>,
 }
 
@@ -532,7 +532,7 @@ impl PriceProcessor {
         //     number_of_intervals
         // );
         let cheapest_price =
-            get_price_for_cheapest_period(prices, number_of_intervals, start_day, end_day)
+            get_price_for_cheapest_period(prices, number_of_intervals, &start_day, &end_day)
                 .unwrap_or(10.0);
 
         let is_cheap = current_price.per_kwh <= cheapest_price;
@@ -549,12 +549,28 @@ impl PriceProcessor {
         let ps = PriceSummary {
             category: prices_to_category(prices),
             is_cheap_2hr: is_cheap,
-            per_kwh: current_price.per_kwh.round() as u32,
+            per_kwh: round_f32_to_i32(current_price.per_kwh),
             next_update: current_price.end_time.clone(),
         };
         log::info!("Price summary: {:?}", ps);
         ps
     }
+}
+
+fn round_f32_to_i32(f: f32) -> i32 {
+    let f = f.round();
+    #[allow(clippy::cast_precision_loss)]
+    if f > i32::MAX as f32 {
+        return i32::MAX;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    if f < i32::MIN as f32 {
+        return i32::MIN;
+    }
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    let f = f as i32;
+    f
 }
 
 fn new_day_state(now: &DateTime<Utc>) -> DayState {
@@ -591,15 +607,15 @@ fn get_day<T: TimeZone + std::fmt::Debug>(
 }
 
 /// Divide two numbers and round up
-fn divide_round_up(dividend: i64, divisor: i64) -> i64 {
+const fn divide_round_up(dividend: i64, divisor: i64) -> i64 {
     (dividend + divisor - 1) / divisor
 }
 
 fn get_price_for_cheapest_period(
     prices: &[PriceResponse],
     number_of_intervals: usize,
-    start_time: DateTime<Utc>,
-    end_time: DateTime<Utc>,
+    start_time: &DateTime<Utc>,
+    end_time: &DateTime<Utc>,
 ) -> Option<f32> {
     if number_of_intervals == 0 {
         return None;
@@ -608,8 +624,8 @@ fn get_price_for_cheapest_period(
     let mut prices: Vec<_> = prices
         .iter()
         .filter(|p| {
-            p.start_time >= start_time
-                && p.start_time < end_time
+            p.start_time >= *start_time
+                && p.start_time < *end_time
                 && p.interval_type != IntervalType::ActualInterval
         })
         .map(|p| p.per_kwh)
@@ -621,7 +637,7 @@ fn get_price_for_cheapest_period(
     prices
         .get(number_of_intervals - 1)
         .or_else(|| prices.last())
-        .cloned()
+        .copied()
 }
 
 #[cfg(test)]
@@ -629,6 +645,10 @@ mod tests {
     use chrono::Local;
 
     use super::*;
+
+    fn dt(dt: impl Into<String>) -> DateTime<Utc> {
+        dt.into().parse().unwrap()
+    }
 
     #[test]
     fn test_get_price_for_cheapest_period() {
@@ -659,76 +679,80 @@ mod tests {
         };
 
         let prices = vec![
-            pr("2020-01-01T00:30:00Z".parse().unwrap(), -10.0),
-            pr("2020-01-01T01:00:00Z".parse().unwrap(), 0.0),
-            pr("2020-01-01T01:30:00Z".parse().unwrap(), 10.0),
-            pr("2020-01-01T02:00:00Z".parse().unwrap(), 0.0),
-            pr("2020-01-01T02:30:00Z".parse().unwrap(), 0.0),
-            pr("2020-01-01T03:30:00Z".parse().unwrap(), -10.0),
-            pr("2020-01-01T04:00:00Z".parse().unwrap(), 0.0),
-            pr("2020-01-01T04:30:00Z".parse().unwrap(), 0.0),
-            pr("2020-01-01T05:00:00Z".parse().unwrap(), 10.0),
-            pr("2020-01-01T05:30:00Z".parse().unwrap(), -10.0),
-            pr("2020-01-01T06:00:00Z".parse().unwrap(), -10.0),
+            pr(dt("2020-01-01T00:30:00Z"), -10.0),
+            pr(dt("2020-01-01T01:00:00Z"), 0.0),
+            pr(dt("2020-01-01T01:30:00Z"), 10.0),
+            pr(dt("2020-01-01T02:00:00Z"), 0.0),
+            pr(dt("2020-01-01T02:30:00Z"), 0.0),
+            pr(dt("2020-01-01T03:30:00Z"), -10.0),
+            pr(dt("2020-01-01T04:00:00Z"), 0.0),
+            pr(dt("2020-01-01T04:30:00Z"), 0.0),
+            pr(dt("2020-01-01T05:00:00Z"), 10.0),
+            pr(dt("2020-01-01T05:30:00Z"), -10.0),
+            pr(dt("2020-01-01T06:00:00Z"), -10.0),
         ];
 
         let start_time: DateTime<Utc> = "2020-01-01T00:00:00Z".parse().unwrap();
         let end_time: DateTime<Utc> = "2020-01-01T06:30:00Z".parse().unwrap();
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 0, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 0, &start_time, &end_time),
             None
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 1, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 1, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 2, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 2, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 3, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 3, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 4, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 4, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 5, start_time, end_time),
+            get_price_for_cheapest_period(&prices, 5, &start_time, &end_time),
             Some(0.0)
         );
 
-        let start_time: DateTime<Utc> = "2020-01-01T00:00:00Z".parse().unwrap();
-        let end_time: DateTime<Utc> = "2020-01-01T06:00:00Z".parse().unwrap();
+        let start_time: DateTime<Utc> = dt("2020-01-01T00:00:00Z");
+        let end_time: DateTime<Utc> = dt("2020-01-01T06:00:00Z");
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 0, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 0, &start_time, &end_time),
             None
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 1, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 1, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 2, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 2, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 3, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 3, &start_time, &end_time),
             Some(-10.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 4, start_time.clone(), end_time.clone()),
+            get_price_for_cheapest_period(&prices, 4, &start_time, &end_time),
             Some(0.0)
         );
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 5, start_time, end_time),
+            get_price_for_cheapest_period(&prices, 5, &start_time, &end_time),
             Some(-0.0)
         );
     }
 
     #[test]
     fn test_price_processor() {
+        use IntervalType::ActualInterval;
+        use IntervalType::CurrentInterval;
+        use IntervalType::ForecastInterval;
+
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
             season: None,
@@ -755,64 +779,20 @@ mod tests {
             }
         };
 
-        use IntervalType::ActualInterval;
-        use IntervalType::CurrentInterval;
-        use IntervalType::ForecastInterval;
-
         let now = "2020-01-01T00:30:00Z".parse().unwrap();
         let mut pp = PriceProcessor::new(&now);
 
         let prices = vec![
-            pr(
-                "2020-01-01T00:30:00Z".parse().unwrap(),
-                0.0,
-                CurrentInterval,
-            ),
-            pr(
-                "2020-01-01T01:00:00Z".parse().unwrap(),
-                0.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T01:30:00Z".parse().unwrap(),
-                10.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T02:00:00Z".parse().unwrap(),
-                0.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T02:30:00Z".parse().unwrap(),
-                0.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T03:30:00Z".parse().unwrap(),
-                -10.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T04:00:00Z".parse().unwrap(),
-                -10.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T04:30:00Z".parse().unwrap(),
-                0.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T05:00:00Z".parse().unwrap(),
-                10.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T05:30:00Z".parse().unwrap(),
-                -10.0,
-                ForecastInterval,
-            ),
+            pr(dt("2020-01-01T00:30:00Z"), 0.0, CurrentInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 10.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), -10.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), -10.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 10.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), -10.0, ForecastInterval),
         ];
 
         assert_eq!(
@@ -821,7 +801,7 @@ mod tests {
                 category: PriceCategory::SuperCheap,
                 is_cheap_2hr: true,
                 per_kwh: 0,
-                next_update: "2020-01-01T01:00:00Z".parse().unwrap(),
+                next_update: dt("2020-01-01T01:00:00Z"),
             }
         );
         let ds = &pp.day;
@@ -830,67 +810,27 @@ mod tests {
         assert_eq!(cp, now);
 
         let prices = vec![
-            pr("2020-01-01T00:30:00Z".parse().unwrap(), 0.0, ActualInterval),
-            pr(
-                "2020-01-01T01:00:00Z".parse().unwrap(),
-                0.0,
-                CurrentInterval,
-            ),
-            pr(
-                "2020-01-01T01:30:00Z".parse().unwrap(),
-                0.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T02:00:00Z".parse().unwrap(),
-                20.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T02:30:00Z".parse().unwrap(),
-                20.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T03:30:00Z".parse().unwrap(),
-                -30.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T04:00:00Z".parse().unwrap(),
-                -30.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T04:30:00Z".parse().unwrap(),
-                -30.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T05:00:00Z".parse().unwrap(),
-                30.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T05:30:00Z".parse().unwrap(),
-                40.0,
-                ForecastInterval,
-            ),
-            pr(
-                "2020-01-01T06:00:00Z".parse().unwrap(),
-                40.0,
-                ForecastInterval,
-            ),
+            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
+            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
         ];
 
-        let now: DateTime<Utc> = "2020-01-01T01:15:00Z".parse().unwrap();
+        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
         assert_eq!(
             pp.prices_to_summary(&now, &prices),
             PriceSummary {
                 category: PriceCategory::SuperCheap,
                 is_cheap_2hr: false,
                 per_kwh: 0,
-                next_update: "2020-01-01T01:30:00Z".parse().unwrap(),
+                next_update: dt("2020-01-01T01:30:00Z"),
             }
         );
         let ds = pp.day;
@@ -914,34 +854,48 @@ mod tests {
         let timezone = FixedOffset::east(60 * 60 * 11);
         {
             let time = Time::new(5, 0, 0);
-            let now = "2020-01-02T00:00:00Z".parse().unwrap();
+            let now = dt("2020-01-02T00:00:00Z");
             let (start, stop) = get_day(&now, time, &timezone);
-            assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
-            assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
+            assert_eq!(start, dt("2020-01-01T18:00:00Z"));
+            assert_eq!(stop, dt("2020-01-02T18:00:00Z"));
         }
 
         {
             let time = Time::new(5, 0, 0);
-            let now = "2020-01-02T17:59:59Z".parse().unwrap();
+            let now = dt("2020-01-02T17:59:59Z");
             let (start, stop) = get_day(&now, time, &timezone);
-            assert_eq!(start, "2020-01-01T18:00:00Z".parse().unwrap());
-            assert_eq!(stop, "2020-01-02T18:00:00Z".parse().unwrap());
+            assert_eq!(start, dt("2020-01-01T18:00:00Z"));
+            assert_eq!(stop, dt("2020-01-02T18:00:00Z"));
         }
 
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T18:00:00Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
-            assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
-            assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
+            assert_eq!(start, dt("2020-01-02T18:00:00Z"));
+            assert_eq!(stop, dt("2020-01-03T18:00:00Z"));
         }
 
         {
             let time = Time::new(5, 0, 0);
             let now = "2020-01-02T18:00:01Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
-            assert_eq!(start, "2020-01-02T18:00:00Z".parse().unwrap());
-            assert_eq!(stop, "2020-01-03T18:00:00Z".parse().unwrap());
+            assert_eq!(start, dt("2020-01-02T18:00:00Z"));
+            assert_eq!(stop, dt("2020-01-03T18:00:00Z"));
         }
+    }
+
+    #[test]
+    fn test_round_f32_to_i32() {
+        assert_eq!(round_f32_to_i32(0.0), 0);
+        assert_eq!(round_f32_to_i32(0.1), 0);
+        assert_eq!(round_f32_to_i32(0.5), 1);
+        assert_eq!(round_f32_to_i32(0.9), 1);
+        assert_eq!(round_f32_to_i32(1.0), 1);
+        assert_eq!(round_f32_to_i32(-0.0), 0);
+        assert_eq!(round_f32_to_i32(-0.1), 0);
+        assert_eq!(round_f32_to_i32(-0.5), -1);
+        assert_eq!(round_f32_to_i32(-0.9), -1);
+        assert_eq!(round_f32_to_i32(-1.0), -1);
     }
 }

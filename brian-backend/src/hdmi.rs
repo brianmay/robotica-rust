@@ -29,7 +29,7 @@ impl TryFrom<MqttMessage> for RoboticaCommand {
     type Error = CommandErr;
 
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        let mark: RoboticaCommand = serde_json::from_str(&msg.payload)?;
+        let mark: Self = serde_json::from_str(&msg.payload)?;
         Ok(mark)
     }
 }
@@ -61,7 +61,11 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
-    let (rx, _) = robotica_backend::devices::hdmi::run(addr, rx, &Default::default());
+    let (rx, _) = robotica_backend::devices::hdmi::run(
+        addr,
+        rx,
+        &robotica_backend::devices::hdmi::Options::default(),
+    );
 
     spawn(async move {
         let mut rx_s = rx.subscribe().await;
@@ -92,8 +96,5 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 }
 
 fn map_input(value: Option<u8>) -> String {
-    match value {
-        Some(v) => v.to_string(),
-        None => "HARD_OFF".to_string(),
-    }
+    value.map_or_else(|| "HARD_OFF".to_string(), |v| v.to_string())
 }
