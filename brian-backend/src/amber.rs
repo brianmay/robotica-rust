@@ -557,20 +557,12 @@ impl PriceProcessor {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn round_f32_to_i32(f: f32) -> i32 {
-    let f = f.round();
-    #[allow(clippy::cast_precision_loss)]
-    if f > i32::MAX as f32 {
-        return i32::MAX;
-    }
-    #[allow(clippy::cast_precision_loss)]
-    if f < i32::MIN as f32 {
-        return i32::MIN;
-    }
-    #[allow(clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
-    let f = f as i32;
-    f
+    // Values that are too big will saturate to i32::MAX
+    // Values that are too small will saturate to i32::MIN
+    // https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+    f.round() as i32
 }
 
 fn new_day_state(now: &DateTime<Utc>) -> DayState {
