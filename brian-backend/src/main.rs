@@ -3,6 +3,8 @@
 #![warn(missing_docs)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::nursery)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
 
 mod amber;
 mod delays;
@@ -84,7 +86,8 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
 
     http::run(state.mqtt.clone())
         .await
-        .expect("HTTP server failed");
+        .unwrap_or_else(|e| panic!("Error running http server: {e}"));
+
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
     tesla::monitor_tesla_doors(&mut state, 1);
 

@@ -62,7 +62,10 @@ pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
         message: str.into(),
     });
 
-    let payload = serde_json::to_string(&msg).unwrap();
+    let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
+        log::error!("Failed to serialize message: {msg:?}");
+        "{}".into()
+    });
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 

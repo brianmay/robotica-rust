@@ -236,12 +236,20 @@ struct PersistentState {
     force_charge: bool,
 }
 
+/// Errors that can occur when monitoring charging.
+#[derive(Debug, Error)]
+pub enum MonitorChargingError {
+    /// An error occurred when loading the persistent state.
+    #[error("failed to load persistent state: {0}")]
+    LoadPersistentState(#[from] persistent_state::Error),
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
     price_summary_rx: Receiver<StatefulData<PriceSummary>>,
-) -> Result<(), persistent_state::Error> {
+) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token")?;
 
     let psr = state
@@ -298,10 +306,20 @@ pub fn monitor_charging(
             .map_into_stateful(move |location| location == "home")
     };
 
+    let mut token = Token::get(&tesla_secret)?;
+
     spawn(async move {
-        let mut token = Token::get(&tesla_secret).unwrap();
-        token.check(&tesla_secret).await.unwrap();
-        let car_id = get_car_id(&mut token, car_number).await.unwrap().unwrap();
+        let car_id = match get_car_id(&mut token, car_number).await {
+            Ok(Some(car_id)) => car_id,
+            Ok(None) => {
+                log::error!("No car ID found for car number {}", car_number);
+                return;
+            }
+            Err(err) => {
+                log::error!("Failed to get car ID: {}", err);
+                return;
+            }
+        };
 
         let mut interval = PollInterval::Long;
         let mut timer: Interval = interval.into();

@@ -488,10 +488,18 @@ impl PriceProcessor {
         now: &DateTime<Utc>,
         prices: &[PriceResponse],
     ) -> PriceSummary {
-        let current_price = prices
+        let Some(current_price) = prices
             .iter()
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
-            .unwrap();
+            else {
+                log::error!("No current price found in prices: {prices:?}");
+                return PriceSummary{
+                    is_cheap_2hr: false,
+                    per_kwh: 100,
+                    next_update: now.clone() + Duration::seconds(30),
+                    category: PriceCategory::Expensive
+                }
+            };
 
         let (start_day, end_day) = get_2hr_day(now);
 
@@ -622,7 +630,7 @@ fn get_price_for_cheapest_period(
         .map(|p| p.per_kwh)
         .collect();
 
-    prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    prices.sort_by(f32::total_cmp);
     // println!("Prices: {prices:?} {number_of_intervals}");
 
     prices
@@ -633,6 +641,7 @@ fn get_price_for_cheapest_period(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use chrono::Local;
 
     use super::*;
