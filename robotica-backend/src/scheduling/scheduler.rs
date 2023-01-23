@@ -6,7 +6,7 @@ use super::{
 };
 use chrono::TimeZone;
 use field_ref::field_ref_of;
-use robotica_common::datetime::{convert_date_time_to_utc, Date, DateTime, DateTimeError, Time};
+use robotica_common::datetime::{convert_date_time_to_utc_or_default, Date, DateTime, Time};
 use serde::{Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
@@ -159,11 +159,7 @@ fn is_tags_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<Strin
 
 /// A scheduling error occurred
 #[derive(Error, Debug)]
-pub enum ScheduleError<T: TimeZone> {
-    /// Error translating the date time to UTC.
-    #[error("Error translating date: {0}")]
-    DateTimeError(#[from] DateTimeError<T>),
-}
+pub enum ScheduleError {}
 
 /// Create a schedule for given date based on the given tags.
 ///
@@ -177,12 +173,12 @@ pub fn get_schedule_with_config<T: TimeZone>(
     tomorrow: &HashSet<String>,
     config_list: &[Config],
     timezone: &T,
-) -> Result<Vec<Schedule>, ScheduleError<T>> {
+) -> Result<Vec<Schedule>, ScheduleError> {
     let schedule = config_list.iter().filter(|config| {
         is_condition_ok(config, today, tomorrow) && is_tags_ok(config, today, tomorrow)
     });
 
-    let sequences: Result<Vec<Schedule>, ScheduleError<T>> = schedule
+    let sequences: Result<Vec<Schedule>, ScheduleError> = schedule
         .fold(HashMap::new(), |mut acc, config| {
             acc.extend(config.sequences.clone());
             acc
@@ -194,7 +190,7 @@ pub fn get_schedule_with_config<T: TimeZone>(
                 .as_ref()
                 .map_or(HashSet::new(), |o| o.iter().cloned().collect());
             let schedule = Schedule {
-                datetime: convert_date_time_to_utc(*date, seq.time, timezone)?,
+                datetime: convert_date_time_to_utc_or_default(*date, seq.time, timezone),
                 sequence_name: name,
                 options,
             };
@@ -211,14 +207,14 @@ pub fn get_schedule_with_config<T: TimeZone>(
 
 /// Error returned by `get_schedule`.
 #[derive(Error, Debug)]
-pub enum GetScheduleError<T: TimeZone> {
+pub enum GetScheduleError {
     /// Error loading the config
     #[error("{0}")]
     ConfigError(#[from] ConfigError),
 
     /// Error processing the schedule.
     #[error("{0}")]
-    ScheduleError(#[from] ScheduleError<T>),
+    ScheduleError(#[from] ScheduleError),
 }
 
 /// Create a schedule for given date based on the given tags.
@@ -232,7 +228,7 @@ pub fn get_schedule<T: TimeZone>(
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
     timezone: &T,
-) -> Result<Vec<Schedule>, GetScheduleError<T>> {
+) -> Result<Vec<Schedule>, GetScheduleError> {
     let config_list = load_config_from_default_file()?;
     let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
     Ok(schedule)
@@ -275,6 +271,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use chrono::FixedOffset;
+    use robotica_common::datetime::convert_date_time_to_utc;
 
     use crate::scheduling::conditions::BooleanParser;
 

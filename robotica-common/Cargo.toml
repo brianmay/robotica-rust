@@ -18,5 +18,8 @@ prost-types = "0.11.5"
 [build-dependencies]
 prost-build = { version = "0.11.5" }
 
+[dev-dependencies]
+chrono-tz = "0.8.1"
+
 [features]
 chrono = ["dep:chrono"]

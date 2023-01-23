@@ -145,6 +145,28 @@ impl FromStr for Time {
     }
 }
 
+impl Display for Time {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Add<Duration> for Time {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Duration> for Time {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
 impl<'de> Deserialize<'de> for Time {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -482,40 +504,104 @@ pub fn convert_date_time_to_utc<T: TimeZone>(
     date: Date,
     time: Time,
     timezone: &T,
-) -> Result<DateTime<chrono::Utc>, DateTimeError<T>> {
+) -> Result<DateTime<chrono::Utc>, DateTimeError<chrono::Utc>> {
     let date = date.0;
     let time = time.0;
     let datetime = chrono::NaiveDateTime::new(date, time);
     let datetime = match timezone.from_local_datetime(&datetime) {
         chrono::LocalResult::None => Err(DateTimeError::CantConvertDateTime(datetime)),
-        chrono::LocalResult::Single(datetime) => Ok(datetime),
+        chrono::LocalResult::Single(datetime) => Ok(datetime.with_timezone(&chrono::Utc)),
         chrono::LocalResult::Ambiguous(x, y) => Err(DateTimeError::AmbiguousDateTime(
             datetime,
-            x.into(),
-            y.into(),
+            x.with_timezone(&chrono::Utc).into(),
+            y.with_timezone(&chrono::Utc).into(),
         )),
     }?;
-    Ok(datetime.with_timezone(&chrono::Utc).into())
+    Ok(datetime.into())
+}
+
+/// Convert a Date and a Time to a Utc `DateTime` but do not fail
+///
+/// If the date and time cannot be converted try to pick a sensible default.
+pub fn convert_date_time_to_utc_or_default<T: TimeZone>(
+    date: Date,
+    time: Time,
+    timezone: &T,
+) -> DateTime<chrono::Utc> {
+    let convert = |time| match convert_date_time_to_utc(date, time, timezone) {
+        Ok(datetime) => Some(datetime),
+        Err(DateTimeError::AmbiguousDateTime(_, x, _)) => Some(x),
+        Err(DateTimeError::CantConvertDateTime(_)) => None,
+    };
+
+    convert(time)
+        .or_else(|| convert(time - Duration::hours(1)))
+        .or_else(|| convert(time + Duration::hours(1)))
+        .unwrap_or_else(|| {
+            let date = date.0;
+            let time = time.0;
+            let datetime = chrono::NaiveDateTime::new(date, time);
+            chrono::Utc
+                .from_utc_datetime(&datetime)
+                .with_timezone(&chrono::Utc)
+                .into()
+        })
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use chrono::FixedOffset;
+    use chrono_tz::Tz;
 
     use super::*;
 
     #[test]
     fn test_convert_date_time_to_utc() {
-        let date = Date::from_str("2020-01-01").unwrap();
-        let time = Time::from_str("10:00:00").unwrap();
-        let timezone = FixedOffset::east(60 * 60 * 10);
-        let datetime = convert_date_time_to_utc(date, time, &timezone).unwrap();
-        assert_eq!(
-            datetime,
-            chrono::Utc.ymd(2020, 1, 1).and_hms(00, 0, 0).into()
-        );
+        let timezone: Tz = "Australia/Melbourne".parse().unwrap();
+
+        let test = |date, time, expected: Option<&str>| {
+            let date = Date::from_str(date).unwrap();
+            let time = Time::from_str(time).unwrap();
+            let expected: Option<DateTime<Utc>> = expected.map(|x| x.parse().unwrap());
+
+            let datetime = convert_date_time_to_utc(date, time, &timezone).ok();
+            assert_eq!(datetime, expected, "date: {date}, time: {time}");
+        };
+
+        // At 3am clocks go back to 2am meaning times are ambiguous.
+        test("2022-04-03", "01:30:00", Some("2022-04-02T14:30:00Z"));
+        test("2022-04-03", "02:30:00", None);
+        test("2022-04-03", "03:30:00", Some("2022-04-02T17:30:00Z"));
+
+        // At 2am clocks go forward to 3am meaning times do not exist.
+        test("2022-10-02", "01:30:00", Some("2022-10-01T15:30:00Z"));
+        test("2022-10-02", "02:30:00", None);
+        test("2022-10-02", "03:30:00", Some("2022-10-01T16:30:00Z"));
+    }
+
+    #[test]
+    fn test_convert_date_time_to_utc_or_default() {
+        let timezone: Tz = "Australia/Melbourne".parse().unwrap();
+
+        let test = |date, time, expected: &str| {
+            let date = Date::from_str(date).unwrap();
+            let time = Time::from_str(time).unwrap();
+            let expected: DateTime<Utc> = expected.parse().unwrap();
+
+            let datetime = convert_date_time_to_utc_or_default(date, time, &timezone);
+            assert_eq!(datetime, expected, "date: {date}, time: {time}");
+        };
+
+        // At 3am clocks go back to 2am meaning times are ambiguous.
+        test("2022-04-03", "01:30:00", "2022-04-02T14:30:00Z");
+        test("2022-04-03", "02:30:00", "2022-04-02T15:30:00Z");
+        test("2022-04-03", "03:30:00", "2022-04-02T17:30:00Z");
+
+        // At 2am clocks go forward to 3am meaning times do not exist.
+        test("2022-10-02", "01:30:00", "2022-10-01T15:30:00Z");
+        test("2022-10-02", "02:30:00", "2022-10-01T15:30:00Z");
+        test("2022-10-02", "03:30:00", "2022-10-01T16:30:00Z");
     }
 
     #[test]

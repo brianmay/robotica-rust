@@ -14,7 +14,7 @@ use robotica_backend::{
     spawn, EnvironmentError,
 };
 use robotica_common::datetime::{
-    convert_date_time_to_utc, utc_now, Date, DateTime, Duration, Time,
+    convert_date_time_to_utc_or_default, utc_now, Date, DateTime, Duration, Time,
 };
 
 use crate::State;
@@ -588,9 +588,8 @@ fn get_day<T: TimeZone + std::fmt::Debug>(
 ) -> (DateTime<Utc>, DateTime<Utc>) {
     let today = now.with_timezone(local).date();
     let tomorrow = today + Duration::days(1);
-    // FIXME: Don't use unwrap here.
-    let mut start_day = convert_date_time_to_utc(today, time, local).unwrap();
-    let mut end_day = convert_date_time_to_utc(tomorrow, time, local).unwrap();
+    let mut start_day = convert_date_time_to_utc_or_default(today, time, local);
+    let mut end_day = convert_date_time_to_utc_or_default(tomorrow, time, local);
     if *now < start_day {
         start_day = start_day - Duration::days(1);
         end_day = end_day - Duration::days(1);
