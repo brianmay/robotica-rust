@@ -42,6 +42,7 @@
         "oneshot",
         "ownerapi",
         "paho",
+        "protobuf",
         "protos",
         "renewables",
         "reqwasm",
