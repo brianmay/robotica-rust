@@ -47,9 +47,8 @@ pub struct State {
 }
 
 async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
-    let mut subscriptions: Subscriptions = Subscriptions::new();
-
-    let message_sink = robotica::create_message_sink(&mut subscriptions, mqtt.clone());
+    let subscriptions: Subscriptions = Subscriptions::new();
+    let message_sink = robotica::create_message_sink(mqtt.clone());
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
         panic!("Error getting persistent state loader: {e}");
     });
