@@ -100,20 +100,6 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch::run(
-        &mut state.subscriptions,
-        state.mqtt.clone(),
-        "Dining/Messages",
-    );
-
-    fake_switch::run(
-        &mut state.subscriptions,
-        state.mqtt.clone(),
-        "Dining/Request_Bathroom",
-    );
-
-    fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), "Brian/Night");
-
     fake_switch(&mut state, "Dining/Messages");
     fake_switch(&mut state, "Dining/Request_Bathroom");
     fake_switch(&mut state, "Brian/Night");
