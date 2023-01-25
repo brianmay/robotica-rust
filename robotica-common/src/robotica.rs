@@ -129,11 +129,11 @@ pub enum Command {
     /// A command to send to a switch.
     Device(DeviceCommand),
 
-    /// Dummy value
+    /// Audio command
     Audio(AudioCommand),
 
-    /// Dummy value
-    LightCommand(LightCommand),
+    /// Light Command
+    Light(LightCommand),
 }
 
 impl TryFrom<MqttMessage> for Command {
