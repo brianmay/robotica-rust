@@ -1,18 +1,12 @@
 use log::debug;
-use serde::Deserialize;
 use thiserror::Error;
 use tokio::select;
 
 use robotica_backend::{devices::hdmi::Command, entities, spawn};
 use robotica_common::mqtt::{MqttMessage, QoS};
+use robotica_common::robotica;
 
 use crate::{robotica::Id, State};
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-struct RoboticaCommand {
-    input: u8,
-    output: u8,
-}
 
 #[derive(Error, Debug)]
 pub enum CommandErr {
@@ -25,22 +19,13 @@ pub enum CommandErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-impl TryFrom<MqttMessage> for RoboticaCommand {
-    type Error = CommandErr;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        let mark: Self = serde_json::from_str(&msg.payload)?;
-        Ok(mark)
-    }
-}
-
 pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
     let id = Id::new(location, device);
     let topic = id.get_command_topic(&[]);
 
     let command_rx = state
         .subscriptions
-        .subscribe_into_stateful::<RoboticaCommand>(&topic);
+        .subscribe_into_stateless::<robotica::Command>(&topic);
 
     let name = id.get_name("hdmi");
     let (tx, rx) = entities::create_stateless_entity(&name);
@@ -50,9 +35,13 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
         loop {
             select! {
-                Ok((_, command)) = rx_s.recv() => {
-                    let command = Command::SetInput(command.input, command.output);
-                    tx.try_send(command);
+                Ok(command) = rx_s.recv() => {
+                    if let robotica::Command::Hdmi(command) = command {
+                        let command = Command::SetInput(command.input, command.output);
+                        tx.try_send(command);
+                    } else {
+                        debug!("Invalid command: {:?}", command);
+                    }
                 },
                 else => break,
             };

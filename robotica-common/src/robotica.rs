@@ -121,6 +121,16 @@ pub struct LightCommand {
     pub scene: Option<String>,
 }
 
+/// A command to send to a HDMI matrix.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HdmiCommand {
+    /// The input to switch to.
+    pub input: u8,
+
+    /// The output to switch.
+    pub output: u8,
+}
+
 /// A command to send to any device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -134,6 +144,9 @@ pub enum Command {
 
     /// Light Command
     Light(LightCommand),
+
+    /// HDMI Command
+    Hdmi(HdmiCommand),
 }
 
 impl TryFrom<MqttMessage> for Command {
