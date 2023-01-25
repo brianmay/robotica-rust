@@ -65,21 +65,19 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         panic!("Error running amber: {e}");
     });
 
-    {
-        price_summary_rx
-            .clone()
-            .map_into_stateful(|(_, current)| current.is_cheap_2hr)
-            .for_each(move |(old, current)| {
-                if old.is_some() {
-                    let message = if current {
-                        "2 hour cheap price has started"
-                    } else {
-                        "2 hour cheap price has ended"
-                    };
-                    log::info!("{}", message);
-                }
-            });
-    }
+    price_summary_rx
+        .clone()
+        .map_into_stateful(|current| current.is_cheap_2hr)
+        .for_each(move |(old, current)| {
+            if old.is_some() {
+                let message = if current {
+                    "2 hour cheap price has started"
+                } else {
+                    "2 hour cheap price has ended"
+                };
+                log::info!("{}", message);
+            }
+        });
 
     monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");

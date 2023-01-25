@@ -22,3 +22,6 @@ robotica-common = { path = "../robotica-common" }
 robotica-backend = { path = "../robotica-backend" }
 influxdb = { version = "0.5.2", features = ["derive"] }
 reqwest = { version = "0.11.6", features = ["json"] }
+
+[dev-dependencies]
+float-cmp = "0.9.0"

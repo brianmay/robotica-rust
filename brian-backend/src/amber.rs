@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 
 use robotica_backend::{
-    entities::{self, Receiver, StatefulData},
+    entities::{self, Receiver},
     get_env, is_debug_mode,
     services::persistent_state::{self, PersistentStateRow},
     spawn, EnvironmentError,
@@ -50,7 +50,7 @@ struct PriceReading {
 #[derive(InfluxDbWriteable)]
 struct PriceSummaryReading {
     is_cheap_2hr: bool,
-    per_kwh: i32,
+    per_kwh: f32,
     time: chrono::DateTime<Utc>,
 }
 
@@ -75,7 +75,7 @@ const fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State) -> Result<Receiver<StatefulData<PriceSummary>>, Error> {
+pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -87,7 +87,7 @@ pub fn run(state: &State) -> Result<Receiver<StatefulData<PriceSummary>>, Error>
         influx_database,
     };
 
-    let (tx, rx) = entities::create_stateful_entity("amber_summary");
+    let (tx, rx) = entities::create_stateless_entity("amber_summary");
 
     let psr = state
         .persistent_state_database
@@ -349,11 +349,11 @@ pub enum PriceCategory {
     Normal,
     Expensive,
 }
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct PriceSummary {
     pub category: PriceCategory,
     pub is_cheap_2hr: bool,
-    pub per_kwh: i32,
+    pub per_kwh: f32,
     pub next_update: DateTime<Utc>,
 }
 
@@ -495,7 +495,7 @@ impl PriceProcessor {
                 log::error!("No current price found in prices: {prices:?}");
                 return PriceSummary{
                     is_cheap_2hr: false,
-                    per_kwh: 100,
+                    per_kwh: 100.0,
                     next_update: now.clone() + Duration::seconds(30),
                     category: PriceCategory::Expensive
                 }
@@ -557,20 +557,12 @@ impl PriceProcessor {
         let ps = PriceSummary {
             category: prices_to_category(prices),
             is_cheap_2hr: is_cheap,
-            per_kwh: round_f32_to_i32(current_price.per_kwh),
+            per_kwh: current_price.per_kwh,
             next_update: current_price.end_time.clone(),
         };
         log::info!("Price summary: {:?}", ps);
         ps
     }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-fn round_f32_to_i32(f: f32) -> i32 {
-    // Values that are too big will saturate to i32::MAX
-    // Values that are too small will saturate to i32::MIN
-    // https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
-    f.round() as i32
 }
 
 fn new_day_state(now: &DateTime<Utc>) -> DayState {
@@ -642,7 +634,9 @@ fn get_price_for_cheapest_period(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
+    #![allow(clippy::bool_assert_comparison)]
     use chrono::Local;
+    use float_cmp::assert_approx_eq;
 
     use super::*;
 
@@ -795,15 +789,11 @@ mod tests {
             pr(dt("2020-01-01T05:30:00Z"), -10.0, ForecastInterval),
         ];
 
-        assert_eq!(
-            pp.prices_to_summary(&now, &prices),
-            PriceSummary {
-                category: PriceCategory::SuperCheap,
-                is_cheap_2hr: true,
-                per_kwh: 0,
-                next_update: dt("2020-01-01T01:00:00Z"),
-            }
-        );
+        let summary = pp.prices_to_summary(&now, &prices);
+        assert_eq!(summary.category, PriceCategory::SuperCheap);
+        assert_eq!(summary.is_cheap_2hr, true);
+        assert_approx_eq!(f32, summary.per_kwh, 0.0);
+        assert_eq!(summary.next_update, dt("2020-01-01T01:00:00Z"));
         let ds = &pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
         let cp = ds.last_cheap_update.clone().unwrap();
@@ -824,15 +814,11 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        assert_eq!(
-            pp.prices_to_summary(&now, &prices),
-            PriceSummary {
-                category: PriceCategory::SuperCheap,
-                is_cheap_2hr: false,
-                per_kwh: 0,
-                next_update: dt("2020-01-01T01:30:00Z"),
-            }
-        );
+        let summary = pp.prices_to_summary(&now, &prices);
+        assert_eq!(summary.category, PriceCategory::SuperCheap);
+        assert_eq!(summary.is_cheap_2hr, false);
+        assert_approx_eq!(f32, summary.per_kwh, 0.0);
+        assert_eq!(summary.next_update, dt("2020-01-01T01:30:00Z"));
         let ds = pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
         let cp = ds.last_cheap_update;
@@ -883,19 +869,5 @@ mod tests {
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
             assert_eq!(stop, dt("2020-01-03T18:00:00Z"));
         }
-    }
-
-    #[test]
-    fn test_round_f32_to_i32() {
-        assert_eq!(round_f32_to_i32(0.0), 0);
-        assert_eq!(round_f32_to_i32(0.1), 0);
-        assert_eq!(round_f32_to_i32(0.5), 1);
-        assert_eq!(round_f32_to_i32(0.9), 1);
-        assert_eq!(round_f32_to_i32(1.0), 1);
-        assert_eq!(round_f32_to_i32(-0.0), 0);
-        assert_eq!(round_f32_to_i32(-0.1), 0);
-        assert_eq!(round_f32_to_i32(-0.5), -1);
-        assert_eq!(round_f32_to_i32(-0.9), -1);
-        assert_eq!(round_f32_to_i32(-1.0), -1);
     }
 }

@@ -15,7 +15,7 @@ use thiserror::Error;
 use tokio::select;
 use tokio::time::{sleep, Interval};
 
-use robotica_backend::entities::{create_stateless_entity, Receiver, StatefulData};
+use robotica_backend::entities::{create_stateless_entity, Receiver};
 use robotica_backend::spawn;
 use robotica_common::mqtt::{MqttMessage, QoS};
 
@@ -248,7 +248,7 @@ pub enum MonitorChargingError {
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
-    price_summary_rx: Receiver<StatefulData<PriceSummary>>,
+    price_summary_rx: Receiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token")?;
 
@@ -259,7 +259,7 @@ pub fn monitor_charging(
 
     let mqtt = state.mqtt.clone();
 
-    let price_category_rx = price_summary_rx.map_into_stateful(|(_, ps)| ps.category);
+    let price_category_rx = price_summary_rx.map_into_stateful(|ps| ps.category);
 
     let pi_rx = state
         .subscriptions
