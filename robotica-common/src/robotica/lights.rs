@@ -76,6 +76,7 @@ pub enum Power {
 
 /// Is the device online? What is its power level and color?
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum State {
     /// The device is online.
     Online(PowerColor),
