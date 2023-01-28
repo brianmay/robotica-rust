@@ -183,7 +183,8 @@ async fn server(
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    let addr = "[::]:4000".parse()?;
+    let http_listener = get_env("HTTP_LISTENER").unwrap_or_else(|_| "[::]:4000".to_string());
+    let addr = http_listener.parse()?;
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
