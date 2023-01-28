@@ -1,7 +1,7 @@
 //! Source (and sink) for MQTT data.
 pub mod topics;
 
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
