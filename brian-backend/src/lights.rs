@@ -323,8 +323,23 @@ async fn set_scene<Entity>(
 
 fn send_state(mqtt: &Mqtt, state: &lights::State, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/status");
-
     match serde_json::to_string(&state) {
+        Ok(json) => {
+            let msg = MqttMessage::new(topic, json, true, QoS::AtLeastOnce);
+            mqtt.try_send(msg);
+        }
+        Err(e) => {
+            error!("Failed to serialize status: {}", e);
+        }
+    }
+
+    let power_state = match state {
+        lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
+        lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
+        lights::State::Offline => lights::PowerState::Offline,
+    };
+    let topic = format!("state/{topic_substr}/power");
+    match serde_json::to_string(&power_state) {
         Ok(json) => {
             let msg = MqttMessage::new(topic, json, true, QoS::AtLeastOnce);
             mqtt.try_send(msg);

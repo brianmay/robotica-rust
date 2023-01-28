@@ -2,7 +2,7 @@
 
 use crate::{
     mqtt::MqttMessage,
-    robotica::lights::{self, PowerColor, State},
+    robotica::lights::{self, PowerState},
 };
 use log::error;
 
@@ -31,7 +31,7 @@ impl ConfigTrait for Config {
         Controller {
             config: self.clone(),
             scene: None,
-            state: None,
+            power: None,
         }
     }
 }
@@ -40,7 +40,7 @@ impl ConfigTrait for Config {
 pub struct Controller {
     config: Config,
     scene: Option<String>,
-    state: Option<lights::State>,
+    power: Option<lights::PowerState>,
 }
 
 fn topic(parts: &[&str]) -> String {
@@ -59,10 +59,10 @@ impl ControllerTrait for Controller {
         };
         result.push(s);
 
-        let p = ["state", &config.topic_substr, "status"];
+        let p = ["state", &config.topic_substr, "power"];
         let s = Subscription {
             topic: topic(&p),
-            label: ButtonStateMsgType::State as u32,
+            label: ButtonStateMsgType::Power as u32,
         };
         result.push(s);
 
@@ -73,9 +73,9 @@ impl ControllerTrait for Controller {
         match label.try_into() {
             Ok(ButtonStateMsgType::Scene) => self.scene = Some(data),
 
-            Ok(ButtonStateMsgType::State) => match serde_json::from_str(&data) {
-                Ok(state) => self.state = Some(state),
-                Err(e) => error!("Invalid state value {}: {}", data, e),
+            Ok(ButtonStateMsgType::Power) => match serde_json::from_str(&data) {
+                Ok(state) => self.power = Some(state),
+                Err(e) => error!("Invalid power value {}: {}", data, e),
             },
 
             _ => error!("Invalid message label {}", label),
@@ -84,7 +84,7 @@ impl ControllerTrait for Controller {
 
     fn process_disconnected(&mut self) {
         self.scene = None;
-        self.state = None;
+        self.power = None;
     }
 
     fn get_display_state(&self) -> DisplayState {
@@ -117,23 +117,22 @@ impl ControllerTrait for Controller {
 
 fn get_display_state_internal(lb: &Controller) -> DisplayState {
     let scene = lb.scene.as_deref();
-    let state = &lb.state;
 
     let off = scene == Some("off");
     let scene_selected = scene.map_or(false, |scene| scene == lb.config.scene);
 
-    match state {
+    match lb.power {
         None => DisplayState::Unknown,
-        Some(State::Offline) => DisplayState::HardOff,
-        Some(State::Online(PowerColor::Off)) if !off && scene_selected => DisplayState::AutoOff,
-        Some(State::Online(..)) if scene_selected => DisplayState::On,
-        Some(State::Online(..)) => DisplayState::Off,
+        Some(PowerState::Offline) => DisplayState::HardOff,
+        Some(PowerState::Off) if !off && scene_selected => DisplayState::AutoOff,
+        Some(PowerState::On | PowerState::Off) if scene_selected => DisplayState::On,
+        Some(PowerState::On | PowerState::Off) => DisplayState::Off,
     }
 }
 
 enum ButtonStateMsgType {
     Scene,
-    State,
+    Power,
 }
 
 impl TryFrom<u32> for ButtonStateMsgType {
@@ -142,7 +141,7 @@ impl TryFrom<u32> for ButtonStateMsgType {
     fn try_from(v: u32) -> Result<Self, Self::Error> {
         match v {
             x if x == ButtonStateMsgType::Scene as u32 => Ok(ButtonStateMsgType::Scene),
-            x if x == ButtonStateMsgType::State as u32 => Ok(ButtonStateMsgType::State),
+            x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
             _ => Err(()),
         }
     }
