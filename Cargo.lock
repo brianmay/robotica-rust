@@ -1481,6 +1481,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
+name = "lifx-core"
+version = "0.3.1"
+source = "git+https://github.com/eminence/lifx.git#08526bb6bb260be75fa1f5e90904f1643050fff2"
+dependencies = [
+ "byteorder",
+ "thiserror",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2258,6 +2267,7 @@ dependencies = [
  "hyper",
  "lalrpop",
  "lalrpop-util",
+ "lifx-core",
  "log",
  "maud",
  "openid",

@@ -217,7 +217,7 @@ impl MqttClient {
                             let debug_mode: bool = is_debug_mode();
                             let msg = msg_time.msg;
 
-                            info!(
+                            debug!(
                                 "Outgoing mqtt {} {} {}.",
                                 if debug_mode { "nop" } else { "live" },
                                 msg.retain,

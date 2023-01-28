@@ -4,7 +4,7 @@ use yew::prelude::*;
 use robotica_common::controllers::{
     hdmi,
     lights::{self, Priority},
-    music, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
+    lights2, music, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
 use robotica_common::mqtt::MqttMessage;
 
@@ -57,6 +57,50 @@ impl ConfigTrait for LightProps {
 }
 
 impl ButtonPropsTrait for LightProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+/// The yew properties for a light button.
+#[derive(Clone, Properties, Eq, PartialEq)]
+pub struct Light2Props {
+    /// The name of the light.
+    pub name: String,
+
+    /// The base string that all topics are derived from.
+    pub topic_substr: String,
+
+    /// The action that the button should perform.
+    pub action: Action,
+
+    /// The icon to display on the button.
+    pub icon: Icon,
+
+    /// The scene to activate when the button is pressed.
+    pub scene: String,
+}
+
+impl ConfigTrait for Light2Props {
+    type Controller = lights2::Controller;
+
+    fn create_controller(&self) -> Self::Controller {
+        let props = (*self).clone();
+        let config = lights2::Config {
+            topic_substr: props.topic_substr,
+            action: props.action,
+            scene: props.scene,
+        };
+
+        config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for Light2Props {
     fn get_icon(&self) -> &Icon {
         &self.icon
     }

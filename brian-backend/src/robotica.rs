@@ -4,9 +4,9 @@ use robotica_backend::entities::Sender;
 use robotica_backend::services::mqtt::Mqtt;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
-use robotica_common::robotica::AudioCommand;
-use robotica_common::robotica::Command;
-use robotica_common::robotica::DevicePower;
+use robotica_common::robotica::commands::AudioCommand;
+use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::commands::DevicePower;
 use serde::Serialize;
 
 #[derive(Clone)]

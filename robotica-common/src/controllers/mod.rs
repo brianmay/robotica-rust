@@ -6,6 +6,7 @@ use log::error;
 
 pub mod hdmi;
 pub mod lights;
+pub mod lights2;
 pub mod music;
 pub mod switch;
 pub mod tasmota;

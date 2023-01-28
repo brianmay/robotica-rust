@@ -219,7 +219,7 @@ impl<T: Send + Clone> Receiver<T> {
         U: Clone + Send + 'static,
     {
         let name = format!("{} (map_into_stateless)", self.name);
-        let (tx, rx) = create_stateless_entity(&name);
+        let (tx, rx) = create_stateless_entity(name);
         self.map(tx, f);
         rx
     }
@@ -235,7 +235,7 @@ impl<T: Send + Clone> Receiver<T> {
         U: Clone + Eq + Send + 'static,
     {
         let name = format!("{} (map_into_stateful)", self.name);
-        let (tx, rx) = create_stateful_entity(&name);
+        let (tx, rx) = create_stateful_entity(name);
         self.map(tx, f);
         rx
     }
@@ -281,7 +281,7 @@ impl<T: Send + Clone> Receiver<T> {
         T: Send + 'static,
     {
         let name = format!("{} (map_into_stateless)", self.name);
-        let (tx, rx) = create_stateless_entity(&name);
+        let (tx, rx) = create_stateless_entity(name);
         self.filter(tx, f);
         rx
     }
@@ -296,7 +296,7 @@ impl<T: Send + Clone> Receiver<T> {
         T: Send + Eq + 'static,
     {
         let name = format!("{} (map_into_stateful)", self.name);
-        let (tx, rx) = create_stateful_entity(&name);
+        let (tx, rx) = create_stateful_entity(name);
         self.filter(tx, f);
         rx
     }
@@ -454,14 +454,16 @@ impl<T: Send + Clone> Subscription<StatefulData<T>> {
 
 /// Create a stateless entity that sends every message.
 #[must_use]
-pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender<T>, Receiver<T>) {
+pub fn create_stateless_entity<T: Clone + Send + 'static>(
+    name: impl Into<String>,
+) -> (Sender<T>, Receiver<T>) {
     let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
 
     drop(out_rx);
 
-    let name = name.to_string();
+    let name = name.into();
 
     let sender = Sender {
         tx: send_tx,
@@ -483,9 +485,9 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender
                     match msg {
                         SendMessage::Set(data) => {
                             saved_data = Some(data.clone());
-                            if let Err(err) = out_tx.send(data) {
+                            if let Err(_err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
-                                debug!("create_stateless_entity({name}): send to broadcast failed: {err} (not an error)");
+                                // debug!("create_stateless_entity({name}): send to broadcast failed: {err} (not an error)");
                             }
                         }
                     }
@@ -530,7 +532,7 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(name: &str) -> (Sender
 /// Create a stateful entity that only produces messages when there is a change.
 #[must_use]
 pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
-    name: &str,
+    name: impl Into<String>,
 ) -> (Sender<T>, Receiver<StatefulData<T>>) {
     let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<StatefulData<T>>>(PIPE_SIZE);
@@ -538,7 +540,7 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
 
     drop(out_rx);
 
-    let name = name.to_string();
+    let name = name.into();
 
     let sender = Sender {
         tx: send_tx,

@@ -26,6 +26,7 @@ regex = "1.6.0"
 field-ref = "0.2.1"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
+lifx-core = { version = "0.3.1", git = "https://github.com/eminence/lifx.git" }
 
 # http server
 axum-core = "0.3.0"

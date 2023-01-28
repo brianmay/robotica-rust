@@ -10,11 +10,14 @@ mod amber;
 mod delays;
 mod environment_monitor;
 mod hdmi;
+mod lights;
 mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use robotica_backend::devices::fake_switch;
+use lights::run_auto_light;
+use robotica_backend::devices::lifx::DiscoverConfig;
+use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::Sender;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
@@ -24,6 +27,7 @@ use robotica_backend::services::http;
 use robotica_backend::services::mqtt::Mqtt;
 use robotica_backend::services::mqtt::{MqttClient, Subscriptions};
 
+#[allow(unreachable_code)]
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -103,6 +107,8 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     fake_switch(&mut state, "Brian/Messages");
     fake_switch(&mut state, "Brian/Request_Bathroom");
 
+    setup_lights(&mut state).await;
+
     // let message_sink_temp = state.message_sink.clone();
     // let rx = state
     //     .subscriptions
@@ -129,4 +135,20 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
 
 fn fake_switch(state: &mut State, topic_substr: &str) {
     fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), topic_substr);
+}
+
+async fn setup_lights(state: &mut State) {
+    let lifx_config = DiscoverConfig {
+        broadcast: "192.168.16.255:56700".to_string(),
+        poll_time: std::time::Duration::from_secs(10),
+        device_timeout: std::time::Duration::from_secs(45),
+        api_timeout: std::time::Duration::from_secs(1),
+        num_retries: 3,
+    };
+    let discover = lifx::discover(lifx_config)
+        .await
+        .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
+    run_auto_light(state, discover, "Brian/Light", 105_867_434_619_856).unwrap_or_else(|e| {
+        panic!("Error running auto light: {e}");
+    });
 }

@@ -59,7 +59,7 @@ where
 {
     let options = options.clone();
     let name = format!("{addr:?}");
-    let (tx, rx) = entities::create_stateful_entity(&name);
+    let (tx, rx) = entities::create_stateful_entity(name);
 
     let handle = spawn(async move {
         debug!("hdmi: Starting with addr {addr:?}");

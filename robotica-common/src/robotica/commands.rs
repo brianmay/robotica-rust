@@ -1,4 +1,4 @@
-//! Messages for Robotica
+//! Commands for Robotica
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -121,6 +121,24 @@ pub struct LightCommand {
     pub scene: Option<String>,
 }
 
+/// A V2 command to send to a light
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "action")]
+pub enum Light2Command {
+    /// Turn the switch on.
+    TurnOn {
+        /// The scene to use
+        scene: String,
+    },
+
+    /// Turn the switch off.
+    TurnOff,
+
+    /// Flash the light.
+    Flash,
+}
+
 /// A command to send to a HDMI matrix.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HdmiCommand {
@@ -144,6 +162,9 @@ pub enum Command {
 
     /// Light Command
     Light(LightCommand),
+
+    /// Light V2 Command
+    Light2(Light2Command),
 
     /// HDMI Command
     Hdmi(HdmiCommand),

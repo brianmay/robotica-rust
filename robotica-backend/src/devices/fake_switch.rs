@@ -1,7 +1,7 @@
 //! Fake a digital on/off switch
 use robotica_common::{
     mqtt::{MqttMessage, QoS},
-    robotica::{Command, DeviceAction, DevicePower},
+    robotica::commands::{Command, DeviceAction, DevicePower},
 };
 use tokio::select;
 

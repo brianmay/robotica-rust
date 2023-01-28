@@ -57,6 +57,7 @@ impl PersistentStateDatabase {
     where
         T: Serialize + DeserializeOwned,
     {
+        let name = name.replace('/', "_");
         let name = format!("{name}.json");
         let path = self.path.join(name);
         let state = PersistentStateRow::new(path);
