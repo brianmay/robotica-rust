@@ -605,7 +605,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_token() {
         let psd = PersistentStateDatabase::new().unwrap();
-        let psr = psd.for_name("tesla_token").unwrap();
+        let psr = psd.for_name("tesla_token");
 
         let token = Token::get(&psr).unwrap();
 

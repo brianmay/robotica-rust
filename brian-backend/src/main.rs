@@ -15,7 +15,7 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use lights::run_auto_light;
+use lights::{run_auto_light, run_passage_light};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::Sender;
@@ -148,7 +148,6 @@ async fn setup_lights(state: &mut State) {
     let discover = lifx::discover(lifx_config)
         .await
         .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
-    run_auto_light(state, discover, "Brian/Light", 105_867_434_619_856).unwrap_or_else(|e| {
-        panic!("Error running auto light: {e}");
-    });
+    run_auto_light(state, discover.clone(), "Brian/Light", 105_867_434_619_856);
+    run_passage_light(state, discover, "Passage/Light", 137_092_148_851_664);
 }

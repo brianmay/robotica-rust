@@ -49,19 +49,15 @@ impl PersistentStateDatabase {
     }
 
     /// Get a `PersistentState` instance for a given name.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the state file cannot be created.
-    pub fn for_name<T>(&self, name: &str) -> Result<PersistentStateRow<T>, Error>
+    #[must_use]
+    pub fn for_name<T>(&self, name: &str) -> PersistentStateRow<T>
     where
         T: Serialize + DeserializeOwned,
     {
         let name = name.replace('/', "_");
         let name = format!("{name}.json");
         let path = self.path.join(name);
-        let state = PersistentStateRow::new(path);
-        Ok(state)
+        PersistentStateRow::new(path)
     }
 }
 

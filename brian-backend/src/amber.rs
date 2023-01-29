@@ -10,7 +10,7 @@ use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use robotica_backend::{
     entities::{self, Receiver},
     get_env, is_debug_mode,
-    services::persistent_state::{self, PersistentStateRow},
+    services::persistent_state::PersistentStateRow,
     spawn, EnvironmentError,
 };
 use robotica_common::datetime::{
@@ -25,10 +25,6 @@ pub enum Error {
     /// Environment variable not found
     #[error("Environment variable error: {0}")]
     Environment(#[from] EnvironmentError),
-
-    /// Persistent state error
-    #[error("Persistent state error: {0}")]
-    PersistentState(#[from] persistent_state::Error),
 }
 
 struct Config {
@@ -91,7 +87,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
 
     let psr = state
         .persistent_state_database
-        .for_name::<DayState>("amber")?;
+        .for_name::<DayState>("amber");
 
     spawn(async move {
         // if is_debug_mode() {

@@ -13,7 +13,7 @@ use tokio::{
 };
 
 use crate::{
-    entities::{self, StatefulData},
+    entities::{self},
     spawn,
 };
 
@@ -418,17 +418,13 @@ async fn wait_for_response(
 /// # Panics
 ///
 /// This function will panic if something goes wrong.
-#[must_use]
-pub fn run_device(
+pub fn device_entity(
+    rx_pc: entities::Receiver<PowerColor>,
+    tx_state: entities::Sender<State>,
     id: u64,
     discover: entities::Receiver<Device>,
-) -> (
-    entities::Sender<PowerColor>,
-    entities::Receiver<StatefulData<State>>,
 ) {
     let discover = discover.filter_into_stateless(move |d| d.target == id);
-    let (tx_pc, rx_pc) = entities::create_stateless_entity(format!("lifx_color_{id}"));
-    let (tx_state, rx_state) = entities::create_stateful_entity(format!("lifx_state_{id}"));
 
     spawn(async move {
         let mut discover_s = discover.subscribe().await;
@@ -477,8 +473,6 @@ pub fn run_device(
             }
         }
     });
-
-    (tx_pc, rx_state)
 }
 
 async fn maybe_sleep_until(state: &DeviceState) -> Option<()> {

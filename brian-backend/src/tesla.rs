@@ -250,11 +250,11 @@ pub fn monitor_charging(
     car_number: usize,
     price_summary_rx: Receiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {
-    let tesla_secret = state.persistent_state_database.for_name("tesla_token")?;
+    let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
     let psr = state
         .persistent_state_database
-        .for_name::<PersistentState>(&format!("tesla_{car_number}"))?;
+        .for_name::<PersistentState>(&format!("tesla_{car_number}"));
     let ps = psr.load().unwrap_or_default();
 
     let mqtt = state.mqtt.clone();
