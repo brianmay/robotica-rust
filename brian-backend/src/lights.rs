@@ -14,7 +14,7 @@ use robotica_common::{
     mqtt::{MqttMessage, QoS},
     robotica::{
         commands::{Command, Light2Command},
-        lights::{self, Colors, PowerColor, HSBK},
+        lights::{self, Colors, PowerColor, PowerState, HSBK},
     },
 };
 use tokio::time::sleep;
@@ -165,10 +165,27 @@ pub fn run_auto_light(
     {
         let mqtt = state.mqtt.clone();
         let topic_substr = topic_substr.to_string();
+        let rx = rx.clone();
         spawn(async move {
             let mut rx = rx.subscribe().await;
             while let Ok((_, status)) = rx.recv().await {
                 send_state(&mqtt, &status, &topic_substr);
+            }
+        });
+    }
+
+    {
+        let mqtt = state.mqtt.clone();
+        let topic_substr = topic_substr.to_string();
+        let rx = rx.map_into_stateful(|(_, status)| match status {
+            lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
+            lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
+            lights::State::Offline => lights::PowerState::Offline,
+        });
+        spawn(async move {
+            let mut rx = rx.subscribe().await;
+            while let Ok((_, status)) = rx.recv().await {
+                send_power_state(&mqtt, &status, &topic_substr);
             }
         });
     }
@@ -332,12 +349,9 @@ fn send_state(mqtt: &Mqtt, state: &lights::State, topic_substr: &str) {
             error!("Failed to serialize status: {}", e);
         }
     }
+}
 
-    let power_state = match state {
-        lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
-        lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
-        lights::State::Offline => lights::PowerState::Offline,
-    };
+fn send_power_state(mqtt: &Mqtt, power_state: &PowerState, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/power");
     match serde_json::to_string(&power_state) {
         Ok(json) => {
@@ -345,7 +359,7 @@ fn send_state(mqtt: &Mqtt, state: &lights::State, topic_substr: &str) {
             mqtt.try_send(msg);
         }
         Err(e) => {
-            error!("Failed to serialize status: {}", e);
+            error!("Failed to serialize power status: {}", e);
         }
     }
 }
