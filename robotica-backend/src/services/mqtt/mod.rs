@@ -187,9 +187,6 @@ impl MqttClient {
 
         let mut rx = self.rx;
 
-        // Subscribe topics.
-        subscribe_topics(&client, &subscriptions);
-
         loop {
             select! {
                 event = event_loop.poll() => {
