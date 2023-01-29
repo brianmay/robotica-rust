@@ -88,7 +88,6 @@ pub enum State {
 /// Is the device offline, on, or off?
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[serde(tag = "power")]
 pub enum PowerState {
     /// The device is offline.
     Offline,
