@@ -183,11 +183,11 @@ fn busy_entity(name: impl Into<String>) -> Receiver<PowerColor> {
 
             let colors = Colors::Sequence(vec![on_color, off_color]);
             tx.try_send(PowerColor::On(colors));
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
             let colors = Colors::Sequence(vec![off_color, on_color]);
             tx.try_send(PowerColor::On(colors));
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
     rx
@@ -209,7 +209,7 @@ fn rainbow_entity(name: impl Into<String>) -> Receiver<PowerColor> {
             if i >= 360.0 {
                 i = 0.0;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
     rx
