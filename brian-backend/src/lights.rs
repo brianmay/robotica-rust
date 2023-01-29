@@ -569,7 +569,7 @@ fn run_passage_multiplexer(
                     hue: 0.0,
                     saturation: 0.0,
                     brightness: 0.0,
-                    kelvin: 0,
+                    kelvin: 3500,
                 });
             }
 
