@@ -176,7 +176,7 @@ fn busy_entity(name: impl Into<String>) -> Receiver<PowerColor> {
 
             let off_color = HSBK {
                 hue: 0.0,
-                saturation: 100.0,
+                saturation: 20.0,
                 brightness: 0.0,
                 kelvin: 3500,
             };
