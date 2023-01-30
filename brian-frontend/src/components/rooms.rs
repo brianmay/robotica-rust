@@ -64,9 +64,9 @@ pub fn jan_room() -> Html {
                 <MqttLast<String> topic="state/jan/Light/power"/>
             </h2>
             <div class="buttons">
-                <Button<LightProps> name={"Auto"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
-                <Button<LightProps> name={"On"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
-                <Button<LightProps> name={"Rainbow"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
+                <Button<Light2Props> name={"Auto"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"on"} />
+                <Button<Light2Props> name={"Rainbow"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
             </div>
 
             <h2>{"Music"}</h2>
@@ -197,9 +197,9 @@ pub fn dining_room() -> Html {
                 <MqttLast<String> topic="state/Dining/Light/power"/>
             </h2>
             <div class="buttons">
-                <Button<LightProps> name={"Auto"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
-                <Button<LightProps> name={"On"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
-                <Button<LightProps> name={"Rainbow"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
+                <Button<Light2Props> name={"Auto"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"on"} />
+                <Button<Light2Props> name={"Rainbow"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
             </div>
         </RequireConnection>
     )
