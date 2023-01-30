@@ -152,5 +152,7 @@ async fn setup_lights(state: &mut State) {
         .await
         .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
     run_auto_light(state, discover.clone(), "Brian/Light", 105_867_434_619_856);
+    run_auto_light(state, discover.clone(), "Dining/Light", 74_174_870_942_672);
+    run_auto_light(state, discover.clone(), "Jan/Light", 189_637_382_730_704);
     run_passage_light(state, discover, "Passage/Light", 137_092_148_851_664);
 }
