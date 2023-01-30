@@ -137,6 +137,10 @@ pub enum LifxError {
     /// A bad response was received.
     #[error("bad response")]
     BadResponse,
+
+    /// The device is offline.
+    #[error("Device is offline")]
+    DeviceOffline,
 }
 
 impl DeviceState {
@@ -183,8 +187,10 @@ impl DeviceState {
                     send_set_colors(color, socket, device, seq).await?;
                 }
             }
+            Ok(())
+        } else {
+            Err(LifxError::DeviceOffline)
         }
-        Ok(())
     }
 }
 
