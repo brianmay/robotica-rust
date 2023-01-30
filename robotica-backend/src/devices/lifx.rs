@@ -3,7 +3,6 @@
 use std::{net::SocketAddr, time::Duration};
 
 use lifx_core::{BuildOptions, Message, RawMessage};
-use log::{debug, error, info};
 use robotica_common::robotica::lights::{Colors, PowerColor, PowerLevel, State, HSBK};
 use thiserror::Error;
 use tokio::{
@@ -11,6 +10,7 @@ use tokio::{
     select,
     time::{interval, sleep_until, Instant},
 };
+use tracing::{debug, error, info};
 
 use crate::{
     entities::{self},

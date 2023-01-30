@@ -1,4 +1,3 @@
-use log::info;
 use robotica_backend::entities::create_stateless_entity;
 use robotica_backend::entities::Sender;
 use robotica_backend::services::mqtt::MqttTx;
@@ -8,6 +7,8 @@ use robotica_common::robotica::commands::AudioCommand;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::commands::DevicePower;
 use serde::Serialize;
+use tracing::error;
+use tracing::info;
 
 #[derive(Clone)]
 pub struct Id {
@@ -62,7 +63,7 @@ pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
     });
 
     let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
-        log::error!("Failed to serialize message: {msg:?}");
+        error!("Failed to serialize message: {msg:?}");
         "{}".into()
     });
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)

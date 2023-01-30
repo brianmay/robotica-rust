@@ -25,7 +25,7 @@ pub fn schedule(props: &Props) -> Html {
         Callback::from(move |msg: MqttMessage| {
             serde_json::from_str(&msg.payload).map_or_else(
                 |e| {
-                    log::error!("Failed to parse schedule: {}", e);
+                    tracing::error!("Failed to parse schedule: {}", e);
                 },
                 |new_schedule: Vec<Sequence>| sequence_list.set(new_schedule),
             );

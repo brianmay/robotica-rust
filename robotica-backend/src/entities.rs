@@ -1,12 +1,12 @@
 //! Stream of data from a source.
 
-use log::debug;
-use log::error;
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tracing::debug;
+use tracing::error;
 
 use crate::spawn;
 use crate::PIPE_SIZE;

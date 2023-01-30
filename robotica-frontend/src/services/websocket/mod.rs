@@ -8,9 +8,9 @@ use futures::{
     SinkExt, StreamExt,
 };
 use gloo_timers::callback::Timeout;
-use log::{debug, error, info};
 use reqwasm::websocket::{futures::WebSocket, Message, WebSocketError};
 use thiserror::Error;
+use tracing::{debug, error, info};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 use yew::Callback;

@@ -1,7 +1,6 @@
 //! Source (and sink) for MQTT data.
 pub mod topics;
 
-use log::{debug, error};
 use rumqttc::tokio_rustls::rustls::ClientConfig;
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
@@ -15,6 +14,7 @@ use thiserror::Error;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Duration};
+use tracing::{debug, error};
 
 use robotica_common::mqtt::{MqttMessage, QoS};
 
@@ -227,6 +227,7 @@ pub fn run_client(
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn process_subscribe(
     client: &AsyncClient,
     subscriptions: &mut Subscriptions,

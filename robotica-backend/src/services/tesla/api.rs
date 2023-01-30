@@ -6,6 +6,7 @@ use reqwest::Error;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{sleep, Instant};
+use tracing::{debug, info};
 
 use crate::{
     is_debug_mode,
@@ -13,7 +14,7 @@ use crate::{
 };
 
 async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
-    log::debug!("post {}", url);
+    debug!("post {}", url);
 
     let client = reqwest::Client::new();
     let response = client
@@ -26,7 +27,7 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
         .error_for_status()?;
 
     let text = response.json().await?;
-    log::debug!("post done {}", url);
+    debug!("post done {}", url);
     Ok(text)
 }
 
@@ -45,7 +46,7 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
 // }
 
 async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U, Error> {
-    log::debug!("get_with_token: {}", url);
+    debug!("get_with_token: {}", url);
 
     let client = reqwest::Client::new();
     let response = client
@@ -62,7 +63,7 @@ async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U
     // let text = serde_json::from_str(&text).unwrap();
 
     let text = response.json().await?;
-    log::debug!("get_with_token done: {}", url);
+    debug!("get_with_token done: {}", url);
     Ok(text)
 }
 
@@ -71,7 +72,7 @@ async fn post_with_token<T: Serialize + Sync, U: DeserializeOwned>(
     token: &str,
     body: &T,
 ) -> Result<U, Error> {
-    log::debug!("post_with_token: {}", url);
+    debug!("post_with_token: {}", url);
 
     let client = reqwest::Client::new();
     let response = client
@@ -89,7 +90,7 @@ async fn post_with_token<T: Serialize + Sync, U: DeserializeOwned>(
     // let text = serde_json::from_str(&text).unwrap();
 
     let text = response.json().await?;
-    log::debug!("post_with_token done: {}", url);
+    debug!("post_with_token done: {}", url);
     Ok(text)
 }
 
@@ -404,23 +405,23 @@ impl Token {
     pub async fn wait_for_wake_up(&self, id: u64) -> Result<(), WakeupError> {
         let timeout = Instant::now() + Duration::from_secs(60);
 
-        log::info!("Trying to wake up (initial)");
+        info!("Trying to wake up (initial)");
         let response = self.wake_up(id).await?;
         if response.state == "online" {
-            log::info!("Car is already online");
+            info!("Car is already online");
             return Ok(());
         }
 
         while Instant::now() < timeout {
-            log::info!("Trying to wake up (retry)");
+            info!("Trying to wake up (retry)");
             let response = self.wake_up(id).await?;
             if response.state == "online" {
-                log::info!("Car is online");
+                info!("Car is online");
                 sleep(Duration::from_secs(30)).await;
-                log::info!("Car is online (after sleep)");
+                info!("Car is online (after sleep)");
                 return Ok(());
             }
-            log::info!("Car is not online");
+            info!("Car is not online");
             sleep(Duration::from_secs(5)).await;
         }
 
@@ -565,7 +566,7 @@ impl CommandSequence {
         }
 
         if is_debug_mode() {
-            log::debug!("Would execute commands: {:?}", self.commands);
+            debug!("Would execute commands: {:?}", self.commands);
             return Ok(());
         }
 

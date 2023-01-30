@@ -2,10 +2,10 @@
 
 use chrono::{FixedOffset, Local, TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
+use tracing::{debug, error, info};
 
 use robotica_backend::{
     entities::{self, Receiver},
@@ -137,7 +137,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
                             // How long to the current interval expires?
                             let now = utc_now();
                             let duration = update_time.clone() - now;
-                            log::info!("Next price update: {update_time:?} in {duration}");
+                            info!("Next price update: {update_time:?} in {duration}");
 
                             // Ensure we update prices at least once once every 5 minutes.
                             let max_duration = Duration::minutes(5);
@@ -145,14 +145,14 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
                             duration.clamp(min_duration, max_duration)
                         }
                         Err(err) => {
-                            log::error!("Failed to get prices: {}", err);
+                            error!("Failed to get prices: {}", err);
                             // If we failed to get prices, try again in 1 minute
                             Duration::minutes(1)
                         }
                     };
 
                     // Schedule the next update
-                    log::info!("Next poll in {}", next_delay);
+                    info!("Next poll in {}", next_delay);
                     let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_secs(300));
                     price_instant = Instant::now() + next_delay;
                 }
@@ -394,7 +394,7 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
         .into_query("amber/price");
 
         if let Err(e) = client.query(&reading).await {
-            log::error!("Failed to write to influxdb: {}", e);
+            error!("Failed to write to influxdb: {}", e);
         }
     }
 
@@ -406,7 +406,7 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
     .into_query("amber/price_summary");
 
     if let Err(e) = client.query(&reading).await {
-        log::error!("Failed to write to influxdb: {}", e);
+        error!("Failed to write to influxdb: {}", e);
     }
 }
 
@@ -434,12 +434,12 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
                 .into_query(name);
 
                 if let Err(e) = client.query(&reading).await {
-                    log::error!("Failed to write to influxdb: {}", e);
+                    error!("Failed to write to influxdb: {}", e);
                 }
             }
         }
         Err(e) => {
-            log::error!("Failed to get usage: {}", e);
+            error!("Failed to get usage: {}", e);
         }
     }
 }
@@ -466,13 +466,13 @@ impl PriceProcessor {
 
     pub fn save(&self, psr: &PersistentStateRow<DayState>) {
         psr.save(&self.day).unwrap_or_else(|err| {
-            log::error!("Failed to save day state: {}", err);
+            error!("Failed to save day state: {}", err);
         });
     }
 
     pub fn load(psr: &PersistentStateRow<DayState>, now: &DateTime<Utc>) -> Self {
         let day = psr.load().unwrap_or_else(|err| {
-            log::error!("Failed to load day state, using defaults: {}", err);
+            error!("Failed to load day state, using defaults: {}", err);
             new_day_state(now)
         });
 
@@ -488,7 +488,7 @@ impl PriceProcessor {
             .iter()
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
             else {
-                log::error!("No current price found in prices: {prices:?}");
+                error!("No current price found in prices: {prices:?}");
                 return PriceSummary{
                     is_cheap_2hr: false,
                     per_kwh: 100.0,
@@ -540,7 +540,7 @@ impl PriceProcessor {
                 .unwrap_or(10.0);
 
         let is_cheap = current_price.per_kwh <= cheapest_price;
-        log::info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
+        info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
 
         if is_cheap {
             ds.last_cheap_update = Some(now.clone());
@@ -556,7 +556,7 @@ impl PriceProcessor {
             per_kwh: current_price.per_kwh,
             next_update: current_price.end_time.clone(),
         };
-        log::info!("Price summary: {:?}", ps);
+        info!("Price summary: {:?}", ps);
         ps
     }
 }

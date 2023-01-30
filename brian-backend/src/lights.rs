@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, error};
 use robotica_backend::{
     devices::lifx::{device_entity, Device},
     entities::{self, create_stateless_entity, Receiver, Sender, StatefulData, Subscription},
@@ -19,6 +18,7 @@ use robotica_common::{
     },
 };
 use tokio::time::sleep;
+use tracing::{debug, error};
 
 trait GetSceneEntity {
     type Scenes;

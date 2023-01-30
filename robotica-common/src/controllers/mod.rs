@@ -2,7 +2,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::mqtt::MqttMessage;
-use log::error;
+use tracing::error;
 
 pub mod hdmi;
 pub mod lights;

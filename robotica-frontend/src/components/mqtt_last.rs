@@ -33,7 +33,7 @@ where
         Callback::from(move |msg: MqttMessage| {
             T::try_from(msg).map_or_else(
                 |e| {
-                    log::error!("Failed to parse message: {e:?}");
+                    tracing::error!("Failed to parse message: {e:?}");
                 },
                 |new_message| message.set(Some(new_message)),
             );

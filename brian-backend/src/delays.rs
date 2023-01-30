@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
-// use log::debug;
+// use tracing::debug;
 use robotica_backend::{entities::create_stateless_entity, spawn};
 use tokio::{
     select,

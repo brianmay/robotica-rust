@@ -1,6 +1,6 @@
-use log::debug;
 use thiserror::Error;
 use tokio::select;
+use tracing::debug;
 
 use robotica_backend::{devices::hdmi::Command, entities, spawn};
 use robotica_common::mqtt::{MqttMessage, QoS};

@@ -34,7 +34,7 @@ pub fn run(subscription: &mut Subscriptions, mqtt: MqttTx, topic_substr: impl In
                             mqtt.try_send(msg);
                         },
                         command => {
-                            log::error!("Invalid command, expected switch, got {:?}", command);
+                            tracing::error!("Invalid command, expected switch, got {:?}", command);
                         }
                     }
                 },

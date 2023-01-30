@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use influxdb::{Client, InfluxDbWriteable};
-use log::{debug, error};
 
 use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
 use robotica_common::anavi_thermometer::{self as anavi, GetReading};
 use robotica_common::mqtt::MqttMessage;
 use serde::Deserialize;
+use tracing::{debug, error};
 
 use crate::State;
 

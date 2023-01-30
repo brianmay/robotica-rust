@@ -19,10 +19,10 @@ pub mod services;
 pub mod sinks;
 pub mod sources;
 
-use log::{debug, error};
 use std::{env, future::Future};
 use thiserror::Error;
 use tokio::task::JoinHandle;
+use tracing::{debug, error};
 
 /// Size of all pipes.
 pub const PIPE_SIZE: usize = 10;

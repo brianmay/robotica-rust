@@ -4,12 +4,12 @@ use std::env::{self, VarError};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
-use log::{debug, error, info};
 use robotica_common::mqtt::QoS;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
+use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 use robotica_common::mqtt::MqttMessage;

@@ -1,12 +1,13 @@
 //! Source for life360 based data
 use anyhow::anyhow;
 use anyhow::Result;
-use log::{error, log, Level};
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::min;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
+use tracing::debug;
+use tracing::error;
 
 use tokio::time;
 
@@ -190,19 +191,10 @@ async fn retry_login(username: &str, password: &str) -> Login {
         let sleep_time = 1000 * 2u64.pow(attempt);
         let sleep_time = min(60_000, sleep_time);
 
-        let log_level = if attempt == 0 {
-            Level::Debug
-        } else {
-            Level::Warn
-        };
-
-        log!(
-            log_level,
-            "Waiting {sleep_time} ms to retry connection attempt {attempt}."
-        );
+        debug!("Waiting {sleep_time} ms to retry connection attempt {attempt}.");
         tokio::time::sleep(Duration::from_millis(sleep_time)).await;
 
-        log!(log_level, "Trying to login");
+        debug!("Trying to login");
         let login_or_none = match login(username, password).await {
             Err(err) => {
                 error!("login: {err}");
@@ -212,7 +204,7 @@ async fn retry_login(username: &str, password: &str) -> Login {
         };
 
         if let Some(login) = login_or_none {
-            log!(log_level, "Successfully logged in");
+            debug!("Successfully logged in");
             break login;
         }
 

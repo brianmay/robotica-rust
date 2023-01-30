@@ -1,5 +1,6 @@
 //! Component that shows the schedule
 use itertools::sorted;
+use tracing::error;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
@@ -21,15 +22,10 @@ pub fn tags_view() -> Html {
         Callback::from(move |msg: MqttMessage| {
             serde_json::from_str(&msg.payload).map_or_else(
                 |e| {
-                    log::error!("Failed to parse schedule: {}", e);
+                    error!("Failed to parse schedule: {}", e);
                 },
                 |new_tags: Tags| tags.set(Some(new_tags)),
             );
-
-            // .map(|new_schedule: Vec<Sequence>| schedule.set(new_schedule))
-            // .unwrap_or_else(|e| {
-            //     log::error!("Failed to parse schedule: {}", e);
-            // });
         })
     };
 

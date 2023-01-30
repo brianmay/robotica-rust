@@ -359,7 +359,6 @@ dependencies = [
  "color-backtrace",
  "float-cmp",
  "influxdb",
- "log",
  "reqwest",
  "robotica-backend",
  "robotica-common",
@@ -378,11 +377,12 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "itertools",
- "log",
  "robotica-common",
  "robotica-frontend",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -2268,7 +2268,6 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "lifx-core",
- "log",
  "maud",
  "openid",
  "regex",
@@ -2296,13 +2295,13 @@ dependencies = [
  "bytes",
  "chrono",
  "chrono-tz",
- "log",
  "prost",
  "prost-build",
  "prost-types",
  "serde",
  "serde_json",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -2314,12 +2313,12 @@ dependencies = [
  "eyre",
  "futures",
  "gloo-timers",
- "log",
  "reqwasm",
  "robotica-common",
  "serde",
  "serde_json",
  "thiserror",
+ "tracing",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
@@ -3032,6 +3031,17 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracing-wasm"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+ "wasm-bindgen",
 ]
 
 [[package]]

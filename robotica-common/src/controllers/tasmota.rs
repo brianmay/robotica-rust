@@ -1,6 +1,6 @@
 //! A Tasmota switch controller
 use crate::mqtt::MqttMessage;
-use log::error;
+use tracing::error;
 
 use super::{
     get_display_state_for_action, get_press_on_or_off, string_command_vec, Action, ConfigTrait,

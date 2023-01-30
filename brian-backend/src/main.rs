@@ -16,12 +16,12 @@ mod tesla;
 
 use anyhow::Result;
 use lights::{run_auto_light, run_passage_light};
-use log::debug;
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::Sender;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
+use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
@@ -83,7 +83,7 @@ async fn setup_pipes(state: &mut State) {
                 } else {
                     "2 hour cheap price has ended"
                 };
-                log::info!("{}", message);
+                info!("{}", message);
             }
         });
 

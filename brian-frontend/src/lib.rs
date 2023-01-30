@@ -109,8 +109,8 @@ fn app() -> Html {
 
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
-    wasm_logger::init(wasm_logger::Config::default());
     console_error_panic_hook::set_once();
+    tracing_wasm::set_as_global_default();
     yew::Renderer::<App>::new().render();
     Ok(())
 }

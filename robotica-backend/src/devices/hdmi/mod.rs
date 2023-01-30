@@ -1,7 +1,6 @@
 //! Dodgy HDMI matrix of unknown origin.
 use std::fmt::Debug;
 
-use log::{debug, info};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -9,6 +8,7 @@ use tokio::{
     select, spawn,
     task::JoinHandle,
 };
+use tracing::{debug, info};
 
 use crate::{
     entities::{self, StatefulData},
