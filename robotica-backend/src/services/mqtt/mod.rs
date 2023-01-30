@@ -124,7 +124,7 @@ impl MqttClient {
     #[must_use]
     pub fn new() -> (Self, Mqtt) {
         // Outgoing MQTT queue.
-        let (tx, rx) = mpsc::channel(50);
+        let (tx, rx) = mpsc::channel(crate::PIPE_SIZE);
 
         (MqttClient { rx }, Mqtt(tx))
     }
