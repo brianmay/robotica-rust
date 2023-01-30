@@ -196,20 +196,30 @@ fn busy_entity(name: impl Into<String>) -> Receiver<PowerColor> {
 fn rainbow_entity(name: impl Into<String>) -> Receiver<PowerColor> {
     let (tx, rx) = entities::create_stateless_entity(name);
     spawn(async move {
-        let mut i = 0.0;
+        let mut i = 0u16;
+        let num_per_cycle = 10u16;
+
         loop {
-            let color = Colors::Single(HSBK {
-                hue: i,
-                saturation: 100.0,
-                brightness: 100.0,
-                kelvin: 3500,
-            });
-            tx.try_send(PowerColor::On(color));
-            i += 10.0;
-            if i >= 360.0 {
-                i = 0.0;
-            }
+            let colors: Vec<HSBK> = (0..num_per_cycle)
+                .into_iter()
+                .map(|j| {
+                    let mut hue = f32::from(i + j) * 360.0 / f32::from(num_per_cycle);
+                    while hue >= 360.0 {
+                        hue -= 360.0;
+                    }
+                    HSBK {
+                        hue,
+                        saturation: 100.0,
+                        brightness: 100.0,
+                        kelvin: 3500,
+                    }
+                })
+                .collect();
+            let colors = Colors::Sequence(colors);
+
+            tx.try_send(PowerColor::On(colors));
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            i = (i + 1) % num_per_cycle;
         }
     });
     rx
