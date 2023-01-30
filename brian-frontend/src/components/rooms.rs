@@ -60,8 +60,7 @@ pub fn jan_room() -> Html {
             <h1>{ "Jan's Room" }</h1>
 
             <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/jan/Light/power"/>
+                {"Lights"}
             </h2>
             <div class="buttons">
                 <Button<Light2Props> name={"Auto"} topic_substr={"Jan/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
@@ -90,8 +89,7 @@ pub fn twins_room() -> Html {
             <h1>{ "Twins' Room" }</h1>
 
             <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/Twins/Light/power"/>
+                {"Lights"}
             </h2>
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
@@ -142,8 +140,7 @@ pub fn akira_room() -> Html {
             <h1>{ "Akira's Room" }</h1>
 
             <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/Akira/Light/power"/>
+                {"Lights"}
             </h2>
             <div class="buttons">
                 <Button<LightProps> name={"Auto"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
@@ -193,8 +190,7 @@ pub fn dining_room() -> Html {
             </div>
 
             <h2>
-                {"Lights - "}
-                <MqttLast<String> topic="state/Dining/Light/power"/>
+                {"Lights"}
             </h2>
             <div class="buttons">
                 <Button<Light2Props> name={"Auto"} topic_substr={"Dining/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
