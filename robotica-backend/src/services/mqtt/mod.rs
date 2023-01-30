@@ -75,9 +75,9 @@ enum MqttCommand {
 
 /// Struct used to send outgoing MQTT messages.
 #[derive(Clone)]
-pub struct Mqtt(mpsc::Sender<MqttCommand>);
+pub struct MqttTx(mpsc::Sender<MqttCommand>);
 
-impl Mqtt {
+impl MqttTx {
     /// Send a message to the MQTT broker.
     pub fn try_send(&self, msg: MqttMessage) {
         let _ = self
@@ -115,19 +115,14 @@ pub enum MqttClientError {
 }
 
 /// Client struct used to connect to MQTT.
-pub struct MqttChannel {
-    rx: mpsc::Receiver<MqttCommand>,
-}
+pub struct MqttRx(mpsc::Receiver<MqttCommand>);
 
-impl MqttChannel {
-    /// Create a new MQTT client.
-    #[must_use]
-    pub fn new() -> (Self, Mqtt) {
-        // Outgoing MQTT queue.
-        let (tx, rx) = mpsc::channel(50);
-
-        (MqttChannel { rx }, Mqtt(tx))
-    }
+/// Create a new MQTT client.
+#[must_use]
+pub fn mqtt_channel() -> (MqttTx, MqttRx) {
+    // Outgoing MQTT queue.
+    let (tx, rx) = mpsc::channel(50);
+    (MqttTx(tx), MqttRx(rx))
 }
 
 /// Connect to the MQTT broker and send/receive messages.
@@ -137,7 +132,7 @@ impl MqttChannel {
 /// Returns an error if there is a problem with the configuration.
 pub fn run_client(
     mut subscriptions: Subscriptions,
-    channel: MqttChannel,
+    channel: MqttRx,
 ) -> Result<(), MqttClientError> {
     let mqtt_host = get_env("MQTT_HOST")?;
     let mqtt_port = get_env("MQTT_PORT")?;
@@ -177,7 +172,7 @@ pub fn run_client(
     // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
     spawn(async move {
-        let mut rx = channel.rx;
+        let mut rx = channel.0;
 
         loop {
             select! {

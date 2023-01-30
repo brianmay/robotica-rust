@@ -16,7 +16,7 @@ use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::{Mark, Payload, Task};
 
 use crate::scheduling::sequencer::check_schedule;
-use crate::services::mqtt::{Mqtt, Subscriptions};
+use crate::services::mqtt::{MqttTx, Subscriptions};
 use crate::spawn;
 
 use super::sequencer::Sequence;
@@ -58,7 +58,7 @@ struct State<T: TimeZone> {
     marks: HashMap<String, Mark>,
     timezone: T,
     config: Config,
-    mqtt: Mqtt,
+    mqtt: MqttTx,
 }
 
 impl<T: TimeZone + Debug> State<T> {
@@ -284,7 +284,7 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Result<(), ExecutorError> {
+pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Mark>("mark");
 
@@ -345,7 +345,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: Mqtt) -> Result<(), Exe
     Ok(())
 }
 
-fn get_initial_state(mqtt: Mqtt) -> Result<State<Local>, ExecutorError> {
+fn get_initial_state(mqtt: MqttTx) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = DateTime::from(Utc::now());
     let date = now.with_timezone::<Local>(&timezone).date();

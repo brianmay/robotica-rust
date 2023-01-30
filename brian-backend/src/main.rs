@@ -25,8 +25,8 @@ use robotica_backend::services::persistent_state::PersistentStateDatabase;
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
-use robotica_backend::services::mqtt::{run_client, Subscriptions};
-use robotica_backend::services::mqtt::{Mqtt, MqttChannel};
+use robotica_backend::services::mqtt::MqttTx;
+use robotica_backend::services::mqtt::{mqtt_channel, run_client, Subscriptions};
 
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
 
-    let (mqtt_client, mqtt) = MqttChannel::new();
+    let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
     let message_sink = robotica::create_message_sink(mqtt.clone());
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     };
 
     setup_pipes(&mut state).await;
-    run_client(state.subscriptions, mqtt_client)?;
+    run_client(state.subscriptions, mqtt_rx)?;
 
     loop {
         debug!("I haven't crashed yet!");
@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
 pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
-    mqtt: Mqtt,
+    mqtt: MqttTx,
     message_sink: Sender<String>,
     persistent_state_database: PersistentStateDatabase,
 }

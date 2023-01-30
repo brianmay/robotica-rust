@@ -34,7 +34,7 @@ use tracing::error;
 use robotica_common::user::User;
 
 use crate::services::http::websocket::websocket_handler;
-use crate::services::mqtt::Mqtt;
+use crate::services::mqtt::MqttTx;
 use crate::{get_env, spawn, EnvironmentError};
 
 use self::oidc::Client;
@@ -42,7 +42,7 @@ use self::oidc::Client;
 #[derive(Clone)]
 struct HttpConfig {
     #[allow(dead_code)]
-    mqtt: Mqtt,
+    mqtt: MqttTx,
     root_url: reqwest::Url,
 }
 
@@ -109,7 +109,7 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: Mqtt) -> Result<(), HttpError> {
+pub async fn run(mqtt: MqttTx) -> Result<(), HttpError> {
     let http_config = HttpConfig {
         mqtt,
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,

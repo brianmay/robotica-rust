@@ -8,7 +8,7 @@ use log::{debug, error};
 use robotica_backend::{
     devices::lifx::{device_entity, Device},
     entities::{self, create_stateless_entity, Receiver, Sender, StatefulData, Subscription},
-    services::{mqtt::Mqtt, persistent_state::PersistentStateRow},
+    services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
     spawn,
 };
 use robotica_common::{
@@ -315,7 +315,7 @@ where
     entity: Receiver<PowerColor>,
     entity_s: Subscription<PowerColor>,
     psr: PersistentStateRow<String>,
-    mqtt: Mqtt,
+    mqtt: MqttTx,
     topic_substr: String,
     tx: Sender<PowerColor>,
     flash_color: PowerColor,
@@ -480,7 +480,7 @@ async fn set_scene<Entity>(
     state.entity_s = state.entity.subscribe().await;
 }
 
-fn send_state(mqtt: &Mqtt, state: &lights::State, topic_substr: &str) {
+fn send_state(mqtt: &MqttTx, state: &lights::State, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/status");
     match serde_json::to_string(&state) {
         Ok(json) => {
@@ -493,7 +493,7 @@ fn send_state(mqtt: &Mqtt, state: &lights::State, topic_substr: &str) {
     }
 }
 
-fn send_power_state(mqtt: &Mqtt, power_state: &PowerState, topic_substr: &str) {
+fn send_power_state(mqtt: &MqttTx, power_state: &PowerState, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/power");
     match serde_json::to_string(&power_state) {
         Ok(json) => {
@@ -506,7 +506,7 @@ fn send_power_state(mqtt: &Mqtt, power_state: &PowerState, topic_substr: &str) {
     }
 }
 
-fn send_scene<Scene: ScenesTrait>(mqtt: &Mqtt, scene: &Scene, topic_substr: &str) {
+fn send_scene<Scene: ScenesTrait>(mqtt: &MqttTx, scene: &Scene, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/scene");
     let msg = MqttMessage::new(topic, scene.to_string(), true, QoS::AtLeastOnce);
     mqtt.try_send(msg);

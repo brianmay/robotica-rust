@@ -6,12 +6,12 @@ use robotica_common::{
 use tokio::select;
 
 use crate::{
-    services::mqtt::{Mqtt, Subscriptions},
+    services::mqtt::{MqttTx, Subscriptions},
     spawn,
 };
 
 /// Run a fake switch
-pub fn run(subscription: &mut Subscriptions, mqtt: Mqtt, topic_substr: impl Into<String>) {
+pub fn run(subscription: &mut Subscriptions, mqtt: MqttTx, topic_substr: impl Into<String>) {
     let topic_substr: String = topic_substr.into();
     let topic = format!("command/{topic_substr}");
     let rx = subscription.subscribe_into_stateless(&topic);

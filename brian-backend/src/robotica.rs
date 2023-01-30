@@ -1,7 +1,7 @@
 use log::info;
 use robotica_backend::entities::create_stateless_entity;
 use robotica_backend::entities::Sender;
-use robotica_backend::services::mqtt::Mqtt;
+use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
 use robotica_common::robotica::commands::AudioCommand;
@@ -68,7 +68,7 @@ pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub fn create_message_sink(mqtt: Mqtt) -> Sender<String> {
+pub fn create_message_sink(mqtt: MqttTx) -> Sender<String> {
     let (tx, rx) = create_stateless_entity::<String>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;

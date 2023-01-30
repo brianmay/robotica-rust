@@ -444,7 +444,7 @@ fn update_auto_charge(
     auto_charge: bool,
     car_number: usize,
     charge_state: &Option<ChargeState>,
-    mqtt: &robotica_backend::services::mqtt::Mqtt,
+    mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
     let is_charging = charge_state
         .as_ref()
@@ -462,7 +462,7 @@ fn update_auto_charge(
 fn publish_auto_charge(
     car_number: usize,
     status: DevicePower,
-    mqtt: &robotica_backend::services::mqtt::Mqtt,
+    mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
     let topic = format!("state/Tesla/{car_number}/AutoCharge/power");
     let string: String = status.into();
@@ -474,7 +474,7 @@ fn update_force_charge(
     charge_state: &Option<ChargeState>,
     car_number: usize,
     force_charge: bool,
-    mqtt: &robotica_backend::services::mqtt::Mqtt,
+    mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
     let is_charging = charge_state
         .as_ref()
@@ -491,7 +491,7 @@ fn update_force_charge(
 fn publish_force_change(
     car_number: usize,
     status: DevicePower,
-    mqtt: &robotica_backend::services::mqtt::Mqtt,
+    mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
     let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
     let string: String = status.into();
