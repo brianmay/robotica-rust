@@ -580,33 +580,7 @@ async fn check_charge(
         false
     };
 
-    // What is the limit we should charge to?
-    #[allow(clippy::match_same_arms)]
-    let requested_charge = match &price_category {
-        PriceCategory::Expensive => RequestedCharge::DontCharge,
-        PriceCategory::Normal => RequestedCharge::DontCharge,
-        PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
-        PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
-    };
-
-    // If we're forcing a charge, we should charge to at least 70%.
-    let requested_charge = if force_charge {
-        requested_charge.min_charge(70)
-    } else {
-        requested_charge
-    };
-
-    // Should we charge? If so, to what limit?
-    let (should_charge, charge_limit) = match requested_charge {
-        RequestedCharge::DontCharge => (false, 50),
-        RequestedCharge::ChargeTo(limit) => (true, limit),
-    };
-
-    // Is battery level low enough that we can charge it?
-    let should_charge = match charge_state {
-        Some(state) => should_charge && state.battery_level < charge_limit,
-        None => should_charge,
-    };
+    let (should_charge, charge_limit) = should_charge(price_category, force_charge, charge_state);
 
     // We should not attempt to start charging if charging is complete.
     let can_start_charge = match charge_state {
@@ -736,6 +710,34 @@ async fn check_charge(
 
     log::info!("All done. {result:?}");
     result
+}
+
+const fn should_charge(
+    price_category: &PriceCategory,
+    force_charge: bool,
+    charge_state: &Option<ChargeState>,
+) -> (bool, u8) {
+    #[allow(clippy::match_same_arms)]
+    let requested_charge = match &price_category {
+        PriceCategory::Expensive => RequestedCharge::DontCharge,
+        PriceCategory::Normal => RequestedCharge::DontCharge,
+        PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
+        PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
+    };
+    let requested_charge = if force_charge {
+        requested_charge.min_charge(70)
+    } else {
+        requested_charge
+    };
+    let (should_charge, charge_limit) = match requested_charge {
+        RequestedCharge::DontCharge => (false, 50),
+        RequestedCharge::ChargeTo(limit) => (true, limit),
+    };
+    let should_charge = match charge_state {
+        Some(state) => should_charge && state.battery_level < charge_limit,
+        None => should_charge,
+    };
+    (should_charge, charge_limit)
 }
 
 async fn get_charge_state(token: &Token, car_id: u64) -> Option<ChargeState> {
