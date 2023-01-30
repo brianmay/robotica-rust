@@ -16,6 +16,7 @@ mod tesla;
 
 use anyhow::Result;
 use lights::{run_auto_light, run_passage_light};
+use log::debug;
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::Sender;
@@ -24,8 +25,8 @@ use robotica_backend::services::persistent_state::PersistentStateDatabase;
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
-use robotica_backend::services::mqtt::Mqtt;
-use robotica_backend::services::mqtt::{MqttClient, Subscriptions};
+use robotica_backend::services::mqtt::{run_client, Subscriptions};
+use robotica_backend::services::mqtt::{Mqtt, MqttChannel};
 
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -33,24 +34,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
 
-    let (mqtt_client, mqtt) = MqttClient::new();
-
-    let subscriptions: Subscriptions = setup_pipes(mqtt).await;
-    mqtt_client.do_loop(subscriptions).await?;
-
-    Ok(())
-}
-
-/// Global state for the application.
-pub struct State {
-    subscriptions: Subscriptions,
-    #[allow(dead_code)]
-    mqtt: Mqtt,
-    message_sink: Sender<String>,
-    persistent_state_database: PersistentStateDatabase,
-}
-
-async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
+    let (mqtt_client, mqtt) = MqttChannel::new();
     let subscriptions: Subscriptions = Subscriptions::new();
     let message_sink = robotica::create_message_sink(mqtt.clone());
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
@@ -64,7 +48,28 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         persistent_state_database,
     };
 
-    let price_summary_rx = amber::run(&state).unwrap_or_else(|e| {
+    setup_pipes(&mut state).await;
+    run_client(state.subscriptions, mqtt_client)?;
+
+    loop {
+        debug!("I haven't crashed yet!");
+        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+    }
+
+    Ok(())
+}
+
+/// Global state for the application.
+pub struct State {
+    subscriptions: Subscriptions,
+    #[allow(dead_code)]
+    mqtt: Mqtt,
+    message_sink: Sender<String>,
+    persistent_state_database: PersistentStateDatabase,
+}
+
+async fn setup_pipes(state: &mut State) {
+    let price_summary_rx = amber::run(state).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
 
@@ -82,7 +87,7 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
             }
         });
 
-    monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
+    monitor_charging(state, 1, price_summary_rx).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");
     });
 
@@ -90,10 +95,10 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
-    hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
-    tesla::monitor_tesla_doors(&mut state, 1);
+    hdmi::run(state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_doors(state, 1);
 
-    environment_monitor::run(&mut state).unwrap_or_else(|err| {
+    environment_monitor::run(state).unwrap_or_else(|err| {
         panic!("Environment monitor failed: {err}");
     });
 
@@ -101,13 +106,13 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch(&mut state, "Dining/Messages");
-    fake_switch(&mut state, "Dining/Request_Bathroom");
-    fake_switch(&mut state, "Brian/Night");
-    fake_switch(&mut state, "Brian/Messages");
-    fake_switch(&mut state, "Brian/Request_Bathroom");
+    fake_switch(state, "Dining/Messages");
+    fake_switch(state, "Dining/Request_Bathroom");
+    fake_switch(state, "Brian/Night");
+    fake_switch(state, "Brian/Messages");
+    fake_switch(state, "Brian/Request_Bathroom");
 
-    setup_lights(&mut state).await;
+    setup_lights(state).await;
 
     // let message_sink_temp = state.message_sink.clone();
     // let rx = state
@@ -129,8 +134,6 @@ async fn setup_pipes(mqtt: Mqtt) -> Subscriptions {
     //         }
     //     }
     // });
-
-    state.subscriptions
 }
 
 fn fake_switch(state: &mut State, topic_substr: &str) {

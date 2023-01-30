@@ -19,7 +19,7 @@ use tokio::time::{sleep, Duration};
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use crate::entities::{self, Receiver, StatefulData};
-use crate::{get_env, is_debug_mode, EnvironmentError};
+use crate::{get_env, is_debug_mode, spawn, EnvironmentError};
 
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
     match qos {
@@ -115,66 +115,69 @@ pub enum MqttClientError {
 }
 
 /// Client struct used to connect to MQTT.
-pub struct MqttClient {
+pub struct MqttChannel {
     rx: mpsc::Receiver<MqttCommand>,
 }
 
-impl MqttClient {
+impl MqttChannel {
     /// Create a new MQTT client.
     #[must_use]
     pub fn new() -> (Self, Mqtt) {
         // Outgoing MQTT queue.
         let (tx, rx) = mpsc::channel(crate::PIPE_SIZE);
 
-        (MqttClient { rx }, Mqtt(tx))
+        (MqttChannel { rx }, Mqtt(tx))
     }
+}
 
-    /// Connect to the MQTT broker and send/receive messages.
-    ///
-    /// Doesn't return.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is a problem with the configuration.
-    pub async fn do_loop(self, mut subscriptions: Subscriptions) -> Result<(), MqttClientError> {
-        let mqtt_host = get_env("MQTT_HOST")?;
-        let mqtt_port = get_env("MQTT_PORT")?;
-        let mqtt_port = mqtt_port
-            .parse()
-            .map_err(|e| MqttClientError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
-        let username = get_env("MQTT_USERNAME")?;
-        let password = get_env("MQTT_PASSWORD")?;
-        // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+/// Connect to the MQTT broker and send/receive messages.
+///
+/// # Errors
+///
+/// Returns an error if there is a problem with the configuration.
+pub fn run_client(
+    mut subscriptions: Subscriptions,
+    channel: MqttChannel,
+) -> Result<(), MqttClientError> {
+    let mqtt_host = get_env("MQTT_HOST")?;
+    let mqtt_port = get_env("MQTT_PORT")?;
+    let mqtt_port = mqtt_port
+        .parse()
+        .map_err(|e| MqttClientError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
+    let username = get_env("MQTT_USERNAME")?;
+    let password = get_env("MQTT_PASSWORD")?;
+    // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
-        let hostname = gethostname::gethostname();
-        let hostname = hostname.to_str().unwrap_or("unknown");
-        let client_id = format!("robotica-rust-{hostname}");
+    let hostname = gethostname::gethostname();
+    let hostname = hostname.to_str().unwrap_or("unknown");
+    let client_id = format!("robotica-rust-{hostname}");
 
-        let mut root_store = rustls::RootCertStore::empty();
-        root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
-        let client_config = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+    let mut root_store = rustls::RootCertStore::empty();
+    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+    let client_config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
 
-        let mut mqtt_options = MqttOptions::new(client_id, mqtt_host, mqtt_port);
-        mqtt_options.set_keep_alive(Duration::from_secs(30));
-        mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
-        mqtt_options.set_credentials(username, password);
-        mqtt_options.set_max_packet_size(100 * 1024, 100 * 10 * 1024);
-        // mqtt_options.set_clean_session(false);
+    let mut mqtt_options = MqttOptions::new(client_id, mqtt_host, mqtt_port);
+    mqtt_options.set_keep_alive(Duration::from_secs(30));
+    mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
+    mqtt_options.set_credentials(username, password);
+    mqtt_options.set_max_packet_size(100 * 1024, 100 * 10 * 1024);
+    // mqtt_options.set_clean_session(false);
 
-        let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
+    let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
 
-        // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+    // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
-        let mut rx = self.rx;
+    spawn(async move {
+        let mut rx = channel.rx;
 
         loop {
             select! {
@@ -225,8 +228,8 @@ impl MqttClient {
                 else => { break; }
             };
         }
-        Ok(())
-    }
+    });
+    Ok(())
 }
 
 fn process_subscribe(
