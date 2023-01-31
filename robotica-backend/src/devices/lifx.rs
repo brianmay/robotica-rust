@@ -163,7 +163,11 @@ impl DeviceState {
         *self = DeviceState::Offline;
     }
 
-    async fn set_power_color(&mut self, power_color: &PowerColor) -> Result<(), LifxError> {
+    async fn set_power_color(
+        &mut self,
+        power_color: &PowerColor,
+        config: &DeviceConfig,
+    ) -> Result<(), LifxError> {
         if let DeviceState::Online(device, _, seq) = self {
             let socket = UdpSocket::bind("0.0.0.0:0").await?;
             // let power = get_power(&socket, device, seq).await?;
@@ -184,7 +188,7 @@ impl DeviceState {
                 }
                 PowerColor::On(color) => {
                     send_set_power(&socket, device, seq, PowerLevel::On).await?;
-                    send_set_colors(color, socket, device, seq).await?;
+                    send_set_colors(color, socket, device, seq, config).await?;
                 }
             }
             Ok(())
@@ -199,13 +203,26 @@ async fn send_set_colors(
     socket: UdpSocket,
     device: &mut Device,
     seq: &mut u8,
+    config: &DeviceConfig,
 ) -> Result<(), LifxError> {
-    match color {
-        Colors::Single(color) => {
-            send_set_color(&socket, device, seq, *color).await?;
-        }
-        Colors::Sequence(colors) => {
+    match (config.multiple_zones, color) {
+        (true, Colors::Sequence(colors)) => {
             send_set_extended_color_zones(&socket, device, seq, colors).await?;
+        }
+        (false, Colors::Sequence(colors)) => {
+            let first_color = colors.first().unwrap_or_else(|| {
+                error!("No colors in sequence");
+                &HSBK {
+                    hue: 0.0,
+                    saturation: 0.0,
+                    brightness: 0.0,
+                    kelvin: 0,
+                }
+            });
+            send_set_color(&socket, device, seq, *first_color).await?;
+        }
+        (_, Colors::Single(color)) => {
+            send_set_color(&socket, device, seq, *color).await?;
         }
     }
     Ok(())
@@ -419,6 +436,13 @@ async fn wait_for_response(
     }
 }
 
+/// Configuration for a device.
+#[derive(Default)]
+pub struct DeviceConfig {
+    /// Does this device have multiple zones?
+    pub multiple_zones: bool,
+}
+
 /// Run the device.
 ///
 /// # Panics
@@ -429,6 +453,7 @@ pub fn device_entity(
     tx_state: entities::Sender<State>,
     id: u64,
     discover: entities::Receiver<Device>,
+    config: DeviceConfig,
 ) {
     let discover = discover.filter_into_stateless(move |d| d.target == id);
 
@@ -443,7 +468,7 @@ pub fn device_entity(
             select! {
                 Ok(d) = discover_s.recv() => {
                     state.set_online(d);
-                    match state.set_power_color(&power_color).await {
+                    match state.set_power_color(&power_color, &config).await {
                         Ok(_) => {
                             state.renew_online();
                             debug!("discovered {state:?}: {power_color:?}");
@@ -458,7 +483,7 @@ pub fn device_entity(
                 }
                 Ok(pc) = rx_s.recv() => {
                     power_color = pc;
-                    match state.set_power_color(&power_color).await {
+                    match state.set_power_color(&power_color, &config).await {
                         Ok(_) => {
                             state.renew_online();
                             debug!("set power color {state:?}: {power_color:?}");

@@ -5,7 +5,7 @@ use std::{
 };
 
 use robotica_backend::{
-    devices::lifx::{device_entity, Device},
+    devices::lifx::{device_entity, Device, DeviceConfig},
     entities::{self, create_stateless_entity, Receiver, Sender, StatefulData, Subscription},
     services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
     spawn,
@@ -263,7 +263,7 @@ pub fn run_auto_light(
         flash_color(),
         format!("{id}_switch"),
     );
-    device_entity(rx, tx_state, id, discover);
+    device_entity(rx, tx_state, id, discover, DeviceConfig::default());
 }
 
 pub fn run_passage_light(
@@ -310,8 +310,12 @@ pub fn run_passage_light(
         ),
     };
 
+    let config = DeviceConfig {
+        multiple_zones: true,
+    };
+
     let rx = run_passage_multiplexer(entities, format!("{id}_multiplexer"));
-    device_entity(rx, tx_state, id, discover);
+    device_entity(rx, tx_state, id, discover, config);
 }
 
 struct LightState<Entities>
