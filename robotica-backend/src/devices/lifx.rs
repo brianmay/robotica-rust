@@ -471,12 +471,12 @@ pub fn device_entity(
                     match state.set_power_color(&power_color, &config).await {
                         Ok(_) => {
                             state.renew_online();
-                            debug!("discovered {state:?}: {power_color:?}");
+                            debug!("{id} discovered and initializing: {power_color:?}");
                             tx_state.try_send(State::Online(power_color.clone()));
                         }
                         Err(err) => {
                             state.set_offline();
-                            info!("failed to set power color {state:?}: {err:?}");
+                            info!("{id} failed initialize: {err:?}");
                             tx_state.try_send(State::Offline);
                         }
                     }
@@ -486,18 +486,18 @@ pub fn device_entity(
                     match state.set_power_color(&power_color, &config).await {
                         Ok(_) => {
                             state.renew_online();
-                            debug!("set power color {state:?}: {power_color:?}");
+                            debug!("{id} set power color: {power_color:?}");
                             tx_state.try_send(State::Online(power_color.clone()));
                         }
                         Err(err) => {
                             state.set_offline();
-                            info!("failed to set power color {state:?}: {err:?}");
+                            info!("{id} failed to set power color: {err:?}");
                             tx_state.try_send(State::Offline);
                         }
                     }
                 }
                 Some(_) = maybe_sleep_until(&state) => {
-                    info!("timeout {state:?}");
+                    info!("{id} timeout");
                     state.set_offline();
                     tx_state.try_send(State::Offline);
                 }
