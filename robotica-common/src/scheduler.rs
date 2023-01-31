@@ -109,16 +109,13 @@ fn location_device_to_text(location: &str, device: &str) -> String {
 }
 
 fn command_to_text(command: &Value) -> String {
-    let mtype = command
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
+    let mtype = command.get("type").and_then(Value::as_str);
 
     match mtype {
-        "audio" => audio_command_to_text(command),
-        "light" => light_command_to_text(command),
-        "device" => device_command_to_text(command),
-        "hdmi" => hdmi_command_to_text(command),
+        Some("audio") => audio_command_to_text(command),
+        Some("light" | "light2") => light_command_to_text(command),
+        Some("device") => device_command_to_text(command),
+        Some("hdmi") => hdmi_command_to_text(command),
         _ => command.to_string(),
     }
 }
@@ -165,13 +162,13 @@ fn audio_command_to_text(command: &Value) -> String {
 }
 
 fn light_command_to_text(command: &Value) -> String {
-    let action = command.get("lights").and_then(Value::as_str);
+    let action = command.get("action").and_then(Value::as_str);
     let scene = command.get("scene").and_then(Value::as_str);
 
     match (action, scene) {
         (Some(command), Some(scene)) => format!("{command} scene {scene}"),
         (Some(command), None) => command.to_string(),
-        (None, Some(scene)) => format!("scene {scene}"),
+        (None, Some(scene)) => format!("turn_on scene {scene}"),
         _ => "unknown light command".to_string(),
     }
 }
