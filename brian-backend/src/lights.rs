@@ -417,7 +417,6 @@ where
                 .save(&scene.to_string())
                 .unwrap_or_else(|e| error!("Failed to save scene: {}", e));
             send_scene(&state.mqtt, &scene, &state.topic_substr);
-            state.tx.try_send(PowerColor::Off);
 
             loop {
                 tokio::select! {
