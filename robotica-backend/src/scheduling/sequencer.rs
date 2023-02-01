@@ -334,7 +334,7 @@ fn config_to_sequence(
         tasks.push(task);
     });
 
-    let default_latest_time = Duration::minutes(5);
+    let default_latest_time = Duration::minutes(1);
     let latest_time = start_time.clone() + config.latest_time.unwrap_or(default_latest_time);
 
     Sequence {
