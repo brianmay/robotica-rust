@@ -497,9 +497,18 @@ pub fn device_entity(
                     }
                 }
                 Some(_) = maybe_sleep_until(&state) => {
-                    info!("{id} timeout");
-                    state.set_offline();
-                    tx_state.try_send(State::Offline);
+                    match state.set_power_color(&power_color, &config).await {
+                        Ok(_) => {
+                            state.renew_online();
+                            debug!("{id} timeout check: {power_color:?}");
+                            tx_state.try_send(State::Online(power_color.clone()));
+                        }
+                        Err(err) => {
+                            state.set_offline();
+                            info!("{id} failed to timeout check: {err:?}");
+                            tx_state.try_send(State::Offline);
+                        }
+                    }
                 }
             }
         }
