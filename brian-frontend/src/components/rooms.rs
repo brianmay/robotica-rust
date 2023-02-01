@@ -93,7 +93,7 @@ pub fn twins_room() -> Html {
             </h2>
             <div class="buttons">
                 <Button<Light2Props> name={"Auto"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
-                <Button<Light2Props> name={"On"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"on"} />
                 <Button<Light2Props> name={"Rainbow"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
                 <Button<Light2Props> name={"Declan"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"declan-night"}  />
                 <Button<Light2Props> name={"Nikolai"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"nikolai-night"} />
@@ -144,7 +144,7 @@ pub fn akira_room() -> Html {
             </h2>
             <div class="buttons">
                 <Button<Light2Props> name={"Auto"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
-                <Button<Light2Props> name={"On"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"on"} />
                 <Button<Light2Props> name={"Rainbow"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
                 <Button<Light2Props> name={"Night"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"akira-night"} />
             </div>
