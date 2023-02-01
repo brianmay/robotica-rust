@@ -591,7 +591,7 @@ mod tests {
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
@@ -602,7 +602,7 @@ mod tests {
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1033,7 +1033,7 @@ mod tests {
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
@@ -1044,7 +1044,7 @@ mod tests {
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1091,7 +1091,7 @@ mod tests {
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
@@ -1102,7 +1102,7 @@ mod tests {
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0).into()
         );
         assert_eq!(sequence[1].id, "test_0");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1225,7 +1225,7 @@ mod tests {
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 5, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
@@ -1236,7 +1236,7 @@ mod tests {
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0).into()
         );
         assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1247,7 +1247,7 @@ mod tests {
         );
         assert_eq!(
             sequence[2].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 35, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
         );
         assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
@@ -1258,7 +1258,7 @@ mod tests {
         );
         assert_eq!(
             sequence[3].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 45, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 41, 0).into()
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);
