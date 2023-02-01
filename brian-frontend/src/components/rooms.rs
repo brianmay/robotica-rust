@@ -2,7 +2,7 @@ use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
-    Button, HdmiProps, Light2Props, LightProps, MusicProps, SwitchProps, TasmotaProps,
+    Button, HdmiProps, Light2Props, MusicProps, SwitchProps, TasmotaProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
 
@@ -92,11 +92,11 @@ pub fn twins_room() -> Html {
                 {"Lights"}
             </h2>
             <div class="buttons">
-                <Button<LightProps> name={"Auto"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
-                <Button<LightProps> name={"On"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
-                <Button<LightProps> name={"Rainbow"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
-                <Button<LightProps> name={"Declan"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"night_declan"} priority={100} />
-                <Button<LightProps> name={"Nikolai"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"night_nikolai"} priority={100} />
+                <Button<Light2Props> name={"Auto"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} />
+                <Button<Light2Props> name={"Rainbow"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
+                <Button<Light2Props> name={"Declan"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"declan-night"}  />
+                <Button<Light2Props> name={"Nikolai"} topic_substr={"Twins/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"nikolai-night"} />
             </div>
 
             <h2>{"Music"}</h2>
@@ -143,10 +143,10 @@ pub fn akira_room() -> Html {
                 {"Lights"}
             </h2>
             <div class="buttons">
-                <Button<LightProps> name={"Auto"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} priority={100} />
-                <Button<LightProps> name={"On"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} priority={100} />
-                <Button<LightProps> name={"Rainbow"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} priority={100} />
-                <Button<LightProps> name={"Night"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"night_akira"} priority={100} />
+                <Button<Light2Props> name={"Auto"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"auto"} />
+                <Button<Light2Props> name={"On"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"default"} />
+                <Button<Light2Props> name={"Rainbow"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"rainbow"} />
+                <Button<Light2Props> name={"Night"} topic_substr={"Akira/Light"} action={Action::Toggle} icon={light_icon.clone()} scene={"akira-night"} />
             </div>
 
             <h2>{"Music"}</h2>
