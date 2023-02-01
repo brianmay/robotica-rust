@@ -77,9 +77,8 @@ impl ToString for StandardScenes {
 impl ScenesTrait for StandardScenes {}
 
 #[derive(Clone)]
-struct StandardSceneEntities {
+pub struct SharedEntities {
     on: Receiver<PowerColor>,
-    auto: Receiver<PowerColor>,
     rainbow: Receiver<PowerColor>,
     busy: Receiver<PowerColor>,
     akira_night: Receiver<PowerColor>,
@@ -88,8 +87,8 @@ struct StandardSceneEntities {
     off: Receiver<PowerColor>,
 }
 
-impl StandardSceneEntities {
-    fn default(state: &mut crate::State, topic_substr: &str) -> Self {
+impl Default for SharedEntities {
+    fn default() -> Self {
         let on_color = Colors::Single(HSBK {
             hue: 0.0,
             saturation: 0.0,
@@ -120,13 +119,39 @@ impl StandardSceneEntities {
 
         Self {
             on: static_entity(PowerColor::On(on_color), "On"),
-            auto: mqtt_entity(state, topic_substr, "auto"),
             rainbow: rainbow_entity("rainbow"),
             busy: busy_entity("busy"),
             akira_night: static_entity(PowerColor::On(akira_night_color), "akira-night"),
             declan_night: static_entity(PowerColor::On(declan_night_color), "akira-night"),
             nikolai_night: static_entity(PowerColor::On(nikolai_night_color), "akira-night"),
             off: static_entity(PowerColor::Off, "off"),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct StandardSceneEntities {
+    on: Receiver<PowerColor>,
+    auto: Receiver<PowerColor>,
+    rainbow: Receiver<PowerColor>,
+    busy: Receiver<PowerColor>,
+    akira_night: Receiver<PowerColor>,
+    declan_night: Receiver<PowerColor>,
+    nikolai_night: Receiver<PowerColor>,
+    off: Receiver<PowerColor>,
+}
+
+impl StandardSceneEntities {
+    fn default(state: &mut crate::State, shared: SharedEntities, topic_substr: &str) -> Self {
+        Self {
+            on: shared.on,
+            auto: mqtt_entity(state, topic_substr, "auto"),
+            rainbow: shared.rainbow,
+            busy: shared.busy,
+            akira_night: shared.akira_night,
+            declan_night: shared.declan_night,
+            nikolai_night: shared.nikolai_night,
+            off: shared.off,
         }
     }
 }
@@ -250,10 +275,11 @@ fn mqtt_entity(
 pub fn run_auto_light(
     state: &mut crate::State,
     discover: Receiver<Device>,
+    shared: SharedEntities,
     topic_substr: &str,
     id: u64,
 ) {
-    let entities = StandardSceneEntities::default(state, topic_substr);
+    let entities = StandardSceneEntities::default(state, shared, topic_substr);
     let (tx_state, rx_state) = entities::create_stateful_entity(format!("{id}-state"));
     let rx = switch_entity(
         state,
@@ -269,12 +295,13 @@ pub fn run_auto_light(
 pub fn run_passage_light(
     state: &mut crate::State,
     discover: Receiver<Device>,
+    shared: SharedEntities,
     topic_substr: &str,
     id: u64,
 ) {
     let (tx_state, rx_state) = entities::create_stateful_entity(format!("{id}-state"));
 
-    let switch_entities = StandardSceneEntities::default(state, topic_substr);
+    let switch_entities = StandardSceneEntities::default(state, shared, topic_substr);
     let entities = PassageEntities {
         all: switch_entity(
             state,

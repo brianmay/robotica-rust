@@ -15,7 +15,7 @@ mod robotica;
 mod tesla;
 
 use anyhow::Result;
-use lights::{run_auto_light, run_passage_light};
+use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::Sender;
@@ -151,11 +151,49 @@ async fn setup_lights(state: &mut State) {
     let discover = lifx::discover(lifx_config)
         .await
         .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
-    run_auto_light(state, discover.clone(), "Brian/Light", 105_867_434_619_856);
-    run_auto_light(state, discover.clone(), "Dining/Light", 74_174_870_942_672);
-    run_auto_light(state, discover.clone(), "Jan/Light", 189_637_382_730_704);
-    run_auto_light(state, discover.clone(), "Twins/Light", 116_355_744_756_688);
-    run_auto_light(state, discover.clone(), "Akira/Light", 280_578_114_286_544);
 
-    run_passage_light(state, discover, "Passage/Light", 137_092_148_851_664);
+    let shared = SharedEntities::default();
+    run_auto_light(
+        state,
+        discover.clone(),
+        shared.clone(),
+        "Brian/Light",
+        105_867_434_619_856,
+    );
+    run_auto_light(
+        state,
+        discover.clone(),
+        shared.clone(),
+        "Dining/Light",
+        74_174_870_942_672,
+    );
+    run_auto_light(
+        state,
+        discover.clone(),
+        shared.clone(),
+        "Jan/Light",
+        189_637_382_730_704,
+    );
+    run_auto_light(
+        state,
+        discover.clone(),
+        shared.clone(),
+        "Twins/Light",
+        116_355_744_756_688,
+    );
+    run_auto_light(
+        state,
+        discover.clone(),
+        shared.clone(),
+        "Akira/Light",
+        280_578_114_286_544,
+    );
+
+    run_passage_light(
+        state,
+        discover,
+        shared,
+        "Passage/Light",
+        137_092_148_851_664,
+    );
 }
