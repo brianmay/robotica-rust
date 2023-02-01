@@ -6,7 +6,9 @@ use std::{
 
 use robotica_backend::{
     devices::lifx::{device_entity, Device, DeviceConfig},
-    entities::{self, create_stateless_entity, Receiver, Sender, StatefulData, Subscription},
+    entities::{
+        self, create_stateful_entity, create_stateless_entity, Receiver, Sender, Subscription,
+    },
     services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
     spawn,
 };
@@ -283,13 +285,50 @@ pub fn run_auto_light(
     let (tx_state, rx_state) = entities::create_stateful_entity(format!("{id}-state"));
     let rx = switch_entity(
         state,
-        rx_state,
         entities,
         topic_substr,
         flash_color(),
         format!("{id}_switch"),
     );
+
+    run_state_sender(state, topic_substr, rx_state);
     device_entity(rx, tx_state, id, discover, DeviceConfig::default());
+}
+
+fn run_state_sender(
+    state: &mut crate::State,
+    topic_substr: impl Into<String>,
+    rx_state: Receiver<(Option<State>, State)>,
+) {
+    let topic_substr = topic_substr.into();
+
+    {
+        let mqtt = state.mqtt.clone();
+        let topic_substr = topic_substr.to_string();
+        let rx = rx_state.clone();
+        spawn(async move {
+            let mut rx = rx.subscribe().await;
+            while let Ok((_, status)) = rx.recv().await {
+                send_state(&mqtt, &status, &topic_substr);
+            }
+        });
+    }
+
+    {
+        let mqtt = state.mqtt.clone();
+        let topic_substr = topic_substr;
+        let rx = rx_state.map_into_stateful(|(_, status)| match status {
+            lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
+            lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
+            lights::State::Offline => lights::PowerState::Offline,
+        });
+        spawn(async move {
+            let mut rx = rx.subscribe().await;
+            while let Ok((_, status)) = rx.recv().await {
+                send_power_state(&mqtt, &status, &topic_substr);
+            }
+        });
+    }
 }
 
 pub fn run_passage_light(
@@ -301,39 +340,40 @@ pub fn run_passage_light(
 ) {
     let (tx_state, rx_state) = entities::create_stateful_entity(format!("{id}-state"));
 
+    let all_topic_substr = topic_substr.to_string();
+    let cupboard_topic_substr = format!("{topic_substr}/split/cupboard");
+    let bathroom_topic_substr = format!("{topic_substr}/split/bathroom");
+    let bedroom_topic_substr = format!("{topic_substr}/split/bedroom");
+
     let switch_entities = StandardSceneEntities::default(state, shared, topic_substr);
     let entities = PassageEntities {
         all: switch_entity(
             state,
-            rx_state.clone(),
             switch_entities.clone(),
-            topic_substr,
+            all_topic_substr.clone(),
             flash_color(),
-            format!("{id}_all"),
+            format!("{id}-all"),
         ),
         cupboard: switch_entity(
             state,
-            rx_state.clone(),
             switch_entities.clone(),
-            format!("{topic_substr}/split/cupboard"),
+            cupboard_topic_substr.clone(),
             flash_color(),
-            format!("{id}_cupboard"),
+            format!("{id}-cupboard"),
         ),
         bathroom: switch_entity(
             state,
-            rx_state.clone(),
             switch_entities.clone(),
-            format!("{topic_substr}/split/bathroom"),
+            bathroom_topic_substr.clone(),
             flash_color(),
-            format!("{id}_bathroom"),
+            format!("{id}-bathroom"),
         ),
         bedroom: switch_entity(
             state,
-            rx_state,
             switch_entities,
-            format!("{topic_substr}/split/bedroom"),
+            bedroom_topic_substr.clone(),
             flash_color(),
-            format!("{id}_bedroom"),
+            format!("{id}-bedroom"),
         ),
     };
 
@@ -341,7 +381,14 @@ pub fn run_passage_light(
         multiple_zones: true,
     };
 
-    let rx = run_passage_multiplexer(entities, format!("{id}_multiplexer"));
+    let (rx, state_entities) =
+        run_passage_multiplexer(entities, format!("{id}-multiplexer"), rx_state);
+
+    run_state_sender(state, all_topic_substr, state_entities.all);
+    run_state_sender(state, cupboard_topic_substr, state_entities.cupboard);
+    run_state_sender(state, bathroom_topic_substr, state_entities.bathroom);
+    run_state_sender(state, bedroom_topic_substr, state_entities.bedroom);
+
     device_entity(rx, tx_state, id, discover, config);
 }
 
@@ -364,7 +411,6 @@ where
 
 fn switch_entity<Entities>(
     state: &mut crate::State,
-    rx_state: Receiver<StatefulData<State>>,
     entities: Entities,
     topic_substr: impl Into<String>,
     flash_color: PowerColor,
@@ -382,34 +428,6 @@ where
     let rx_command = state
         .subscriptions
         .subscribe_into_stateless::<Command>(topic);
-
-    {
-        let mqtt = state.mqtt.clone();
-        let topic_substr = topic_substr.to_string();
-        let rx = rx_state.clone();
-        spawn(async move {
-            let mut rx = rx.subscribe().await;
-            while let Ok((_, status)) = rx.recv().await {
-                send_state(&mqtt, &status, &topic_substr);
-            }
-        });
-    }
-
-    {
-        let mqtt = state.mqtt.clone();
-        let topic_substr = topic_substr.to_string();
-        let rx = rx_state.map_into_stateful(|(_, status)| match status {
-            lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
-            lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
-            lights::State::Offline => lights::PowerState::Offline,
-        });
-        spawn(async move {
-            let mut rx = rx.subscribe().await;
-            while let Ok((_, status)) = rx.recv().await {
-                send_power_state(&mqtt, &status, &topic_substr);
-            }
-        });
-    }
 
     {
         let psr = state.persistent_state_database.for_name(&topic_substr);
@@ -559,21 +577,38 @@ struct PassageEntities {
     bedroom: Receiver<PowerColor>,
 }
 
+struct PassageStateEntities {
+    all: Receiver<(Option<State>, State)>,
+    cupboard: Receiver<(Option<State>, State)>,
+    bathroom: Receiver<(Option<State>, State)>,
+    bedroom: Receiver<(Option<State>, State)>,
+}
+
 fn run_passage_multiplexer(
     entities: PassageEntities,
     name: impl Into<String>,
-) -> Receiver<PowerColor> {
-    let (tx, rx) = create_stateless_entity(name);
+    state_in: Receiver<(Option<State>, State)>,
+) -> (Receiver<PowerColor>, PassageStateEntities) {
+    let name = name.into();
+    let (tx, rx) = create_stateless_entity(name.clone());
+    let (tx_all_state, rx_all_state) = create_stateful_entity(format!("{name}-all"));
+    let (tx_cupboard_state, rx_cupboard_state) = create_stateful_entity(format!("{name}-cupboard"));
+    let (tx_bathroom_state, rx_bathroom_state) = create_stateful_entity(format!("{name}-bathroom"));
+    let (tx_bedroom_state, rx_bedroom_state) = create_stateful_entity(format!("{name}-bathroom"));
+
     spawn(async move {
         let mut all = entities.all.subscribe().await;
         let mut cupboard = entities.cupboard.subscribe().await;
         let mut bathroom = entities.bathroom.subscribe().await;
         let mut bedroom = entities.bedroom.subscribe().await;
+        let mut state_s = state_in.subscribe().await;
 
         let mut all_colors = PowerColor::Off;
         let mut cupboard_colors = PowerColor::Off;
         let mut bathroom_colors = PowerColor::Off;
         let mut bedroom_colors = PowerColor::Off;
+
+        let mut state = None;
 
         loop {
             tokio::select! {
@@ -588,6 +623,25 @@ fn run_passage_multiplexer(
                 }
                 Ok(pc) = bedroom.recv() => {
                     bedroom_colors = pc;
+                }
+                Ok((_, s)) = state_s.recv() => {
+                    state = Some(s);
+                }
+            }
+
+            match state {
+                None => {}
+                Some(State::Offline) => {
+                    tx_all_state.try_send(State::Offline);
+                    tx_cupboard_state.try_send(State::Offline);
+                    tx_bathroom_state.try_send(State::Offline);
+                    tx_bedroom_state.try_send(State::Offline);
+                }
+                Some(_) => {
+                    tx_all_state.try_send(State::Online(all_colors.clone()));
+                    tx_cupboard_state.try_send(State::Online(cupboard_colors.clone()));
+                    tx_bathroom_state.try_send(State::Online(bathroom_colors.clone()));
+                    tx_bedroom_state.try_send(State::Online(bedroom_colors.clone()));
                 }
             }
 
@@ -627,7 +681,14 @@ fn run_passage_multiplexer(
         }
     });
 
-    rx
+    let pse = PassageStateEntities {
+        all: rx_all_state,
+        cupboard: rx_cupboard_state,
+        bathroom: rx_bathroom_state,
+        bedroom: rx_bedroom_state,
+    };
+
+    (rx, pse)
 }
 
 fn copy_colors_to_pos(add_colors: &PowerColor, colors: &mut [HSBK], offset: usize, number: usize) {
