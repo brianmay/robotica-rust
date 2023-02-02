@@ -308,26 +308,27 @@ impl Subscriptions {
     }
 
     /// Add a new subscription.
-    pub fn subscribe(&mut self, topic: &str) -> entities::Receiver<MqttMessage> {
+    pub fn subscribe(&mut self, topic: impl Into<String>) -> entities::Receiver<MqttMessage> {
         // Per subscription incoming MQTT queue.
-        if let Some(subscription) = self.0.get(topic) {
+        let topic = topic.into();
+        if let Some(subscription) = self.0.get(&topic) {
             subscription.rx.clone()
         } else {
-            let (tx, rx) = entities::create_stateless_entity(topic);
+            let (tx, rx) = entities::create_stateless_entity(topic.clone());
 
             let subscription = Subscription {
-                topic: topic.to_string(),
+                topic: topic.clone(),
                 tx,
                 rx: rx.clone(),
             };
 
-            self.0.insert(topic.to_string(), subscription);
+            self.0.insert(topic, subscription);
             rx
         }
     }
 
     /// Add new subscription and parse incoming data as type T
-    pub fn subscribe_into_stateless<T>(&mut self, topic: &str) -> entities::Receiver<T>
+    pub fn subscribe_into_stateless<T>(&mut self, topic: impl Into<String>) -> entities::Receiver<T>
     where
         T: TryFrom<MqttMessage> + Clone + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
@@ -336,7 +337,10 @@ impl Subscriptions {
     }
 
     /// Add new subscription and parse incoming data as type T
-    pub fn subscribe_into_stateful<T>(&mut self, topic: &str) -> entities::Receiver<StatefulData<T>>
+    pub fn subscribe_into_stateful<T>(
+        &mut self,
+        topic: impl Into<String>,
+    ) -> entities::Receiver<StatefulData<T>>
     where
         T: TryFrom<MqttMessage> + Clone + Eq + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
