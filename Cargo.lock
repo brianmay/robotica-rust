@@ -1482,8 +1482,9 @@ checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
 name = "lifx-core"
-version = "0.3.1"
-source = "git+https://github.com/eminence/lifx.git#08526bb6bb260be75fa1f5e90904f1643050fff2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b0a411829f6de7b7cd2bc87929734b1e238bb6abf33808dbafcd45db6d79447"
 dependencies = [
  "byteorder",
  "thiserror",
