@@ -278,8 +278,8 @@ mod tests {
         let config = vec![
             Config {
                 date: None,
-                start: Some(Date::from_ymd(2020, 1, 1)),
-                stop: Some(Date::from_ymd(2020, 12, 31)),
+                start: Some(Date::from_ymd_opt(2020, 1, 1).unwrap()),
+                stop: Some(Date::from_ymd_opt(2020, 12, 31).unwrap()),
                 week_day: Some(true),
                 day_of_week: None,
                 if_cond: None,
@@ -290,8 +290,8 @@ mod tests {
             },
             Config {
                 date: None,
-                start: Some(Date::from_ymd(2020, 1, 1)),
-                stop: Some(Date::from_ymd(2020, 12, 31)),
+                start: Some(Date::from_ymd_opt(2020, 1, 1).unwrap()),
+                stop: Some(Date::from_ymd_opt(2020, 12, 31).unwrap()),
                 week_day: None,
                 day_of_week: Some(chrono::Weekday::Mon.into()),
                 if_cond: None,
@@ -302,26 +302,26 @@ mod tests {
             },
         ];
 
-        let date = Date::from_ymd(2019, 1, 7);
+        let date = Date::from_ymd_opt(2019, 1, 7).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
 
-        let date = Date::from_ymd(2020, 1, 1);
+        let date = Date::from_ymd_opt(2020, 1, 1).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from(["weekday".to_string()]));
 
-        let date = Date::from_ymd(2020, 1, 4);
+        let date = Date::from_ymd_opt(2020, 1, 4).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
 
-        let date = Date::from_ymd(2020, 1, 6);
+        let date = Date::from_ymd_opt(2020, 1, 6).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(
             tags,
             HashSet::from(["weekday".to_string(), "monday".to_string()])
         );
 
-        let date = Date::from_ymd(2021, 1, 4);
+        let date = Date::from_ymd_opt(2021, 1, 4).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
     }
@@ -353,7 +353,7 @@ mod tests {
             delete: None,
         }];
 
-        let date = Date::from_ymd(2020, 1, 1);
+        let date = Date::from_ymd_opt(2020, 1, 1).unwrap();
         let tags = classify_date_with_config(&date, &config);
         assert_eq!(tags, HashSet::from([]));
     }

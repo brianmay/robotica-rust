@@ -17,8 +17,8 @@ pub struct Date(chrono::NaiveDate);
 impl Date {
     /// Convert a year,month,day into a Date.
     #[must_use]
-    pub fn from_ymd(year: i32, month: u32, day: u32) -> Self {
-        Self(chrono::NaiveDate::from_ymd(year, month, day))
+    pub fn from_ymd_opt(year: i32, month: u32, day: u32) -> Option<Self> {
+        chrono::NaiveDate::from_ymd_opt(year, month, day).map(Self)
     }
 
     /// Get the weekday of the date.
@@ -125,14 +125,14 @@ impl<'de> Deserialize<'de> for Weekday {
 }
 
 /// A Serializable Time.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Time(chrono::NaiveTime);
 
 impl Time {
     #[must_use]
     /// Create a new Time.
-    pub fn new(hour: u32, minute: u32, second: u32) -> Self {
-        Self(chrono::NaiveTime::from_hms(hour, minute, second))
+    pub fn new(hour: u32, minute: u32, second: u32) -> Option<Self> {
+        chrono::NaiveTime::from_hms_opt(hour, minute, second).map(Self)
     }
 }
 

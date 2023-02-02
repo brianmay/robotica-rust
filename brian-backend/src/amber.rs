@@ -572,7 +572,7 @@ fn new_day_state(now: &DateTime<Utc>) -> DayState {
 }
 
 fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
-    let time_2hr_cheap: Time = Time::new(5, 0, 0);
+    let time_2hr_cheap: Time = Time::new(5, 0, 0).unwrap_or_default();
     let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
     (start_day, end_day)
 }
@@ -835,7 +835,7 @@ mod tests {
     fn test_get_day() {
         let timezone = FixedOffset::east(60 * 60 * 11);
         {
-            let time = Time::new(5, 0, 0);
+            let time = Time::new(5, 0, 0).unwrap();
             let now = dt("2020-01-02T00:00:00Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -843,7 +843,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0);
+            let time = Time::new(5, 0, 0).unwrap();
             let now = dt("2020-01-02T17:59:59Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -851,7 +851,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0);
+            let time = Time::new(5, 0, 0).unwrap();
             let now = "2020-01-02T18:00:00Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
@@ -859,7 +859,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0);
+            let time = Time::new(5, 0, 0).unwrap();
             let now = "2020-01-02T18:00:01Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));

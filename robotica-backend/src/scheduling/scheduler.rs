@@ -345,7 +345,7 @@ mod tests {
     fn test_every_day() {
         let config_list = config();
 
-        let date = Date::from_ymd(2018, 12, 24);
+        let date = Date::from_ymd_opt(2018, 12, 24).unwrap();
         let today = vec!["today"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
@@ -375,7 +375,7 @@ mod tests {
     fn test_christmas() {
         let config_list = config();
 
-        let date = Date::from_ymd(2018, 12, 25);
+        let date = Date::from_ymd_opt(2018, 12, 25).unwrap();
         let today = vec!["christmas"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
@@ -410,7 +410,7 @@ mod tests {
     fn test_boxing() {
         let config_list = config();
 
-        let date = Date::from_ymd(2018, 12, 26);
+        let date = Date::from_ymd_opt(2018, 12, 26).unwrap();
         let today = vec!["boxing"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
