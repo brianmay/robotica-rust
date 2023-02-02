@@ -57,10 +57,7 @@ struct AutoColor {
 #[allow(dead_code)]
 pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
     let topic = "ha/event/message/everyone";
-    let msg = Command::Audio(AudioCommand {
-        title: "Robotica Rust".into(),
-        message: str.into(),
-    });
+    let msg = Command::Audio(AudioCommand::new_message("Robotica Rust", str));
 
     let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
         error!("Failed to serialize message: {msg:?}");
