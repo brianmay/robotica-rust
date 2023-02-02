@@ -13,29 +13,15 @@ use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 use robotica_common::mqtt::MqttMessage;
-use robotica_common::scheduler::{Mark, Payload, Task};
+use robotica_common::scheduler::Mark;
 
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
 use crate::spawn;
+use crate::tasks::get_task_messages;
 
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
-
-/// Get the MQTT message for this task.
-#[must_use]
-pub fn get_task_messages(task: &Task) -> Vec<MqttMessage> {
-    let mut messages = Vec::with_capacity(task.topics.len());
-    for topic in &task.topics {
-        let payload = match &task.payload {
-            Payload::String(s) => s.to_string(),
-            Payload::Json(v) => v.to_string(),
-        };
-        let message = MqttMessage::new(topic, payload, task.retain, task.qos);
-        messages.push(message);
-    }
-    messages
-}
 
 struct Config {
     classifier: Vec<classifier::Config>,

@@ -5,6 +5,8 @@ use thiserror::Error;
 
 use crate::mqtt::MqttMessage;
 
+use super::tasks::Task;
+
 /// An action to send to a switch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -84,7 +86,7 @@ impl TryFrom<MqttMessage> for DevicePower {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MusicCommand {
     /// The playlist to play.
-    pub play_list: String,
+    pub play_list: Option<String>,
 
     /// Should we stop playing music?
     pub stop: Option<bool>,
@@ -119,10 +121,10 @@ pub struct AudioCommand {
     pub volume: Option<VolumeCommand>,
 
     /// Pre tasks to execute before playing the message.
-    pub pre_tasks: Vec<Command>,
+    pub pre_tasks: Option<Vec<Task>>,
 
     /// Post tasks to execute after playing the message.
-    pub post_tasks: Vec<Command>,
+    pub post_tasks: Option<Vec<Task>>,
 }
 
 impl AudioCommand {
@@ -135,8 +137,8 @@ impl AudioCommand {
             sound: None,
             music: None,
             volume: None,
-            pre_tasks: Vec::new(),
-            post_tasks: Vec::new(),
+            pre_tasks: None,
+            post_tasks: None,
         }
     }
 }

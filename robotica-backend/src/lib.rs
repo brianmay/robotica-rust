@@ -18,6 +18,7 @@ pub mod scheduling;
 pub mod services;
 pub mod sinks;
 pub mod sources;
+pub mod tasks;
 
 use std::{env, future::Future};
 use thiserror::Error;

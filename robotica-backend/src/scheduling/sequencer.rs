@@ -13,7 +13,8 @@ use thiserror::Error;
 use robotica_common::{
     datetime::{DateTime, Duration},
     mqtt::QoS,
-    scheduler::{Mark, Payload, Task},
+    robotica::tasks::{Payload, Task},
+    scheduler::Mark,
 };
 
 use super::{
