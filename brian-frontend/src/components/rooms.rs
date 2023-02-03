@@ -2,7 +2,7 @@ use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
-    Button, HdmiProps, Light2Props, MusicProps, SwitchProps, TasmotaProps,
+    Button, HdmiProps, Light2Props, Music2Props, MusicProps, SwitchProps, TasmotaProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
 
@@ -35,9 +35,9 @@ pub fn brian_room() -> Html {
 
             <h2>{"Music"}</h2>
             <div class="buttons">
-                <Button<MusicProps> name={"Frozen"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
-                <Button<MusicProps> name={"Sleep"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"sleep"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
+                <Button<Music2Props> name={"Frozen"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
+                <Button<Music2Props> name={"Sleep"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"sleep"} />
+                <Button<Music2Props> name={"Wakeup"} topic_substr={"Brian/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
             </div>
 
             <h2>{"Switches"}</h2>
