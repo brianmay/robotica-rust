@@ -1,5 +1,5 @@
 //! A robotica music controller
-use crate::mqtt::MqttMessage;
+use crate::{mqtt::MqttMessage, robotica::audio};
 use tracing::error;
 
 use super::{
@@ -26,7 +26,7 @@ impl ConfigTrait for Config {
     fn create_controller(&self) -> Controller {
         Controller {
             config: self.clone(),
-            play_list: None,
+            state: None,
         }
     }
 }
@@ -34,7 +34,7 @@ impl ConfigTrait for Config {
 /// The controller for a music
 pub struct Controller {
     config: Config,
-    play_list: Option<String>,
+    state: Option<audio::State>,
 }
 
 impl Controller {
@@ -43,7 +43,7 @@ impl Controller {
     pub fn new(config: &Config) -> Self {
         Self {
             config: config.clone(),
-            play_list: None,
+            state: None,
         }
     }
 }
@@ -57,10 +57,10 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr, "play_list"];
+        let p = ["state", &config.topic_substr];
         let s = Subscription {
             topic: topic(&p),
-            label: ButtonStateMsgType::PlayList as u32,
+            label: ButtonStateMsgType::State as u32,
         };
         result.push(s);
 
@@ -68,25 +68,34 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        if let Ok(ButtonStateMsgType::PlayList) = label.try_into() {
-            self.play_list = Some(data);
-        } else {
-            error!("Invalid message label {}", label);
+        #[allow(clippy::single_match_else)]
+        match label.try_into() {
+            Ok(ButtonStateMsgType::State) => match serde_json::from_str(&data) {
+                Ok(state) => self.state = Some(state),
+                Err(e) => error!("Invalid state {}: {}", data, e),
+            },
+
+            Err(_) => error!("Invalid message label {}", label),
         }
     }
 
     fn process_disconnected(&mut self) {
-        self.play_list = None;
+        self.state = None;
     }
 
     fn get_display_state(&self) -> DisplayState {
-        let play_list = self.play_list.as_deref();
-        let state = match play_list {
+        let state = match &self.state {
             None => DisplayState::Unknown,
-            Some("ERROR") => DisplayState::Error,
-            Some("STOP") => DisplayState::Off,
-            Some(pl) if pl == self.config.play_list => DisplayState::On,
-            _ => DisplayState::Off,
+            Some(audio::State {
+                error: Some(..), ..
+            }) => DisplayState::Error,
+
+            Some(audio::State {
+                play_list: Some(play_list),
+                ..
+            }) if *play_list == self.config.play_list => DisplayState::On,
+
+            Some(audio::State { .. }) => DisplayState::Off,
         };
 
         let action = self.config.action;
@@ -120,7 +129,7 @@ impl ControllerTrait for Controller {
 }
 
 enum ButtonStateMsgType {
-    PlayList,
+    State,
 }
 
 impl TryFrom<u32> for ButtonStateMsgType {
@@ -128,7 +137,7 @@ impl TryFrom<u32> for ButtonStateMsgType {
 
     fn try_from(v: u32) -> Result<Self, Self::Error> {
         match v {
-            x if x == ButtonStateMsgType::PlayList as u32 => Ok(ButtonStateMsgType::PlayList),
+            x if x == ButtonStateMsgType::State as u32 => Ok(ButtonStateMsgType::State),
             _ => Err(()),
         }
     }
