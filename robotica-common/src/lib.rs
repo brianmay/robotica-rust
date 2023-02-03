@@ -10,13 +10,18 @@
 pub mod anavi_thermometer;
 pub mod controllers;
 pub mod mqtt;
-pub mod protobuf;
-mod protos;
+
 pub mod robotica;
 pub mod user;
 pub mod version;
 pub mod websocket;
 pub mod zigbee2mqtt;
+
+#[cfg(feature = "websockets")]
+pub mod protobuf;
+
+#[cfg(feature = "websockets")]
+mod protos;
 
 #[cfg(feature = "chrono")]
 pub mod datetime;

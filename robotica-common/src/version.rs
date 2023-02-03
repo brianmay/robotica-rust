@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 
+#[cfg(feature = "websockets")]
 use crate::{protobuf::ProtobufIntoFrom, protos};
 
 /// The date that this build was created
@@ -31,6 +32,7 @@ impl Version {
     }
 }
 
+#[cfg(feature = "websockets")]
 impl ProtobufIntoFrom for Version {
     type Protobuf = protos::Version;
 

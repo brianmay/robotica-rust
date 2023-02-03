@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+websockets = ["robotica-common/websockets"]
+
 [dependencies]
 bytes = "1.2.1"
 rumqttc = { version = "0.18.0", git = "https://github.com/brianmay/rumqtt", branch = "fixes" }
@@ -24,7 +27,10 @@ lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = "1.6.0"
 field-ref = "0.2.1"
 tracing = "0.1.35"
-robotica-common = { path = "../robotica-common", features = ["chrono"] }
+robotica-common = { path = "../robotica-common", features = [
+    "chrono",
+    "websockets",
+] }
 lifx-core = "0.4.0"
 # http server
 axum-core = "0.3.0"

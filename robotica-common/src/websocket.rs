@@ -1,5 +1,8 @@
 //! Common structs shared between robotica-backend and robotica-frontend for websockets
-use crate::{mqtt::MqttMessage, protobuf::ProtobufIntoFrom, protos, user::User, version::Version};
+use crate::{mqtt::MqttMessage, user::User, version::Version};
+
+#[cfg(feature = "websockets")]
+use crate::{protobuf::ProtobufIntoFrom, protos};
 
 /// Error message sent from the backend to the frontend
 #[derive(Debug)]
@@ -24,6 +27,7 @@ pub enum WsStatus {
     Disconnected(WsError),
 }
 
+#[cfg(feature = "websockets")]
 impl ProtobufIntoFrom for WsStatus {
     type Protobuf = protos::WsStatus;
 
@@ -76,6 +80,7 @@ pub enum WsCommand {
     KeepAlive,
 }
 
+#[cfg(feature = "websockets")]
 impl ProtobufIntoFrom for WsCommand {
     type Protobuf = protos::WsCommand;
 

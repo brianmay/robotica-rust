@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "websockets")]
 use crate::{protobuf::ProtobufIntoFrom, protos};
 
 /// An authenticated end user
@@ -24,6 +25,7 @@ impl Display for User {
     }
 }
 
+#[cfg(feature = "websockets")]
 impl ProtobufIntoFrom for User {
     type Protobuf = protos::User;
 

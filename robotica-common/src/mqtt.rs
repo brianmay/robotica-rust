@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(feature = "websockets")]
 use crate::{protobuf::ProtobufIntoFrom, protos};
 
 /// The `QoS` level for a MQTT message.
@@ -76,6 +77,7 @@ impl Default for MqttMessage {
     }
 }
 
+#[cfg(feature = "websockets")]
 impl ProtobufIntoFrom for MqttMessage {
     type Protobuf = protos::EncodedMqttMessage;
 
