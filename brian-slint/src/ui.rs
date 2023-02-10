@@ -117,9 +117,9 @@ pub fn run_gui(state: &Arc<RunningState>) {
             bc: ButtonConfig::Light2Config(lights2::Config {
                 topic_substr: format!("{}/Light", state.location),
                 action: Action::Toggle,
-                scene: "off".into(),
+                scene: "rainbow".into(),
             }),
-            title: "Off".into(),
+            title: "Rainbow".into(),
             icon: Icon::Light,
         }),
     ];
