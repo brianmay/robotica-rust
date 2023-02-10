@@ -34,29 +34,36 @@ mod slint {
 use crate::RunningState;
 use ::slint::{ComponentHandle, Model, ModelRc, RgbaColor, VecModel};
 use futures::{stream::FuturesUnordered, Future, StreamExt};
+use serde::Deserialize;
 
 use robotica_backend::entities::{self, RecvError};
 use robotica_common::{
-    controllers::{lights2, switch, Action, ConfigTrait, ControllerTrait, DisplayState, Label},
+    controllers::{lights2, switch, ConfigTrait, ControllerTrait, DisplayState, Label},
     mqtt::{MqttMessage, QoS},
 };
 use tokio::{select, sync::mpsc};
 use tracing::error;
 
 #[allow(dead_code)]
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 enum ButtonConfig {
-    Light2Config(lights2::Config),
-    DeviceConfig(switch::Config),
+    Light2(lights2::Config),
+    Switch(switch::Config),
 }
 
 #[allow(dead_code)]
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum Icon {
     Light,
     Fan,
 }
 
 #[allow(dead_code)]
-struct LabeledButtonConfig {
+#[derive(Deserialize)]
+pub struct LabeledButtonConfig {
     bc: ButtonConfig,
     title: String,
     icon: Icon,
@@ -93,41 +100,46 @@ async fn receive(
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn run_gui(state: &Arc<RunningState>) {
-    let lbc_list = vec![
-        Arc::new(LabeledButtonConfig {
-            bc: ButtonConfig::Light2Config(lights2::Config {
-                topic_substr: format!("{}/Light", state.location),
-                action: Action::Toggle,
-                scene: "on".into(),
-            }),
-            title: "On".into(),
-            icon: Icon::Light,
-        }),
-        Arc::new(LabeledButtonConfig {
-            bc: ButtonConfig::Light2Config(lights2::Config {
-                topic_substr: format!("{}/Light", state.location),
-                action: Action::Toggle,
-                scene: "auto".into(),
-            }),
-            title: "Auto".into(),
-            icon: Icon::Light,
-        }),
-        Arc::new(LabeledButtonConfig {
-            bc: ButtonConfig::Light2Config(lights2::Config {
-                topic_substr: format!("{}/Light", state.location),
-                action: Action::Toggle,
-                scene: "rainbow".into(),
-            }),
-            title: "Rainbow".into(),
-            icon: Icon::Light,
-        }),
-    ];
+pub fn run_gui(state: RunningState, buttons: Vec<Arc<LabeledButtonConfig>>) {
+    let state = Arc::new(state);
+
+    // let lbc_list = buttons;
+
+    // let lbc_list = vec![
+    //     Arc::new(LabeledButtonConfig {
+    //         bc: ButtonConfig::Light2(lights2::Config {
+    //             topic_substr: format!("{}/Light", state.config.location),
+    //             action: Action::Toggle,
+    //             scene: "on".into(),
+    //         }),
+    //         title: "On".into(),
+    //         icon: Icon::Light,
+    //     }),
+    //     Arc::new(LabeledButtonConfig {
+    //         bc: ButtonConfig::Light2(lights2::Config {
+    //             topic_substr: format!("{}/Light", state.config.location),
+    //             action: Action::Toggle,
+    //             scene: "auto".into(),
+    //         }),
+    //         title: "Auto".into(),
+    //         icon: Icon::Light,
+    //     }),
+    //     Arc::new(LabeledButtonConfig {
+    //         bc: ButtonConfig::Light2(lights2::Config {
+    //             topic_substr: format!("{}/Light", state.config.location),
+    //             action: Action::Toggle,
+    //             scene: "rainbow".into(),
+    //         }),
+    //         title: "Rainbow".into(),
+    //         icon: Icon::Light,
+    //     }),
+    // ];
 
     let (tx_click, rx_click) = {
-        let mut rx_click = Vec::with_capacity(lbc_list.len());
-        let mut tx_click = Vec::with_capacity(lbc_list.len());
-        for _ in 0..lbc_list.len() {
+        let len = buttons.len();
+        let mut rx_click = Vec::with_capacity(len);
+        let mut tx_click = Vec::with_capacity(len);
+        for _ in 0..len {
             let (tx, rx) = mpsc::channel::<()>(1);
             rx_click.push(rx);
             tx_click.push(tx);
@@ -140,7 +152,7 @@ pub fn run_gui(state: &Arc<RunningState>) {
 
     let icons = ui.get_all_icons();
 
-    let all_buttons: Vec<slint::RoboticaButtonData> = lbc_list
+    let all_buttons: Vec<slint::RoboticaButtonData> = buttons
         .iter()
         .map(|lbc| {
             let display_state = DisplayState::Unknown;
@@ -190,7 +202,7 @@ pub fn run_gui(state: &Arc<RunningState>) {
     //     }
     // });
 
-    for (i, (lbc, rx_click)) in lbc_list.into_iter().zip(rx_click).enumerate() {
+    for (i, (lbc, rx_click)) in buttons.into_iter().zip(rx_click).enumerate() {
         let state = state.clone();
         let handle_weak = ui.as_weak();
         let mut rx_click = rx_click;
@@ -199,8 +211,8 @@ pub fn run_gui(state: &Arc<RunningState>) {
             let lbc = lbc;
 
             let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.bc {
-                ButtonConfig::Light2Config(config) => Box::new(config.create_controller()),
-                ButtonConfig::DeviceConfig(config) => Box::new(config.create_controller()),
+                ButtonConfig::Light2(config) => Box::new(config.create_controller()),
+                ButtonConfig::Switch(config) => Box::new(config.create_controller()),
             };
 
             let requested_subcriptions = controller.get_subscriptions();
@@ -222,14 +234,12 @@ pub fn run_gui(state: &Arc<RunningState>) {
                 select! {
                     _ = rx_click.recv() => {
                         controller.get_press_commands().iter().for_each(|c| {
-                            println!("Sending command: {c:?}");
                             let message = MqttMessage::new(c.topic.clone(), c.payload.clone(), false, QoS::AtLeastOnce);
                             state.mqtt.try_send(message);
                         });
                     }
 
                     Ok((label, msg)) = select_ok(f) => {
-                        println!("Received message: {i} {label:?} {msg:?}");
                         controller.process_message(label, msg.payload);
 
                         let display_state = controller.get_display_state();

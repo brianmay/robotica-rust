@@ -2,6 +2,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::mqtt::MqttMessage;
+use serde::Deserialize;
 use tracing::error;
 
 pub mod hdmi;
@@ -16,8 +17,9 @@ pub mod tasmota;
 pub type Label = u32;
 
 /// The action to happen when a button is pressed.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Deserialize)]
 #[allow(dead_code)]
+#[serde(rename_all = "snake_case")]
 pub enum Action {
     /// The button should turn on the device
     TurnOn,

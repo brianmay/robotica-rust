@@ -1,6 +1,7 @@
 //! A robotica light controller
 
 use crate::mqtt::MqttMessage;
+use serde::Deserialize;
 use tracing::error;
 
 use super::{
@@ -9,7 +10,7 @@ use super::{
 };
 
 /// The configuration for a light controller
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// The topic substring for the light
     pub topic_substr: String,

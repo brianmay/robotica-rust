@@ -16,18 +16,29 @@ use robotica_backend::services::{
     persistent_state::PersistentStateDatabase,
 };
 use robotica_common::controllers::{lights2, switch};
+use serde::Deserialize;
+use ui::LabeledButtonConfig;
+
+#[derive(Deserialize)]
+struct Config {
+    location: String,
+    buttons: Vec<Arc<LabeledButtonConfig>>,
+}
 
 #[tokio::main]
-async fn main() -> Result<(), Box<anyhow::Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
 
     let args: Vec<String> = std::env::args().collect();
-    let location = args
+    let config_file = args
         .get(1)
         .ok_or_else(|| anyhow::anyhow!("No location provided"))?;
 
-    start_services(location)?;
+    let string = std::fs::read_to_string(config_file)?;
+    let config: Config = serde_yaml::from_str(&string)?;
+    start_services(config)?;
+
     Ok(())
 }
 
@@ -41,11 +52,12 @@ struct SetupState {
 /// Running state for program.
 pub struct RunningState {
     mqtt: MqttTx,
+    // config: Config,
     // persistent_state_database: PersistentStateDatabase,
-    location: String,
+    // location: String,
 }
 
-fn start_services(location: impl Into<String>) -> Result<(), anyhow::Error> {
+fn start_services(config: Config) -> Result<(), anyhow::Error> {
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
@@ -56,7 +68,7 @@ fn start_services(location: impl Into<String>) -> Result<(), anyhow::Error> {
         subscriptions,
         mqtt,
         persistent_state_database,
-        location: location.into(),
+        location: config.location.clone(),
     };
 
     setup_pipes(&mut state);
@@ -66,10 +78,11 @@ fn start_services(location: impl Into<String>) -> Result<(), anyhow::Error> {
     let running_state = RunningState {
         mqtt: state.mqtt,
         // persistent_state_database: state.persistent_state_database,
-        location: state.location,
+        // location: state.location,
+        // config,
     };
 
-    ui::run_gui(&Arc::new(running_state));
+    ui::run_gui(running_state, config.buttons);
     Ok(())
 }
 
@@ -94,11 +107,4 @@ enum ButtonConfig {
 enum Icon {
     Light,
     Fan,
-}
-
-#[allow(dead_code)]
-struct LabeledButtonConfig {
-    bc: ButtonConfig,
-    title: String,
-    icon: Icon,
 }

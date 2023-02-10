@@ -502,6 +502,7 @@ dependencies = [
  "robotica-common",
  "serde",
  "serde_json",
+ "serde_yaml",
  "slint",
  "slint-build",
  "thiserror",
