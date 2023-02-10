@@ -1,0 +1,102 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+struct Icon := {
+    on: image,
+    off: image,
+    auto_off: image,
+    error: image,
+}
+
+struct AllIcons := {
+    fan: Icon,
+    light: Icon,
+}
+
+struct RoboticaButtonData := {
+    title: string,
+    state: string,
+    image: image,
+    color: color,
+    text_color: color,
+}
+
+RoboticaButton := Rectangle {
+    callback clicked;
+    property<image> icon;
+    property<string> title;
+    property<string> state;
+    property<color> text_color;
+
+    height: 64px + 12px + 12px;
+    width: 64px;
+    animate background { duration: 200ms; }
+
+    Image {
+        source: icon;
+        width: 64px;
+        height: 64px;
+    }
+
+    Text {
+        text: title;
+        x: 0px;
+        y: 64px;
+        width: parent.width;
+        // height: parent.height;
+        color: text_color;
+        font-size: 12px;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        text: state;
+        x: 0px;
+        y: 76px;
+        width: parent.width;
+        // height: parent.height;
+        color: text_color;
+        font-size: 12px;
+        horizontal-alignment: center;
+    }
+
+    TouchArea {
+        clicked => {
+            // Delegate to the user of this element
+            root.clicked();
+        }
+    }
+}
+
+
+export component AppWindow inherits Window {
+    // in-out property<int> counter: 42;
+    // in property<string> msg-title: "Hello world!";
+    // in property<string> msg-text: "Hello world!";
+    // callback request-increase-value();
+    callback clicked_button(int);
+
+    out property<AllIcons> all_icons: {
+        fan: { on: @image-url("images/fan_on.svg"), off: @image-url("images/fan_off.svg"), auto_off: @image-url("images/fan_auto.svg"), error: @image-url("images/fan_error.svg") },
+        light: { on: @image-url("images/light_on.svg"), off: @image-url("images/light_off.svg"), auto_off: @image-url("images/light_auto.svg"), error: @image-url("images/light_error.svg") }
+    };
+
+    in property <[RoboticaButtonData]> buttons: [];
+
+    for button[i] in buttons : RoboticaButton {
+        x: mod(i, 4) * (64px + 10px);
+        y: floor(i / 4) * (64px + 12px + 12px + 10px);
+        // width: 64px;
+        // height: 64px;
+        icon: button.image;
+        background: button.color;
+        text_color: button.text_color;
+        title: button.title;
+        state: button.state;
+        // open_curtain: tile.image_visible || tile.solved;
+        // // propagate the solved status from the model to the tile
+        // solved: tile.solved;
+        clicked => {
+            root.clicked_button(i);
+        }
+    }
+}

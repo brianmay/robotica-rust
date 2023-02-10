@@ -54,7 +54,7 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        if let Ok(ButtonStateMsgType::Power) = label.try_into() {
+        if matches!(label.try_into(), Ok(ButtonStateMsgType::Power)) {
             self.power = Some(data);
         } else {
             error!("Invalid message label {}", label);

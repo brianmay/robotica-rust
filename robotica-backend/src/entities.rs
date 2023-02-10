@@ -517,7 +517,7 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(
                 }
             }
 
-            if let (None, 0) = (&receive_rx, out_tx.receiver_count()) {
+            if matches!((&receive_rx, out_tx.receiver_count()), (None, 0)) {
                 debug!(
                     "create_stateless_entity({name}): receiver closed and all subscriptions closed"
                 );
@@ -602,7 +602,7 @@ pub fn create_stateful_entity<T: Clone + Eq + Send + 'static>(
                 }
             }
 
-            if let (None, 0) = (&receive_rx, out_tx.receiver_count()) {
+            if matches!((&receive_rx, out_tx.receiver_count()), (None, 0)) {
                 debug!(
                     "create_stateful_entity({name}): receiver closed and all subscriptions closed"
                 );

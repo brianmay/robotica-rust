@@ -43,8 +43,7 @@ impl<'de> Deserialize<'de> for QoS {
             1 => Ok(QoS::AtLeastOnce),
             2 => Ok(QoS::ExactlyOnce),
             _ => Err(serde::de::Error::custom(format!(
-                "Invalid QoS value: {}",
-                value
+                "Invalid QoS value: {value}"
             ))),
         }
     }

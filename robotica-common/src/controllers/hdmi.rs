@@ -111,7 +111,10 @@ impl ControllerTrait for Controller {
         });
 
         let display_state = self.get_display_state();
-        if let TurnOnOff::TurnOn = get_press_on_or_off(display_state, self.config.action) {
+        if matches!(
+            get_press_on_or_off(display_state, self.config.action),
+            TurnOnOff::TurnOn
+        ) {
             let topic = format!("command/{}", self.config.topic_substr);
             json_command_vec(&topic, &payload)
         } else {

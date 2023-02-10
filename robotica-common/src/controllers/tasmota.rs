@@ -62,10 +62,10 @@ impl ControllerTrait for Controller {
     }
 
     fn process_message(&mut self, label: Label, data: String) {
-        if let Ok(ButtonStateMsgType::Power) = label.try_into() {
+        if matches!(label.try_into(), Ok(ButtonStateMsgType::Power)) {
             self.power = Some(data);
             self.online = true;
-        } else if let Ok(ButtonStateMsgType::Lwt) = label.try_into() {
+        } else if matches!(label.try_into(), Ok(ButtonStateMsgType::Lwt)) {
             if data == "Online" {
                 self.online = true;
             } else {

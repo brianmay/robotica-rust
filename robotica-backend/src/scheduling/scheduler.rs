@@ -188,7 +188,7 @@ pub fn get_schedule_with_config<T: TimeZone>(
             let options = seq
                 .options
                 .as_ref()
-                .map_or(HashSet::new(), |o| o.iter().cloned().collect());
+                .map_or_else(HashSet::new, |o| o.iter().cloned().collect());
             let schedule = Schedule {
                 datetime: convert_date_time_to_utc_or_default(*date, seq.time, timezone),
                 sequence_name: name,

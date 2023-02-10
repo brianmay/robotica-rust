@@ -246,7 +246,8 @@ async fn fallback_handler(
                 StatusCode::NOT_FOUND if !asset_file => {
                     let index_path = PathBuf::from(static_path).join("index.html");
                     let index_content = match fs::read_to_string(index_path).await {
-                        Err(_) => {
+                        Err(err) => {
+                            error!("failed to read index file: {}", err);
                             return (StatusCode::INTERNAL_SERVER_ERROR, "index file not found")
                                 .into_response();
                         }
