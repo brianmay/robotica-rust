@@ -9,20 +9,19 @@ mod audio;
 mod command;
 mod ui;
 
-use std::sync::Arc;
-
 use robotica_backend::services::{
     mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
     persistent_state::PersistentStateDatabase,
 };
 use robotica_common::controllers::{lights2, switch};
 use serde::Deserialize;
-use ui::LabeledButtonConfig;
+use ui::WidgetConfig;
 
 #[derive(Deserialize)]
 struct Config {
     location: String,
-    buttons: Vec<Arc<LabeledButtonConfig>>,
+    number_per_row: u8,
+    buttons: Vec<WidgetConfig>,
 }
 
 #[tokio::main]
@@ -82,7 +81,7 @@ fn start_services(config: Config) -> Result<(), anyhow::Error> {
         // config,
     };
 
-    ui::run_gui(running_state, config.buttons);
+    ui::run_gui(running_state, config.number_per_row, config.buttons);
     Ok(())
 }
 
