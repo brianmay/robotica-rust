@@ -142,8 +142,8 @@ export component AppWindow inherits Window {
 
     for widget[i] in widgets : Widget {
         widget: widget;
-        x: mod(i, number_per_row) * 100px + 10px;
-        y: floor(i / number_per_row) * 100px + 10px;
+        x: mod(i, number_per_row) * 90px + 10px;
+        y: floor(i / number_per_row) * 90px + 10px;
         clicked => {
             root.clicked_widget(i);
         }
