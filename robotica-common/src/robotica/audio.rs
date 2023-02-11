@@ -16,8 +16,8 @@ pub struct VolumeState {
 impl Default for VolumeState {
     fn default() -> Self {
         Self {
-            music: 100,
-            message: 100,
+            music: 90,
+            message: 90,
         }
     }
 }
