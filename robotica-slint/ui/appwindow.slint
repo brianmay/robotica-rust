@@ -126,6 +126,7 @@ Widget := VerticalBox {
 export component AppWindow inherits Window {
     in-out property<int> number_per_row;
     callback clicked_widget(int);
+    background: black;
 
     out property<AllIcons> all_icons: {
         fan: { on: @image-url("images/fan_on.svg"), off: @image-url("images/fan_off.svg"), auto_off: @image-url("images/fan_auto.svg"), error: @image-url("images/fan_error.svg") },

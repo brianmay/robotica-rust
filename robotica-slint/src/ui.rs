@@ -304,16 +304,16 @@ fn get_title_data(lbc: &TitleConfig) -> slint::WidgetData {
         title: lbc.title.clone().into(),
         state: "".into(),
         color: RgbaColor {
-            red: 240u8,
-            green: 240u8,
-            blue: 240u8,
+            red: 30u8,
+            green: 30u8,
+            blue: 30u8,
             alpha: 255u8,
         }
         .into(),
         text_color: RgbaColor {
-            red: 0u8,
-            green: 0u8,
-            blue: 0u8,
+            red: 255u8,
+            green: 255u8,
+            blue: 255u8,
             alpha: 255u8,
         }
         .into(),
@@ -332,9 +332,9 @@ fn get_nil_data() -> slint::WidgetData {
         title: "".into(),
         state: "".into(),
         color: RgbaColor {
-            red: 240u8,
-            green: 240u8,
-            blue: 240u8,
+            red: 30u8,
+            green: 30u8,
+            blue: 30u8,
             alpha: 255u8,
         }
         .into(),
@@ -351,10 +351,10 @@ fn get_nil_data() -> slint::WidgetData {
 const fn get_color(display_state: DisplayState) -> RgbaColor<u8> {
     match display_state {
         DisplayState::HardOff => RgbaColor {
-            red: 240u8,
-            green: 240u8,
-            blue: 240u8,
-            alpha: 240u8,
+            red: 30u8,
+            green: 30u8,
+            blue: 30u8,
+            alpha: 255u8,
         },
         DisplayState::Error => RgbaColor {
             red: 255u8,
@@ -376,8 +376,8 @@ const fn get_color(display_state: DisplayState) -> RgbaColor<u8> {
         },
         DisplayState::Off => RgbaColor {
             red: 0u8,
-            green: 0u8,
-            blue: 0u8,
+            green: 00u8,
+            blue: 127u8,
             alpha: 255u8,
         },
     }
