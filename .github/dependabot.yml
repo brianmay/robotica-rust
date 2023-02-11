@@ -18,6 +18,10 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
+    directory: "/robotica-slint"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/brian-frontend"
     schedule:
       interval: "daily"
