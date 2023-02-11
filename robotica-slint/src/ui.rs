@@ -38,7 +38,9 @@ use serde::Deserialize;
 
 use robotica_backend::entities::{self, RecvError};
 use robotica_common::{
-    controllers::{lights2, switch, ConfigTrait, ControllerTrait, DisplayState, Label},
+    controllers::{
+        hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
+    },
     mqtt::{MqttMessage, QoS},
 };
 use tokio::{select, sync::mpsc};
@@ -49,16 +51,25 @@ use tracing::error;
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum ControllerConfig {
+    Hdmi(hdmi::Config),
     Light2(lights2::Config),
+    Music2(music2::Config),
     Switch(switch::Config),
+    Tasmota(tasmota::Config),
 }
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Icon {
-    Light,
     Fan,
+    Light,
+    Night,
+    Schedule,
+    Select,
+    Speaker,
+    Trumpet,
+    Tv,
 }
 
 #[allow(dead_code)]
@@ -201,8 +212,11 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: Vec<WidgetConfi
                 let lbc = lbc;
 
                 let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
+                    ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
                     ControllerConfig::Light2(config) => Box::new(config.create_controller()),
                     ControllerConfig::Switch(config) => Box::new(config.create_controller()),
+                    ControllerConfig::Music2(config) => Box::new(config.create_controller()),
+                    ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
                 };
 
                 let requested_subcriptions = controller.get_subscriptions();
@@ -421,14 +435,21 @@ const fn get_image<'a>(
     display_state: DisplayState,
     images: &'a slint::AllIcons,
 ) -> &'a ::slint::Image {
-    match (&lbc.icon, display_state) {
-        (Icon::Light, DisplayState::On) => &images.light.on,
-        (Icon::Light, DisplayState::Off | DisplayState::HardOff) => &images.light.off,
-        (Icon::Light, DisplayState::AutoOff) => &images.light.auto_off,
-        (Icon::Light, DisplayState::Error | DisplayState::Unknown) => &images.light.error,
-        (Icon::Fan, DisplayState::On) => &images.fan.on,
-        (Icon::Fan, DisplayState::Off | DisplayState::HardOff) => &images.fan.off,
-        (Icon::Fan, DisplayState::AutoOff) => &images.fan.auto_off,
-        (Icon::Fan, DisplayState::Error | DisplayState::Unknown) => &images.fan.error,
+    let icon = match &lbc.icon {
+        Icon::Fan => &images.fan,
+        Icon::Light => &images.light,
+        Icon::Night => &images.night,
+        Icon::Select => &images.select,
+        Icon::Schedule => &images.schedule,
+        Icon::Speaker => &images.speaker,
+        Icon::Trumpet => &images.trumpet,
+        Icon::Tv => &images.tv,
+    };
+
+    match display_state {
+        DisplayState::On => &icon.on,
+        DisplayState::Off | DisplayState::HardOff => &icon.off,
+        DisplayState::AutoOff => &icon.auto_off,
+        DisplayState::Error | DisplayState::Unknown => &icon.error,
     }
 }

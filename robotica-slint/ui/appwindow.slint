@@ -10,6 +10,12 @@ struct Icon := {
 struct AllIcons := {
     fan: Icon,
     light: Icon,
+    night: Icon,
+    schedule: Icon,
+    select: Icon,
+    speaker: Icon,
+    trumpet: Icon,
+    tv: Icon,
 }
 
 struct WidgetData := {
@@ -123,7 +129,13 @@ export component AppWindow inherits Window {
 
     out property<AllIcons> all_icons: {
         fan: { on: @image-url("images/fan_on.svg"), off: @image-url("images/fan_off.svg"), auto_off: @image-url("images/fan_auto.svg"), error: @image-url("images/fan_error.svg") },
-        light: { on: @image-url("images/light_on.svg"), off: @image-url("images/light_off.svg"), auto_off: @image-url("images/light_auto.svg"), error: @image-url("images/light_error.svg") }
+        light: { on: @image-url("images/light_on.svg"), off: @image-url("images/light_off.svg"), auto_off: @image-url("images/light_auto.svg"), error: @image-url("images/light_error.svg") },
+        night: { on: @image-url("images/night_on.svg"), off: @image-url("images/night_off.svg"), auto_off: @image-url("images/night_auto.svg"), error: @image-url("images/night_error.svg") },
+        schedule: { on: @image-url("images/schedule_on.svg"), off: @image-url("images/schedule_off.svg"), auto_off: @image-url("images/schedule_auto.svg"), error: @image-url("images/schedule_error.svg") },
+        select: { on: @image-url("images/select_on.svg"), off: @image-url("images/select_off.svg"), auto_off: @image-url("images/select_auto.svg"), error: @image-url("images/select_error.svg") },
+        speaker: { on: @image-url("images/speaker_on.svg"), off: @image-url("images/speaker_off.svg"), auto_off: @image-url("images/speaker_auto.svg"), error: @image-url("images/speaker_error.svg") },
+        trumpet: { on: @image-url("images/trumpet_on.svg"), off: @image-url("images/trumpet_off.svg"), auto_off: @image-url("images/trumpet_auto.svg"), error: @image-url("images/trumpet_error.svg") },
+        tv: { on: @image-url("images/tv_on.svg"), off: @image-url("images/tv_off.svg"), auto_off: @image-url("images/tv_auto.svg"), error: @image-url("images/tv_error.svg") },
     };
 
     in property <[WidgetData]> widgets: [];
