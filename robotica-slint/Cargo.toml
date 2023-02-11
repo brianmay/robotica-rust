@@ -1,5 +1,5 @@
 [package]
-name = "brian-slint"
+name = "robotica-slint"
 version = "0.1.0"
 authors = ["Brian May <brian@linuxpenguins.xyz>"]
 edition = "2021"

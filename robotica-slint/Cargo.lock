@@ -491,27 +491,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "brian-slint"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "color-backtrace",
- "futures",
- "openssl",
- "robotica-backend",
- "robotica-common",
- "serde",
- "serde_json",
- "serde_yaml",
- "slint",
- "slint-build",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3615,6 +3594,27 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "robotica-slint"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "color-backtrace",
+ "futures",
+ "openssl",
+ "robotica-backend",
+ "robotica-common",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "slint",
+ "slint-build",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
