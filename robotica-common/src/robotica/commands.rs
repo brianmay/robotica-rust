@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::mqtt::MqttMessage;
 
-use super::tasks::Task;
+use super::tasks::SubTask;
 
 /// An action to send to a switch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,10 +121,10 @@ pub struct AudioCommand {
     pub volume: Option<VolumeCommand>,
 
     /// Pre tasks to execute before playing the message.
-    pub pre_tasks: Option<Vec<Task>>,
+    pub pre_tasks: Option<Vec<SubTask>>,
 
     /// Post tasks to execute after playing the message.
-    pub post_tasks: Option<Vec<Task>>,
+    pub post_tasks: Option<Vec<SubTask>>,
 }
 
 impl AudioCommand {

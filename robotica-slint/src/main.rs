@@ -9,6 +9,8 @@ mod audio;
 mod command;
 mod ui;
 
+use std::sync::Arc;
+
 use robotica_backend::services::{
     mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
     persistent_state::PersistentStateDatabase,
@@ -19,9 +21,9 @@ use ui::WidgetConfig;
 
 #[derive(Deserialize)]
 struct Config {
-    location: String,
     number_per_row: u8,
     buttons: Vec<WidgetConfig>,
+    audio: Arc<audio::Config>,
 }
 
 #[tokio::main]
@@ -35,8 +37,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .ok_or_else(|| anyhow::anyhow!("No location provided"))?;
 
     let string = std::fs::read_to_string(config_file)?;
-    let config: Config = serde_yaml::from_str(&string)?;
-    start_services(config)?;
+    let config: Arc<Config> = Arc::new(serde_yaml::from_str(&string)?);
+    start_services(&config)?;
 
     Ok(())
 }
@@ -45,18 +47,17 @@ struct SetupState {
     subscriptions: Subscriptions,
     mqtt: MqttTx,
     persistent_state_database: PersistentStateDatabase,
-    location: String,
+    config: Arc<Config>,
 }
 
 /// Running state for program.
 pub struct RunningState {
     mqtt: MqttTx,
-    // config: Config,
+    // config: Arc<Config>,
     // persistent_state_database: PersistentStateDatabase,
-    // location: String,
 }
 
-fn start_services(config: Config) -> Result<(), anyhow::Error> {
+fn start_services(config: &Arc<Config>) -> Result<(), anyhow::Error> {
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
@@ -67,32 +68,25 @@ fn start_services(config: Config) -> Result<(), anyhow::Error> {
         subscriptions,
         mqtt,
         persistent_state_database,
-        location: config.location.clone(),
+        config: config.clone(),
     };
 
     setup_pipes(&mut state);
 
     run_client(state.subscriptions, mqtt_rx)?;
 
-    let running_state = RunningState {
-        mqtt: state.mqtt,
-        // persistent_state_database: state.persistent_state_database,
-        // location: state.location,
-        // config,
-    };
+    let running_state = RunningState { mqtt: state.mqtt };
 
-    ui::run_gui(running_state, config.number_per_row, config.buttons);
+    ui::run_gui(running_state, config.number_per_row, &config.buttons);
     Ok(())
 }
 
 fn setup_pipes(state: &mut SetupState) {
-    let topic_substr = format!("{}/Robotica", state.location);
-
     audio::run(
         &mut state.subscriptions,
         state.mqtt.clone(),
         &state.persistent_state_database,
-        topic_substr,
+        state.config.audio.clone(),
     );
 }
 

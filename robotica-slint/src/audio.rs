@@ -1,6 +1,6 @@
 //! Audio player service
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use robotica_backend::{
     entities::Receiver,
@@ -19,23 +19,32 @@ use robotica_common::{
         tasks::Task,
     },
 };
+use serde::Deserialize;
 use tracing::{debug, error};
 
 use crate::command::{Error, ErrorKind, Line};
+
+#[derive(Deserialize)]
+pub struct Config {
+    topic_substr: String,
+    targets: HashMap<String, String>,
+}
 
 pub fn run(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     database: &PersistentStateDatabase,
-    topic_substr: impl Into<String>,
+    config: Arc<Config>,
 ) {
-    let topic_substr = topic_substr.into();
+    let topic_substr = &config.topic_substr;
     let topic = format!("command/{topic_substr}");
     let command_rx: Receiver<Command> = subscriptions.subscribe_into_stateless(topic);
-    let psr = database.for_name::<State>(&topic_substr);
+    let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
     spawn(async move {
+        let topic_substr = &config.topic_substr;
+
         let mut command_s = command_rx.subscribe().await;
         init_all(&state).await.unwrap_or_else(|err| {
             state.error = Some(err);
@@ -45,8 +54,8 @@ pub fn run(
         while let Ok(command) = command_s.recv().await {
             if let Command::Audio(command) = command {
                 state.error = None;
-                handle_command(&mut state, &mqtt, command).await;
-                send_state(&mqtt, &state, &topic_substr);
+                handle_command(&mut state, &config, &mqtt, command).await;
+                send_state(&mqtt, &state, topic_substr);
                 psr.save(&state).unwrap_or_else(|e| {
                     error!("Failed to save state: {}", e);
                 });
@@ -91,7 +100,12 @@ fn send_task(mqtt: &MqttTx, task: &Task) {
     }
 }
 
-async fn handle_command(state: &mut State, mqtt: &MqttTx, command: AudioCommand) {
+async fn handle_command(
+    state: &mut State,
+    config: &Arc<Config>,
+    mqtt: &MqttTx,
+    command: AudioCommand,
+) {
     let music_volume = command.volume.as_ref().and_then(|v| v.music);
     let message_volume = command.volume.as_ref().and_then(|v| v.message);
 
@@ -107,12 +121,14 @@ async fn handle_command(state: &mut State, mqtt: &MqttTx, command: AudioCommand)
     let post_tasks = command.post_tasks.clone().unwrap_or_default();
 
     for task in pre_tasks {
+        let task = task.to_task(&config.targets);
         send_task(mqtt, &task);
     }
 
     process_command(state, command).await;
 
     for task in post_tasks {
+        let task = task.to_task(&config.targets);
         send_task(mqtt, &task);
     }
 }

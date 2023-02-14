@@ -127,7 +127,7 @@ async fn receive(
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn run_gui(state: RunningState, number_per_row: u8, buttons: Vec<WidgetConfig>) {
+pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConfig>) {
     let state = Arc::new(state);
 
     let (tx_click, rx_click) = {
@@ -202,8 +202,9 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: Vec<WidgetConfi
     //     }
     // });
 
-    for (i, (lbc, rx_click)) in buttons.into_iter().zip(rx_click).enumerate() {
+    for (i, (lbc, rx_click)) in buttons.iter().zip(rx_click).enumerate() {
         if let WidgetConfig::Button(lbc) = lbc {
+            let lbc = lbc.clone();
             let state = state.clone();
             let handle_weak = ui.as_weak();
             let mut rx_click = rx_click;

@@ -1,9 +1,13 @@
 //! A Command and a recipient
 
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::error;
 
 use crate::mqtt;
 
@@ -48,6 +52,50 @@ pub struct Task {
     pub topics: Vec<String>,
 }
 
+/// A task with all values completed.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SubTask {
+    /// The description of the task.
+    pub description: Option<String>,
+
+    /// The payload of the task.
+    #[serde(flatten)]
+    pub payload: Payload,
+
+    /// The qos to be used when sending the message.
+    pub qos: Option<mqtt::QoS>,
+
+    /// The retain value to be used when sending the message.
+    pub retain: Option<bool>,
+
+    /// The target of this subtask
+    pub target: String,
+}
+
+impl SubTask {
+    /// Convert `SubTask` to a `Task`
+    #[must_use]
+    pub fn to_task(self, targets: &HashMap<String, String>) -> Task {
+        let topics = targets.get(&self.target).map_or_else(
+            || {
+                error!("Target {} not found", self.target);
+                vec![]
+            },
+            |target| vec![target.clone()],
+        );
+
+        Task {
+            description: self.description,
+            payload: self.payload,
+            qos: self.qos.unwrap_or(mqtt::QoS::ExactlyOnce),
+            retain: self.retain.unwrap_or(false),
+            locations: vec![],
+            devices: vec![],
+            topics,
+        }
+    }
+}
 fn location_device_to_text(location: &str, device: &str) -> String {
     format!("{location}/{device}")
 }
