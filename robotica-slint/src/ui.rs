@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 mod slint {
     #![allow(clippy::wildcard_imports)]
@@ -32,7 +32,9 @@ mod slint {
 }
 
 use crate::RunningState;
-use ::slint::{ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, VecModel};
+use ::slint::{
+    ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, VecModel, Weak,
+};
 use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
@@ -43,7 +45,11 @@ use robotica_common::{
     },
     mqtt::{MqttMessage, QoS},
 };
-use tokio::{select, sync::mpsc};
+use tokio::{
+    select,
+    sync::mpsc,
+    time::{sleep_until, Instant},
+};
 use tracing::error;
 
 #[allow(dead_code)]
@@ -129,6 +135,7 @@ async fn receive(
 #[allow(clippy::too_many_lines)]
 pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConfig>) {
     let state = Arc::new(state);
+    let (tx_screen_reset, rx_screen_reset) = mpsc::channel(1);
 
     let (tx_click, rx_click) = {
         let len = buttons.len();
@@ -172,6 +179,11 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConf
             });
     });
 
+    ui.on_screen_reset(move || {
+        tx_screen_reset.try_send(()).unwrap_or_else(|_| {
+            error!("Failed to send screen off event");
+        });
+    });
     // let ui_handle = ui.as_weak();
     // ui.on_request_increase_value(move || {
     //     let ui = ui_handle.unwrap();
@@ -201,6 +213,42 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConf
     //         }
     //     }
     // });
+
+    let handle_weak = ui.as_weak();
+    tokio::spawn(async move {
+        enum ScreenState {
+            On(Instant),
+            Off,
+        }
+
+        async fn timer_wait(state: &ScreenState) -> Option<()> {
+            match state {
+                ScreenState::On(instant) => {
+                    sleep_until(*instant).await;
+                    Some(())
+                }
+                ScreenState::Off => None,
+            }
+        }
+
+        let mut state = ScreenState::On(Instant::now() + Duration::from_secs(30));
+        let mut rx_screen_reset = rx_screen_reset;
+
+        loop {
+            select! {
+                Some(()) = rx_screen_reset.recv() => {
+                    if matches!(state, ScreenState::Off) {
+                        turn_screen_on(&handle_weak);
+                    }
+                    state = ScreenState::On(Instant::now() + Duration::from_secs(30));
+                }
+                Some(_) = timer_wait(&state) => {
+                    turn_screen_off(&handle_weak);
+                    state = ScreenState::Off;
+                }
+            }
+        }
+    });
 
     for (i, (lbc, rx_click)) in buttons.iter().zip(rx_click).enumerate() {
         if let WidgetConfig::Button(lbc) = lbc {
@@ -453,4 +501,20 @@ const fn get_image<'a>(
         DisplayState::AutoOff => &icon.auto_off,
         DisplayState::Error | DisplayState::Unknown => &icon.error,
     }
+}
+
+fn turn_screen_off(handle_weak: &Weak<slint::AppWindow>) {
+    handle_weak
+        .upgrade_in_event_loop(|handle| {
+            handle.set_screen_off(true);
+        })
+        .unwrap();
+}
+
+fn turn_screen_on(handle_weak: &Weak<slint::AppWindow>) {
+    handle_weak
+        .upgrade_in_event_loop(|handle| {
+            handle.set_screen_off(false);
+        })
+        .unwrap();
 }

@@ -1,13 +1,13 @@
 import { Button, VerticalBox } from "std-widgets.slint";
 
-struct Icon := {
+struct Icon {
     on: image,
     off: image,
     auto_off: image,
     error: image,
 }
 
-struct AllIcons := {
+struct AllIcons {
     fan: Icon,
     light: Icon,
     night: Icon,
@@ -18,7 +18,7 @@ struct AllIcons := {
     tv: Icon,
 }
 
-struct WidgetData := {
+struct WidgetData {
     is_button: bool,
     is_title: bool,
     title: string,
@@ -28,12 +28,12 @@ struct WidgetData := {
     text_color: color,
 }
 
-RoboticaButton := Rectangle {
+component RoboticaButton inherits Rectangle {
     callback clicked;
-    property<image> icon;
-    property<string> title;
-    property<string> state;
-    property<color> text_color;
+    in property<image> icon;
+    in property<string> title;
+    in property<string> state;
+    in property<color> text_color;
 
     height: 80px;
     width: 80px;
@@ -42,7 +42,7 @@ RoboticaButton := Rectangle {
 
     Image {
         source: icon;
-        x: parent.width/2 - width/2;
+        x: parent.width/2 - self.width/2;
         y: 4px;
         width: 52px;
         height: 52px;
@@ -78,10 +78,10 @@ RoboticaButton := Rectangle {
     }
 }
 
-Title := Rectangle {
+component Title inherits Rectangle {
     callback clicked;
-    property<string> title;
-    property<color> text_color;
+    in property<string> title;
+    in property<color> text_color;
 
     height: 80px;
     width: 80px;
@@ -100,8 +100,8 @@ Title := Rectangle {
     }
 }
 
-Widget := VerticalBox {
-    property<WidgetData> widget;
+component Widget inherits VerticalBox {
+    in property<WidgetData> widget;
     callback clicked;
 
     if widget.is_button : RoboticaButton {
@@ -125,7 +125,9 @@ Widget := VerticalBox {
 
 export component AppWindow inherits Window {
     in-out property<int> number_per_row;
+    in property<bool> screen_off;
     callback clicked_widget(int);
+    callback screen_reset;
     background: black;
 
     out property<AllIcons> all_icons: {
@@ -141,12 +143,34 @@ export component AppWindow inherits Window {
 
     in property <[WidgetData]> widgets: [];
 
+    if !screen_off : TouchArea {
+        clicked => {
+            screen_reset();
+        }
+    }
+
     for widget[i] in widgets : Widget {
         widget: widget;
         x: mod(i, number_per_row) * 90px + 10px;
         y: floor(i / number_per_row) * 90px + 10px;
         clicked => {
+            screen_reset();
             root.clicked_widget(i);
+        }
+    }
+
+    if screen_off : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: black;
+        opacity: 0.5;
+    }
+
+    if screen_off : TouchArea {
+        clicked => {
+            screen_reset();
         }
     }
 }
