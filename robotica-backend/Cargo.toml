@@ -39,7 +39,7 @@ base64 = "0.21.0"
 url = "2.2.2"
 futures = "0.3.25"
 tower = "0.4.13"
-tower-http = { version = "0.3.4", features = ["fs", "trace"] }
+tower-http = { version = "0.4.0", features = ["fs", "trace"] }
 arc-swap = "1.4.0"
 hyper = "0.14.24"
 
