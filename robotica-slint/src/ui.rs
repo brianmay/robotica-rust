@@ -31,7 +31,7 @@ mod slint {
     slint::include_modules!();
 }
 
-use crate::RunningState;
+use crate::{command::Line, RunningState};
 use ::slint::{
     ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, VecModel, Weak,
 };
@@ -50,7 +50,7 @@ use tokio::{
     sync::mpsc,
     time::{sleep_until, Instant},
 };
-use tracing::error;
+use tracing::{error, info};
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -181,7 +181,7 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConf
 
     ui.on_screen_reset(move || {
         tx_screen_reset.try_send(()).unwrap_or_else(|_| {
-            error!("Failed to send screen off event");
+            error!("Failed to send screen reset event");
         });
     });
     // let ui_handle = ui.as_weak();
@@ -238,12 +238,14 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConf
             select! {
                 Some(()) = rx_screen_reset.recv() => {
                     if matches!(state, ScreenState::Off) {
-                        turn_screen_on(&handle_weak);
+                        let handle_weak = handle_weak.clone();
+                        turn_screen_on(handle_weak).await;
                     }
                     state = ScreenState::On(Instant::now() + Duration::from_secs(30));
                 }
                 Some(_) = timer_wait(&state) => {
-                    turn_screen_off(&handle_weak);
+                    let handle_weak = handle_weak.clone();
+                    turn_screen_off(handle_weak).await;
                     state = ScreenState::Off;
                 }
             }
@@ -503,7 +505,15 @@ const fn get_image<'a>(
     }
 }
 
-fn turn_screen_off(handle_weak: &Weak<slint::AppWindow>) {
+async fn turn_screen_off(handle_weak: Weak<slint::AppWindow>) {
+    info!("Turning off display");
+    // let cmd = Line("swaymsg".to_string(), vec!["output * dpms off".to_string()]);
+    let cmd = Line::new("../screen", vec!["turn-off"]);
+    info!("Done turning off display");
+    if let Err(err) = cmd.run().await {
+        error!("Error turning off display: {}", err);
+    };
+
     handle_weak
         .upgrade_in_event_loop(|handle| {
             handle.set_screen_off(true);
@@ -511,7 +521,15 @@ fn turn_screen_off(handle_weak: &Weak<slint::AppWindow>) {
         .unwrap();
 }
 
-fn turn_screen_on(handle_weak: &Weak<slint::AppWindow>) {
+async fn turn_screen_on(handle_weak: Weak<slint::AppWindow>) {
+    info!("Turning on display");
+    // let cmd = Line("swaymsg".to_string(), vec!["output * dpms on".to_string()]);
+    let cmd = Line::new("../screen", vec!["turn-on"]);
+    info!("Done turning on display");
+    if let Err(err) = cmd.run().await {
+        error!("Error turning on display: {}", err);
+    };
+
     handle_weak
         .upgrade_in_event_loop(|handle| {
             handle.set_screen_off(false);

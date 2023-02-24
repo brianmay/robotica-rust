@@ -150,6 +150,12 @@ fn get_stdin_out(
 }
 
 impl Line {
+    pub fn new(cmd: impl Into<String>, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let cmd = cmd.into();
+        let args = args.into_iter().map(std::convert::Into::into).collect();
+        Self(cmd, args)
+    }
+
     pub async fn run(&self) -> Result {
         let start = Instant::now();
         info!("Running command: {self}");

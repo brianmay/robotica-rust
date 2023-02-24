@@ -228,8 +228,8 @@ async fn process_command(state: &mut State, command: AudioCommand) {
 }
 
 async fn set_volume(volume: u8) -> Result<(), String> {
-    let cl = Line(
-        "amixer".into(),
+    let cl = Line::new(
+        "amixer",
         vec!["set".into(), "Speaker".into(), format!("{volume}%")],
     );
 
@@ -242,7 +242,7 @@ async fn set_volume(volume: u8) -> Result<(), String> {
 }
 
 async fn is_music_paused() -> Result<bool, String> {
-    let cl = Line("mpc".into(), vec!["pause-if-playing".into()]);
+    let cl = Line::new("mpc", vec!["pause-if-playing"]);
 
     match cl.run().await {
         Ok(_output) => Ok(true),
@@ -258,7 +258,7 @@ async fn is_music_paused() -> Result<bool, String> {
 }
 
 async fn music_resume() -> Result<(), String> {
-    let cl = Line("mpc".into(), vec!["play".into()]);
+    let cl = Line::new("mpc", vec!["play"]);
 
     if let Err(err) = cl.run().await {
         error!("Failed to resume music: {err}");
@@ -284,7 +284,7 @@ async fn play_sound(sound: &str) -> Result<(), String> {
         })?
         .to_string();
 
-    let cl = Line("aplay".into(), vec!["-q".into(), path]);
+    let cl = Line::new("aplay", vec!["-q".into(), path]);
 
     if let Err(err) = cl.run().await {
         error!("Failed to play sound: {err}");
@@ -294,17 +294,9 @@ async fn play_sound(sound: &str) -> Result<(), String> {
 }
 
 async fn say(message: &str) -> Result<(), String> {
-    let cl = Line(
-        "espeak".into(),
-        vec![
-            "-v".into(),
-            "en-us".into(),
-            "-s".into(),
-            "150".into(),
-            "-a".into(),
-            "200".into(),
-            message.into(),
-        ],
+    let cl = Line::new(
+        "espeak",
+        vec!["-v", "en-us", "-s", "150", "-a", "200", message],
     );
 
     play_sound("start.wav").await?;
@@ -327,9 +319,9 @@ async fn say(message: &str) -> Result<(), String> {
 
 async fn play_music(play_list: &str) -> Result<(), String> {
     let cl_list = vec![
-        Line("mpc".into(), vec!["clear".into()]),
-        Line("mpc".into(), vec!["load".into(), play_list.into()]),
-        Line("mpc".into(), vec!["play".into()]),
+        Line::new("mpc", vec!["clear"]),
+        Line::new("mpc", vec!["load", play_list]),
+        Line::new("mpc", vec!["play"]),
     ];
 
     for cl in cl_list {
@@ -343,7 +335,7 @@ async fn play_music(play_list: &str) -> Result<(), String> {
 }
 
 async fn stop_music() -> Result<(), String> {
-    let cl = Line("mpc".into(), vec!["stop".into()]);
+    let cl = Line::new("mpc", vec!["stop"]);
 
     if let Err(err) = cl.run().await {
         error!("Failed to stop music: {err}");
@@ -353,7 +345,7 @@ async fn stop_music() -> Result<(), String> {
 }
 
 async fn init() -> Result<(), String> {
-    let cl = Line("mpc".into(), vec!["repeat".into(), "on".into()]);
+    let cl = Line::new("mpc", vec!["repeat", "on"]);
     if let Err(err) = cl.run().await {
         error!("Failed to init music: {err}");
         return Err(format!("Failed to init music: {err}"));
