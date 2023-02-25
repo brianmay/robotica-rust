@@ -17,7 +17,8 @@ use robotica_backend::services::{
 };
 use robotica_common::controllers::{lights2, switch};
 use serde::Deserialize;
-use ui::WidgetConfig;
+use tokio::sync::mpsc;
+use ui::{ScreenCommand, WidgetConfig};
 
 #[derive(Deserialize)]
 struct Config {
@@ -48,11 +49,13 @@ struct SetupState {
     mqtt: MqttTx,
     persistent_state_database: PersistentStateDatabase,
     config: Arc<Config>,
+    tx_screen_command: mpsc::Sender<ScreenCommand>,
 }
 
 /// Running state for program.
 pub struct RunningState {
     mqtt: MqttTx,
+    tx_screen_command: mpsc::Sender<ScreenCommand>,
     // config: Arc<Config>,
     // persistent_state_database: PersistentStateDatabase,
 }
@@ -64,25 +67,37 @@ fn start_services(config: &Arc<Config>) -> Result<(), anyhow::Error> {
         panic!("Error getting persistent state loader: {e}");
     });
 
+    let (tx_screen_command, rx_screen_command) = mpsc::channel(1);
+
     let mut state = SetupState {
         subscriptions,
         mqtt,
         persistent_state_database,
         config: config.clone(),
+        tx_screen_command,
     };
 
     setup_pipes(&mut state);
 
     run_client(state.subscriptions, mqtt_rx)?;
 
-    let running_state = RunningState { mqtt: state.mqtt };
+    let running_state = RunningState {
+        mqtt: state.mqtt,
+        tx_screen_command: state.tx_screen_command,
+    };
 
-    ui::run_gui(running_state, config.number_per_row, &config.buttons);
+    ui::run_gui(
+        running_state,
+        config.number_per_row,
+        &config.buttons,
+        rx_screen_command,
+    );
     Ok(())
 }
 
 fn setup_pipes(state: &mut SetupState) {
     audio::run(
+        state.tx_screen_command.clone(),
         &mut state.subscriptions,
         state.mqtt.clone(),
         &state.persistent_state_database,

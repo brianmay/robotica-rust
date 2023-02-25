@@ -126,6 +126,10 @@ component Widget inherits VerticalBox {
 export component AppWindow inherits Window {
     in-out property<int> number_per_row;
     in property<bool> screen_off;
+    in property<string> msg_body;
+    in property<string> msg_title;
+    in property<bool> display_message;
+
     callback clicked_widget(int);
     callback screen_reset;
     background: black;
@@ -159,13 +163,37 @@ export component AppWindow inherits Window {
         }
     }
 
+    if display_message : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: white;
+        opacity: 0.9;
+
+        VerticalLayout {
+            Text {
+                text: msg_title;
+                color: black;
+                horizontal-alignment: center;
+                font-size: 20px;
+            }
+            Text {
+                text: msg_body;
+                color: black;
+                horizontal-alignment: center;
+                font-size: 20px;
+            }
+        }
+    }
+
     if screen_off : Rectangle {
         x: 0px;
         y: 0px;
         width: parent.width;
         height: parent.height;
         background: black;
-        opacity: 0.5;
+        opacity: 0.9;
     }
 
     if screen_off : TouchArea {

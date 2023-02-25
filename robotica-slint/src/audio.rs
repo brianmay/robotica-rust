@@ -20,9 +20,13 @@ use robotica_common::{
     },
 };
 use serde::Deserialize;
+use tokio::sync::mpsc;
 use tracing::{debug, error};
 
-use crate::command::{Error, ErrorKind, Line};
+use crate::{
+    command::{Error, ErrorKind, Line},
+    ui::ScreenCommand,
+};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -31,6 +35,7 @@ pub struct Config {
 }
 
 pub fn run(
+    tx_screen_command: mpsc::Sender<ScreenCommand>,
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     database: &PersistentStateDatabase,
@@ -54,7 +59,7 @@ pub fn run(
         while let Ok(command) = command_s.recv().await {
             if let Command::Audio(command) = command {
                 state.error = None;
-                handle_command(&mut state, &config, &mqtt, command).await;
+                handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
                 send_state(&mqtt, &state, topic_substr);
                 psr.save(&state).unwrap_or_else(|e| {
                     error!("Failed to save state: {}", e);
@@ -101,6 +106,7 @@ fn send_task(mqtt: &MqttTx, task: &Task) {
 }
 
 async fn handle_command(
+    tx_screen_command: &mpsc::Sender<ScreenCommand>,
     state: &mut State,
     config: &Arc<Config>,
     mqtt: &MqttTx,
@@ -115,6 +121,19 @@ async fn handle_command(
 
     if let Some(message_volume) = message_volume {
         state.volume.message = message_volume;
+    }
+
+    if let Some(message) = &command.message {
+        let title = command
+            .title
+            .clone()
+            .unwrap_or_else(|| "No title".to_string());
+        let message = message.clone();
+        tx_screen_command
+            .try_send(ScreenCommand::Message { title, message })
+            .unwrap_or_else(|err| {
+                error!("Failed to send message to screen: {err}");
+            });
     }
 
     let pre_tasks = command.pre_tasks.clone().unwrap_or_default();

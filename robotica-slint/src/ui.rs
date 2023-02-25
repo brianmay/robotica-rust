@@ -132,10 +132,19 @@ async fn receive(
     Ok((label, msg))
 }
 
+pub enum ScreenCommand {
+    TurnOn,
+    Message { title: String, message: String },
+}
+
 #[allow(clippy::too_many_lines)]
-pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConfig>) {
+pub fn run_gui(
+    state: RunningState,
+    number_per_row: u8,
+    buttons: &Vec<WidgetConfig>,
+    rx_screen_command: mpsc::Receiver<ScreenCommand>,
+) {
     let state = Arc::new(state);
-    let (tx_screen_reset, rx_screen_reset) = mpsc::channel(1);
 
     let (tx_click, rx_click) = {
         let len = buttons.len();
@@ -179,74 +188,104 @@ pub fn run_gui(state: RunningState, number_per_row: u8, buttons: &Vec<WidgetConf
             });
     });
 
+    let tx_screen_command = state.tx_screen_command.clone();
     ui.on_screen_reset(move || {
-        tx_screen_reset.try_send(()).unwrap_or_else(|_| {
-            error!("Failed to send screen reset event");
-        });
+        tx_screen_command
+            .try_send(ScreenCommand::TurnOn)
+            .unwrap_or_else(|_| {
+                error!("Failed to send screen reset event");
+            });
     });
-    // let ui_handle = ui.as_weak();
-    // ui.on_request_increase_value(move || {
-    //     let ui = ui_handle.unwrap();
-    //     ui.set_counter(ui.get_counter() + 1);
-    // });
-
-    // let handle_weak = ui.as_weak();
-    // let topic = format!("command/{}/Robotica", state.location);
-
-    // let mqtt = state.mqtt.clone();
-    // tokio::spawn(async move {
-    //     let rx: Receiver<robotica::commands::Command> =
-    //         mqtt.subscribe_into_stateless(topic).await.unwrap();
-    //     let mut rx_s = rx.subscribe().await;
-
-    //     while let Ok(command) = rx_s.recv().await {
-    //         if let robotica::commands::Command::Audio(command) = command {
-    //             let title = command.title;
-    //             let message = command.message;
-
-    //             handle_weak
-    //                 .upgrade_in_event_loop(move |handle| {
-    //                     handle.set_msg_title(format!("{title:?}").into());
-    //                     handle.set_msg_text(format!("{message:?}").into());
-    //                 })
-    //                 .unwrap();
-    //         }
-    //     }
-    // });
 
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
-        enum ScreenState {
-            On(Instant),
-            Off,
+        #[derive(Clone)]
+        struct ScreenState {
+            on: Option<Instant>,
+            message: Option<Instant>,
         }
 
-        async fn timer_wait(state: &ScreenState) -> Option<()> {
-            match state {
-                ScreenState::On(instant) => {
-                    sleep_until(*instant).await;
-                    Some(())
+        impl ScreenState {
+            const fn is_on(&self) -> bool {
+                self.on.is_some() || self.message.is_some()
+            }
+
+            const fn is_off(&self) -> bool {
+                !self.is_on()
+            }
+
+            async fn sync(&mut self, prev: Self, handle_weak: Weak<slint::AppWindow>) {
+                if self.is_on() && prev.is_off() {
+                    turn_screen_on(handle_weak).await;
+                } else if self.is_off() && prev.is_on() {
+                    turn_screen_off(handle_weak).await;
                 }
-                ScreenState::Off => None,
             }
         }
 
-        let mut state = ScreenState::On(Instant::now() + Duration::from_secs(30));
-        let mut rx_screen_reset = rx_screen_reset;
+        async fn on_timer_wait(state: &ScreenState) -> Option<()> {
+            match state.on {
+                Some(instant) => {
+                    sleep_until(instant).await;
+                    Some(())
+                }
+                None => None,
+            }
+        }
+
+        async fn message_timer_wait(state: &ScreenState) -> Option<()> {
+            match state.message {
+                Some(instant) => {
+                    sleep_until(instant).await;
+                    Some(())
+                }
+                None => None,
+            }
+        }
+
+        let mut state = ScreenState {
+            on: Some(Instant::now() + Duration::from_secs(30)),
+            message: None,
+        };
+        let mut rx_screen_command = rx_screen_command;
 
         loop {
+            let prev = state.clone();
+
             select! {
-                Some(()) = rx_screen_reset.recv() => {
-                    if matches!(state, ScreenState::Off) {
-                        let handle_weak = handle_weak.clone();
-                        turn_screen_on(handle_weak).await;
+                Some(command) = rx_screen_command.recv() => {
+                    match command {
+                        ScreenCommand::TurnOn => {
+                            state.on = Some(Instant::now() + Duration::from_secs(30));
+                        }
+                        ScreenCommand::Message{title, message} => {
+                            state.message = Some(Instant::now() + Duration::from_secs(5));
+                            handle_weak
+                                .upgrade_in_event_loop(|handle| {
+                                    handle.set_msg_title(title.into());
+                                    handle.set_msg_body(message.into());
+                                    handle.set_display_message(true);
+                                })
+                                .unwrap();
+                        }
                     }
-                    state = ScreenState::On(Instant::now() + Duration::from_secs(30));
-                }
-                Some(_) = timer_wait(&state) => {
                     let handle_weak = handle_weak.clone();
-                    turn_screen_off(handle_weak).await;
-                    state = ScreenState::Off;
+                    state.sync(prev, handle_weak).await;
+                }
+                Some(_) = on_timer_wait(&state) => {
+                    state.on = None;
+                    let handle_weak = handle_weak.clone();
+                    state.sync(prev, handle_weak).await;
+                }
+                Some(_) = message_timer_wait(&state) => {
+                    handle_weak
+                        .upgrade_in_event_loop(|handle| {
+                            handle.set_display_message(false);
+                        })
+                        .unwrap();
+                    state.message = None;
+                    let handle_weak = handle_weak.clone();
+                    state.sync(prev, handle_weak).await;
                 }
             }
         }
