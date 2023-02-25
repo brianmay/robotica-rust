@@ -196,7 +196,7 @@ export component AppWindow inherits Window {
         opacity: 0.9;
     }
 
-    if screen_off : TouchArea {
+    if screen_off || display_message : TouchArea {
         clicked => {
             screen_reset();
         }

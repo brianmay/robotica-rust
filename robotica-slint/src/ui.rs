@@ -215,6 +215,13 @@ pub fn run_gui(
             }
 
             async fn sync(&mut self, prev: Self, handle_weak: Weak<slint::AppWindow>) {
+                if self.message.is_none() && prev.message.is_some() {
+                    handle_weak
+                        .upgrade_in_event_loop(|handle| {
+                            handle.set_display_message(false);
+                        })
+                        .unwrap();
+                }
                 if self.is_on() && prev.is_off() {
                     turn_screen_on(handle_weak).await;
                 } else if self.is_off() && prev.is_on() {
@@ -257,6 +264,7 @@ pub fn run_gui(
                     match command {
                         ScreenCommand::TurnOn => {
                             state.on = Some(Instant::now() + Duration::from_secs(30));
+                            state.message = None;
                         }
                         ScreenCommand::Message{title, message} => {
                             state.message = Some(Instant::now() + Duration::from_secs(5));
@@ -278,11 +286,6 @@ pub fn run_gui(
                     state.sync(prev, handle_weak).await;
                 }
                 Some(_) = message_timer_wait(&state) => {
-                    handle_weak
-                        .upgrade_in_event_loop(|handle| {
-                            handle.set_display_message(false);
-                        })
-                        .unwrap();
                     state.message = None;
                     let handle_weak = handle_weak.clone();
                     state.sync(prev, handle_weak).await;
