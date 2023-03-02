@@ -3073,9 +3073,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openid"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac275c82305398bb093022fb610c7b1d67ba048b87aeba36a4578ef5769e6dda"
+checksum = "50485a8cdd9ea653beeddd954b64d17f51252276568270f16839ac748d81a91a"
 dependencies = [
  "base64 0.13.1",
  "biscuit",
