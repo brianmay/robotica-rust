@@ -22,7 +22,7 @@ slint = "0.3.4"
 thiserror = "1.0.38"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.1"
-tokio = { version = "1.23.1", features = ["full"] }
+tokio = { version = "1.26.0", features = ["full"] }
 futures = "0.3.24"
 clap = { version = "4.1.8", features = ["derive"] }
 
