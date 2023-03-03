@@ -31,7 +31,7 @@ robotica-common = { path = "../robotica-common", features = ["chrono"] }
 lifx-core = "0.4.0"
 # http server
 axum-core = "0.3.0"
-axum = { version = "0.6.9", features = ["ws"] }
+axum = { version = "0.6.10", features = ["ws"] }
 openid = "0.11.1"
 maud = { version = "0.24.0", features = ["axum"] }
 axum-sessions = "0.4.1"
