@@ -64,7 +64,7 @@ impl TryFrom<MqttMessage> for Mark {
 ///
 /// Note this is not used in the backend, which has its own copy.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Sequence {
     /// The id of the step.
     pub id: String,
