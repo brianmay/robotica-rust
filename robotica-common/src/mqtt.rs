@@ -246,6 +246,14 @@ impl<T: DeserializeOwned + std::fmt::Display> std::fmt::Display for Json<T> {
     }
 }
 
+impl<T: DeserializeOwned + PartialEq> PartialEq for Json<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl<T: DeserializeOwned + Eq> Eq for Json<T> {}
+
 /// The error type for JSON conversion
 #[derive(Error, Debug)]
 pub enum JsonError {

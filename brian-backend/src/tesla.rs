@@ -213,6 +213,41 @@ enum PollInterval {
     Long,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChargingState {
+    Disconnected,
+    Charging,
+    NoPower,
+    Complete,
+    Stopped,
+}
+
+/// Charging state error
+#[derive(Debug, Error)]
+pub enum ChargingStateError {
+    #[error("Invalid charging state: {0}")]
+    InvalidChargingState(String),
+
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] std::str::Utf8Error),
+}
+
+impl TryFrom<MqttMessage> for ChargingState {
+    type Error = ChargingStateError;
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let payload = msg.payload_as_str();
+        match payload {
+            Ok("Disconnected") => Ok(Self::Disconnected),
+            Ok("Charging") => Ok(Self::Charging),
+            Ok("NoPower") => Ok(Self::NoPower),
+            Ok("Complete") => Ok(Self::Complete),
+            Ok("Stopped") => Ok(Self::Stopped),
+            Ok(state) => Err(ChargingStateError::InvalidChargingState(state.to_string())),
+            Err(err) => Err(err.into()),
+        }
+    }
+}
+
 impl From<PollInterval> for Duration {
     fn from(pi: PollInterval) -> Self {
         match pi {
@@ -310,7 +345,36 @@ pub fn monitor_charging(
             .map_into_stateful(move |location| location == "home")
     };
 
+    let charging_state_rx = state
+        .subscriptions
+        .subscribe_into_stateful::<ChargingState>(&format!(
+            "teslamate/cars/{car_number}/charging_state"
+        ));
     let mut token = Token::get(&tesla_secret)?;
+
+    {
+        let message_sink = state.message_sink.clone();
+        let charging_state_rx = charging_state_rx.clone();
+
+        spawn(async move {
+            let mut charging_state_s = charging_state_rx.subscribe().await;
+
+            while let Ok((prev, charging_state)) = charging_state_s.recv().await {
+                if prev == None {
+                    continue;
+                }
+
+                let msg = match charging_state {
+                    ChargingState::Disconnected => "The Tesla is disconnected",
+                    ChargingState::Charging => "The Tesla is charging",
+                    ChargingState::NoPower => "The Tesla is not connected to power",
+                    ChargingState::Complete => "The Tesla is fully charged",
+                    ChargingState::Stopped => "The Tesla charging has stopped",
+                };
+                message_sink.try_send(msg.to_string());
+            }
+        });
+    }
 
     spawn(async move {
         let car_id = match get_car_id(&mut token, car_number).await {
@@ -333,6 +397,7 @@ pub fn monitor_charging(
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
+        let mut charging_state_s = charging_state_rx.subscribe().await;
 
         let mut charge_state = None;
         let mut price_category: Option<PriceCategory> = None;
@@ -400,7 +465,10 @@ pub fn monitor_charging(
                     // If we arrived home we must refresh the charge state.
                     charge_state = None;
                 }
-                else => break,
+
+                Ok((_, charging_state)) = charging_state_s.recv() => {
+                    info!("Charging state: {charging_state:?}");
+                }
             }
 
             let new_interval = if is_home && ps.auto_charge {
@@ -688,22 +756,6 @@ async fn check_charge(
 
         // We don't have a valid charge state, we should retry.
         (None, None) => Err(CheckChargeError::ScheduleRetry),
-
-        // We're not charging, but we should be.
-        // We should invalidate the state - as it might be out-of-date - and retry.
-        // Note: sometimes Tesla will enter state where is refuses to start charging, this will keep it awake.
-        (None, Some(ChargingStateEnum::Complete)) if should_charge => {
-            info!("Charge complete, but we should be charging");
-            *charge_state = None;
-            Err(CheckChargeError::ScheduleRetry)
-        }
-
-        // We're not charging, but we should be.
-        // This might happen if we increased the charge limit but the car didn't start charging.
-        (None, Some(ChargingStateEnum::Stopped)) if should_charge => {
-            info!("Charge stopped, but we should be charging");
-            Err(CheckChargeError::ScheduleRetry)
-        }
 
         // We are charging.
         (None, Some(s)) if s.is_charging() => Ok(CheckChargeState::Charging),
