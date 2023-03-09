@@ -1,6 +1,6 @@
 //! A robotica light controller
 
-use crate::mqtt::MqttMessage;
+use crate::mqtt::{Json, MqttMessage};
 use serde::Deserialize;
 use tracing::error;
 
@@ -8,6 +8,8 @@ use super::{
     get_press_on_or_off, json_command_vec, Action, ConfigTrait, ControllerTrait, DisplayState,
     Label, Subscription, TurnOnOff,
 };
+
+use crate::robotica::commands::DevicePower;
 
 /// The configuration for a light controller
 #[derive(Clone, Deserialize)]
@@ -41,13 +43,26 @@ impl ConfigTrait for Config {
 /// The controller for a light
 pub struct Controller {
     config: Config,
-    power: Option<String>,
+    power: Option<DevicePower>,
     scenes: Option<Vec<String>>,
     priorities: Option<Vec<Priority>>,
 }
 
 fn topic(parts: &[&str]) -> String {
     parts.join("/")
+}
+
+fn log_error<T, Err>(result: Result<T, Err>, msg: &str) -> Option<T>
+where
+    Err: std::fmt::Debug,
+{
+    match result {
+        Ok(v) => Some(v),
+        Err(e) => {
+            error!("Invalid {msg}: {e:?}");
+            None
+        }
+    }
 }
 
 impl ControllerTrait for Controller {
@@ -79,19 +94,25 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         match label.try_into() {
-            Ok(ButtonStateMsgType::Power) => self.power = Some(data),
+            Ok(ButtonStateMsgType::Power) => {
+                if let Some(p) = log_error(data.try_into(), "power") {
+                    self.power = Some(p);
+                }
+            }
 
-            Ok(ButtonStateMsgType::Scenes) => match serde_json::from_str(&data) {
-                Ok(scenes) => self.scenes = Some(scenes),
-                Err(e) => error!("Invalid scenes value {}: {}", data, e),
-            },
+            Ok(ButtonStateMsgType::Scenes) => {
+                if let Some(Json(s)) = log_error(data.try_into(), "scenes") {
+                    self.scenes = Some(s);
+                }
+            }
 
-            Ok(ButtonStateMsgType::Priorities) => match serde_json::from_str(&data) {
-                Ok(priorities) => self.priorities = Some(priorities),
-                Err(e) => error!("Invalid priorities value {}: {}", data, e),
-            },
+            Ok(ButtonStateMsgType::Priorities) => {
+                if let Some(Json(priorities)) = log_error(data.try_into(), "priorities") {
+                    self.priorities = Some(priorities);
+                }
+            }
 
             _ => error!("Invalid message label {}", label),
         }
@@ -139,7 +160,7 @@ impl ControllerTrait for Controller {
 }
 
 fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
-    let power = lb.power.as_deref();
+    let power = lb.power;
     let scenes = lb.scenes.as_deref();
     let scene = &lb.config.scene;
 
@@ -147,8 +168,8 @@ fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
 
     match power {
         None => DisplayState::Unknown,
-        Some("HARD_OFF") => DisplayState::HardOff,
-        Some("OFF") if scenes_contains => DisplayState::AutoOff,
+        Some(DevicePower::HardOff) => DisplayState::HardOff,
+        Some(DevicePower::Off) if scenes_contains => DisplayState::AutoOff,
         _ => match scenes {
             None => DisplayState::Unknown,
             Some(_) if scenes_contains => DisplayState::On,
@@ -158,7 +179,7 @@ fn get_display_state_turn_on(lb: &Controller) -> DisplayState {
 }
 
 fn get_display_state_turn_off(lb: &Controller) -> DisplayState {
-    let power = lb.power.as_deref();
+    let power = lb.power;
     let scenes = lb.scenes.as_deref();
     let priorities = lb.priorities.as_deref();
     let priority = lb.config.priority;
@@ -170,9 +191,9 @@ fn get_display_state_turn_off(lb: &Controller) -> DisplayState {
 
     match power {
         None => DisplayState::Unknown,
-        Some("HARD_OFF") => DisplayState::HardOff,
-        Some("ON") if scenes_empty => DisplayState::Off,
-        Some("OFF") if scenes_empty => DisplayState::On,
+        Some(DevicePower::HardOff) => DisplayState::HardOff,
+        Some(DevicePower::On) if scenes_empty => DisplayState::Off,
+        Some(DevicePower::Off) if scenes_empty => DisplayState::On,
         _ => match priorities {
             None => DisplayState::Unknown,
             Some(priorities) if priorities.contains(&priority) => DisplayState::Off,

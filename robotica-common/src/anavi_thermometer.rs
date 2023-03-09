@@ -3,8 +3,6 @@ use std::fmt::Display;
 
 use serde::Deserialize;
 
-use crate::mqtt::MqttMessage;
-
 /// Get the reading for a measurement
 pub trait GetReading {
     /// Get the reading for a measurement
@@ -23,14 +21,6 @@ impl Display for Temperature {
     }
 }
 
-impl TryFrom<MqttMessage> for Temperature {
-    type Error = serde_json::Error;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
-    }
-}
-
 impl GetReading for Temperature {
     fn get_reading(&self) -> f64 {
         self.temperature
@@ -46,14 +36,6 @@ pub struct Humidity {
 impl Display for Humidity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:.1}%", self.humidity)
-    }
-}
-
-impl TryFrom<MqttMessage> for Humidity {
-    type Error = serde_json::Error;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
     }
 }
 

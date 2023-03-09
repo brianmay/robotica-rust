@@ -7,7 +7,6 @@ use thiserror::Error;
 
 use crate::{
     datetime::{DateTime, Duration},
-    mqtt::MqttMessage,
     robotica::tasks::Task,
 };
 
@@ -49,15 +48,6 @@ pub enum MarkError {
     /// UTF-8 error in Mark.
     #[error("Invalid UTF8")]
     Utf8Error(#[from] std::str::Utf8Error),
-}
-
-impl TryFrom<MqttMessage> for Mark {
-    type Error = MarkError;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        let mark: Mark = serde_json::from_str(&msg.payload)?;
-        Ok(mark)
-    }
 }
 
 /// The schedule with all values completed.

@@ -39,7 +39,7 @@ const fn qos_from_rumqttc(qos: rumqttc::v5::mqttbytes::QoS) -> QoS {
 
 fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
     let topic = str::from_utf8(&msg.topic)?.to_string();
-    let payload = str::from_utf8(&msg.payload)?.to_string();
+    let payload = msg.payload.to_vec();
     Ok(MqttMessage {
         topic,
         payload,
@@ -422,7 +422,7 @@ mod tests {
             retain: false,
         };
 
-        let data: String = msg.payload;
+        let data: String = msg.try_into().unwrap();
         assert_eq!(data, "test");
     }
 
@@ -430,7 +430,7 @@ mod tests {
     fn test_string_to_message() {
         let msg = MqttMessage::new("test", "test".to_string(), false, QoS::AtLeastOnce);
         assert_eq!(msg.topic, "test");
-        assert_eq!(msg.payload, "test");
+        assert_eq!(msg.payload, b"test");
         assert_eq!(msg.qos, QoS::AtLeastOnce);
         assert!(!msg.retain);
     }

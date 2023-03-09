@@ -1,1 +1,1 @@
-RUST_LOG=robotica_backend,brian_backend cargo run -p brian-backend
+RUST_LOG=robotica_backend,brian_backend cargo run -p brian-backend --bin brian-backend

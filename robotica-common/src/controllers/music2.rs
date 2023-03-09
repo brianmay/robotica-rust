@@ -1,5 +1,8 @@
 //! A robotica music controller
-use crate::{mqtt::MqttMessage, robotica::audio};
+use crate::{
+    mqtt::{Json, MqttMessage},
+    robotica::audio,
+};
 use serde::Deserialize;
 use tracing::error;
 
@@ -68,12 +71,12 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         #[allow(clippy::single_match_else)]
         match label.try_into() {
-            Ok(ButtonStateMsgType::State) => match serde_json::from_str(&data) {
-                Ok(state) => self.state = Some(state),
-                Err(e) => error!("Invalid state {}: {}", data, e),
+            Ok(ButtonStateMsgType::State) => match data.try_into() {
+                Ok(Json(state)) => self.state = Some(state),
+                Err(e) => error!("Invalid state: {e}"),
             },
 
             Err(_) => error!("Invalid message label {}", label),

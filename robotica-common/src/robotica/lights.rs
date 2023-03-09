@@ -2,8 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::mqtt::MqttMessage;
-
 /// A LIFX device's power level.
 #[derive(Serialize, Deserialize)]
 pub enum PowerLevel {
@@ -53,14 +51,6 @@ pub enum PowerColor {
 
     /// The device is on and showing the specified colors
     On(Colors),
-}
-
-impl TryFrom<MqttMessage> for PowerColor {
-    type Error = serde_json::Error;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
-    }
 }
 
 /// A V2 light power state

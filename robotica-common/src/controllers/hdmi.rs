@@ -71,12 +71,15 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, _label: Label, data: String) {
-        match (data.parse(), data.as_ref()) {
-            (Ok(value), _) => {
+    fn process_message(&mut self, _label: Label, data: MqttMessage) {
+        let body = data.payload_as_str();
+        let u8 = body.map_or(None, |body| body.parse().ok());
+
+        match (u8, body) {
+            (Some(value), _) => {
                 self.device_state = DeviceState::SelectedInput(value);
             }
-            (_, "HARD_OFF") => {
+            (_, Ok("HARD_OFF")) => {
                 self.device_state = DeviceState::HardOff;
             }
             (_, _) => {

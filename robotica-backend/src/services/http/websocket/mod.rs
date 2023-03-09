@@ -149,7 +149,7 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
                         }
                         Ok(WsCommand::Send(msg)) => {
                             if check_topic_send_allowed(&msg.topic, &user, &config) {
-                                tracing::info!("recv_task: Sending message to mqtt {}: {}", msg.topic, msg.payload);
+                                tracing::info!("recv_task: Sending message to mqtt {}: {:?}", msg.topic, msg.payload);
                                 config.mqtt.try_send(msg);
                             }
                         }

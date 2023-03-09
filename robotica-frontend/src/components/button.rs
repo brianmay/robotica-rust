@@ -345,7 +345,7 @@ pub enum Message {
     Click,
 
     /// Button was received MQTT message
-    Receive((Label, String)),
+    Receive((Label, MqttMessage)),
 
     /// Button was received a WebSocket event
     Event(WsEvent),
@@ -385,7 +385,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                 let s = (*s).clone();
                 let callback = ctx
                     .link()
-                    .callback(move |msg: MqttMessage| Message::Receive((s.label, msg.payload)));
+                    .callback(move |msg: MqttMessage| Message::Receive((s.label, msg)));
 
                 let mut wss = wss.clone();
                 ctx.link().send_future(async move {
@@ -462,8 +462,8 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                     self.wss.send_mqtt(msg);
                 }
             }
-            Message::Receive((label, payload)) => {
-                self.controller.process_message(label, payload);
+            Message::Receive((label, msg)) => {
+                self.controller.process_message(label, msg);
             }
             Message::Event(WsEvent::Disconnected(_)) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connected { .. }) => {}

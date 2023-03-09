@@ -62,15 +62,17 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         if matches!(label.try_into(), Ok(ButtonStateMsgType::Power)) {
-            self.power = Some(data);
+            match data.try_into() {
+                Ok(s) => self.power = Some(s),
+                Err(e) => error!("Invalid message data {}", e),
+            }
             self.online = true;
         } else if matches!(label.try_into(), Ok(ButtonStateMsgType::Lwt)) {
-            if data == "Online" {
-                self.online = true;
-            } else {
-                self.online = false;
+            match data.payload_as_str() {
+                Ok("Online") => self.online = true,
+                _ => self.online = false,
             }
         } else {
             error!("Invalid message label {}", label);

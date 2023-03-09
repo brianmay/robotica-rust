@@ -1,3 +1,4 @@
+use robotica_common::mqtt::Json;
 use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
@@ -172,7 +173,7 @@ pub fn dining_room() -> Html {
             <h1>{ "Dining Room" }</h1>
 
             <div>
-                {"Front door - "} <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Dining/door"/>
+                {"Front door - "} <MqttLast<Json<zigbee2mqtt::Door>> topic="zigbee2mqtt/Dining/door"/>
             </div>
 
             <h2>{"Switches"}</h2>
@@ -233,28 +234,28 @@ pub fn bathroom() -> Html {
                     <tr>
                         <th>{"Bathroom door"}</th>
                         <td>
-                            <MqttLast<zigbee2mqtt::Door> topic="zigbee2mqtt/Bathroom/door"/>
+                            <MqttLast<Json<zigbee2mqtt::Door>> topic="zigbee2mqtt/Bathroom/door"/>
                         </td>
                     </tr>
 
                     <tr>
                         <th>{"Air temperature"}</th>
                         <td>
-                            <MqttLast<anavi::Temperature> topic="workgroup/3765653003a76f301ad767b4676d7065/air/temperature"/>
+                            <MqttLast<Json<anavi::Temperature>> topic="workgroup/3765653003a76f301ad767b4676d7065/air/temperature"/>
                         </td>
                     </tr>
 
                     <tr>
                         <th>{"Air humidity"}</th>
                         <td>
-                            <MqttLast<anavi::Humidity> topic="workgroup/3765653003a76f301ad767b4676d7065/air/humidity"/>
+                            <MqttLast<Json<anavi::Humidity>> topic="workgroup/3765653003a76f301ad767b4676d7065/air/humidity"/>
                         </td>
                     </tr>
 
                     <tr>
                         <th>{"Water temperature"}</th>
                         <td>
-                            <MqttLast<anavi::Temperature> topic="workgroup/3765653003a76f301ad767b4676d7065/water/temperature"/>
+                            <MqttLast<Json<anavi::Temperature>> topic="workgroup/3765653003a76f301ad767b4676d7065/water/temperature"/>
                         </td>
                     </tr>
                 </tbody>

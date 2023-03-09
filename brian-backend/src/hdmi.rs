@@ -3,7 +3,7 @@ use tokio::select;
 use tracing::debug;
 
 use robotica_backend::{devices::hdmi::Command, entities, spawn};
-use robotica_common::mqtt::{MqttMessage, QoS};
+use robotica_common::mqtt::{Json, MqttMessage, QoS};
 use robotica_common::robotica::commands;
 
 use crate::{robotica::Id, State};
@@ -25,7 +25,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let command_rx = state
         .subscriptions
-        .subscribe_into_stateless::<commands::Command>(&topic);
+        .subscribe_into_stateless::<Json<commands::Command>>(&topic);
 
     let name = id.get_name("hdmi");
     let (tx, rx) = entities::create_stateless_entity(name);
@@ -35,7 +35,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
         loop {
             select! {
-                Ok(command) = rx_s.recv() => {
+                Ok(Json(command)) = rx_s.recv() => {
                     if let commands::Command::Hdmi(command) = command {
                         let command = Command::SetInput(command.input, command.output);
                         tx.try_send(command);

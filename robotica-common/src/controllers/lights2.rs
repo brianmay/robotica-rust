@@ -1,7 +1,7 @@
 //! A robotica light controller
 
 use crate::{
-    mqtt::MqttMessage,
+    mqtt::{Json, MqttMessage},
     robotica::lights::{self, PowerState},
 };
 use serde::Deserialize;
@@ -70,13 +70,16 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         match label.try_into() {
-            Ok(ButtonStateMsgType::Scene) => self.scene = Some(data),
+            Ok(ButtonStateMsgType::Scene) => match data.try_into() {
+                Ok(scene) => self.scene = Some(scene),
+                Err(e) => error!("Invalid scene value: {e}"),
+            },
 
-            Ok(ButtonStateMsgType::Power) => match serde_json::from_str(&data) {
-                Ok(state) => self.power = Some(state),
-                Err(e) => error!("Invalid power value {}: {}", data, e),
+            Ok(ButtonStateMsgType::Power) => match data.try_into() {
+                Ok(Json(state)) => self.power = Some(state),
+                Err(e) => error!("Invalid power value: {e}"),
             },
 
             Err(_) => error!("Invalid message label {}", label),

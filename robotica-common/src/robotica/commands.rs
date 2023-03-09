@@ -1,5 +1,7 @@
 //! Commands for Robotica
 
+use std::str::Utf8Error;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -26,7 +28,7 @@ pub struct DeviceCommand {
 }
 
 /// The status from a switch
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DevicePower {
     /// The switch is on.
@@ -62,22 +64,24 @@ pub enum PowerError {
     #[error("Invalid state: {0}")]
     InvalidState(String),
 
-    /// UTF-8 error in power state.
-    #[error("Invalid UTF8")]
-    Utf8Error(#[from] std::str::Utf8Error),
+    /// The payload was not a valid UTF-8 string.
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] Utf8Error),
 }
 
 impl TryFrom<MqttMessage> for DevicePower {
     type Error = PowerError;
 
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        match msg.payload.as_str() {
+        let payload = msg.payload_as_str()?;
+
+        match payload {
             "ON" => Ok(DevicePower::On),
             "AUTO_OFF" => Ok(DevicePower::AutoOff),
             "OFF" => Ok(DevicePower::Off),
             "HARD_OFF" => Ok(DevicePower::HardOff),
             "ERROR" => Ok(DevicePower::DeviceError),
-            _ => Err(PowerError::InvalidState(msg.payload)),
+            _ => Err(PowerError::InvalidState(payload.to_string())),
         }
     }
 }
@@ -221,14 +225,6 @@ pub enum Command {
 
     /// HDMI Command
     Hdmi(HdmiCommand),
-}
-
-impl TryFrom<MqttMessage> for Command {
-    type Error = serde_json::Error;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
-    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use std::env::{self, VarError};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
-use robotica_common::mqtt::QoS;
+use robotica_common::mqtt::{Json, QoS};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
@@ -272,7 +272,7 @@ pub enum ExecutorError {
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt)?;
-    let mark_rx = subscriptions.subscribe_into_stateless::<Mark>("mark");
+    let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;
@@ -319,7 +319,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), E
                     state.finalize(&now);
                     expire_marks(&mut state.marks, &now);
                 },
-                Ok(mark) = mark_s.recv() => {
+                Ok(Json(mark)) = mark_s.recv() => {
                     state.marks.insert(mark.id.clone(), mark);
                     debug!("Marks: {:?}", state.marks);
                     set_all_marks(&mut state.sequences, &state.marks);

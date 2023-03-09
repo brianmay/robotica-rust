@@ -17,7 +17,7 @@ use tracing::{debug, error, info};
 
 use robotica_backend::entities::{create_stateless_entity, Receiver};
 use robotica_backend::spawn;
-use robotica_common::mqtt::{MqttMessage, QoS};
+use robotica_common::mqtt::{BoolError, Json, MqttMessage, QoS};
 
 use super::State;
 
@@ -39,10 +39,10 @@ impl Display for TeslaDoorState {
 impl TryFrom<MqttMessage> for TeslaDoorState {
     type Error = StateErr;
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        match msg.payload.as_str() {
-            "true" => Ok(Self::Open),
-            "false" => Ok(Self::Closed),
-            _ => Err(StateErr::InvalidDoorState(msg.payload)),
+        match msg.try_into() {
+            Ok(true) => Ok(Self::Open),
+            Ok(false) => Ok(Self::Closed),
+            Err(err) => Err(err.into()),
         }
     }
 }
@@ -65,10 +65,10 @@ impl Display for TeslaUserIsPresent {
 impl TryFrom<MqttMessage> for TeslaUserIsPresent {
     type Error = StateErr;
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        match msg.payload.as_str() {
-            "true" => Ok(Self::UserPresent),
-            "false" => Ok(Self::UserNotPresent),
-            _ => Err(StateErr::InvalidDoorState(msg.payload)),
+        match msg.try_into() {
+            Ok(true) => Ok(Self::UserPresent),
+            Ok(false) => Ok(Self::UserNotPresent),
+            Err(err) => Err(err.into()),
         }
     }
 }
@@ -76,7 +76,7 @@ impl TryFrom<MqttMessage> for TeslaUserIsPresent {
 #[derive(Error, Debug)]
 pub enum StateErr {
     #[error("Invalid door state: {0}")]
-    InvalidDoorState(String),
+    InvalidDoorState(#[from] BoolError),
 
     #[error("Invalid UTF8")]
     Utf8Error(#[from] std::str::Utf8Error),
@@ -269,8 +269,10 @@ pub fn monitor_charging(
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/AutoCharge"))
-            .map_into_stateless(move |cmd| {
+            .subscribe_into_stateless::<Json<Command>>(&format!(
+                "command/Tesla/{car_number}/AutoCharge"
+            ))
+            .map_into_stateless(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,
@@ -286,8 +288,10 @@ pub fn monitor_charging(
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into_stateless::<Command>(&format!("command/Tesla/{car_number}/ForceCharge"))
-            .map_into_stateless(move |cmd| {
+            .subscribe_into_stateless::<Json<Command>>(&format!(
+                "command/Tesla/{car_number}/ForceCharge"
+            ))
+            .map_into_stateless(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,

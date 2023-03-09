@@ -95,7 +95,7 @@ pub trait ControllerTrait {
     fn process_disconnected(&mut self);
 
     /// Process an incoming message
-    fn process_message(&mut self, label: Label, data: String);
+    fn process_message(&mut self, label: Label, data: MqttMessage);
 
     /// Get the current display state for this controller
     fn get_display_state(&self) -> DisplayState;

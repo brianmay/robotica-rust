@@ -2,7 +2,10 @@
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
-use robotica_common::{mqtt::MqttMessage, scheduler::Sequence};
+use robotica_common::{
+    mqtt::{Json, MqttMessage},
+    scheduler::Sequence,
+};
 
 use crate::services::websocket::WebsocketService;
 
@@ -23,11 +26,11 @@ pub fn schedule(props: &Props) -> Html {
     let callback = {
         let sequence_list = sequence_list.clone();
         Callback::from(move |msg: MqttMessage| {
-            serde_json::from_str(&msg.payload).map_or_else(
+            msg.try_into().map_or_else(
                 |e| {
                     tracing::error!("Failed to parse schedule: {}", e);
                 },
-                |new_schedule: Vec<Sequence>| sequence_list.set(new_schedule),
+                |Json(new_schedule): Json<Vec<Sequence>>| sequence_list.set(new_schedule),
             );
         })
     };

@@ -68,9 +68,12 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         if matches!(label.try_into(), Ok(ButtonStateMsgType::PlayList)) {
-            self.play_list = Some(data);
+            match data.try_into() {
+                Ok(data) => self.play_list = Some(data),
+                Err(e) => error!("Invalid play list: {}", e),
+            }
         } else {
             error!("Invalid message label {}", label);
         }

@@ -3,8 +3,6 @@ use std::fmt::Display;
 
 use serde::Deserialize;
 
-use crate::mqtt::MqttMessage;
-
 /// The `Zigbee2MQTT` door.
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -25,13 +23,5 @@ impl Display for Door {
         } else {
             write!(f, "Open")
         }
-    }
-}
-
-impl TryFrom<MqttMessage> for Door {
-    type Error = serde_json::Error;
-
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
     }
 }

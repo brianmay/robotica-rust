@@ -13,7 +13,7 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    mqtt::{MqttMessage, QoS},
+    mqtt::{Json, MqttMessage, QoS},
     robotica::{
         commands::{Command, Light2Command},
         lights::{self, Colors, PowerColor, PowerLevel, PowerState, State, HSBK},
@@ -262,7 +262,8 @@ fn mqtt_entity(
 
     let pc_rx = state
         .subscriptions
-        .subscribe_into_stateless::<PowerColor>(&topic);
+        .subscribe_into_stateless::<Json<PowerColor>>(&topic)
+        .map_into_stateless(|Json(c)| c);
 
     let (tx, rx) = entities::create_stateless_entity(name);
     spawn(async move {
@@ -427,7 +428,7 @@ where
     let topic = &format!("command/{topic_substr}");
     let rx_command = state
         .subscriptions
-        .subscribe_into_stateless::<Command>(topic);
+        .subscribe_into_stateless::<Json<Command>>(topic);
 
     {
         let psr = state.persistent_state_database.for_name(&topic_substr);
@@ -465,7 +466,7 @@ where
 
             loop {
                 tokio::select! {
-                    Ok(command) = rx_command_s.recv() => {
+                    Ok(Json(command)) = rx_command_s.recv() => {
                         debug!("Got command: {:?}", command);
                         match command {
                             Command::Light2(command) => {

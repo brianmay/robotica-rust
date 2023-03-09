@@ -1,5 +1,5 @@
 //! A robotica switch controller
-use crate::mqtt::MqttMessage;
+use crate::{mqtt::MqttMessage, robotica::commands::DevicePower};
 use serde::Deserialize;
 use tracing::error;
 
@@ -32,7 +32,7 @@ impl ConfigTrait for Config {
 /// The controller for a switch
 pub struct Controller {
     config: Config,
-    power: Option<String>,
+    power: Option<DevicePower>,
 }
 
 fn topic(parts: &[&str]) -> String {
@@ -54,9 +54,12 @@ impl ControllerTrait for Controller {
         result
     }
 
-    fn process_message(&mut self, label: Label, data: String) {
+    fn process_message(&mut self, label: Label, data: MqttMessage) {
         if matches!(label.try_into(), Ok(ButtonStateMsgType::Power)) {
-            self.power = Some(data);
+            match data.try_into() {
+                Ok(json) => self.power = Some(json),
+                Err(err) => error!("Invalid power state: {err}"),
+            }
         } else {
             error!("Invalid message label {}", label);
         }
@@ -67,14 +70,14 @@ impl ControllerTrait for Controller {
     }
 
     fn get_display_state(&self) -> DisplayState {
-        let power = self.power.as_deref();
+        let power = self.power;
 
         let state = match power {
             None => DisplayState::Unknown,
-            Some("HARD_OFF") => DisplayState::HardOff,
-            Some("AUTO_OFF") => DisplayState::AutoOff,
-            Some("ON") => DisplayState::On,
-            Some("OFF") => DisplayState::Off,
+            Some(DevicePower::HardOff) => DisplayState::HardOff,
+            Some(DevicePower::AutoOff) => DisplayState::AutoOff,
+            Some(DevicePower::On) => DisplayState::On,
+            Some(DevicePower::Off) => DisplayState::Off,
             _ => DisplayState::Error,
         };
 

@@ -1,6 +1,13 @@
 //! Common Mqtt stuff
 
-use serde::{Deserialize, Serialize};
+use core::fmt;
+use std::{
+    fmt::Formatter,
+    str::{FromStr, Utf8Error},
+    string::FromUtf8Error,
+};
+
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
 #[cfg(feature = "websockets")]
@@ -50,13 +57,13 @@ impl<'de> Deserialize<'de> for QoS {
 }
 
 /// A MQTT message.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MqttMessage {
     /// MQTT topic to send the message to.
     pub topic: String,
 
     /// MQTT message to send.
-    pub payload: String,
+    pub payload: Vec<u8>,
 
     /// Was/Is this message retained?
     pub retain: bool,
@@ -65,14 +72,70 @@ pub struct MqttMessage {
     pub qos: QoS,
 }
 
+impl std::fmt::Debug for MqttMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let payload = String::from_utf8(self.payload.clone())
+            .map_or_else(|_| format!("{:?}", self.payload), |payload| payload);
+
+        f.debug_struct("MqttMessage")
+            .field("topic", &self.topic)
+            .field("payload", &payload)
+            .field("retain", &self.retain)
+            .field("qos", &self.qos)
+            .finish()
+    }
+}
+
 impl Default for MqttMessage {
     fn default() -> Self {
         Self {
             topic: String::new(),
-            payload: String::new(),
+            payload: Vec::new(),
             retain: false,
             qos: QoS::ExactlyOnce,
         }
+    }
+}
+
+impl MqttMessage {
+    /// Create a new message.
+    #[must_use]
+    pub fn new(
+        topic: impl Into<String>,
+        payload: impl Into<String>,
+        retain: bool,
+        qos: QoS,
+    ) -> Self {
+        Self {
+            topic: topic.into(),
+            payload: payload.into().bytes().collect(),
+            retain,
+            qos,
+        }
+    }
+
+    /// Create a new message from a JSON value.
+    ///
+    /// # Errors
+    ///
+    /// If the JSON value cannot be serialized.
+    pub fn from_json(
+        topic: impl Into<String>,
+        payload: &impl Serialize,
+        retain: bool,
+        qos: QoS,
+    ) -> Result<Self, serde_json::Error> {
+        let payload = serde_json::to_string(payload)?;
+        Ok(Self::new(topic, payload, retain, qos))
+    }
+
+    /// Return reference to decoded string payload.
+    ///
+    /// # Errors
+    ///
+    /// If the payload is not valid UTF-8.
+    pub fn payload_as_str(&self) -> Result<&str, Utf8Error> {
+        std::str::from_utf8(&self.payload)
     }
 }
 
@@ -103,20 +166,33 @@ impl ProtobufIntoFrom for MqttMessage {
     }
 }
 
+impl TryFrom<MqttMessage> for String {
+    type Error = FromUtf8Error;
+
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let payload = String::from_utf8(msg.payload)?;
+        Ok(payload)
+    }
+}
+
 /// The error type for bool conversion
 #[derive(Error, Debug)]
 pub enum BoolError {
     /// The payload was not a valid boolean string.
     #[error("Invalid value: {0}")]
     InvalidValue(String),
+
+    /// The payload was not a valid UTF-8 string.
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] Utf8Error),
 }
 
 impl TryFrom<MqttMessage> for bool {
     type Error = BoolError;
 
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        let payload: String = msg.payload;
-        match payload.as_str() {
+        let payload: &str = msg.payload_as_str()?;
+        match payload {
             "true" => Ok(true),
             "false" => Ok(false),
             value => Err(BoolError::InvalidValue(value.to_string())),
@@ -124,56 +200,71 @@ impl TryFrom<MqttMessage> for bool {
     }
 }
 
-impl TryFrom<MqttMessage> for serde_json::Value {
-    type Error = serde_json::Error;
+/// A parsed MQTT message.
+pub struct Parsed<Body: FromStr>(pub Body);
 
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        serde_json::from_str(&msg.payload)
-    }
-}
-
-/// Dummy error for String conversion
+/// The error type for u8 conversion
 #[derive(Error, Debug)]
-pub enum StringError {}
+pub enum ParsedError<ParserError> {
+    /// The payload could not be parsed.
+    #[error("Invalid value: {0}")]
+    InvalidValue(ParserError),
 
-impl TryFrom<MqttMessage> for String {
-    type Error = StringError;
+    /// The payload was not a valid UTF-8 string.
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] Utf8Error),
+}
+
+impl<Body: FromStr> TryFrom<MqttMessage> for Parsed<Body> {
+    type Error = ParsedError<Body::Err>;
 
     fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        Ok(msg.payload)
+        let payload: &str = msg.payload_as_str()?;
+        let payload: Body = payload.parse().map_err(ParsedError::InvalidValue)?;
+        Ok(Parsed(payload))
     }
 }
 
-impl MqttMessage {
-    /// Create a new message.
-    #[must_use]
-    pub fn new(
-        topic: impl Into<String>,
-        payload: impl Into<String>,
-        retain: bool,
-        qos: QoS,
-    ) -> Self {
-        Self {
-            topic: topic.into(),
-            payload: payload.into(),
-            retain,
-            qos,
-        }
-    }
+/// A JSON MQTT message.
+pub struct Json<T: DeserializeOwned>(pub T);
 
-    /// Create a new message from a json payload.
-    ///
-    /// # Errors
-    ///
-    /// This function will fail if the payload cannot be serialized to json.
-    pub fn from_json(
-        topic: impl Into<String>,
-        payload: &serde_json::Value,
-        retain: bool,
-        qos: QoS,
-    ) -> Result<Self, serde_json::Error> {
-        let payload = serde_json::to_string(payload)?;
-        Ok(Self::new(topic, payload, retain, qos))
+impl<T: DeserializeOwned + Clone> Clone for Json<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: DeserializeOwned + std::fmt::Debug> std::fmt::Debug for Json<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T: DeserializeOwned + std::fmt::Display> std::fmt::Display for Json<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The error type for JSON conversion
+#[derive(Error, Debug)]
+pub enum JsonError {
+    /// The payload was not a valid JSON string.
+    #[error("Invalid JSON: {0}")]
+    InvalidJson(#[from] serde_json::Error),
+
+    /// The payload was not a valid UTF-8 string.
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] Utf8Error),
+}
+
+impl<Body: DeserializeOwned> TryFrom<MqttMessage> for Json<Body> {
+    type Error = JsonError;
+
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let payload: &str = msg.payload_as_str()?;
+        let value = serde_json::from_str(payload)?;
+        Ok(Json(value))
     }
 }
 

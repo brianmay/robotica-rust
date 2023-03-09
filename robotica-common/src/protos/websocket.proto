@@ -3,7 +3,7 @@ package protos.websocket;
 
 message EncodedMqttMessage {
   string topic = 1;
-  string payload = 2;
+  bytes payload = 2;
   bool retain = 3;
   uint32 qos = 4;
 }

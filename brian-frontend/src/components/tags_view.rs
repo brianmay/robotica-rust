@@ -4,7 +4,7 @@ use tracing::error;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
-use robotica_common::mqtt::MqttMessage;
+use robotica_common::mqtt::{Json, MqttMessage};
 use robotica_common::scheduler::Tags;
 use robotica_frontend::services::websocket::WebsocketService;
 
@@ -20,11 +20,11 @@ pub fn tags_view() -> Html {
     let callback = {
         let tags = tags.clone();
         Callback::from(move |msg: MqttMessage| {
-            serde_json::from_str(&msg.payload).map_or_else(
+            msg.try_into().map_or_else(
                 |e| {
                     error!("Failed to parse schedule: {}", e);
                 },
-                |new_tags: Tags| tags.set(Some(new_tags)),
+                |Json(new_tags): Json<Tags>| tags.set(Some(new_tags)),
             );
         })
     };

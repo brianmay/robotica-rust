@@ -484,9 +484,9 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
 fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut State) {
     match msg {
         Some(Ok(msg)) => {
-            debug!("ws: Received message: {:?}", msg);
             if let Some(msg) = message_to_bytes(msg) {
                 let msg: MqttMessage = MqttMessage::decode(&msg).unwrap();
+                debug!("ws: Received message: {:?}", msg);
                 state.dispatch_mqtt(&msg);
             }
             set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
