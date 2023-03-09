@@ -2,10 +2,8 @@
 use yew::prelude::*;
 
 use robotica_common::controllers::{
-    hdmi,
-    lights::{self, Priority},
-    lights2, music, music2, switch, tasmota, Action, ConfigTrait, ControllerTrait, DisplayState,
-    Label,
+    hdmi, lights2, music, music2, switch, tasmota, Action, ConfigTrait, ControllerTrait,
+    DisplayState, Label,
 };
 use robotica_common::mqtt::MqttMessage;
 
@@ -17,54 +15,6 @@ use crate::services::{
 trait ButtonPropsTrait {
     fn get_icon(&self) -> &Icon;
     fn get_name(&self) -> &str;
-}
-
-/// The yew properties for a light button.
-#[derive(Clone, Properties, Eq, PartialEq)]
-pub struct LightProps {
-    /// The name of the light.
-    pub name: String,
-
-    /// The base string that all topics are derived from.
-    pub topic_substr: String,
-
-    /// The action that the button should perform.
-    pub action: Action,
-
-    /// The icon to display on the button.
-    pub icon: Icon,
-
-    /// The scene to activate when the button is pressed.
-    pub scene: String,
-
-    /// The priority of the scene.
-    pub priority: Priority,
-}
-
-impl ConfigTrait for LightProps {
-    type Controller = lights::Controller;
-
-    fn create_controller(&self) -> Self::Controller {
-        let props = (*self).clone();
-        let config = lights::Config {
-            topic_substr: props.topic_substr,
-            action: props.action,
-            scene: props.scene,
-            priority: props.priority,
-        };
-
-        config.create_controller()
-    }
-}
-
-impl ButtonPropsTrait for LightProps {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
-    }
-
-    fn get_name(&self) -> &str {
-        self.name.as_str()
-    }
 }
 
 /// The yew properties for a light button.
@@ -352,17 +302,6 @@ pub enum Message {
 
     /// We have subscribed to a topic
     Subscribed(websocket::Subscription),
-}
-
-impl From<LightProps> for lights::Config {
-    fn from(props: LightProps) -> Self {
-        Self {
-            topic_substr: props.topic_substr,
-            action: props.action,
-            scene: props.scene,
-            priority: props.priority,
-        }
-    }
 }
 
 impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component for Button<T> {
