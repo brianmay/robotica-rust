@@ -41,7 +41,7 @@ futures = "0.3.25"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["fs", "trace"] }
 arc-swap = "1.4.0"
-hyper = "0.14.24"
+hyper = "0.14.25"
 
 [build-dependencies]
 lalrpop = "0.19.3"
