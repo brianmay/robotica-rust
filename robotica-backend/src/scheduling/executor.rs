@@ -49,7 +49,7 @@ struct State<T: TimeZone> {
 
 impl<T: TimeZone + Debug> State<T> {
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
-        let today = now.with_timezone::<T>(&self.timezone).date();
+        let today = now.with_timezone::<T>(&self.timezone).date_naive();
 
         if let Some(sequences) = self.check_time_travel(today) {
             self.publish_sequences(&sequences);
@@ -116,11 +116,11 @@ impl<T: TimeZone + Debug> State<T> {
         next.map_or_else(
             || Instant::now() + tokio::time::Duration::from_secs(60),
             |next| {
-                let next = next.required_time.clone();
-                let mut next = next - now.clone();
+                let next = next.required_time;
+                let mut next = next - *now;
                 // We poll at least every two minutes just in case system time changes.
-                if next > Duration::minutes(2) {
-                    next = Duration::minutes(2);
+                if next > chrono::Duration::minutes(2) {
+                    next = chrono::Duration::minutes(2);
                 }
                 let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
                 Instant::now() + next
@@ -333,8 +333,8 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), E
 
 fn get_initial_state(mqtt: MqttTx) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
-    let now = DateTime::from(Utc::now());
-    let date = now.with_timezone::<Local>(&timezone).date();
+    let now = Utc::now();
+    let date = now.with_timezone::<Local>(&timezone).date_naive();
     let hostname = env::var("HOSTNAME")?;
 
     let state = {

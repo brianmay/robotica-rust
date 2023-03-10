@@ -71,12 +71,17 @@ pub struct Config {
     zero_time: Option<bool>,
 
     /// The total duration of this step.
+    #[serde(with = "robotica_common::datetime::with_duration")]
     required_time: Duration,
 
     /// The latest time this step can be completed.
+    #[serde(with = "robotica_common::datetime::with_option_duration")]
+    #[serde(default)]
     latest_time: Option<Duration>,
 
     /// How frequently this step should be repeated.
+    #[serde(with = "robotica_common::datetime::with_option_duration")]
+    #[serde(default)]
     repeat_time: Option<Duration>,
 
     /// How many times this step should be repeated.
@@ -132,6 +137,7 @@ pub struct Sequence {
     pub required_time: DateTime<Utc>,
 
     /// The required duration of this step.
+    #[serde(with = "robotica_common::datetime::with_duration")]
     required_duration: Duration,
 
     /// The latest time this step can be completed.
@@ -336,7 +342,7 @@ fn config_to_sequence(
     });
 
     let default_latest_time = Duration::minutes(1);
-    let latest_time = start_time.clone() + config.latest_time.unwrap_or(default_latest_time);
+    let latest_time = *start_time + config.latest_time.unwrap_or(default_latest_time);
 
     Sequence {
         id,
@@ -345,7 +351,7 @@ fn config_to_sequence(
         classifications: config.classifications,
         options: config.options,
         zero_time: config.zero_time.unwrap_or(false),
-        required_time: start_time.clone(),
+        required_time: *start_time,
         required_duration: config.required_time,
         latest_time,
         repeat_number,
@@ -368,7 +374,7 @@ pub fn get_sequence_with_config(
     options: &HashSet<String>,
     start_time: &DateTime<Utc>,
 ) -> Result<Vec<Sequence>, SequenceError> {
-    let start_time = start_time.clone();
+    let start_time = *start_time;
 
     let src_sequences: &Vec<Config> = config
         .get(sequence_name)
@@ -403,7 +409,7 @@ pub fn get_sequence_with_config(
             expanded.repeat_number,
         );
         sequences.push(sequence);
-        start_time = start_time + expanded.duration;
+        start_time += expanded.duration;
     }
 
     Ok(sequences)
@@ -500,14 +506,14 @@ fn get_corrected_start_time(
     start_time: DateTime<Utc>,
     expanded_list: &Vec<ExpandedConfig>,
 ) -> DateTime<Utc> {
-    let mut updated_start_time = start_time.clone();
+    let mut updated_start_time = start_time;
 
     for expanded in expanded_list {
         if expanded.config.zero_time == Some(true) {
             return updated_start_time;
         }
 
-        updated_start_time = updated_start_time - expanded.duration;
+        updated_start_time -= expanded.duration;
     }
 
     // If we didn't find any zero time sequences, then just return the start time.
@@ -581,29 +587,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -863,13 +869,10 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(
-            corrected_datetime,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
-        );
+        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 30, 0));
     }
 
     #[test]
@@ -910,13 +913,10 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(
-            corrected_datetime,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
-        );
+        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 30, 0));
     }
 
     #[test]
@@ -962,13 +962,10 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into();
+        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(
-            corrected_datetime,
-            Utc.ymd(2020, 12, 25).and_hms(0, 15, 0).into()
-        );
+        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 15, 0));
     }
 
     #[test]
@@ -1023,29 +1020,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into(),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 30, 0),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1081,29 +1078,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0)
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0)
         );
         assert_eq!(sequence[1].id, "test_0");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1116,12 +1113,12 @@ mod tests {
             scheduler::Schedule {
                 sequence_name: "test".to_string(),
                 options: HashSet::new(),
-                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into(),
+                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
             },
             scheduler::Schedule {
                 sequence_name: "christmas".to_string(),
                 options: HashSet::new(),
-                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into(),
+                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 10, 0),
             },
         ];
 
@@ -1222,44 +1219,44 @@ mod tests {
         assert_eq!(sequence.len(), 4);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0)
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0)
         );
         assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
 
         assert_eq!(
             sequence[2].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
         );
         assert_eq!(
             sequence[2].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
         );
         assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
 
         assert_eq!(
             sequence[3].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 40, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 40, 0)
         );
         assert_eq!(
             sequence[3].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 41, 0).into()
+            Utc.ymd(2020, 12, 25).and_hms(0, 41, 0)
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);

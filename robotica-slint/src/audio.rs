@@ -12,7 +12,7 @@ use robotica_backend::{
     tasks::get_task_messages,
 };
 use robotica_common::{
-    mqtt::{MqttMessage, QoS},
+    mqtt::{Json, MqttMessage, QoS},
     robotica::{
         audio::State,
         commands::{AudioCommand, Command},
@@ -43,7 +43,7 @@ pub fn run(
 ) {
     let topic_substr = &config.topic_substr;
     let topic = format!("command/{topic_substr}");
-    let command_rx: Receiver<Command> = subscriptions.subscribe_into_stateless(topic);
+    let command_rx: Receiver<Json<Command>> = subscriptions.subscribe_into_stateless(topic);
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
@@ -56,7 +56,7 @@ pub fn run(
             state.play_list = None;
         });
 
-        while let Ok(command) = command_s.recv().await {
+        while let Ok(Json(command)) = command_s.recv().await {
             if let Command::Audio(command) = command {
                 state.error = None;
                 handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;

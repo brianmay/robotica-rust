@@ -43,7 +43,7 @@ use robotica_common::{
     controllers::{
         hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
-    mqtt::{MqttMessage, QoS},
+    mqtt::MqttMessage,
 };
 use tokio::{
     select,
@@ -330,14 +330,13 @@ pub fn run_gui(
 
                     select! {
                         _ = rx_click.recv() => {
-                            controller.get_press_commands().iter().for_each(|c| {
-                                let message = MqttMessage::new(c.topic.clone(), c.payload.clone(), false, QoS::AtLeastOnce);
+                            controller.get_press_commands().into_iter().for_each(|message| {
                                 state.mqtt.try_send(message);
                             });
                         }
 
                         Ok((label, msg)) = select_ok(f) => {
-                            controller.process_message(label, msg.payload);
+                            controller.process_message(label, msg);
 
                             let display_state = controller.get_display_state();
                             let lbc = lbc.clone();

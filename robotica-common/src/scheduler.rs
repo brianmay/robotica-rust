@@ -83,6 +83,7 @@ pub struct Sequence {
     pub required_time: DateTime<Utc>,
 
     /// The required duration of this step.
+    #[serde(with = "crate::datetime::with_duration")]
     required_duration: Duration,
 
     /// The latest time this step can be completed.

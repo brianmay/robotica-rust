@@ -6,11 +6,12 @@ use std::{
 };
 
 use crate::scheduling::conditions;
+use chrono::Datelike;
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use robotica_common::datetime::{Date, Weekday};
+use robotica_common::datetime::{num_days_from_ce, Date, Weekday};
 
 use super::ast::{Boolean, Fields, Reference};
 
@@ -143,8 +144,7 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
         }
         let weekday = date.weekday();
         if let Some(weekday_wanted) = c.week_day {
-            let is_weekday =
-                !(weekday == chrono::Weekday::Sat.into() || weekday == chrono::Weekday::Sun.into());
+            let is_weekday = !(weekday == chrono::Weekday::Sat || weekday == chrono::Weekday::Sun);
 
             if is_weekday != weekday_wanted {
                 continue;
@@ -157,7 +157,7 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
         }
         if let Some(if_cond) = &c.if_cond {
             let context = Context {
-                days_since_epoch: date.num_days_from_ce(),
+                days_since_epoch: num_days_from_ce(date),
                 classifications: tags.clone(),
                 day_of_week: date.weekday().to_string().to_lowercase(),
             };
@@ -293,7 +293,7 @@ mod tests {
                 start: Some(Date::from_ymd_opt(2020, 1, 1).unwrap()),
                 stop: Some(Date::from_ymd_opt(2020, 12, 31).unwrap()),
                 week_day: None,
-                day_of_week: Some(chrono::Weekday::Mon.into()),
+                day_of_week: Some(chrono::Weekday::Mon),
                 if_cond: None,
                 if_set: None,
                 if_not_set: None,

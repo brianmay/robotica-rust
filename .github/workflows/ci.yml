@@ -23,7 +23,7 @@ jobs:
       - name: Compile
         run: cargo build
       - name: Test common lib
-        run: cargo test -p robotica-common
+        run: cargo test -p robotica-common --features chrono
       - name: Test backend lib
         run: cargo test -p robotica-backend
       - name: Test frontend lib

@@ -200,7 +200,7 @@ pub fn get_schedule_with_config<T: TimeZone>(
 
     sequences.map(|s| {
         let mut s = s;
-        s.sort_by_key(|s| s.datetime.clone());
+        s.sort_by_key(|s| s.datetime);
         s
     })
 }

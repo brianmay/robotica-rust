@@ -14,7 +14,7 @@ use robotica_backend::{
     spawn, EnvironmentError,
 };
 use robotica_common::datetime::{
-    convert_date_time_to_utc_or_default, utc_now, Date, DateTime, Duration, Time,
+    convert_date_time_to_utc_or_default, duration_from_hms, utc_now, Date, DateTime, Duration, Time,
 };
 
 use crate::State;
@@ -111,7 +111,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
             tokio::select! {
                 _ = sleep_until(price_instant) => {
                     let now = utc_now();
-                    let today = now.with_timezone(&nem_timezone).date();
+                    let today = now.with_timezone(&nem_timezone).date_naive();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
 
@@ -125,7 +125,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
                             let summary = pp.prices_to_summary(&now, &prices);
                             pp.save(&psr);
 
-                            let update_time = summary.next_update.clone();
+                            let update_time = summary.next_update;
 
                             // Write the prices to influxdb and send
                             prices_to_influxdb(&config, &prices, &summary).await;
@@ -136,7 +136,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
 
                             // How long to the current interval expires?
                             let now = utc_now();
-                            let duration = update_time.clone() - now;
+                            let duration: Duration = update_time - now;
                             info!("Next price update: {update_time:?} in {duration}");
 
                             // Ensure we update prices at least once once every 5 minutes.
@@ -159,7 +159,7 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
                 _ = usage_interval.tick() => {
                     // Update the amber usage once an hour.
                     let now = utc_now();
-                    let today = now.with_timezone(&nem_timezone).date();
+                    let today = now.with_timezone(&nem_timezone).date_naive();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
                     process_usage(&config, yesterday, tomorrow).await;
@@ -388,7 +388,7 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
             duration: data.duration,
             per_kwh: data.per_kwh,
             renewables: data.renewables,
-            time: data.start_time.clone().into(),
+            time: data.start_time,
             interval_type: data.interval_type,
         }
         .into_query("amber/price");
@@ -429,7 +429,7 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
                     renewables: data.renewables,
                     kwh: data.kwh,
                     cost: data.cost,
-                    time: data.start_time.into(),
+                    time: data.start_time,
                 }
                 .into_query(name);
 
@@ -448,6 +448,8 @@ async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
 struct DayState {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
+
+    #[serde(with = "robotica_common::datetime::with_duration")]
     cheap_power_for_day: Duration,
     last_cheap_update: Option<DateTime<Utc>>,
 }
@@ -492,7 +494,7 @@ impl PriceProcessor {
                 return PriceSummary{
                     is_cheap_2hr: false,
                     per_kwh: 100.0,
-                    next_update: now.clone() + Duration::seconds(30),
+                    next_update: *now + Duration::seconds(30),
                     category: PriceCategory::Expensive
                 }
             };
@@ -506,7 +508,7 @@ impl PriceProcessor {
         };
 
         if let Some(last_cheap_update) = &ds.last_cheap_update {
-            let duration = now.clone() - last_cheap_update.clone();
+            let duration = *now - *last_cheap_update;
             // println!(
             //     "Adding {:?} to cheap power for day {now:?} - {current_cheap_update:?}",
             //     duration
@@ -524,7 +526,7 @@ impl PriceProcessor {
         let interval_duration = Duration::minutes(30);
         let duration = Duration::hours(2)
             .checked_sub(&ds.cheap_power_for_day)
-            .unwrap_or_else(|| Duration::new(0, 0, 0));
+            .unwrap_or_else(|| duration_from_hms(0, 0, 0));
 
         let number_of_intervals =
             divide_round_up(duration.num_minutes(), interval_duration.num_minutes());
@@ -543,7 +545,7 @@ impl PriceProcessor {
         info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
 
         if is_cheap {
-            ds.last_cheap_update = Some(now.clone());
+            ds.last_cheap_update = Some(*now);
         } else {
             ds.last_cheap_update = None;
         }
@@ -554,7 +556,7 @@ impl PriceProcessor {
             category: prices_to_category(prices),
             is_cheap_2hr: is_cheap,
             per_kwh: current_price.per_kwh,
-            next_update: current_price.end_time.clone(),
+            next_update: current_price.end_time,
         };
         info!("Price summary: {:?}", ps);
         ps
@@ -566,13 +568,13 @@ fn new_day_state(now: &DateTime<Utc>) -> DayState {
     DayState {
         start: start_day,
         end: end_day,
-        cheap_power_for_day: Duration::new(0, 0, 0),
+        cheap_power_for_day: duration_from_hms(0, 0, 0),
         last_cheap_update: None,
     }
 }
 
 fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
-    let time_2hr_cheap: Time = Time::new(5, 0, 0).unwrap_or_default();
+    let time_2hr_cheap: Time = Time::from_hms(5, 0, 0);
     let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
     (start_day, end_day)
 }
@@ -582,13 +584,13 @@ fn get_day<T: TimeZone + std::fmt::Debug>(
     time: Time,
     local: &T,
 ) -> (DateTime<Utc>, DateTime<Utc>) {
-    let today = now.with_timezone(local).date();
+    let today = now.with_timezone(local).date_naive();
     let tomorrow = today + Duration::days(1);
     let mut start_day = convert_date_time_to_utc_or_default(today, time, local);
     let mut end_day = convert_date_time_to_utc_or_default(tomorrow, time, local);
     if *now < start_day {
-        start_day = start_day - Duration::days(1);
-        end_day = end_day - Duration::days(1);
+        start_day -= Duration::days(1);
+        end_day -= Duration::days(1);
     }
     (start_day, end_day)
 }
@@ -650,8 +652,8 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price| {
-            let date = start_time.with_timezone(&Local).date();
-            let end_time = start_time.clone() + Duration::minutes(30);
+            let date = start_time.with_timezone(&Local).date_naive();
+            let end_time = start_time + Duration::minutes(30);
             PriceResponse {
                 date,
                 start_time,
@@ -751,8 +753,8 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&Local).date();
-            let end_time = start_time.clone() + Duration::minutes(30);
+            let date = start_time.with_timezone(&Local).date_naive();
+            let end_time = start_time + Duration::minutes(30);
             PriceResponse {
                 date,
                 start_time,
@@ -792,7 +794,7 @@ mod tests {
         assert_eq!(summary.next_update, dt("2020-01-01T01:00:00Z"));
         let ds = &pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
-        let cp = ds.last_cheap_update.clone().unwrap();
+        let cp = ds.last_cheap_update.unwrap();
         assert_eq!(cp, now);
 
         let prices = vec![
@@ -835,7 +837,7 @@ mod tests {
     fn test_get_day() {
         let timezone = FixedOffset::east(60 * 60 * 11);
         {
-            let time = Time::new(5, 0, 0).unwrap();
+            let time = Time::from_hms(5, 0, 0);
             let now = dt("2020-01-02T00:00:00Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -843,7 +845,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0).unwrap();
+            let time = Time::from_hms(5, 0, 0);
             let now = dt("2020-01-02T17:59:59Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -851,7 +853,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0).unwrap();
+            let time = Time::from_hms(5, 0, 0);
             let now = "2020-01-02T18:00:00Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
@@ -859,7 +861,7 @@ mod tests {
         }
 
         {
-            let time = Time::new(5, 0, 0).unwrap();
+            let time = Time::from_hms(5, 0, 0);
             let now = "2020-01-02T18:00:01Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));

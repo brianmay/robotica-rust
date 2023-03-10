@@ -50,7 +50,7 @@ pub fn schedule(props: &Props) -> Html {
             sequence_list.iter().map(|sequence| {
                 html! {
                     <div class="sequence" id={sequence.id.clone()}>
-                        <div>{sequence.required_time.clone()}</div>
+                        <div>{sequence.required_time}</div>
                         <div>{
                             sequence.tasks.iter().map(|task| {
                                 html! {
