@@ -228,7 +228,6 @@ fn rainbow_entity(name: impl Into<String>) -> Receiver<PowerColor> {
 
         loop {
             let colors: Vec<HSBK> = (0..num_per_cycle)
-                .into_iter()
                 .map(|j| {
                     let mut hue = f32::from(i + j) * 360.0 / f32::from(num_per_cycle);
                     while hue >= 360.0 {

@@ -360,7 +360,7 @@ pub fn monitor_charging(
             let mut charging_state_s = charging_state_rx.subscribe().await;
 
             while let Ok((prev, charging_state)) = charging_state_s.recv().await {
-                if prev == None {
+                if prev.is_none() {
                     continue;
                 }
 
