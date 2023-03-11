@@ -296,10 +296,6 @@ pub fn monitor_charging(
 
     let price_category_rx = price_summary_rx.map_into_stateful(|ps| ps.category);
 
-    let pi_rx = state
-        .subscriptions
-        .subscribe_into_stateful::<bool>(&format!("teslamate/cars/{car_number}/plugged_in"));
-
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
         state
@@ -393,7 +389,6 @@ pub fn monitor_charging(
         let mut timer: Interval = interval.into();
 
         let mut price_category_s = price_category_rx.subscribe().await;
-        let mut plugged_in_s = pi_rx.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
@@ -418,15 +413,6 @@ pub fn monitor_charging(
                 Ok((_, new_price_category)) = price_category_s.recv() => {
                     info!("New price summary: {:?}", new_price_category);
                     price_category = Some(new_price_category);
-                }
-                Ok((_, plugged_in)) = plugged_in_s.recv() => {
-                    if plugged_in {
-                        info!("Car is plugged in");
-                    } else {
-                        info!("Car is disconnected");
-                    }
-                    // The charge state must be refreshed now.
-                    charge_state = None;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
@@ -468,6 +454,7 @@ pub fn monitor_charging(
 
                 Ok((_, charging_state)) = charging_state_s.recv() => {
                     info!("Charging state: {charging_state:?}");
+                    charge_state = None;
                 }
             }
 
