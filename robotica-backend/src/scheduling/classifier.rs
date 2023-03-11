@@ -11,7 +11,7 @@ use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use robotica_common::datetime::{num_days_from_ce, Date, Weekday};
+use robotica_common::datetime::{num_days_from_ce, week_day_to_string, Date, Weekday};
 
 use super::ast::{Boolean, Fields, Reference};
 
@@ -159,7 +159,7 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
             let context = Context {
                 days_since_epoch: num_days_from_ce(date),
                 classifications: tags.clone(),
-                day_of_week: date.weekday().to_string().to_lowercase(),
+                day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
             };
             if !if_cond.iter().any(|c| c.eval(&context)) {
                 continue;

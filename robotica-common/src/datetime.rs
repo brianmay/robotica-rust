@@ -97,20 +97,20 @@ pub fn num_days_from_ce(date: &Date) -> i32 {
 //     }
 // }
 
-// impl ToString for Weekday {
-//     fn to_string(&self) -> String {
-//         match self.0 {
-//             chrono::Weekday::Mon => "Monday",
-//             chrono::Weekday::Tue => "Tuesday",
-//             chrono::Weekday::Wed => "Wednesday",
-//             chrono::Weekday::Thu => "Thursday",
-//             chrono::Weekday::Fri => "Friday",
-//             chrono::Weekday::Sat => "Saturday",
-//             chrono::Weekday::Sun => "Sunday",
-//         }
-//         .to_string()
-//     }
-// }
+/// Convert a weekday to a string.
+#[must_use]
+pub fn week_day_to_string(weekday: Weekday) -> String {
+    match weekday {
+        chrono::Weekday::Mon => "Monday",
+        chrono::Weekday::Tue => "Tuesday",
+        chrono::Weekday::Wed => "Wednesday",
+        chrono::Weekday::Thu => "Thursday",
+        chrono::Weekday::Fri => "Friday",
+        chrono::Weekday::Sat => "Saturday",
+        chrono::Weekday::Sun => "Sunday",
+    }
+    .to_string()
+}
 
 // impl<'de> Deserialize<'de> for Weekday {
 //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
