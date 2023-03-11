@@ -1,6 +1,6 @@
 //! Serializable datetime types.
 
-use chrono::{Datelike, NaiveDateTime, TimeZone, Utc};
+use chrono::{Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use thiserror::Error;
 
 /// A Date.
@@ -222,12 +222,12 @@ pub fn utc_now() -> DateTime<Utc> {
     Utc::now()
 }
 
-// impl std::fmt::Display for DateTime<Utc> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         let local = self.0.with_timezone(&Local);
-//         write!(f, "{}", local.format("%Y-%m-%d %H:%M:%S %z"))
-//     }
-// }
+/// Convert a date time to a local string.
+#[must_use]
+pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
+    let local = dt.with_timezone(&Local);
+    local.format("%Y-%m-%d %H:%M:%S %z").to_string()
+}
 
 // impl<T: TimeZone> std::fmt::Debug for DateTime<T> {
 //     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

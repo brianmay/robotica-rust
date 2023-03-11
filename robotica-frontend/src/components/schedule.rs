@@ -3,6 +3,7 @@ use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use robotica_common::{
+    datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     scheduler::Sequence,
 };
@@ -50,7 +51,7 @@ pub fn schedule(props: &Props) -> Html {
             sequence_list.iter().map(|sequence| {
                 html! {
                     <div class="sequence" id={sequence.id.clone()}>
-                        <div>{sequence.required_time}</div>
+                        <div>{datetime_to_string(&sequence.required_time)}</div>
                         <div>{
                             sequence.tasks.iter().map(|task| {
                                 html! {
