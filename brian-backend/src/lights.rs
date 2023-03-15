@@ -15,8 +15,8 @@ use robotica_backend::{
 use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
     robotica::{
-        commands::{Command, Light2Command},
-        lights::{self, Colors, PowerColor, PowerLevel, PowerState, State, HSBK},
+        commands::Command,
+        lights::{self, Colors, Light2Command, PowerColor, PowerLevel, PowerState, State, HSBK},
     },
 };
 use tokio::time::sleep;

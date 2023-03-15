@@ -14,8 +14,8 @@ use robotica_backend::{
 use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
     robotica::{
-        audio::State,
-        commands::{AudioCommand, Command},
+        audio::{AudioCommand, State},
+        commands::Command,
         tasks::Task,
     },
 };

@@ -1,6 +1,8 @@
-//! Stuff for robotica lights
+//! Messages for robotica lights
 
 use serde::{Deserialize, Serialize};
+
+use super::switch::DeviceAction;
 
 /// A LIFX device's power level.
 #[derive(Serialize, Deserialize)]
@@ -87,4 +89,53 @@ pub enum PowerState {
 
     /// The device is off.
     Off,
+}
+
+/// A color for a light.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoboticaColor {
+    /// The hue of the color, 0-359.
+    pub hue: u16,
+
+    /// The saturation of the color, 0-100.
+    pub saturation: u16,
+
+    /// The brightness of the color, 0-100.
+    pub brightness: u16,
+
+    /// The kelvin of the color, 2500-9000.
+    pub kelvin: u16,
+}
+
+/// A command to send to a light.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LightCommand {
+    /// The action to perform.
+    pub action: Option<DeviceAction>,
+
+    /// The color to set.
+    pub color: Option<RoboticaColor>,
+
+    /// The scene to set.
+    pub scene: Option<String>,
+}
+
+/// A V2 command to send to a light
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "action")]
+pub enum Light2Command {
+    /// Turn the switch on.
+    TurnOn {
+        /// The scene to use
+        scene: String,
+    },
+
+    /// Turn the switch off.
+    TurnOff,
+
+    /// Flash the light.
+    Flash,
 }

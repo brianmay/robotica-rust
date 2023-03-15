@@ -1,5 +1,5 @@
 //! A robotica switch controller
-use crate::{mqtt::MqttMessage, robotica::commands::DevicePower};
+use crate::{mqtt::MqttMessage, robotica::switch::DevicePower};
 use serde::Deserialize;
 use tracing::error;
 

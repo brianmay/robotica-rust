@@ -6,7 +6,8 @@ use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{
     ChargeState, ChargingStateEnum, CommandSequence, Token,
 };
-use robotica_common::robotica::commands::{Command, DeviceAction, DevicePower};
+use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::time::Duration;
