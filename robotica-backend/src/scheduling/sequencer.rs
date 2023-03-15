@@ -587,29 +587,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
+            &Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap(),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 1, 0).unwrap()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 31, 0).unwrap()
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -869,10 +869,13 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
+        let datetime = Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap();
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 30, 0));
+        assert_eq!(
+            corrected_datetime,
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
+        );
     }
 
     #[test]
@@ -913,10 +916,13 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
+        let datetime = Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap();
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 30, 0));
+        assert_eq!(
+            corrected_datetime,
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
+        );
     }
 
     #[test]
@@ -962,10 +968,13 @@ mod tests {
             },
         ];
 
-        let datetime = Utc.ymd(2020, 12, 25).and_hms(0, 30, 0);
+        let datetime = Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap();
         let corrected_datetime = get_corrected_start_time(datetime, &expanded);
 
-        assert_eq!(corrected_datetime, Utc.ymd(2020, 12, 25).and_hms(0, 15, 0));
+        assert_eq!(
+            corrected_datetime,
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 15, 0).unwrap()
+        );
     }
 
     #[test]
@@ -1020,29 +1029,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 30, 0),
+            &Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap(),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 1, 0).unwrap()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 31, 0).unwrap()
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1078,29 +1087,29 @@ mod tests {
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
             &HashSet::from(["boxing".to_string()]),
-            &Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
+            &Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap(),
         )
         .unwrap();
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 1, 0).unwrap()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap()
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 11, 0).unwrap()
         );
         assert_eq!(sequence[1].id, "test_0");
         assert_eq!(sequence[1].tasks.len(), 1);
@@ -1113,12 +1122,12 @@ mod tests {
             scheduler::Schedule {
                 sequence_name: "test".to_string(),
                 options: HashSet::new(),
-                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 0, 0),
+                datetime: Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap(),
             },
             scheduler::Schedule {
                 sequence_name: "christmas".to_string(),
                 options: HashSet::new(),
-                datetime: Utc.ymd(2020, 12, 25).and_hms(0, 10, 0),
+                datetime: Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap(),
             },
         ];
 
@@ -1219,44 +1228,44 @@ mod tests {
         assert_eq!(sequence.len(), 4);
         assert_eq!(
             sequence[0].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 0, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
             sequence[0].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 1, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 1, 0).unwrap()
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
             sequence[1].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 10, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap()
         );
         assert_eq!(
             sequence[1].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 11, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 11, 0).unwrap()
         );
         assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
 
         assert_eq!(
             sequence[2].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 30, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
             sequence[2].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 31, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 31, 0).unwrap()
         );
         assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
 
         assert_eq!(
             sequence[3].required_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 40, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 40, 0).unwrap()
         );
         assert_eq!(
             sequence[3].latest_time,
-            Utc.ymd(2020, 12, 25).and_hms(0, 41, 0)
+            Utc.with_ymd_and_hms(2020, 12, 25, 0, 41, 0).unwrap()
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);

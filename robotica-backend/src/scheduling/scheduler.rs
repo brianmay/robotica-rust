@@ -350,7 +350,7 @@ mod tests {
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
 
-        let timezone = FixedOffset::east(60 * 60 * 10);
+        let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
             get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
@@ -380,7 +380,7 @@ mod tests {
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
 
-        let timezone = FixedOffset::east(60 * 60 * 10);
+        let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
             get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
@@ -415,7 +415,7 @@ mod tests {
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
 
-        let timezone = FixedOffset::east(60 * 60 * 10);
+        let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
             get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();

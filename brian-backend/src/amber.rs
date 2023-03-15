@@ -25,6 +25,10 @@ pub enum Error {
     /// Environment variable not found
     #[error("Environment variable error: {0}")]
     Environment(#[from] EnvironmentError),
+
+    /// Internal error
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 struct Config {
@@ -89,6 +93,9 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
         .persistent_state_database
         .for_name::<DayState>("amber");
 
+    let nem_timezone = FixedOffset::east_opt(hours(10).into())
+        .ok_or_else(|| Error::Internal("Failed to create NEM timezone".to_string()))?;
+
     spawn(async move {
         // if is_debug_mode() {
         //     let start_date = Date::from_ymd(2022, 1, 1);
@@ -98,8 +105,6 @@ pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
         //     println!("------------------- done -------------------");
         // }
         let mut pp = PriceProcessor::load(&psr, &utc_now());
-        let nem_timezone = FixedOffset::east(hours(10).into());
-
         // Update prices maximum every 5 minutes
         let mut price_instant = Instant::now() + tokio::time::Duration::from_secs(0);
 
@@ -574,7 +579,7 @@ fn new_day_state(now: &DateTime<Utc>) -> DayState {
 }
 
 fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
-    let time_2hr_cheap: Time = Time::from_hms(5, 0, 0);
+    let time_2hr_cheap: Time = Time::from_hms_opt(5, 0, 0).unwrap_or_default();
     let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
     (start_day, end_day)
 }
@@ -835,9 +840,9 @@ mod tests {
 
     #[test]
     fn test_get_day() {
-        let timezone = FixedOffset::east(60 * 60 * 11);
+        let timezone = FixedOffset::east_opt(60 * 60 * 11).unwrap();
         {
-            let time = Time::from_hms(5, 0, 0);
+            let time = Time::from_hms_opt(5, 0, 0).unwrap();
             let now = dt("2020-01-02T00:00:00Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -845,7 +850,7 @@ mod tests {
         }
 
         {
-            let time = Time::from_hms(5, 0, 0);
+            let time = Time::from_hms_opt(5, 0, 0).unwrap();
             let now = dt("2020-01-02T17:59:59Z");
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-01T18:00:00Z"));
@@ -853,7 +858,7 @@ mod tests {
         }
 
         {
-            let time = Time::from_hms(5, 0, 0);
+            let time = Time::from_hms_opt(5, 0, 0).unwrap();
             let now = "2020-01-02T18:00:00Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
@@ -861,7 +866,7 @@ mod tests {
         }
 
         {
-            let time = Time::from_hms(5, 0, 0);
+            let time = Time::from_hms_opt(5, 0, 0).unwrap();
             let now = "2020-01-02T18:00:01Z".parse().unwrap();
             let (start, stop) = get_day(&now, time, &timezone);
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
