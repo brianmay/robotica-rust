@@ -59,11 +59,11 @@ pub enum MessagePriority {
     /// The message is urgent and should be delivered immediately.
     Urgent,
 
-    /// The message is important and should be delivered during the day if allowed.
-    DaytimeOnly,
-
     /// The message is not important.
     Low,
+
+    /// The message is important and should be delivered during the day if allowed.
+    DaytimeOnly,
 }
 
 /// A message to send
@@ -167,6 +167,24 @@ impl Message {
                 body,
                 priority: _,
             } => HaMessageCommand { title, text: body },
+        }
+    }
+
+    /// Decide if we should play this message
+    #[cfg(feature = "chrono")]
+    #[must_use]
+    pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
+        use chrono::Timelike;
+        let day_hour = matches!(now.hour(), 7..=21);
+
+        let priority = self.priority();
+        #[allow(clippy::match_same_arms)]
+        match (priority, day_hour, enabled) {
+            (MessagePriority::Urgent, _, _) => true,
+            (MessagePriority::Low, _, true) => true,
+            (MessagePriority::Low, _, _) => false,
+            (MessagePriority::DaytimeOnly, true, true) => true,
+            (MessagePriority::DaytimeOnly, _, _) => false,
         }
     }
 }

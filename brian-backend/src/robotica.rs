@@ -69,9 +69,16 @@ pub fn create_message_sink(mqtt: MqttTx) -> Sender<Message> {
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
-            info!("Sending message {:?}", msg);
-            let msg = string_to_message(msg);
-            mqtt.try_send(msg);
+            let now = chrono::Local::now();
+
+            // FIXME: Should move this logic to audio player.
+            if msg.should_play(now, true) {
+                info!("Sending message {:?}", msg);
+                let msg = string_to_message(msg);
+                mqtt.try_send(msg);
+            } else {
+                info!("Not sending message {:?}", msg);
+            }
         }
     });
     tx
