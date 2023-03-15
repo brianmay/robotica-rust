@@ -53,14 +53,133 @@ pub struct VolumeCommand {
     pub message: Option<u8>,
 }
 
+/// The priority of a message
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum MessagePriority {
+    /// The message is urgent and should be delivered immediately.
+    Urgent,
+
+    /// The message is important and should be delivered during the day if allowed.
+    DaytimeOnly,
+
+    /// The message is not important.
+    Low,
+}
+
+/// A message to send
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Message {
+    /// Legacy format: just a string
+    String(String),
+
+    /// New format: a struct with more details
+    ///
+    /// This format is not supported by old code and should not be used yet.
+    Details {
+        /// The title of the message.
+        title: String,
+
+        /// The message to send.
+        body: String,
+
+        /// The priority of the message.
+        priority: MessagePriority,
+    },
+}
+
+impl Message {
+    /// Create a new message
+    pub fn new(
+        title: impl Into<String>,
+        body: impl Into<String>,
+        priority: MessagePriority,
+    ) -> Self {
+        Self::Details {
+            title: title.into(),
+            body: body.into(),
+            priority,
+        }
+    }
+
+    /// What is the title?
+    #[must_use]
+    pub fn title(&self) -> &str {
+        match self {
+            Self::String(_) => "No title",
+            Self::Details { title, .. } => title,
+        }
+    }
+
+    /// What is the message?
+    #[must_use]
+    pub fn body(&self) -> &str {
+        match self {
+            Self::String(s) => s,
+            Self::Details { body, .. } => body,
+        }
+    }
+
+    /// What is the priority?
+    #[must_use]
+    pub const fn priority(&self) -> MessagePriority {
+        match self {
+            Self::String(_) => MessagePriority::Low,
+            Self::Details { priority, .. } => *priority,
+        }
+    }
+
+    /// Get owned body
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn into_body(self) -> String {
+        match self {
+            Self::String(s) => s,
+            Self::Details { body, .. } => body,
+        }
+    }
+
+    /// Get owned strings
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn into_owned(self) -> (String, String, MessagePriority) {
+        match self {
+            Self::String(s) => ("No title".to_string(), s, MessagePriority::Low),
+            Self::Details {
+                title,
+                body,
+                priority,
+            } => (body, title, priority),
+        }
+    }
+
+    /// Turn into a HA message
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn into_ha_message(self) -> HaMessageCommand {
+        match self {
+            Self::String(s) => HaMessageCommand {
+                title: "No title".to_string(),
+                text: s,
+            },
+            Self::Details {
+                title,
+                body,
+                priority: _,
+            } => HaMessageCommand { title, text: body },
+        }
+    }
+}
+
 /// An audio command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCommand {
     /// The title of the message.
-    pub title: Option<String>,
+    #[serde(rename = "title")]
+    pub legacy_title: Option<String>,
 
     /// The message to send.
-    pub message: Option<String>,
+    pub message: Option<Message>,
 
     /// The sounds to play.
     pub sound: Option<String>,
@@ -80,16 +199,49 @@ pub struct AudioCommand {
 
 impl AudioCommand {
     /// Create a new message only command
+    // #[must_use]
+    // pub fn new_message(title: impl Into<String>, message: impl Into<String>) -> Self {
+    //     let message = Message::new(title, message);
+    //     Self {
+    //         legacy_title: None,
+    //         message: Some(message),
+    //         sound: None,
+    //         music: None,
+    //         volume: None,
+    //         pre_tasks: None,
+    //         post_tasks: None,
+    //     }
+    // }
+
+    /// What is the title?
     #[must_use]
-    pub fn new_message(title: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn title(&self) -> Option<&str> {
+        if let Some(Message::Details { title, .. }) = &self.message {
+            Some(title)
+        } else {
+            self.legacy_title.as_deref()
+        }
+    }
+}
+
+/// A HA audio command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HaMessageCommand {
+    /// The title of the message.
+    pub title: String,
+
+    /// The message to send.
+    #[serde(rename = "message")]
+    pub text: String,
+}
+
+impl HaMessageCommand {
+    /// Create a new message only command
+    #[must_use]
+    pub fn new_message(title: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
-            title: Some(title.into()),
-            message: Some(message.into()),
-            sound: None,
-            music: None,
-            volume: None,
-            pre_tasks: None,
-            post_tasks: None,
+            title: title.into(),
+            text: text.into(),
         }
     }
 }

@@ -44,6 +44,7 @@ use robotica_common::{
         hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
     mqtt::MqttMessage,
+    robotica::audio::Message,
 };
 use tokio::{
     select,
@@ -134,7 +135,7 @@ async fn receive(
 
 pub enum ScreenCommand {
     TurnOn,
-    Message { title: String, message: String },
+    Message(Message),
 }
 
 #[allow(clippy::too_many_lines)]
@@ -266,12 +267,14 @@ pub fn run_gui(
                             state.on = Some(Instant::now() + Duration::from_secs(30));
                             state.message = None;
                         }
-                        ScreenCommand::Message{title, message} => {
+                        ScreenCommand::Message(message) => {
+                            let (title, body, _priority) = message.into_owned();
+
                             state.message = Some(Instant::now() + Duration::from_secs(5));
                             handle_weak
                                 .upgrade_in_event_loop(|handle| {
                                     handle.set_msg_title(title.into());
-                                    handle.set_msg_body(message.into());
+                                    handle.set_msg_body(body.into());
                                     handle.set_display_message(true);
                                 })
                                 .unwrap();

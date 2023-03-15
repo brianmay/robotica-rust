@@ -124,13 +124,9 @@ async fn handle_command(
     }
 
     if let Some(message) = &command.message {
-        let title = command
-            .title
-            .clone()
-            .unwrap_or_else(|| "No title".to_string());
         let message = message.clone();
         tx_screen_command
-            .try_send(ScreenCommand::Message { title, message })
+            .try_send(ScreenCommand::Message(message))
             .unwrap_or_else(|err| {
                 error!("Failed to send message to screen: {err}");
             });
@@ -189,8 +185,8 @@ fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
         actions.push(Action::Sound(sound));
     }
 
-    if let Some(say) = command.message {
-        actions.push(Action::Say(say));
+    if let Some(msg) = command.message {
+        actions.push(Action::Say(msg.into_body()));
     }
 
     if let Some(music) = command.music {

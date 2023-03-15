@@ -6,6 +6,7 @@ use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{
     ChargeState, ChargingStateEnum, CommandSequence, Token,
 };
+use robotica_common::robotica::audio::{Message, MessagePriority};
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,10 @@ use robotica_backend::spawn;
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, QoS};
 
 use super::State;
+
+fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
+    Message::new("Tesla", message.into(), priority)
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum TeslaDoorState {
@@ -202,6 +207,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
             } else {
                 format!("The Tesla {} are open", open.join(", "))
             };
+            let msg = new_message(msg, MessagePriority::Urgent);
             message_sink.try_send(msg);
         }
     });
@@ -368,7 +374,8 @@ pub fn monitor_charging(
                     ChargingState::Complete => "The Tesla is fully charged",
                     ChargingState::Stopped => "The Tesla charging has stopped",
                 };
-                message_sink.try_send(msg.to_string());
+                let msg = new_message(msg, MessagePriority::DaytimeOnly);
+                message_sink.try_send(msg);
             }
         });
     }

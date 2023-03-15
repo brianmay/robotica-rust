@@ -3,8 +3,7 @@ use robotica_backend::entities::Sender;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
-use robotica_common::robotica::audio::AudioCommand;
-use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::audio::Message;
 use robotica_common::robotica::switch::DevicePower;
 use serde::Serialize;
 use tracing::error;
@@ -55,10 +54,9 @@ struct AutoColor {
 }
 
 #[allow(dead_code)]
-pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
+pub fn string_to_message(msg: Message) -> MqttMessage {
     let topic = "ha/event/message/everyone";
-    let msg = Command::Audio(AudioCommand::new_message("Robotica Rust", str));
-
+    let msg = msg.into_ha_message();
     let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
         error!("Failed to serialize message: {msg:?}");
         "{}".into()
@@ -66,12 +64,12 @@ pub fn string_to_message(str: impl Into<String>) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub fn create_message_sink(mqtt: MqttTx) -> Sender<String> {
-    let (tx, rx) = create_stateless_entity::<String>("messages");
+pub fn create_message_sink(mqtt: MqttTx) -> Sender<Message> {
+    let (tx, rx) = create_stateless_entity::<Message>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
-            info!("Sending message {}", msg);
+            info!("Sending message {:?}", msg);
             let msg = string_to_message(msg);
             mqtt.try_send(msg);
         }
