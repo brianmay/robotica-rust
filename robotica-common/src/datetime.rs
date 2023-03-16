@@ -18,84 +18,13 @@ pub type Weekday = chrono::Weekday;
 /// A duration between two times.
 pub type Duration = chrono::Duration;
 
-// /// A Serializable Date.
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-// pub struct Date(chrono::NaiveDate);
-
-// impl Date {
-//     /// Convert a year,month,day into a Date.
-//     #[must_use]
-//     pub fn from_ymd_opt(year: i32, month: u32, day: u32) -> Option<Self> {
-//         chrono::NaiveDate::from_ymd_opt(year, month, day).map(Self)
-//     }
-
-//     /// Get the weekday of the date.
-//     #[must_use]
-//     pub fn weekday(self) -> Weekday {
-//         Weekday(self.0.weekday())
-//     }
-
 /// Get the number of days from CE of the date.
 ///
-// Kludge: This function returns values consistent with Elxir's to_iso_days/1 function.
+/// Kludge: This function returns values consistent with Elxir's `to_iso_days/1` function.
 #[must_use]
 pub fn num_days_from_ce(date: &Date) -> i32 {
     date.num_days_from_ce() + 365
 }
-
-// }
-
-// impl Add<Duration> for Date {
-//     type Output = Self;
-
-//     fn add(self, rhs: Duration) -> Self::Output {
-//         self + rhs.0
-//     }
-// }
-
-// impl Sub<Duration> for Date {
-//     type Output = Self;
-
-//     fn sub(self, rhs: Duration) -> Self::Output {
-//         self - rhs.0
-//     }
-// }
-
-// impl FromStr for Date {
-//     type Err = chrono::ParseError;
-
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")?;
-//         Ok(Self(date))
-//     }
-// }
-
-// impl Display for Date {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", self.0.format("%Y-%m-%d"))
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for Date {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let s: String = Deserialize::deserialize(deserializer)?;
-//         let d = Date::from_str(&s).map_err(serde::de::Error::custom)?;
-//         Ok(d)
-//     }
-// }
-
-// /// A Serializable Weekday.
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// pub struct Weekday(chrono::Weekday);
-
-// impl From<chrono::Weekday> for Weekday {
-//     fn from(wd: chrono::Weekday) -> Self {
-//         Self(wd)
-//     }
-// }
 
 /// Convert a weekday to a string.
 #[must_use]
@@ -112,80 +41,6 @@ pub fn week_day_to_string(weekday: Weekday) -> String {
     .to_string()
 }
 
-// impl<'de> Deserialize<'de> for Weekday {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let s: String = Deserialize::deserialize(deserializer)?;
-
-//         match s.to_lowercase().as_str() {
-//             "monday" => Ok(Weekday(chrono::Weekday::Mon)),
-//             "tuesday" => Ok(Weekday(chrono::Weekday::Tue)),
-//             "wednesday" => Ok(Weekday(chrono::Weekday::Wed)),
-//             "thursday" => Ok(Weekday(chrono::Weekday::Thu)),
-//             "friday" => Ok(Weekday(chrono::Weekday::Fri)),
-//             "saturday" => Ok(Weekday(chrono::Weekday::Sat)),
-//             "sunday" => Ok(Weekday(chrono::Weekday::Sun)),
-//             _ => Err(serde::de::Error::custom(format!("Invalid weekday {s}"))),
-//         }
-//     }
-// }
-
-// /// A Serializable Time.
-// #[derive(Debug, Copy, Clone, Default)]
-// pub struct Time(chrono::NaiveTime);
-
-// impl Time {
-//     #[must_use]
-//     /// Create a new Time.
-//     pub fn new(hour: u32, minute: u32, second: u32) -> Option<Self> {
-//         chrono::NaiveTime::from_hms_opt(hour, minute, second).map(Self)
-//     }
-// }
-
-// impl FromStr for Time {
-//     type Err = chrono::ParseError;
-
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let date = chrono::NaiveTime::parse_from_str(s, "%H:%M:%S")?;
-//         Ok(Self(date))
-//     }
-// }
-
-// impl Display for Time {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         self.0.fmt(f)
-//     }
-// }
-
-// impl Add<Duration> for Time {
-//     type Output = Self;
-
-//     fn add(self, rhs: Duration) -> Self::Output {
-//         self + rhs.0
-//     }
-// }
-
-// impl Sub<Duration> for Time {
-//     type Output = Self;
-
-//     fn sub(self, rhs: Duration) -> Self::Output {
-//         self - rhs.0
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for Time {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let s: String = Deserialize::deserialize(deserializer)?;
-//         let d = Time::from_str(&s).map_err(serde::de::Error::custom)?;
-//         Ok(d)
-//     }
-// }
-
 /// An error that can occur when translating a `DateTime`.
 #[derive(Error, Debug)]
 pub enum DateTimeError<T: TimeZone> {
@@ -197,24 +52,6 @@ pub enum DateTimeError<T: TimeZone> {
     #[error("DateTime {0} is ambiguous when converting to local timezone")]
     AmbiguousDateTime(NaiveDateTime, DateTime<T>, DateTime<T>),
 }
-
-// /// A Serializable `DateTime`.
-// #[derive(Clone, PartialEq, Eq, Hash)]
-// pub struct DateTime<Tz: TimeZone>(chrono::DateTime<Tz>);
-
-// impl<T: TimeZone> DateTime<T> {
-//     /// Get the date of the date time.
-//     #[must_use]
-//     pub fn date(self) -> Date {
-//         Date(self.0.date_naive())
-//     }
-
-//     /// Get the time of the date time.
-//     #[must_use]
-//     pub fn time(self) -> Time {
-//         Time(self.0.time())
-//     }
-// }
 
 /// Get the current time in UTC timezone.
 #[must_use]
@@ -229,115 +66,6 @@ pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
     local.format("%Y-%m-%d %H:%M:%S %z").to_string()
 }
 
-// impl<T: TimeZone> std::fmt::Debug for DateTime<T> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         let local = self.0.with_timezone(&Local);
-//         write!(f, "{}", local.format("DateTime(%Y-%m-%d %H:%M:%S %z)"))
-//     }
-// }
-
-// impl DateTime<Utc> {
-//     /// Convert the date time to a local date time.
-//     pub fn with_timezone<T: TimeZone>(&self, tz: &T) -> DateTime<T> {
-//         DateTime(self.0.with_timezone(tz))
-//     }
-// }
-
-// impl<T: TimeZone> From<chrono::DateTime<T>> for DateTime<T> {
-//     fn from(dt: chrono::DateTime<T>) -> Self {
-//         Self(dt)
-//     }
-// }
-
-// impl<T: TimeZone> From<DateTime<T>> for chrono::DateTime<T> {
-//     fn from(dt: DateTime<T>) -> Self {
-//         dt.0
-//     }
-// }
-
-// impl FromStr for DateTime<Utc> {
-//     type Err = chrono::ParseError;
-
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let datetime = chrono::DateTime::parse_from_rfc3339(s)?;
-//         let datetime = datetime.with_timezone(&Utc);
-//         Ok(datetime.into())
-//     }
-// }
-
-// impl Ord for DateTime<Utc> {
-//     fn cmp(&self, other: &Self) -> Ordering {
-//         self.0.cmp(&other.0)
-//     }
-// }
-
-// impl PartialOrd<DateTime<Utc>> for DateTime<Utc> {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         self.0.partial_cmp(&other.0)
-//     }
-// }
-
-// impl Add<Duration> for DateTime<Utc> {
-//     type Output = Self;
-
-//     fn add(self, rhs: Duration) -> Self::Output {
-//         self + rhs.0
-//     }
-// }
-
-// impl Sub<Duration> for DateTime<Utc> {
-//     type Output = Self;
-
-//     fn sub(self, rhs: Duration) -> Self::Output {
-//         self - rhs.0
-//     }
-// }
-
-// // impl Sub<DateTime<Utc>> for DateTime<Utc> {
-// //     type Output = Duration;
-
-// //     fn sub(self, rhs: DateTime<Utc>) -> Self::Output {
-// //         Duration(self.0 - rhs.0)
-// //     }
-// // }
-
-// // impl<'de> Deserialize<'de> for DateTime<Utc> {
-// //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-// //     where
-// //         D: Deserializer<'de>,
-// //     {
-// //         let s: String = Deserialize::deserialize(deserializer)?;
-// //         let d = DateTime::from_str(&s).map_err(serde::de::Error::custom)?;
-// //         Ok(d)
-// //     }
-// // }
-
-// // impl Serialize for DateTime<Utc> {
-// //     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-// //     where
-// //         S: Serializer,
-// //     {
-// //         let s = self.0.to_rfc3339();
-// //         serializer.serialize_str(&s)
-// //     }
-// // }
-
-// /// The value was out of range.
-// #[derive(Error, Debug)]
-// pub struct OutOfRangeError {}
-
-// impl Display for OutOfRangeError {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "Out of range")
-//     }
-// }
-
-// /// A Serializable Duration.
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-// pub struct Duration(chrono::Duration);
-
-// impl Duration {
-
 /// Create a new Duration.
 #[must_use]
 pub fn duration_from_hms(hours: i64, minutes: i64, seconds: i64) -> Duration {
@@ -346,104 +74,9 @@ pub fn duration_from_hms(hours: i64, minutes: i64, seconds: i64) -> Duration {
         + chrono::Duration::seconds(seconds)
 }
 
-//     /// Get the number of hours in the duration.
-//     #[must_use]
-//     pub fn num_hours(self) -> i64 {
-//         self.0.num_hours()
-//     }
-
-//     /// Get the number of minutes in the duration.
-//     #[must_use]
-//     pub fn num_minutes(self) -> i64 {
-//         self.0.num_minutes()
-//     }
-
-//     /// Get the number of seconds in the duration.
-//     #[must_use]
-//     pub fn num_seconds(self) -> i64 {
-//         self.0.num_seconds()
-//     }
-
-//     /// Create a duration from a number of days.
-//     #[must_use]
-//     pub fn days(days: i64) -> Self {
-//         Self(chrono::Duration::days(days))
-//     }
-
-//     /// Create a duration from a number of seconds.
-//     #[must_use]
-//     pub fn seconds(seconds: i64) -> Self {
-//         Self(chrono::Duration::seconds(seconds))
-//     }
-
-//     /// Create a duration from a number of minutes.
-//     #[must_use]
-//     pub fn minutes(minutes: i64) -> Self {
-//         Self(chrono::Duration::minutes(minutes))
-//     }
-
-//     /// Create a duration from a number of hours.
-//     #[must_use]
-//     pub fn hours(hours: i64) -> Self {
-//         Self(chrono::Duration::hours(hours))
-//     }
-
-//     /// Subtract a duration from this duration.
-//     #[must_use]
-//     pub fn checked_sub(self, rhs: &Self) -> Option<Self> {
-//         self.0.checked_sub(&rhs.0).map(Self)
-//     }
-
-//     /// Convert the duration to a std duration.
-//     ///
-//     /// # Errors
-//     ///
-//     /// If the duration is negative.
-//     pub fn to_std(&self) -> Result<std::time::Duration, OutOfRangeError> {
-//         self.0.to_std().map_err(|_| OutOfRangeError {})
-//     }
-// }
-
-// impl From<chrono::Duration> for Duration {
-//     fn from(d: chrono::Duration) -> Self {
-//         Self(d)
-//     }
-// }
-
-// impl Add<Duration> for Duration {
-//     type Output = Self;
-
-//     fn add(self, rhs: Self) -> Self::Output {
-//         Self(self.0 + rhs.0)
-//     }
-// }
-
-// impl std::fmt::Display for Duration {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", self.0)
-//     }
-// }
-
 const fn div_rem(a: u64, b: u64) -> (u64, u64) {
     (a / b, a % b)
 }
-
-// impl Serialize for Duration {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer,
-//     {
-//         let s = self.0.to_std().map_err(serde::ser::Error::custom)?;
-
-//         let secs = s.as_secs();
-
-//         let (minutes, secs) = div_rem(secs, 60);
-//         let (hours, minutes) = div_rem(minutes, 60);
-
-//         let result = format!("{hours:02}:{minutes:02}:{secs:02}");
-//         serializer.serialize_str(&result)
-//     }
-// }
 
 /// A Serializable Duration.
 #[derive(Error, Debug)]
@@ -478,25 +111,6 @@ fn duration_from_str(s: &str) -> Result<Duration, DurationParseError> {
         Err(DurationParseError::InvalidDuration(s.to_string()))
     }
 }
-
-// impl<'de> Deserialize<'de> for Duration {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let s: String = Deserialize::deserialize(deserializer)?;
-//         let d = Duration::from_str(&s).map_err(serde::de::Error::custom)?;
-//         Ok(d)
-//     }
-// }
-
-// impl Mul<i32> for Duration {
-//     type Output = Duration;
-
-//     fn mul(self, rhs: i32) -> Self::Output {
-//         Duration(self.0 * rhs)
-//     }
-// }
 
 /// Serde serialization deserialization for a duration.
 pub mod with_duration {
