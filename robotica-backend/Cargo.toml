@@ -44,7 +44,7 @@ arc-swap = "1.4.0"
 hyper = "0.14.25"
 
 [build-dependencies]
-lalrpop = "0.19.3"
+lalrpop = "0.19.9"
 
 [dev-dependencies]
 env_logger = "0.10.0"
