@@ -1,69 +1,59 @@
 {
-  description = "Control IO devices";
+  description = "A very basic flake";
 
-  inputs = {
-    rust-overlay.url = "github:oxalica/rust-overlay";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.flake-utils.url = "github:numtide/flake-utils";
 
-    cargo2nix = {
-      url = "github:cargo2nix/cargo2nix/unstable";
-      inputs.rust-overlay.follows = "rust-overlay";
-    };
-    flake-utils.follows = "cargo2nix/flake-utils";
-    nixpkgs.follows = "cargo2nix/nixpkgs";
-  };
-
-  outputs = inputs:
-    with inputs;
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachSystem flake-utils.lib.allSystems (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ cargo2nix.overlays.default ];
-        };
+        pkgs = import nixpkgs { inherit system; };
+        pkg = pkgs.rustPlatform.buildRustPackage {
+          pname = "robotica-slint";
+          version = "0.0.1";
+          src = ./.;
+          cargoBuildFlags = "-p robotica-slint";
 
-        packageOverrides = pkgs:
-          pkgs.rustBuilder.overrides.all ++ [
-            (pkgs.rustBuilder.rustLib.makeOverride {
-              name = "yeslogic-fontconfig-sys";
-              overrideAttrs = drv: {
-                propagatedNativeBuildInputs =
-                  drv.propagatedNativeBuildInputs or [ ] ++ [
-                    pkgs.fontconfig
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            outputHashes = {
+              "getrandom-0.2.8" =
+                "sha256-B6xHsgEgJMYG2xj2pNRnjD/b71fSTRVC9Jv/fH3b2Ok=";
+              "rumqttc-0.18.0" =
+                "sha256-bZA887J8+G8JReMYT2elBtq7iRSM/mNy7/9wlPCNxrI=";
+            };
+          };
 
-                  ];
-              };
-            })
-            (pkgs.rustBuilder.rustLib.makeOverride {
-              name = "skia-bindings";
-              overrideAttrs = drv: {
-                propagatedNativeBuildInputs =
-                  drv.propagatedNativeBuildInputs or [ ];
-              };
-            })
+          nativeBuildInputs = with pkgs; [
+            pkgconfig
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            xorg.libxcb
           ];
 
-        # create the workspace & dependencies package set
-        rustPkgs = pkgs.rustBuilder.makePackageSet {
-          rustVersion = "1.68.1";
-          packageFun = import ./Cargo.nix;
-          extraRustComponents = [ "clippy" "rustfmt" ];
-          packageOverrides = packageOverrides;
+          PKG_CONFIG_PATH =
+            "${pkgs.openssl.dev}/lib/pkgconfig:${pkgs.fontconfig.dev}/lib/pkgconfig:${pkgs.freetype.dev}/lib/pkgconfig";
         };
 
-        # The workspace defines a development shell with all of the dependencies
-        # and environment settings necessary for a regular `cargo build`
-        workspaceShell = rustPkgs.workspaceShell {
-          # This adds cargo2nix to the project shell via the cargo2nix flake
-          packages = [ cargo2nix.packages."${system}".cargo2nix ];
-        };
+      in {
+        devShell = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            #rustup
+            #cargo-cross
+            cargo
+            rustc
+            clippy
+            pkgconfig
+            openssl
+            protobuf
 
-        robotica-slint = (rustPkgs.workspace.robotica-slint { }).bin;
-
-      in rec {
-        packages = {
-          robotica-slint = robotica-slint;
-          default = robotica-slint;
+            # slint
+            fontconfig
+            xorg.libxcb
+          ];
         };
-        devShell = workspaceShell;
+        packages = { robotica-slint = pkg; };
       });
 }
