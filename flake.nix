@@ -27,10 +27,7 @@
               name = "yeslogic-fontconfig-sys";
               overrideAttrs = drv: {
                 propagatedNativeBuildInputs =
-                  drv.propagatedNativeBuildInputs or [ ] ++ [
-                    pkgs.fontconfig
-
-                  ];
+                  drv.propagatedNativeBuildInputs or [ ] ++ [ pkgs.fontconfig ];
               };
             })
             (pkgs.rustBuilder.rustLib.makeOverride {
