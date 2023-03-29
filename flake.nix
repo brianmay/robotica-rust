@@ -3,12 +3,23 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
+  inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
     flake-utils.lib.eachSystem flake-utils.lib.allSystems (system:
       let
-        pkgs = import nixpkgs { inherit system; };
-        pkg = pkgs.rustPlatform.buildRustPackage {
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+        };
+
+        rust_pkgs = pkgs.rust-bin.stable.latest;
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rust_pkgs.minimal;
+          rustc = rust_pkgs.minimal;
+        };
+
+        pkg = rustPlatform.buildRustPackage {
           pname = "robotica-slint";
           version = "0.0.1";
           src = ./.;
@@ -36,15 +47,11 @@
           PKG_CONFIG_PATH =
             "${pkgs.openssl.dev}/lib/pkgconfig:${pkgs.fontconfig.dev}/lib/pkgconfig:${pkgs.freetype.dev}/lib/pkgconfig";
         };
-
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
-            #rustup
-            #cargo-cross
-            cargo
-            rustc
-            clippy
+            rust_pkgs.default
+            rust-analyzer
             pkgconfig
             openssl
             protobuf

@@ -2,3 +2,5 @@
 /target
 /.envrc
 /state
+/.direnv
+/result
