@@ -1,11 +1,10 @@
 //! Classification of a date.
 use std::{
     collections::{HashMap, HashSet},
-    env,
     path::{Path, PathBuf},
 };
 
-use crate::scheduling::conditions;
+use crate::{get_env_os, scheduling::conditions, EnvironmentOsError};
 use chrono::Datelike;
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
@@ -78,8 +77,8 @@ pub struct Config {
 #[derive(Error, Debug)]
 pub enum ConfigError {
     /// Environment variable not set
-    #[error("Environment variable missing: {0}")]
-    VarError(String),
+    #[error("{0}")]
+    EnvironmentError(#[from] EnvironmentOsError),
 
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
@@ -112,7 +111,7 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
 /// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file cannot be read.
 pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
     let env_name = "CLASSIFICATIONS_FILE";
-    let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
+    let filename = get_env_os(env_name)?;
     load_config(Path::new(&filename))
 }
 

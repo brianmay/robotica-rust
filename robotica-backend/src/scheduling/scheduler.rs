@@ -1,5 +1,7 @@
 //! Create a schedule based on tags from classifier.
 //!
+use crate::{get_env_os, EnvironmentOsError};
+
 use super::{
     ast::{Boolean, Fields},
     conditions,
@@ -10,7 +12,6 @@ use robotica_common::datetime::{convert_date_time_to_utc_or_default, Date, DateT
 use serde::{Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
-    env,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
@@ -95,8 +96,8 @@ impl<'de> Deserialize<'de> for Boolean<Context> {
 #[derive(Error, Debug)]
 pub enum ConfigError {
     /// Environment variable not set
-    #[error("Environment variable missing: {0}")]
-    VarError(String),
+    #[error("{0}")]
+    EnvironmentError(#[from] EnvironmentOsError),
 
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
@@ -129,7 +130,7 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
 /// Returns an error if the environment variable `SCHEDULE_FILE` is not set or if the file cannot be read.
 pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
     let env_name = "SCHEDULE_FILE";
-    let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
+    let filename = get_env_os(env_name)?;
     load_config(Path::new(&filename))
 }
 

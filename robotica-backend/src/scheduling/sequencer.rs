@@ -1,7 +1,6 @@
 //! Assemble schedule into sequences
 use std::{
     collections::{HashMap, HashSet},
-    env,
     path::{Path, PathBuf},
 };
 
@@ -16,6 +15,8 @@ use robotica_common::{
     robotica::tasks::{Payload, Task},
     scheduler::Mark,
 };
+
+use crate::{get_env_os, EnvironmentOsError};
 
 use super::{
     ast::{Boolean, Fields},
@@ -220,8 +221,8 @@ impl<'de> Deserialize<'de> for Boolean<Context> {
 #[derive(Error, Debug)]
 pub enum ConfigError {
     /// Environment variable not set
-    #[error("Environment variable missing: {0}")]
-    VarError(String),
+    #[error("{0}")]
+    EnvironmentError(#[from] EnvironmentOsError),
 
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
@@ -262,7 +263,7 @@ pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
 /// Returns an error if the environment variable `SEQUENCES_FILE` is not set or if the file cannot be read.
 pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
     let env_name = "SEQUENCES_FILE";
-    let filename = env::var(env_name).map_err(|_| ConfigError::VarError(env_name.to_string()))?;
+    let filename = get_env_os(env_name)?;
     load_config(Path::new(&filename))
 }
 

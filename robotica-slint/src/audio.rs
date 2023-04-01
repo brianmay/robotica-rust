@@ -1,9 +1,15 @@
 //! Audio player service
 
-use std::{collections::HashMap, ffi::OsStr, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use robotica_backend::{
     entities::Receiver,
+    get_env_os,
     services::{
         mqtt::{MqttTx, Subscriptions},
         persistent_state::PersistentStateDatabase,
@@ -32,6 +38,10 @@ use crate::{
 pub struct Config {
     topic_substr: String,
     targets: HashMap<String, String>,
+}
+
+pub fn get_sound_path() -> PathBuf {
+    get_env_os("SOUND_DIR").map_or_else(|_| PathBuf::from("sounds"), PathBuf::from)
 }
 
 pub fn run(
@@ -287,7 +297,7 @@ async fn play_sound(sound: &str) -> Result<(), String> {
         .file_name()
         .ok_or_else(|| format!("Failed to get file name from sound path: {sound}"))?;
 
-    let path = Path::new("sounds").join(path).as_os_str().to_owned();
+    let path = get_sound_path().join(path).as_os_str().to_owned();
     let cl = Line::new("aplay", vec![OsStr::new("-q").to_owned(), path]);
 
     if let Err(err) = cl.run().await {

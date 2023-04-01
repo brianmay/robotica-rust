@@ -4,14 +4,14 @@ use std::{io::Write, marker::PhantomData, path::PathBuf};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
-use crate::{get_env, EnvironmentError};
+use crate::{get_env_os, EnvironmentOsError};
 
 /// Errors that can occur when using a `PersistentState`.
 #[derive(Error, Debug)]
 pub enum Error {
     /// An error occurred while trying to get an environment variable.
     #[error("Environment error: {0}")]
-    EnvironmentError(#[from] EnvironmentError),
+    EnvironmentError(#[from] EnvironmentOsError),
 
     /// An IO error occurred.
     #[error("IO error file {0}: {1}")]
@@ -37,7 +37,7 @@ impl PersistentStateDatabase {
     /// This function will return an error if the `STATE_DIR` environment variable is not set or if
     /// the directory does not exist and cannot be created.
     pub fn new() -> Result<PersistentStateDatabase, Error> {
-        let path = get_env("STATE_DIR")?;
+        let path = get_env_os("STATE_DIR")?;
         let path = PathBuf::from(path);
 
         if !path.is_dir() {
