@@ -35,18 +35,30 @@
             };
           };
 
-          nativeBuildInputs = with pkgs; [
-            pkgconfig
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
+
+          buildInputs = with pkgs; [
             openssl
             protobuf
             fontconfig
             freetype
             xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            # dbus
+            # libGL
+            wayland
+            libxkbcommon
           ];
-
-          PKG_CONFIG_PATH =
-            "${pkgs.openssl.dev}/lib/pkgconfig:${pkgs.fontconfig.dev}/lib/pkgconfig:${pkgs.freetype.dev}/lib/pkgconfig";
         };
+        wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
+          export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
+          exec ${pkg}/bin/robotica-slint "$@"
+        '';
+
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -55,12 +67,20 @@
             pkgconfig
             openssl
             protobuf
-
-            # slint
             fontconfig
+            freetype
             xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            dbus
+            libGL
+            wayland
+            libxkbcommon
           ];
         };
-        packages = { robotica-slint = pkg; };
+        packages = { robotica-slint = wrapper; };
       });
 }
