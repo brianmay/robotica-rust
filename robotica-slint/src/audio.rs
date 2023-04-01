@@ -1,6 +1,6 @@
 //! Audio player service
 
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, ffi::OsStr, path::Path, sync::Arc};
 
 use robotica_backend::{
     entities::Receiver,
@@ -262,7 +262,7 @@ async fn is_music_paused() -> Result<bool, String> {
     match cl.run().await {
         Ok(_output) => Ok(true),
         Err(Error {
-            kind: ErrorKind::BadExitCode,
+            kind: ErrorKind::BadExitCode { .. },
             ..
         }) => Ok(false),
         Err(err) => {
@@ -287,19 +287,8 @@ async fn play_sound(sound: &str) -> Result<(), String> {
         .file_name()
         .ok_or_else(|| format!("Failed to get file name from sound path: {sound}"))?;
 
-    let path = Path::new("sounds")
-        .join(path)
-        .as_os_str()
-        .to_str()
-        .ok_or_else(|| {
-            format!(
-                "Failed to convert path to string: {}",
-                path.to_string_lossy()
-            )
-        })?
-        .to_string();
-
-    let cl = Line::new("aplay", vec!["-q".into(), path]);
+    let path = Path::new("sounds").join(path).as_os_str().to_owned();
+    let cl = Line::new("aplay", vec![OsStr::new("-q").to_owned(), path]);
 
     if let Err(err) = cl.run().await {
         error!("Failed to play sound: {err}");

@@ -7,6 +7,7 @@
 
 mod audio;
 mod command;
+mod duration;
 mod ui;
 
 use std::sync::Arc;

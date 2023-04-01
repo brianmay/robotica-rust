@@ -3,22 +3,16 @@
 //! This will run a Unix command, and keep track of stdout, stderr, and any errors.
 
 use std::{
-    error,
+    ffi::OsString,
     fmt::Display,
     process::{Output, Stdio},
-    result,
     str::{self, Utf8Error},
     time::{Duration, Instant},
 };
 use tokio::{io, process::Command};
 use tracing::info;
 
-pub fn duration_string(duration: &Duration) -> String {
-    let seconds = duration.as_secs() % 60;
-    let minutes = (duration.as_secs() / 60) % 60;
-    let hours = (duration.as_secs() / 60) / 60;
-    format!("{hours:02}:{minutes:02}:{seconds:02}")
-}
+use crate::duration::to_string;
 
 #[derive(Debug)]
 pub struct Success {
@@ -48,7 +42,7 @@ impl Display for Success {
         f.write_str("\n")?;
 
         f.write_str("duration: ")?;
-        f.write_str(&duration_string(&self.duration))?;
+        f.write_str(&to_string(&self.duration))?;
         f.write_str("\n")?;
 
         f.write_str("stdout:\n")?;
@@ -75,7 +69,7 @@ pub struct Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    BadExitCode,
+    BadExitCode {},
     FailedToStart { err: std::io::Error },
     Utf8Error { err: Utf8Error },
 }
@@ -109,7 +103,7 @@ impl Display for Error {
         f.write_str("\n")?;
 
         f.write_str("duration: ")?;
-        f.write_str(&duration_string(&self.duration))?;
+        f.write_str(&to_string(&self.duration))?;
         f.write_str("\n")?;
 
         f.write_str("stdout:\n")?;
@@ -124,22 +118,22 @@ impl Display for Error {
     }
 }
 
-impl error::Error for Error {}
+impl std::error::Error for Error {}
 
-pub type Result = result::Result<Success, Error>;
+pub type Result = core::result::Result<Success, Error>;
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct Line(pub String, pub Vec<String>);
+pub struct Line(pub OsString, pub Vec<OsString>);
 
-fn get_exit_code(output: &result::Result<Output, io::Error>) -> i32 {
+fn get_exit_code(output: &core::result::Result<Output, io::Error>) -> i32 {
     output
         .as_ref()
         .map_or(-1, |output| output.status.code().unwrap_or(-1))
 }
 
 fn get_stdin_out(
-    output: &result::Result<Output, io::Error>,
-) -> result::Result<(String, String), ErrorKind> {
+    output: &core::result::Result<Output, io::Error>,
+) -> core::result::Result<(String, String), ErrorKind> {
     if let Ok(output) = &output {
         let stdin = str::from_utf8(&output.stdout)?;
         let stderr = str::from_utf8(&output.stderr)?;
@@ -150,7 +144,10 @@ fn get_stdin_out(
 }
 
 impl Line {
-    pub fn new(cmd: impl Into<String>, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    pub fn new(
+        cmd: impl Into<OsString>,
+        args: impl IntoIterator<Item = impl Into<OsString>>,
+    ) -> Self {
         let cmd = cmd.into();
         let args = args.into_iter().map(std::convert::Into::into).collect();
         Self(cmd, args)
@@ -218,9 +215,9 @@ impl Line {
 
 impl Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)?;
+        write!(f, "{}", self.0.to_string_lossy())?;
         for arg in &self.1 {
-            write!(f, " {arg}")?;
+            write!(f, " {}", arg.to_string_lossy())?;
         }
         Ok(())
     }
@@ -228,9 +225,9 @@ impl Display for Line {
 
 impl std::fmt::Debug for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{}", self.0)?;
+        write!(f, "CommandLine(\"{:?}", self.0)?;
         for arg in &self.1 {
-            write!(f, " {arg}")?;
+            write!(f, " {arg:?}")?;
         }
         write!(f, "\")")?;
         Ok(())
