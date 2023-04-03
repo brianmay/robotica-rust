@@ -31,4 +31,4 @@ optional = true
 version = "0.10.48"
 
 [build-dependencies]
-slint-build = "0.3.4"
+slint-build = "1.0.0"
