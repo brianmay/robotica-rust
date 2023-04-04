@@ -369,7 +369,7 @@ async fn say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), Strin
 async fn play_music(play_list: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let cl_list = vec![
         programs.mpc.to_line_with_arg("clear"),
-        programs.mpc.to_line_with_args(["clear", play_list]),
+        programs.mpc.to_line_with_args(["load", play_list]),
         programs.mpc.to_line_with_arg("play"),
     ];
 
