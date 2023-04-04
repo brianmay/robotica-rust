@@ -2,7 +2,6 @@
 
 use std::{
     collections::HashMap,
-    ffi::OsStr,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -30,14 +29,57 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 
 use crate::{
-    command::{Error, ErrorKind, Line},
+    command::{self, ErrorKind},
+    partial_command::{self, PartialLine},
     ui::ScreenCommand,
 };
 
 #[derive(Deserialize)]
+pub struct ProgramsConfig {
+    set_volume: Vec<String>,
+    say: Vec<String>,
+    play_sound: Vec<String>,
+    mpc: Vec<String>,
+}
+
+#[derive(Deserialize)]
 pub struct Config {
+    programs: ProgramsConfig,
     topic_substr: String,
     targets: HashMap<String, String>,
+}
+
+#[derive()]
+pub struct LoadedProgramsConfig {
+    set_volume: PartialLine,
+    say: PartialLine,
+    play_sound: PartialLine,
+    mpc: PartialLine,
+}
+
+#[derive()]
+pub struct LoadedConfig {
+    programs: LoadedProgramsConfig,
+    topic_substr: String,
+    targets: HashMap<String, String>,
+}
+
+impl TryFrom<Config> for LoadedConfig {
+    type Error = partial_command::Error;
+
+    fn try_from(config: Config) -> Result<Self, Self::Error> {
+        let programs = LoadedProgramsConfig {
+            set_volume: PartialLine::new(config.programs.set_volume)?,
+            say: PartialLine::new(config.programs.say)?,
+            play_sound: PartialLine::new(config.programs.play_sound)?,
+            mpc: PartialLine::new(config.programs.mpc)?,
+        };
+        Ok(Self {
+            programs,
+            topic_substr: config.topic_substr,
+            targets: config.targets,
+        })
+    }
 }
 
 pub fn get_sound_path() -> PathBuf {
@@ -49,7 +91,7 @@ pub fn run(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     database: &PersistentStateDatabase,
-    config: Arc<Config>,
+    config: Arc<LoadedConfig>,
 ) {
     let topic_substr = &config.topic_substr;
     let topic = format!("command/{topic_substr}");
@@ -61,7 +103,7 @@ pub fn run(
         let topic_substr = &config.topic_substr;
 
         let mut command_s = command_rx.subscribe().await;
-        init_all(&state).await.unwrap_or_else(|err| {
+        init_all(&state, &config).await.unwrap_or_else(|err| {
             state.error = Some(err);
             state.play_list = None;
         });
@@ -83,14 +125,14 @@ pub fn run(
     });
 }
 
-async fn init_all(state: &State) -> Result<(), String> {
-    init().await?;
+async fn init_all(state: &State, config: &LoadedConfig) -> Result<(), String> {
+    init(&config.programs).await?;
 
-    set_volume(state.volume.music).await?;
+    set_volume(state.volume.music, &config.programs).await?;
     if let Some(play_list) = &state.play_list {
-        play_music(play_list).await?;
+        play_music(play_list, &config.programs).await?;
     } else {
-        stop_music().await?;
+        stop_music(&config.programs).await?;
     }
     Ok(())
 }
@@ -118,7 +160,7 @@ fn send_task(mqtt: &MqttTx, task: &Task) {
 async fn handle_command(
     tx_screen_command: &mpsc::Sender<ScreenCommand>,
     state: &mut State,
-    config: &Arc<Config>,
+    config: &Arc<LoadedConfig>,
     mqtt: &MqttTx,
     command: AudioCommand,
 ) {
@@ -150,7 +192,7 @@ async fn handle_command(
         send_task(mqtt, &task);
     }
 
-    process_command(state, command).await;
+    process_command(state, command, config).await;
 
     for task in post_tasks {
         let task = task.to_task(&config.targets);
@@ -166,22 +208,22 @@ enum Action {
 }
 
 impl Action {
-    async fn execute(self, state: &State) -> Result<(), String> {
+    async fn execute(self, state: &State, config: &LoadedConfig) -> Result<(), String> {
         match self {
             Self::Sound(sound) => {
-                set_volume(state.volume.message).await?;
-                play_sound(&sound).await?;
+                set_volume(state.volume.message, &config.programs).await?;
+                play_sound(&sound, &config.programs).await?;
             }
             Self::Say(msg) => {
-                set_volume(state.volume.message).await?;
-                say(&msg).await?;
+                set_volume(state.volume.message, &config.programs).await?;
+                say(&msg, &config.programs).await?;
             }
             Self::Play(play_list) => {
-                set_volume(state.volume.music).await?;
-                play_music(&play_list).await?;
+                set_volume(state.volume.music, &config.programs).await?;
+                play_music(&play_list, &config.programs).await?;
             }
             Self::Stop => {
-                stop_music().await?;
+                stop_music(&config.programs).await?;
             }
         }
         Ok(())
@@ -212,33 +254,35 @@ fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
     actions
 }
 
-async fn process_command(state: &mut State, command: AudioCommand) {
+async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig) {
     let play_list = command.music.clone().and_then(|m| m.play_list);
 
     let actions = get_actions_for_command(command);
 
     if actions.is_empty() {
-        set_volume(state.volume.music).await.unwrap_or_else(|e| {
-            state.error = Some(e);
-            state.play_list = None;
-        });
+        set_volume(state.volume.music, &config.programs)
+            .await
+            .unwrap_or_else(|e| {
+                state.error = Some(e);
+                state.play_list = None;
+            });
     } else {
         let play_action = actions
             .iter()
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
 
         let do_actions = || async {
-            let paused = is_music_paused().await?;
+            let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
-                action.execute(state).await?;
+                action.execute(state, config).await?;
             }
 
             if paused && !play_action {
-                set_volume(state.volume.music).await?;
-                music_resume().await?;
+                set_volume(state.volume.music, &config.programs).await?;
+                music_resume(&config.programs).await?;
             } else if !paused && !play_action {
-                set_volume(state.volume.music).await?;
+                set_volume(state.volume.music, &config.programs).await?;
             }
 
             state.play_list = play_list;
@@ -252,12 +296,8 @@ async fn process_command(state: &mut State, command: AudioCommand) {
     }
 }
 
-async fn set_volume(volume: u8) -> Result<(), String> {
-    let cl = Line::new(
-        "amixer",
-        vec!["set".into(), "Speaker".into(), format!("{volume}%")],
-    );
-
+async fn set_volume(volume: u8, programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs.set_volume.to_line_with_arg(format!("{volume}%"));
     if let Err(err) = cl.run().await {
         error!("Failed to set volume: {err}");
         return Err(format!("Failed to set volume: {err}"));
@@ -266,12 +306,11 @@ async fn set_volume(volume: u8) -> Result<(), String> {
     Ok(())
 }
 
-async fn is_music_paused() -> Result<bool, String> {
-    let cl = Line::new("mpc", vec!["pause-if-playing"]);
-
+async fn is_music_paused(programs: &LoadedProgramsConfig) -> Result<bool, String> {
+    let cl = programs.mpc.to_line_with_arg("pause-if-playing");
     match cl.run().await {
         Ok(_output) => Ok(true),
-        Err(Error {
+        Err(command::Error {
             kind: ErrorKind::BadExitCode { .. },
             ..
         }) => Ok(false),
@@ -282,9 +321,8 @@ async fn is_music_paused() -> Result<bool, String> {
     }
 }
 
-async fn music_resume() -> Result<(), String> {
-    let cl = Line::new("mpc", vec!["play"]);
-
+async fn music_resume(programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs.mpc.to_line_with_arg("play");
     if let Err(err) = cl.run().await {
         error!("Failed to resume music: {err}");
         return Err(format!("Failed to resume music: {err}"));
@@ -292,13 +330,13 @@ async fn music_resume() -> Result<(), String> {
     Ok(())
 }
 
-async fn play_sound(sound: &str) -> Result<(), String> {
+async fn play_sound(sound: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let path = Path::new(sound)
         .file_name()
         .ok_or_else(|| format!("Failed to get file name from sound path: {sound}"))?;
 
     let path = get_sound_path().join(path).as_os_str().to_owned();
-    let cl = Line::new("aplay", vec![OsStr::new("-q").to_owned(), path]);
+    let cl = programs.play_sound.to_line_with_arg(path);
 
     if let Err(err) = cl.run().await {
         error!("Failed to play sound: {err}");
@@ -307,35 +345,32 @@ async fn play_sound(sound: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn say(message: &str) -> Result<(), String> {
-    let cl = Line::new(
-        "espeak",
-        vec!["-v", "en-us", "-s", "150", "-a", "200", message],
-    );
+async fn say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs.say.to_line_with_arg(message);
 
-    play_sound("start.wav").await?;
+    play_sound("start.wav", programs).await?;
 
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
     };
 
-    play_sound("middle.wav").await?;
+    play_sound("middle.wav", programs).await?;
 
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
     };
 
-    play_sound("stop.wav").await?;
+    play_sound("stop.wav", programs).await?;
     Ok(())
 }
 
-async fn play_music(play_list: &str) -> Result<(), String> {
+async fn play_music(play_list: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let cl_list = vec![
-        Line::new("mpc", vec!["clear"]),
-        Line::new("mpc", vec!["load", play_list]),
-        Line::new("mpc", vec!["play"]),
+        programs.mpc.to_line_with_arg("clear"),
+        programs.mpc.to_line_with_args(["clear", play_list]),
+        programs.mpc.to_line_with_arg("play"),
     ];
 
     for cl in cl_list {
@@ -348,9 +383,8 @@ async fn play_music(play_list: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn stop_music() -> Result<(), String> {
-    let cl = Line::new("mpc", vec!["stop"]);
-
+async fn stop_music(programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs.mpc.to_line_with_arg("stop");
     if let Err(err) = cl.run().await {
         error!("Failed to stop music: {err}");
         return Err(format!("Failed to stop music: {err}"));
@@ -358,8 +392,8 @@ async fn stop_music() -> Result<(), String> {
     Ok(())
 }
 
-async fn init() -> Result<(), String> {
-    let cl = Line::new("mpc", vec!["repeat", "on"]);
+async fn init(programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs.mpc.to_line_with_args(["repeat", "on"]);
     if let Err(err) = cl.run().await {
         error!("Failed to init music: {err}");
         return Err(format!("Failed to init music: {err}"));

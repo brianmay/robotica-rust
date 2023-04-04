@@ -31,7 +31,10 @@ mod slint {
     slint::include_modules!();
 }
 
-use crate::{command::Line, RunningState};
+use crate::{
+    partial_command::{self, PartialLine},
+    RunningState,
+};
 use ::slint::{
     ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, VecModel, Weak,
 };
@@ -88,19 +91,61 @@ pub struct ButtonConfig {
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct TitleConfig {
     title: String,
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum WidgetConfig {
     Button(Arc<ButtonConfig>),
     Title(TitleConfig),
     Nil,
+}
+
+#[derive(Deserialize)]
+pub struct ProgramsConfig {
+    turn_screen_on: Vec<String>,
+    turn_screen_off: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct Config {
+    number_per_row: u8,
+    buttons: Vec<WidgetConfig>,
+    programs: ProgramsConfig,
+}
+
+#[derive()]
+pub struct LoadedProgramsConfig {
+    turn_screen_on: PartialLine,
+    turn_screen_off: PartialLine,
+}
+
+#[derive()]
+pub struct LoadedConfig {
+    pub number_per_row: u8,
+    pub buttons: Vec<WidgetConfig>,
+    pub programs: LoadedProgramsConfig,
+}
+
+impl TryFrom<Config> for LoadedConfig {
+    type Error = partial_command::Error;
+
+    fn try_from(config: Config) -> Result<Self, Self::Error> {
+        let programs = LoadedProgramsConfig {
+            turn_screen_on: PartialLine::new(config.programs.turn_screen_on)?,
+            turn_screen_off: PartialLine::new(config.programs.turn_screen_off)?,
+        };
+        Ok(Self {
+            number_per_row: config.number_per_row,
+            buttons: config.buttons,
+            programs,
+        })
+    }
 }
 
 async fn select_ok<F, FUTURES, A, B>(futs: FUTURES) -> Result<A, B>
@@ -141,14 +186,13 @@ pub enum ScreenCommand {
 #[allow(clippy::too_many_lines)]
 pub fn run_gui(
     state: RunningState,
-    number_per_row: u8,
-    buttons: &Vec<WidgetConfig>,
+    config: Arc<LoadedConfig>,
     rx_screen_command: mpsc::Receiver<ScreenCommand>,
 ) {
     let state = Arc::new(state);
 
     let (tx_click, rx_click) = {
-        let len = buttons.len();
+        let len = config.buttons.len();
         let mut rx_click = Vec::with_capacity(len);
         let mut tx_click = Vec::with_capacity(len);
         for _ in 0..len {
@@ -159,13 +203,14 @@ pub fn run_gui(
         (tx_click, rx_click)
     };
 
-    let ui = slint::AppWindow::new();
-    ui.set_number_per_row(number_per_row.into());
-    ui.hide();
+    let ui = slint::AppWindow::new().unwrap();
+    ui.set_number_per_row(config.number_per_row.into());
+    ui.hide().unwrap();
 
     let icons = ui.get_all_icons();
 
-    let all_widgets: Vec<slint::WidgetData> = buttons
+    let all_widgets: Vec<slint::WidgetData> = config
+        .buttons
         .iter()
         .map(|wc| match wc {
             WidgetConfig::Button(bc) => {
@@ -198,106 +243,7 @@ pub fn run_gui(
             });
     });
 
-    let handle_weak = ui.as_weak();
-    tokio::spawn(async move {
-        #[derive(Clone)]
-        struct ScreenState {
-            on: Option<Instant>,
-            message: Option<Instant>,
-        }
-
-        impl ScreenState {
-            const fn is_on(&self) -> bool {
-                self.on.is_some() || self.message.is_some()
-            }
-
-            const fn is_off(&self) -> bool {
-                !self.is_on()
-            }
-
-            async fn sync(&mut self, prev: Self, handle_weak: Weak<slint::AppWindow>) {
-                if self.message.is_none() && prev.message.is_some() {
-                    handle_weak
-                        .upgrade_in_event_loop(|handle| {
-                            handle.set_display_message(false);
-                        })
-                        .unwrap();
-                }
-                if self.is_on() && prev.is_off() {
-                    turn_screen_on(handle_weak).await;
-                } else if self.is_off() && prev.is_on() {
-                    turn_screen_off(handle_weak).await;
-                }
-            }
-        }
-
-        async fn on_timer_wait(state: &ScreenState) -> Option<()> {
-            match state.on {
-                Some(instant) => {
-                    sleep_until(instant).await;
-                    Some(())
-                }
-                None => None,
-            }
-        }
-
-        async fn message_timer_wait(state: &ScreenState) -> Option<()> {
-            match state.message {
-                Some(instant) => {
-                    sleep_until(instant).await;
-                    Some(())
-                }
-                None => None,
-            }
-        }
-
-        let mut state = ScreenState {
-            on: Some(Instant::now() + Duration::from_secs(30)),
-            message: None,
-        };
-        let mut rx_screen_command = rx_screen_command;
-
-        loop {
-            let prev = state.clone();
-
-            select! {
-                Some(command) = rx_screen_command.recv() => {
-                    match command {
-                        ScreenCommand::TurnOn => {
-                            state.on = Some(Instant::now() + Duration::from_secs(30));
-                            state.message = None;
-                        }
-                        ScreenCommand::Message(message) => {
-                            let (title, body, _priority) = message.into_owned();
-
-                            state.message = Some(Instant::now() + Duration::from_secs(5));
-                            handle_weak
-                                .upgrade_in_event_loop(|handle| {
-                                    handle.set_msg_title(title.into());
-                                    handle.set_msg_body(body.into());
-                                    handle.set_display_message(true);
-                                })
-                                .unwrap();
-                        }
-                    }
-                    let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak).await;
-                }
-                Some(_) = on_timer_wait(&state) => {
-                    state.on = None;
-                    let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak).await;
-                }
-                Some(_) = message_timer_wait(&state) => {
-                    state.message = None;
-                    let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak).await;
-                }
-            }
-        }
-    });
-
-    for (i, (lbc, rx_click)) in buttons.iter().zip(rx_click).enumerate() {
+    for (i, (lbc, rx_click)) in config.buttons.iter().zip(rx_click).enumerate() {
         if let WidgetConfig::Button(lbc) = lbc {
             let lbc = lbc.clone();
             let state = state.clone();
@@ -362,7 +308,111 @@ pub fn run_gui(
         }
     }
 
-    ui.run();
+    let handle_weak = ui.as_weak();
+    tokio::spawn(async move {
+        #[derive(Clone)]
+        struct ScreenState {
+            on: Option<Instant>,
+            message: Option<Instant>,
+        }
+
+        impl ScreenState {
+            const fn is_on(&self) -> bool {
+                self.on.is_some() || self.message.is_some()
+            }
+
+            const fn is_off(&self) -> bool {
+                !self.is_on()
+            }
+
+            async fn sync(
+                &mut self,
+                prev: Self,
+                handle_weak: Weak<slint::AppWindow>,
+                config: &LoadedConfig,
+            ) {
+                if self.message.is_none() && prev.message.is_some() {
+                    handle_weak
+                        .upgrade_in_event_loop(|handle| {
+                            handle.set_display_message(false);
+                        })
+                        .unwrap();
+                }
+                if self.is_on() && prev.is_off() {
+                    turn_screen_on(handle_weak, &config.programs).await;
+                } else if self.is_off() && prev.is_on() {
+                    turn_screen_off(handle_weak, &config.programs).await;
+                }
+            }
+        }
+
+        async fn on_timer_wait(state: &ScreenState) -> Option<()> {
+            match state.on {
+                Some(instant) => {
+                    sleep_until(instant).await;
+                    Some(())
+                }
+                None => None,
+            }
+        }
+
+        async fn message_timer_wait(state: &ScreenState) -> Option<()> {
+            match state.message {
+                Some(instant) => {
+                    sleep_until(instant).await;
+                    Some(())
+                }
+                None => None,
+            }
+        }
+
+        let mut state = ScreenState {
+            on: Some(Instant::now() + Duration::from_secs(30)),
+            message: None,
+        };
+        let mut rx_screen_command = rx_screen_command;
+
+        loop {
+            let prev = state.clone();
+
+            select! {
+                Some(command) = rx_screen_command.recv() => {
+                    match command {
+                        ScreenCommand::TurnOn => {
+                            state.on = Some(Instant::now() + Duration::from_secs(30));
+                            state.message = None;
+                        }
+                        ScreenCommand::Message(message) => {
+                            let (title, body, _priority) = message.into_owned();
+
+                            state.message = Some(Instant::now() + Duration::from_secs(5));
+                            handle_weak
+                                .upgrade_in_event_loop(|handle| {
+                                    handle.set_msg_title(title.into());
+                                    handle.set_msg_body(body.into());
+                                    handle.set_display_message(true);
+                                })
+                                .unwrap();
+                        }
+                    }
+                    let handle_weak = handle_weak.clone();
+                    state.sync(prev, handle_weak, &config).await;
+                }
+                Some(_) = on_timer_wait(&state) => {
+                    state.on = None;
+                    let handle_weak = handle_weak.clone();
+                    state.sync(prev, handle_weak, &config).await;
+                }
+                Some(_) = message_timer_wait(&state) => {
+                    state.message = None;
+                    let handle_weak = handle_weak.clone();
+                    state.sync(prev, handle_weak, &config).await;
+                }
+            }
+        }
+    });
+
+    ui.run().unwrap();
 }
 
 fn get_button_data(
@@ -549,10 +599,9 @@ const fn get_image<'a>(
     }
 }
 
-async fn turn_screen_off(handle_weak: Weak<slint::AppWindow>) {
+async fn turn_screen_off(handle_weak: Weak<slint::AppWindow>, programs: &LoadedProgramsConfig) {
     info!("Turning off display");
-    // let cmd = Line("swaymsg".to_string(), vec!["output * dpms off".to_string()]);
-    let cmd = Line::new("../screen", vec!["turn-off"]);
+    let cmd = programs.turn_screen_off.to_line();
     info!("Done turning off display");
     if let Err(err) = cmd.run().await {
         error!("Error turning off display: {}", err);
@@ -565,10 +614,9 @@ async fn turn_screen_off(handle_weak: Weak<slint::AppWindow>) {
         .unwrap();
 }
 
-async fn turn_screen_on(handle_weak: Weak<slint::AppWindow>) {
+async fn turn_screen_on(handle_weak: Weak<slint::AppWindow>, programs: &LoadedProgramsConfig) {
     info!("Turning on display");
-    // let cmd = Line("swaymsg".to_string(), vec!["output * dpms on".to_string()]);
-    let cmd = Line::new("../screen", vec!["turn-on"]);
+    let cmd = programs.turn_screen_on.to_line();
     info!("Done turning on display");
     if let Err(err) = cmd.run().await {
         error!("Error turning on display: {}", err);

@@ -123,7 +123,10 @@ impl std::error::Error for Error {}
 pub type Result = core::result::Result<Success, Error>;
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct Line(pub OsString, pub Vec<OsString>);
+pub struct Line {
+    pub command: OsString,
+    pub args: Vec<OsString>,
+}
 
 fn get_exit_code(output: &core::result::Result<Output, io::Error>) -> i32 {
     output
@@ -148,17 +151,17 @@ impl Line {
         cmd: impl Into<OsString>,
         args: impl IntoIterator<Item = impl Into<OsString>>,
     ) -> Self {
-        let cmd = cmd.into();
+        let command = cmd.into();
         let args = args.into_iter().map(std::convert::Into::into).collect();
-        Self(cmd, args)
+        Self { command, args }
     }
 
     pub async fn run(&self) -> Result {
         let start = Instant::now();
         info!("Running command: {self}");
 
-        let Self(cmd, args) = &self;
-        let output = Command::new(cmd)
+        let Self { command, args } = &self;
+        let output = Command::new(command)
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -215,8 +218,8 @@ impl Line {
 
 impl Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.to_string_lossy())?;
-        for arg in &self.1 {
+        write!(f, "{}", self.command.to_string_lossy())?;
+        for arg in &self.args {
             write!(f, " {}", arg.to_string_lossy())?;
         }
         Ok(())
@@ -225,8 +228,8 @@ impl Display for Line {
 
 impl std::fmt::Debug for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{:?}", self.0)?;
-        for arg in &self.1 {
+        write!(f, "CommandLine(\"{:?}", self.command)?;
+        for arg in &self.args {
             write!(f, " {arg:?}")?;
         }
         write!(f, "\")")?;
