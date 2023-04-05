@@ -87,22 +87,18 @@ pub struct Receiver<T> {
 impl<T: Send + Clone> Receiver<T> {
     /// Retrieve the most recent value from the entity.
     ///
-    /// FIXME: This should not panic.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the receiver is disconnected.
+    /// Returns `None` if the entity is closed.
     pub async fn get(&self) -> Option<T> {
         let (tx, rx) = oneshot::channel();
         let msg = ReceiveMessage::Get(tx);
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: get/send failed: {}", self.name, err);
-            panic!("get failed");
+            return None;
         };
         (rx.await).map_or_else(
             |_| {
                 error!("{}: get/await failed", self.name);
-                panic!("get failed");
+                None
             },
             |v| v,
         )
@@ -110,23 +106,23 @@ impl<T: Send + Clone> Receiver<T> {
 
     /// Subscribe to this entity.
     ///
-    /// FIXME: This should not panic.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the receiver is disconnected.
+    /// Returns an already closed subscription if the entity is closed.
     pub async fn subscribe(&self) -> Subscription<T> {
         let (tx, rx) = oneshot::channel();
         let msg = ReceiveMessage::Subscribe(tx);
         if let Err(err) = self.tx.send(msg).await {
-            error!("{}: get/send failed: {}", self.name, err);
-            panic!("get failed");
+            error!("{}: subscribe/send failed: {}", self.name, err);
+            return Subscription::null(self.tx.clone());
         };
         if let Ok((rx, initial)) = rx.await {
-            Subscription { rx, _tx: self.tx.clone(), initial }
+            Subscription {
+                rx,
+                _tx: self.tx.clone(),
+                initial,
+            }
         } else {
-            error!("{}: get/await failed", self.name);
-            panic!("get failed");
+            error!("{}: subscribe/await failed", self.name);
+            Subscription::null(self.tx.clone())
         }
     }
 
@@ -410,6 +406,18 @@ pub struct Subscription<T> {
     // We need to keep this to ensure connection stays alive.
     _tx: mpsc::Sender<ReceiveMessage<T>>,
     initial: Option<T>,
+}
+
+impl<T: Clone> Subscription<T> {
+    /// Create a null subscription that is already closed.
+    fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
+        let (_tx, rx) = broadcast::channel(0);
+        Self {
+            rx,
+            _tx: tx,
+            initial: None,
+        }
+    }
 }
 
 impl<T: Send + Clone> Subscription<T> {
