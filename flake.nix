@@ -62,11 +62,16 @@
       in {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
-            rust_pkgs.default
             rust-analyzer
             pkgconfig
             openssl
             protobuf
+            nodejs
+            wasm-pack
+            (rust_pkgs.default.override {
+              extensions = [ "rust-src" ];
+              targets = [ "wasm32-unknown-unknown" ];
+            })
             # fontconfig
             # freetype
             # xorg.libxcb

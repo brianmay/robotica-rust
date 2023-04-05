@@ -60,6 +60,23 @@ impl<T: Send> Sender<T> {
     }
 }
 
+/// A `Receiver` that doesn't count as a reference to the entity.
+pub struct WeakReceiver<T> {
+    name: String,
+    tx: mpsc::WeakSender<ReceiveMessage<T>>,
+}
+
+impl<T> WeakReceiver<T> {
+    /// Try to convert to a `Receiver`.
+    #[must_use]
+    pub fn upgrade(&self) -> Option<Receiver<T>> {
+        self.tx.upgrade().map(|tx| Receiver {
+            name: self.name.clone(),
+            tx,
+        })
+    }
+}
+
 /// Receive a value from an entity.
 #[derive(Debug, Clone)]
 pub struct Receiver<T> {
@@ -69,6 +86,8 @@ pub struct Receiver<T> {
 
 impl<T: Send + Clone> Receiver<T> {
     /// Retrieve the most recent value from the entity.
+    ///
+    /// FIXME: This should not panic.
     ///
     /// # Panics
     ///
@@ -91,6 +110,8 @@ impl<T: Send + Clone> Receiver<T> {
 
     /// Subscribe to this entity.
     ///
+    /// FIXME: This should not panic.
+    ///
     /// # Panics
     ///
     /// Panics if the receiver is disconnected.
@@ -102,7 +123,7 @@ impl<T: Send + Clone> Receiver<T> {
             panic!("get failed");
         };
         if let Ok((rx, initial)) = rx.await {
-            Subscription { rx, initial }
+            Subscription { rx, _tx: self.tx.clone(), initial }
         } else {
             error!("{}: get/await failed", self.name);
             panic!("get failed");
@@ -357,6 +378,15 @@ impl<T: Send + Clone> Receiver<T> {
     pub async fn closed(&self) {
         self.tx.closed().await;
     }
+
+    /// Create a new `WeakReceiver` from this Receiver.
+    #[must_use]
+    pub fn downgrade(&self) -> WeakReceiver<T> {
+        WeakReceiver {
+            tx: self.tx.downgrade(),
+            name: self.name.clone(),
+        }
+    }
 }
 
 impl<T: Send + Clone> Receiver<StatefulData<T>> {
@@ -377,6 +407,8 @@ pub enum RecvError {
 /// A subscription to receive data from an entity.
 pub struct Subscription<T> {
     rx: broadcast::Receiver<T>,
+    // We need to keep this to ensure connection stays alive.
+    _tx: mpsc::Sender<ReceiveMessage<T>>,
     initial: Option<T>,
 }
 
@@ -647,6 +679,10 @@ mod tests {
 
         let result = rx.get().await;
         assert_eq!(Some("goodbye".to_string()), result);
+
+        drop(s);
+        drop(rx);
+        tx.closed().await;
     }
 
     #[tokio::test]
@@ -674,5 +710,9 @@ mod tests {
         let (prev, current) = rx.get().await.unwrap();
         assert_eq!("hello", prev.unwrap());
         assert_eq!("goodbye", current);
+
+        drop(s);
+        drop(rx);
+        tx.closed().await;
     }
 }

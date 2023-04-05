@@ -433,16 +433,11 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
             let to = state.subscriptions.unsubscribe(id);
 
             if let Some(SubscribeTo::Mqtt(topic, ..)) = to {
-                if state.subscriptions.is_mqtt_topic_subscribed(&topic) {
-                    // FIXME: We don't have an unsubscribe command in the backend yet.
-                    // let command = WsCommand::Unsubscribe { id };
-                    // state
-                    //     .backend
-                    //     .send(Message::Text(serde_json::to_string(&command).unwrap()))
-                    //     .await;
-                    // set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
-                    // state.last_message.remove(&topic);
-                }
+                debug!("ws: unsubscribing from mqtt topic {}", topic);
+                let command = WsCommand::Unsubscribe { topic };
+                let message = command.encode().unwrap();
+                state.backend.send(Message::Bytes(message.into())).await;
+                set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
             }
 
             debug!("ws: unsubscribed from {}", id);

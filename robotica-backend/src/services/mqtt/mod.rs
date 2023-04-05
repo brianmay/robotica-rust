@@ -71,6 +71,7 @@ enum MqttCommand {
         String,
         oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
     ),
+    Unsubscribe(String),
 }
 
 /// Struct used to send outgoing MQTT messages.
@@ -150,14 +151,17 @@ pub enum MqttClientError {
 }
 
 /// Client struct used to connect to MQTT.
-pub struct MqttRx(mpsc::Receiver<MqttCommand>);
+pub struct MqttRx {
+    tx: mpsc::Sender<MqttCommand>,
+    rx: mpsc::Receiver<MqttCommand>,
+}
 
 /// Create a new MQTT client.
 #[must_use]
 pub fn mqtt_channel() -> (MqttTx, MqttRx) {
     // Outgoing MQTT queue.
     let (tx, rx) = mpsc::channel(50);
-    (MqttTx(tx), MqttRx(rx))
+    (MqttTx(tx.clone()), MqttRx { tx, rx })
 }
 
 /// Connect to the MQTT broker and send/receive messages.
@@ -205,9 +209,16 @@ pub fn run_client(
     let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
 
     // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+    for subscription in subscriptions.iter() {
+        watch_tx_closed(
+            subscription.tx.clone(),
+            channel.tx.clone(),
+            subscription.topic.clone(),
+        );
+    }
 
     spawn(async move {
-        let mut rx = channel.0;
+        let mut rx = channel.rx;
 
         loop {
             select! {
@@ -251,7 +262,16 @@ pub fn run_client(
                             }
                         },
                         MqttCommand::Subscribe(topic, tx) => {
-                            process_subscribe(&client, &mut subscriptions, &topic, tx);
+                            process_subscribe(&client, &mut subscriptions, &topic, tx, channel.tx.clone());
+                        }
+                        MqttCommand::Unsubscribe(topic) => {
+                            debug!("Unsubscribing from topic: {}.", topic);
+                            if let Some(subscription) = subscriptions.unsubscribe(&topic) {
+                                if let Err(err) = client.try_unsubscribe(&topic) {
+                                    error!("Failed to unsubscribe from topic: {:?}.", err);
+                                }
+                                drop(subscription);
+                            }
                         }
                     }
                 }
@@ -266,30 +286,38 @@ pub fn run_client(
 fn process_subscribe(
     client: &AsyncClient,
     subscriptions: &mut Subscriptions,
-    topic: &str,
+    topic: impl Into<String>,
     tx: oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
+    channel_tx: mpsc::Sender<MqttCommand>,
 ) {
+    let topic: String = topic.into();
+
     debug!("Subscribing to topic: {}.", topic);
-    let response = if let Some(subscription) = subscriptions.0.get(topic) {
-        Ok(subscription.rx.clone())
+    let subscription = subscriptions.0.get(&topic);
+    let maybe_rx = subscription.and_then(|s| s.rx.upgrade());
+
+    let response = if let Some(rx) = maybe_rx {
+        Ok(rx)
     } else {
-        let (tx, rx) = entities::create_stateless_entity(topic);
+        let (tx, rx) = entities::create_stateless_entity(&topic);
 
         let subscription = Subscription {
             topic: topic.to_string(),
-            tx,
-            rx: rx.clone(),
+            tx: tx.clone(),
+            rx: rx.downgrade(),
         };
 
-        let filter = topic_to_filter(topic);
+        let filter = topic_to_filter(&topic);
         match client.try_subscribe_many([filter]) {
             Ok(_) => {
                 debug!("Subscribed to topic: {:?}.", topic);
                 subscriptions.0.insert(topic.to_string(), subscription);
+                watch_tx_closed(tx, channel_tx, topic);
                 Ok(rx)
             }
             Err(err) => {
                 error!("Failed to subscribe to topics: {:?}.", err);
+                subscriptions.0.remove(&topic);
                 Err(err.into())
             }
         }
@@ -298,6 +326,23 @@ fn process_subscribe(
     if let Err(err) = tx.send(response) {
         error!("Failed to send subscribe response: {:?}.", err);
     }
+}
+
+fn watch_tx_closed(
+    tx: entities::Sender<MqttMessage>,
+    channel_tx: mpsc::Sender<MqttCommand>,
+    topic: String,
+) {
+    spawn(async move {
+        tx.closed().await;
+        debug!("Entity for subscription closed: {:?}.", topic);
+        channel_tx
+            .send(MqttCommand::Unsubscribe(topic))
+            .await
+            .unwrap_or_else(|err| {
+                error!("Failed to send unsubscribe command: {:?}.", err);
+            });
+    });
 }
 
 fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptions) {
@@ -325,7 +370,7 @@ struct Subscription {
     #[allow(dead_code)]
     topic: String,
     tx: entities::Sender<MqttMessage>,
-    rx: entities::Receiver<MqttMessage>,
+    rx: entities::WeakReceiver<MqttMessage>,
 }
 
 /// List of all required subscriptions.
@@ -346,15 +391,18 @@ impl Subscriptions {
     pub fn subscribe(&mut self, topic: impl Into<String>) -> entities::Receiver<MqttMessage> {
         // Per subscription incoming MQTT queue.
         let topic = topic.into();
-        if let Some(subscription) = self.0.get(&topic) {
-            subscription.rx.clone()
+        let subscription = self.0.get(&topic);
+        let maybe_rx = subscription.and_then(|s| s.rx.upgrade());
+
+        if let Some(rx) = maybe_rx {
+            rx
         } else {
             let (tx, rx) = entities::create_stateless_entity(topic.clone());
 
             let subscription = Subscription {
                 topic: topic.clone(),
                 tx,
-                rx: rx.clone(),
+                rx: rx.downgrade(),
             };
 
             self.0.insert(topic, subscription);
@@ -381,6 +429,16 @@ impl Subscriptions {
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
         self.subscribe(topic).translate_into_stateful::<T>()
+    }
+
+    /// Iterate over all subscriptions.
+    fn iter(&self) -> impl Iterator<Item = &Subscription> {
+        self.0.values()
+    }
+
+    /// Remove a subscription from the list.
+    fn unsubscribe(&mut self, topic: &str) -> Option<Subscription> {
+        self.0.remove(topic)
     }
 }
 

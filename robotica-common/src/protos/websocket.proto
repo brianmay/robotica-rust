@@ -39,6 +39,10 @@ message WsSubscribe {
     string topic = 1;
 }
 
+message WsUnsubscribe {
+    string topic = 1;
+}
+
 message WsKeepAlive {
 }
 
@@ -51,5 +55,6 @@ message WsCommand {
         WsSubscribe subscribe = 1;
         WsSend send = 2;
         WsKeepAlive keep_alive = 3;
+        WsUnsubscribe unsubscribe = 4;
     }
 }

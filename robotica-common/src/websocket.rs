@@ -73,6 +73,12 @@ pub enum WsCommand {
         topic: String,
     },
 
+    /// Frontend wants to unsubscribe from MQTT topic.
+    Unsubscribe {
+        /// MQTT topic to unsubscribe from.
+        topic: String,
+    },
+
     /// Frontend wants to send a MQTT message.
     Send(MqttMessage),
 
@@ -90,6 +96,9 @@ impl ProtobufIntoFrom for WsCommand {
                 WsCommand::Subscribe { topic } => {
                     protos::ws_command::Command::Subscribe(protos::WsSubscribe { topic })
                 }
+                WsCommand::Unsubscribe { topic } => {
+                    protos::ws_command::Command::Unsubscribe(protos::WsUnsubscribe { topic })
+                }
                 WsCommand::Send(message) => {
                     crate::protos::ws_command::Command::Send(protos::WsSend {
                         message: Some(message.into_protobuf()),
@@ -105,6 +114,9 @@ impl ProtobufIntoFrom for WsCommand {
     fn from_protobuf(src: Self::Protobuf) -> Option<Self> {
         Some(match src.command? {
             protos::ws_command::Command::Subscribe(subscribe) => WsCommand::Subscribe {
+                topic: subscribe.topic,
+            },
+            protos::ws_command::Command::Unsubscribe(subscribe) => WsCommand::Unsubscribe {
                 topic: subscribe.topic,
             },
             protos::ws_command::Command::Send(protos::WsSend { message }) => {

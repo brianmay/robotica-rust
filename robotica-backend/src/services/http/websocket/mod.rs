@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -6,9 +8,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_sessions::extractors::ReadableSession;
-use futures::{SinkExt, StreamExt};
-use tokio::{select, sync::mpsc};
-use tracing::{debug, error};
+use futures::{stream::FuturesUnordered, StreamExt};
+use tokio::select;
+use tracing::{debug, error, info};
 
 use robotica_common::{
     mqtt::MqttMessage,
@@ -17,7 +19,7 @@ use robotica_common::{
     websocket::{WsCommand, WsError, WsStatus},
 };
 
-use crate::services::mqtt::topics::topic_matches_any;
+use crate::{entities::Subscription, services::mqtt::topics::topic_matches_any};
 
 use super::{get_user, HttpConfig, User};
 
@@ -54,10 +56,9 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
     }
 }
 
-async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
-    // By splitting we can send and receive at the same time.
-    let (mut sender, mut receiver) = stream.split();
-
+// FIXME: function is too long
+#[allow(clippy::too_many_lines)]
+async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
     // Send Connect message.
     let message = WsStatus::Connected {
         user: user.clone(),
@@ -72,50 +73,75 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
         }
     };
 
-    if let Err(e) = sender.send(Message::Binary(message.into())).await {
+    if let Err(e) = stream.send(Message::Binary(message.into())).await {
         error!("Error sending websocket status: {}", e);
     }
-
-    // We can't clone sender, so we create a process that can receive from multiple threads.
-    let (tx, rx) = mpsc::unbounded_channel::<MqttMessage>();
-    let send_task = tokio::spawn(async move {
-        debug!("send_task: starting send_task");
-
-        let mut rx = rx;
-        while let Some(msg) = rx.recv().await {
-            let msg = match msg.encode() {
-                Ok(msg) => msg,
-                Err(e) => {
-                    error!("send_task: failed to serialize message: {}", e);
-                    continue;
-                }
-            };
-
-            if let Err(err) = sender.send(Message::Binary(msg.into())).await {
-                error!(
-                    "send_task: failed to send message to web socket, stopping: {}",
-                    err
-                );
-                break;
-            }
-
-            // Note: sender.closed() is not implemented, so
-            // we can't check if the socket is closed.
-            // Instead we kill this process when the recv_task process dies.
-        }
-
-        debug!("send_task: stopping");
-    });
 
     // This task will receive messages from client and send them to broadcast subscribers.
     let recv_task = tokio::spawn(async move {
         debug!("recv_task: starting recv_task");
 
-        let tx = tx;
+        let mut add_subscriptions: Vec<String> = Vec::new();
+        let mut remove_subscriptions: Vec<String> = Vec::new();
+        let mut subscriptions: HashMap<String, Subscription<MqttMessage>> = HashMap::new();
 
         loop {
+            for topic in &add_subscriptions {
+                let already_subscribed = subscriptions.contains_key(topic);
+                if check_topic_subscribe_allowed(topic, &user, &config) && !already_subscribed {
+                    match config.mqtt.subscribe(topic.clone()).await {
+                        Ok(entity) => {
+                            info!("Subscribed to topic: {}", topic);
+                            let subscription = entity.subscribe().await;
+                            subscriptions.insert(topic.clone(), subscription);
+                        }
+                        Err(e) => {
+                            error!("Failed to subscribe to topic: {}", e);
+                        }
+                    }
+                }
+            }
+            add_subscriptions.clear();
+
+            for topic in &remove_subscriptions {
+                if let Some(_subscription) = subscriptions.remove(topic) {
+                    info!("Unsubscribed from topic: {}", topic);
+                }
+            }
+            remove_subscriptions.clear();
+
+            let mut futures = {
+                let futures = FuturesUnordered::new();
+                for s in subscriptions.values_mut() {
+                    futures.push(s.recv());
+                }
+                futures
+            };
+
             select! {
-                msg = receiver.next() => {
+                Some(msg) = futures.next() => {
+                        let msg = match msg {
+                            Ok(msg) => msg,
+                            Err(e) => {
+                                error!("recv_task: failed to receive message from broadcast: {}", e);
+                                continue;
+                            }
+                        };
+
+                        let msg = match msg.encode() {
+                            Ok(msg) => msg,
+                            Err(e) => {
+                                error!("recv_task: failed to serialize message: {}", e);
+                                continue;
+                            }
+                        };
+
+                        if let Err(err) = stream.send(Message::Binary(msg.into())).await {
+                            error!("recv_task: failed to send message to web socket, stopping: {}", err);
+                            break;
+                        }
+                }
+                msg = stream.next() => {
                     let msg = match msg {
                         Some(Ok(Message::Text(msg))) => {
                             error!("recv_task: received text message, ignoring: {}", msg);
@@ -143,9 +169,16 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
                     };
                     match msg {
                         Ok(WsCommand::Subscribe { topic }) => {
+                            error!("recv_task: Received subscribe command: {}", topic);
+                            // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
                             if check_topic_subscribe_allowed(&topic, &user, &config) {
-                                process_subscribe(topic, &config, tx.clone()).await;
+                                add_subscriptions.push(topic);
                             }
+                        }
+                        Ok(WsCommand::Unsubscribe { topic }) => {
+                            error!("recv_task: Received unsubscribe command: {}", topic);
+                            // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
+                            remove_subscriptions.push(topic);
                         }
                         Ok(WsCommand::Send(msg)) => {
                             if check_topic_send_allowed(&msg.topic, &user, &config) {
@@ -161,10 +194,6 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
                         }
                     };
                 },
-                _ = tx.closed() => {
-                    debug!("recv_task: send_task pipe closed, stopping");
-                    break;
-                }
             }
         }
 
@@ -172,7 +201,6 @@ async fn websocket(stream: WebSocket, config: HttpConfig, user: User) {
     });
 
     let _rc = recv_task.await;
-    send_task.abort();
 }
 
 const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
@@ -212,42 +240,4 @@ fn check_topic_send_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> 
         error!("check_topic_send_allowed: topic {} not allowed", topic);
         false
     }
-}
-
-async fn process_subscribe(
-    topic: String,
-    config: &HttpConfig,
-    sender: mpsc::UnboundedSender<MqttMessage>,
-) {
-    debug!("Subscribing to {}", topic);
-    let rc = config.mqtt.subscribe(&topic).await;
-    let rx = match rc {
-        Ok(rx) => rx,
-        Err(e) => {
-            error!("Error subscribing to {}: {}", topic, e);
-            return;
-        }
-    };
-
-    let rx_s = rx.subscribe().await;
-    let topic_clone = topic.clone();
-    tokio::spawn(async move {
-        debug!("Starting receiver for {}", topic_clone);
-        let mut rx_s = rx_s;
-        loop {
-            select! {
-                Ok(msg) = rx_s.recv() => {
-                    if let Err(err) = sender.send(msg) {
-                        error!("topic_task: Error sending MQTT message: {}, unsubscribing from {}", err, topic_clone);
-                        break;
-                    }
-                }
-                _ = sender.closed() => {
-                    debug!("topic_task: send_task pipe closed, unsubscribing from {}", topic_clone);
-                    break;
-                }
-            }
-        }
-        debug!("topic_task: Ending receiver for {}", topic_clone);
-    });
 }
