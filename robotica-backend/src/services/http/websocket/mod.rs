@@ -77,130 +77,123 @@ async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
         error!("Error sending websocket status: {}", e);
     }
 
-    // This task will receive messages from client and send them to broadcast subscribers.
-    let recv_task = tokio::spawn(async move {
-        debug!("recv_task: starting recv_task");
+    let mut add_subscriptions: Vec<String> = Vec::new();
+    let mut remove_subscriptions: Vec<String> = Vec::new();
+    let mut subscriptions: HashMap<String, Subscription<MqttMessage>> = HashMap::new();
 
-        let mut add_subscriptions: Vec<String> = Vec::new();
-        let mut remove_subscriptions: Vec<String> = Vec::new();
-        let mut subscriptions: HashMap<String, Subscription<MqttMessage>> = HashMap::new();
-
-        loop {
-            for topic in &add_subscriptions {
-                let already_subscribed = subscriptions.contains_key(topic);
-                if check_topic_subscribe_allowed(topic, &user, &config) && !already_subscribed {
-                    match config.mqtt.subscribe(topic.clone()).await {
-                        Ok(entity) => {
-                            info!("Subscribed to topic: {}", topic);
-                            let subscription = entity.subscribe().await;
-                            subscriptions.insert(topic.clone(), subscription);
-                        }
-                        Err(e) => {
-                            error!("Failed to subscribe to topic: {}", e);
-                        }
+    loop {
+        for topic in &add_subscriptions {
+            let already_subscribed = subscriptions.contains_key(topic);
+            if check_topic_subscribe_allowed(topic, &user, &config) && !already_subscribed {
+                match config.mqtt.subscribe(topic.clone()).await {
+                    Ok(entity) => {
+                        info!("Subscribed to topic: {}", topic);
+                        let subscription = entity.subscribe().await;
+                        subscriptions.insert(topic.clone(), subscription);
+                    }
+                    Err(e) => {
+                        error!("Failed to subscribe to topic: {}", e);
                     }
                 }
             }
-            add_subscriptions.clear();
+        }
+        add_subscriptions.clear();
 
-            for topic in &remove_subscriptions {
-                if let Some(_subscription) = subscriptions.remove(topic) {
-                    info!("Unsubscribed from topic: {}", topic);
-                }
-            }
-            remove_subscriptions.clear();
-
-            let mut futures = {
-                let futures = FuturesUnordered::new();
-                for s in subscriptions.values_mut() {
-                    futures.push(s.recv());
-                }
-                futures
-            };
-
-            select! {
-                Some(msg) = futures.next() => {
-                        let msg = match msg {
-                            Ok(msg) => msg,
-                            Err(e) => {
-                                error!("recv_task: failed to receive message from broadcast: {}", e);
-                                continue;
-                            }
-                        };
-
-                        let msg = match msg.encode() {
-                            Ok(msg) => msg,
-                            Err(e) => {
-                                error!("recv_task: failed to serialize message: {}", e);
-                                continue;
-                            }
-                        };
-
-                        if let Err(err) = stream.send(Message::Binary(msg.into())).await {
-                            error!("recv_task: failed to send message to web socket, stopping: {}", err);
-                            break;
-                        }
-                }
-                msg = stream.next() => {
-                    let msg = match msg {
-                        Some(Ok(Message::Text(msg))) => {
-                            error!("recv_task: received text message, ignoring: {}", msg);
-                            continue;
-                        },
-                        Some(Ok(Message::Binary(msg))) => {
-                            WsCommand::decode(&msg)
-                        }
-                        Some(Ok(Message::Close(_))) => {
-                            debug!("recv_task: received close message, stopping");
-                            break;
-                        }
-                        Some(Ok(msg)) => {
-                            debug!("recv_task: received unexpected message from web socket: {:?}", msg);
-                            continue;
-                        }
-                        Some(Err(err)) => {
-                            debug!("recv_task: failed to receive message from web socket, stopping: {}", err);
-                            break;
-                        }
-                        None => {
-                            debug!("recv_task: websocket closed, stopping");
-                            break;
-                        }
-                    };
-                    match msg {
-                        Ok(WsCommand::Subscribe { topic }) => {
-                            error!("recv_task: Received subscribe command: {}", topic);
-                            // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
-                            if check_topic_subscribe_allowed(&topic, &user, &config) {
-                                add_subscriptions.push(topic);
-                            }
-                        }
-                        Ok(WsCommand::Unsubscribe { topic }) => {
-                            error!("recv_task: Received unsubscribe command: {}", topic);
-                            // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
-                            remove_subscriptions.push(topic);
-                        }
-                        Ok(WsCommand::Send(msg)) => {
-                            if check_topic_send_allowed(&msg.topic, &user, &config) {
-                                tracing::info!("recv_task: Sending message to mqtt {}: {:?}", msg.topic, msg.payload);
-                                config.mqtt.try_send(msg);
-                            }
-                        }
-                        Ok(WsCommand::KeepAlive) => {
-                            // Do nothing
-                        }
-                        Err(err) => {
-                            tracing::error!("recv_task: Error parsing message: {}", err);
-                        }
-                    };
-                },
+        for topic in &remove_subscriptions {
+            if let Some(_subscription) = subscriptions.remove(topic) {
+                info!("Unsubscribed from topic: {}", topic);
             }
         }
+        remove_subscriptions.clear();
 
-        debug!("recv_task: ending recv_task");
-    });
+        let mut futures = {
+            let futures = FuturesUnordered::new();
+            for s in subscriptions.values_mut() {
+                futures.push(s.recv());
+            }
+            futures
+        };
 
-    let _rc = recv_task.await;
+        select! {
+            Some(msg) = futures.next() => {
+                    let msg = match msg {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            error!("websocket: failed to receive message from broadcast: {}", e);
+                            continue;
+                        }
+                    };
+
+                    let msg = match msg.encode() {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            error!("websocket: failed to serialize message: {}", e);
+                            continue;
+                        }
+                    };
+
+                    if let Err(err) = stream.send(Message::Binary(msg.into())).await {
+                        error!("websocket: failed to send message to web socket, stopping: {}", err);
+                        break;
+                    }
+            }
+            msg = stream.next() => {
+                let msg = match msg {
+                    Some(Ok(Message::Text(msg))) => {
+                        error!("websocket: received text message, ignoring: {}", msg);
+                        continue;
+                    },
+                    Some(Ok(Message::Binary(msg))) => {
+                        WsCommand::decode(&msg)
+                    }
+                    Some(Ok(Message::Close(_))) => {
+                        debug!("websocket: received close message, stopping");
+                        break;
+                    }
+                    Some(Ok(msg)) => {
+                        debug!("websocket: received unexpected message from web socket: {:?}", msg);
+                        continue;
+                    }
+                    Some(Err(err)) => {
+                        debug!("websocket: failed to receive message from web socket, stopping: {}", err);
+                        break;
+                    }
+                    None => {
+                        debug!("websocket: websocket closed, stopping");
+                        break;
+                    }
+                };
+                match msg {
+                    Ok(WsCommand::Subscribe { topic }) => {
+                        debug!("websocket: Received subscribe command: {}", topic);
+                        // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
+                        if check_topic_subscribe_allowed(&topic, &user, &config) {
+                            add_subscriptions.push(topic);
+                        }
+                    }
+                    Ok(WsCommand::Unsubscribe { topic }) => {
+                        debug!("websocket: Received unsubscribe command: {}", topic);
+                        // We cannot touch the subscriptions map directly, because it is borrowed mutably by the futures.
+                        remove_subscriptions.push(topic);
+                    }
+                    Ok(WsCommand::Send(msg)) => {
+                        if check_topic_send_allowed(&msg.topic, &user, &config) {
+                            tracing::info!("websocket: Sending message to mqtt {}: {:?}", msg.topic, msg.payload);
+                            config.mqtt.try_send(msg);
+                        }
+                    }
+                    Ok(WsCommand::KeepAlive) => {
+                        // Do nothing
+                    }
+                    Err(err) => {
+                        tracing::error!("websocket: Error parsing message: {}", err);
+                    }
+                };
+            },
+        }
+    }
+
+    debug!("websocket: ending socket");
 }
 
 const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
