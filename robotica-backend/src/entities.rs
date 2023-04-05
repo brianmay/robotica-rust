@@ -516,7 +516,6 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(
 
     spawn(async move {
         let name = name;
-        let mut saved_data: Option<T> = None;
         let mut receive_rx = Some(receive_rx);
 
         loop {
@@ -524,7 +523,6 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(
                 Some(msg) = send_rx.recv() => {
                     match msg {
                         SendMessage::Set(data) => {
-                            saved_data = Some(data.clone());
                             if let Err(_err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
                                 // debug!("create_stateless_entity({name}): send to broadcast failed: {err} (not an error)");
@@ -535,13 +533,13 @@ pub fn create_stateless_entity<T: Clone + Send + 'static>(
                 Some(msg) = try_receive(&mut receive_rx) => {
                     match msg {
                         Some(ReceiveMessage::Get(tx)) => {
-                            if tx.send(saved_data.clone()).is_err() {
+                            if tx.send(None).is_err() {
                                 error!("create_stateless_entity{name}): get send failed");
                             };
                         }
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
-                            if tx.send((rx, saved_data.clone())).is_err() {
+                            if tx.send((rx, None)).is_err() {
                                 error!("create_stateless_entity({name}): subscribe send failed");
                             };
                         }
@@ -669,8 +667,8 @@ mod tests {
     #[tokio::test]
     async fn test_stateless_entity() {
         let (tx, rx) = create_stateless_entity::<String>("test");
-        tx.try_send("hello".to_string());
         let mut s = rx.subscribe().await;
+        tx.try_send("hello".to_string());
         tx.try_send("goodbye".to_string());
 
         let current = s.recv().await.unwrap();
@@ -680,13 +678,13 @@ mod tests {
         assert_eq!("goodbye", current);
 
         let result = rx.get().await;
-        assert_eq!(Some("goodbye".to_string()), result);
+        assert!(result.is_none());
 
         let result = s.try_recv().unwrap();
         assert!(result.is_none());
 
         let result = rx.get().await;
-        assert_eq!(Some("goodbye".to_string()), result);
+        assert!(result.is_none());
 
         drop(s);
         drop(rx);
