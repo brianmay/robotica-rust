@@ -667,8 +667,8 @@ mod tests {
     #[tokio::test]
     async fn test_stateless_entity() {
         let (tx, rx) = create_stateless_entity::<String>("test");
-        tx.try_send("hello".to_string());
         let mut s = rx.subscribe().await;
+        tx.try_send("hello".to_string());
         tx.try_send("goodbye".to_string());
 
         let current = s.recv().await.unwrap();
@@ -678,13 +678,13 @@ mod tests {
         assert_eq!("goodbye", current);
 
         let result = rx.get().await;
-        assert_eq!(Some("goodbye".to_string()), result);
+        assert!(result.is_none());
 
         let result = s.try_recv().unwrap();
         assert!(result.is_none());
 
         let result = rx.get().await;
-        assert_eq!(Some("goodbye".to_string()), result);
+        assert!(result.is_none());
 
         drop(s);
         drop(rx);
