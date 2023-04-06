@@ -84,7 +84,7 @@ async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
     loop {
         for topic in &add_subscriptions {
             let already_subscribed = subscriptions.contains_key(topic);
-            if check_topic_subscribe_allowed(topic, &user, &config) && !already_subscribed {
+            if !already_subscribed {
                 match config.mqtt.subscribe(topic.clone()).await {
                     Ok(entity) => {
                         info!("Subscribed to topic: {}", topic);
