@@ -18,7 +18,7 @@ use anyhow::Result;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
-use robotica_backend::entities::Sender;
+use robotica_backend::entities::StatelessSender;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
 use robotica_common::robotica::audio::Message;
@@ -65,7 +65,7 @@ pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt: MqttTx,
-    message_sink: Sender<Message>,
+    message_sink: StatelessSender<Message>,
     persistent_state_database: PersistentStateDatabase,
 }
 
@@ -76,7 +76,7 @@ async fn setup_pipes(state: &mut State) {
 
     price_summary_rx
         .clone()
-        .map_into_stateful(|current| current.is_cheap_2hr)
+        .map_stateful(|current| current.is_cheap_2hr)
         .for_each(move |(old, current)| {
             if old.is_some() {
                 let message = if current {

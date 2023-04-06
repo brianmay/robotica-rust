@@ -37,9 +37,7 @@ where
     Json<T>: TryFrom<MqttMessage>,
     <Json<T> as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
 {
-    let rx = state
-        .subscriptions
-        .subscribe_into_stateless::<Json<T>>(topic);
+    let rx = state.subscriptions.subscribe_into::<Json<T>>(topic);
     let topic = topic.to_string();
     let influx_url = get_env("INFLUXDB_URL")?;
     let influx_database = get_env("INFLUXDB_DATABASE")?;
@@ -70,7 +68,7 @@ where
 pub fn monitor_fishtank(state: &mut State, topic: &str) -> Result<(), EnvironmentError> {
     let rx = state
         .subscriptions
-        .subscribe_into_stateless::<Json<FishTankData>>(topic);
+        .subscribe_into::<Json<FishTankData>>(topic);
     let topic = topic.to_string();
     let influx_url = get_env("INFLUXDB_URL")?;
     let influx_database = get_env("INFLUXDB_DATABASE")?;

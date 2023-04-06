@@ -11,7 +11,7 @@ use tokio::{
 use tracing::{debug, info};
 
 use crate::{
-    entities::{self, StatefulData},
+    entities::{self, StatefulReceiver, StatelessReceiver},
     is_debug_mode,
 };
 
@@ -48,12 +48,9 @@ pub enum Error {
 /// This function will return an error if the connection to the HDMI matrix fails.
 pub fn run<A>(
     addr: A,
-    rx_cmd: entities::Receiver<Command>,
+    rx_cmd: StatelessReceiver<Command>,
     options: &Options,
-) -> (
-    entities::Receiver<StatefulData<Result<Status, Error>>>,
-    JoinHandle<()>,
-)
+) -> (StatefulReceiver<Result<Status, Error>>, JoinHandle<()>)
 where
     A: ToSocketAddrs + Clone + Send + Sync + Debug + 'static,
 {

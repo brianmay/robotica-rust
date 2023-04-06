@@ -272,7 +272,7 @@ pub enum ExecutorError {
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt)?;
-    let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
+    let mark_rx = subscriptions.subscribe_into::<Json<Mark>>("mark");
 
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;

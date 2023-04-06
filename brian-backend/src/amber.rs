@@ -8,7 +8,7 @@ use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use tracing::{debug, error, info};
 
 use robotica_backend::{
-    entities::{self, Receiver},
+    entities::{self, StatelessReceiver},
     get_env, is_debug_mode,
     services::persistent_state::PersistentStateRow,
     spawn, EnvironmentError,
@@ -75,7 +75,7 @@ const fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State) -> Result<Receiver<PriceSummary>, Error> {
+pub fn run(state: &State) -> Result<StatelessReceiver<PriceSummary>, Error> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;

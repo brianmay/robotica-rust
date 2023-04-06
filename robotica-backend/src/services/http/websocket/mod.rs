@@ -19,7 +19,7 @@ use robotica_common::{
     websocket::{WsCommand, WsError, WsStatus},
 };
 
-use crate::{entities::Subscription, services::mqtt::topics::topic_matches_any};
+use crate::{entities::StatefulSubscription, services::mqtt::topics::topic_matches_any};
 
 use super::{get_user, HttpConfig, User};
 
@@ -79,7 +79,7 @@ async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
 
     let mut add_subscriptions: Vec<String> = Vec::new();
     let mut remove_subscriptions: Vec<String> = Vec::new();
-    let mut subscriptions: HashMap<String, Subscription<MqttMessage>> = HashMap::new();
+    let mut subscriptions: HashMap<String, StatefulSubscription<MqttMessage>> = HashMap::new();
 
     loop {
         for topic in &add_subscriptions {
@@ -88,7 +88,7 @@ async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
                 match config.mqtt.subscribe(topic.clone()).await {
                     Ok(entity) => {
                         info!("Subscribed to topic: {}", topic);
-                        let subscription = entity.subscribe().await;
+                        let subscription = entity.into_stateful().subscribe().await;
                         subscriptions.insert(topic.clone(), subscription);
                     }
                     Err(e) => {

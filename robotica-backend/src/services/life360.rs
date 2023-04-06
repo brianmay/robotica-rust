@@ -150,7 +150,7 @@ struct Circle {
 /// # Errors
 ///
 /// Will return an error if the environment variables `LIFE360_USERNAME` and `LIFE360_PASSWORD` are not set.
-pub fn circles(name: &str) -> Result<entities::Receiver<Vec<Member>>, EnvironmentError> {
+pub fn circles(name: &str) -> Result<entities::StatelessReceiver<Vec<Member>>, EnvironmentError> {
     let (tx, rx) = entities::create_stateless_entity(name);
     let username = get_env("LIFE360_USERNAME")?;
     let password = get_env("LIFE360_PASSWORD")?;
@@ -225,7 +225,7 @@ async fn get_circles_or_none(login: &Login) -> Option<List> {
 async fn dispatch_circle_details(
     login: &Login,
     circles: &List,
-    tx: &entities::Sender<Vec<Member>>,
+    tx: &entities::StatelessSender<Vec<Member>>,
 ) {
     for circle in &circles.circles {
         match get_circle_details(login, circle).await {

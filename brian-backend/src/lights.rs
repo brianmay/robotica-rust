@@ -7,7 +7,8 @@ use std::{
 use robotica_backend::{
     devices::lifx::{device_entity, Device, DeviceConfig},
     entities::{
-        self, create_stateful_entity, create_stateless_entity, Receiver, Sender, Subscription,
+        self, create_stateful_entity, StatefulReceiver, StatefulSender, StatefulSubscription,
+        StatelessReceiver,
     },
     services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
     spawn,
@@ -24,7 +25,7 @@ use tracing::{debug, error};
 
 trait GetSceneEntity {
     type Scenes;
-    fn get_scene_entity(&self, scene: Self::Scenes) -> Receiver<PowerColor>;
+    fn get_scene_entity(&self, scene: Self::Scenes) -> StatefulReceiver<PowerColor>;
 }
 
 trait ScenesTrait: FromStr + ToString + Default {}
@@ -80,13 +81,13 @@ impl ScenesTrait for StandardScenes {}
 
 #[derive(Clone)]
 pub struct SharedEntities {
-    on: Receiver<PowerColor>,
-    rainbow: Receiver<PowerColor>,
-    busy: Receiver<PowerColor>,
-    akira_night: Receiver<PowerColor>,
-    declan_night: Receiver<PowerColor>,
-    nikolai_night: Receiver<PowerColor>,
-    off: Receiver<PowerColor>,
+    on: StatefulReceiver<PowerColor>,
+    rainbow: StatefulReceiver<PowerColor>,
+    busy: StatefulReceiver<PowerColor>,
+    akira_night: StatefulReceiver<PowerColor>,
+    declan_night: StatefulReceiver<PowerColor>,
+    nikolai_night: StatefulReceiver<PowerColor>,
+    off: StatefulReceiver<PowerColor>,
 }
 
 impl Default for SharedEntities {
@@ -133,14 +134,14 @@ impl Default for SharedEntities {
 
 #[derive(Clone)]
 struct StandardSceneEntities {
-    on: Receiver<PowerColor>,
-    auto: Receiver<PowerColor>,
-    rainbow: Receiver<PowerColor>,
-    busy: Receiver<PowerColor>,
-    akira_night: Receiver<PowerColor>,
-    declan_night: Receiver<PowerColor>,
-    nikolai_night: Receiver<PowerColor>,
-    off: Receiver<PowerColor>,
+    on: StatefulReceiver<PowerColor>,
+    auto: StatefulReceiver<PowerColor>,
+    rainbow: StatefulReceiver<PowerColor>,
+    busy: StatefulReceiver<PowerColor>,
+    akira_night: StatefulReceiver<PowerColor>,
+    declan_night: StatefulReceiver<PowerColor>,
+    nikolai_night: StatefulReceiver<PowerColor>,
+    off: StatefulReceiver<PowerColor>,
 }
 
 impl StandardSceneEntities {
@@ -170,7 +171,7 @@ const fn flash_color() -> PowerColor {
 impl GetSceneEntity for StandardSceneEntities {
     type Scenes = StandardScenes;
 
-    fn get_scene_entity(&self, scene: Self::Scenes) -> Receiver<PowerColor> {
+    fn get_scene_entity(&self, scene: Self::Scenes) -> StatefulReceiver<PowerColor> {
         match scene {
             StandardScenes::On => self.on.clone(),
             StandardScenes::Auto => self.auto.clone(),
@@ -184,14 +185,14 @@ impl GetSceneEntity for StandardSceneEntities {
     }
 }
 
-fn static_entity(pc: PowerColor, name: impl Into<String>) -> Receiver<PowerColor> {
-    let (tx, rx) = entities::create_stateless_entity(name);
+fn static_entity(pc: PowerColor, name: impl Into<String>) -> StatefulReceiver<PowerColor> {
+    let (tx, rx) = entities::create_stateful_entity(name);
     tx.try_send(pc);
     rx
 }
 
-fn busy_entity(name: impl Into<String>) -> Receiver<PowerColor> {
-    let (tx, rx) = entities::create_stateless_entity(name);
+fn busy_entity(name: impl Into<String>) -> StatefulReceiver<PowerColor> {
+    let (tx, rx) = entities::create_stateful_entity(name);
     spawn(async move {
         loop {
             let on_color = HSBK {
@@ -220,8 +221,8 @@ fn busy_entity(name: impl Into<String>) -> Receiver<PowerColor> {
     rx
 }
 
-fn rainbow_entity(name: impl Into<String>) -> Receiver<PowerColor> {
-    let (tx, rx) = entities::create_stateless_entity(name);
+fn rainbow_entity(name: impl Into<String>) -> StatefulReceiver<PowerColor> {
+    let (tx, rx) = entities::create_stateful_entity(name);
     spawn(async move {
         let mut i = 0u16;
         let num_per_cycle = 10u16;
@@ -255,16 +256,16 @@ fn mqtt_entity(
     state: &mut crate::State,
     topic_substr: &str,
     name: impl Into<String>,
-) -> Receiver<PowerColor> {
+) -> StatefulReceiver<PowerColor> {
     let name = name.into();
     let topic: String = format!("command/{topic_substr}/{name}");
 
     let pc_rx = state
         .subscriptions
-        .subscribe_into_stateless::<Json<PowerColor>>(&topic)
-        .map_into_stateless(|Json(c)| c);
+        .subscribe_into_stateful::<Json<PowerColor>>(&topic)
+        .map(|(_, Json(c))| c);
 
-    let (tx, rx) = entities::create_stateless_entity(name);
+    let (tx, rx) = entities::create_stateful_entity(name);
     spawn(async move {
         let mut pc_s = pc_rx.subscribe().await;
         while let Ok(pc) = pc_s.recv().await {
@@ -276,7 +277,7 @@ fn mqtt_entity(
 
 pub fn run_auto_light(
     state: &mut crate::State,
-    discover: Receiver<Device>,
+    discover: StatelessReceiver<Device>,
     shared: SharedEntities,
     topic_substr: &str,
     id: u64,
@@ -298,7 +299,7 @@ pub fn run_auto_light(
 fn run_state_sender(
     state: &mut crate::State,
     topic_substr: impl Into<String>,
-    rx_state: Receiver<(Option<State>, State)>,
+    rx_state: StatefulReceiver<State>,
 ) {
     let topic_substr = topic_substr.into();
 
@@ -308,7 +309,7 @@ fn run_state_sender(
         let rx = rx_state.clone();
         spawn(async move {
             let mut rx = rx.subscribe().await;
-            while let Ok((_, status)) = rx.recv().await {
+            while let Ok(status) = rx.recv().await {
                 send_state(&mqtt, &status, &topic_substr);
             }
         });
@@ -317,14 +318,14 @@ fn run_state_sender(
     {
         let mqtt = state.mqtt.clone();
         let topic_substr = topic_substr;
-        let rx = rx_state.map_into_stateful(|(_, status)| match status {
+        let rx = rx_state.map(|(_, status)| match status {
             lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
             lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
             lights::State::Offline => lights::PowerState::Offline,
         });
         spawn(async move {
             let mut rx = rx.subscribe().await;
-            while let Ok((_, status)) = rx.recv().await {
+            while let Ok(status) = rx.recv().await {
                 send_power_state(&mqtt, &status, &topic_substr);
             }
         });
@@ -333,7 +334,7 @@ fn run_state_sender(
 
 pub fn run_passage_light(
     state: &mut crate::State,
-    discover: Receiver<Device>,
+    discover: StatelessReceiver<Device>,
     shared: SharedEntities,
     topic_substr: &str,
     id: u64,
@@ -400,12 +401,12 @@ where
 {
     scene: Entities::Scenes,
     entities: Entities,
-    entity: Receiver<PowerColor>,
-    entity_s: Subscription<PowerColor>,
+    entity: StatefulReceiver<PowerColor>,
+    entity_s: StatefulSubscription<PowerColor>,
     psr: PersistentStateRow<String>,
     mqtt: MqttTx,
     topic_substr: String,
-    tx: Sender<PowerColor>,
+    tx: StatefulSender<PowerColor>,
     flash_color: PowerColor,
 }
 
@@ -415,19 +416,17 @@ fn switch_entity<Entities>(
     topic_substr: impl Into<String>,
     flash_color: PowerColor,
     name: impl Into<String>,
-) -> Receiver<PowerColor>
+) -> StatefulReceiver<PowerColor>
 where
     Entities: GetSceneEntity + Send + Sync + 'static,
     Entities::Scenes: ScenesTrait + Copy + Send + Sync + 'static,
     <Entities::Scenes as FromStr>::Err: Send + Sync + 'static,
 {
-    let (tx, rx) = entities::create_stateless_entity(name);
+    let (tx, rx) = entities::create_stateful_entity(name);
 
     let topic_substr: String = topic_substr.into();
     let topic = &format!("command/{topic_substr}");
-    let rx_command = state
-        .subscriptions
-        .subscribe_into_stateless::<Json<Command>>(topic);
+    let rx_command = state.subscriptions.subscribe_into::<Json<Command>>(topic);
 
     {
         let psr = state.persistent_state_database.for_name(&topic_substr);
@@ -571,26 +570,26 @@ fn send_scene<Scene: ScenesTrait>(mqtt: &MqttTx, scene: &Scene, topic_substr: &s
 }
 
 struct PassageEntities {
-    all: Receiver<PowerColor>,
-    cupboard: Receiver<PowerColor>,
-    bathroom: Receiver<PowerColor>,
-    bedroom: Receiver<PowerColor>,
+    all: StatefulReceiver<PowerColor>,
+    cupboard: StatefulReceiver<PowerColor>,
+    bathroom: StatefulReceiver<PowerColor>,
+    bedroom: StatefulReceiver<PowerColor>,
 }
 
 struct PassageStateEntities {
-    all: Receiver<(Option<State>, State)>,
-    cupboard: Receiver<(Option<State>, State)>,
-    bathroom: Receiver<(Option<State>, State)>,
-    bedroom: Receiver<(Option<State>, State)>,
+    all: StatefulReceiver<State>,
+    cupboard: StatefulReceiver<State>,
+    bathroom: StatefulReceiver<State>,
+    bedroom: StatefulReceiver<State>,
 }
 
 fn run_passage_multiplexer(
     entities: PassageEntities,
     name: impl Into<String>,
-    state_in: Receiver<(Option<State>, State)>,
-) -> (Receiver<PowerColor>, PassageStateEntities) {
+    state_in: StatefulReceiver<State>,
+) -> (StatefulReceiver<PowerColor>, PassageStateEntities) {
     let name = name.into();
-    let (tx, rx) = create_stateless_entity(name.clone());
+    let (tx, rx) = create_stateful_entity(name.clone());
     let (tx_all_state, rx_all_state) = create_stateful_entity(format!("{name}-all"));
     let (tx_cupboard_state, rx_cupboard_state) = create_stateful_entity(format!("{name}-cupboard"));
     let (tx_bathroom_state, rx_bathroom_state) = create_stateful_entity(format!("{name}-bathroom"));
@@ -624,7 +623,7 @@ fn run_passage_multiplexer(
                 Ok(pc) = bedroom.recv() => {
                     bedroom_colors = pc;
                 }
-                Ok((_, s)) = state_s.recv() => {
+                Ok(s) = state_s.recv() => {
                     state = Some(s);
                 }
             }

@@ -1,5 +1,5 @@
 use robotica_backend::entities::create_stateless_entity;
-use robotica_backend::entities::Sender;
+use robotica_backend::entities::StatelessSender;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
@@ -64,7 +64,7 @@ pub fn string_to_message(msg: Message) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub fn create_message_sink(mqtt: MqttTx) -> Sender<Message> {
+pub fn create_message_sink(mqtt: MqttTx) -> StatelessSender<Message> {
     let (tx, rx) = create_stateless_entity::<Message>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;

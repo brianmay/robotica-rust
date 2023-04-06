@@ -8,7 +8,7 @@ use crate::spawn;
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
 #[must_use]
-pub fn timer(duration: Duration, name: &str) -> entities::Receiver<Instant> {
+pub fn timer(duration: Duration, name: &str) -> entities::StatelessReceiver<Instant> {
     let (tx, rx) = entities::create_stateless_entity(name);
 
     spawn(async move {

@@ -1,5 +1,5 @@
 use crate::amber::{PriceCategory, PriceSummary};
-use crate::delays::{delay_input, delay_repeat, IsActive};
+use crate::delays::{delay_input, delay_repeat};
 
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
@@ -17,7 +17,7 @@ use tokio::select;
 use tokio::time::{sleep, Interval};
 use tracing::{debug, error, info};
 
-use robotica_backend::entities::{create_stateless_entity, Receiver};
+use robotica_backend::entities::{create_stateless_entity, StatelessReceiver};
 use robotica_backend::spawn;
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, QoS};
 
@@ -88,9 +88,23 @@ pub enum StateErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-impl IsActive for Vec<&str> {
-    fn is_active(&self) -> bool {
-        !self.is_empty()
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Door {
+    Frunk,
+    Boot,
+    Doors,
+    #[allow(dead_code)]
+    Windows,
+}
+
+impl Door {
+    const fn to_str(&self) -> &'static str {
+        match self {
+            Self::Frunk => "frunk",
+            Self::Boot => "boot",
+            Self::Doors => "doors",
+            Self::Windows => "windows",
+        }
     }
 }
 
@@ -134,22 +148,22 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
         loop {
             select! {
-                Ok((_, _)) = frunk_s.recv() => {},
-                Ok((_, _)) = boot_s.recv() => {},
-                Ok((_, _)) = doors_s.recv() => {},
-                Ok((_, _)) = windows_s.recv() => {},
-                Ok((_, _)) = user_present_s.recv() => {},
+                Ok(_) = frunk_s.recv() => {},
+                Ok(_) = boot_s.recv() => {},
+                Ok(_) = doors_s.recv() => {},
+                Ok(_) = windows_s.recv() => {},
+                Ok(_) = user_present_s.recv() => {},
                 else => break,
             };
 
-            let mut open: Vec<&str> = vec![];
+            let mut open: Vec<Door> = vec![];
 
-            let maybe_user_present = user_present_rx.get_current().await;
+            let maybe_user_present = user_present_rx.get().await;
             if Some(TeslaUserIsPresent::UserNotPresent) == maybe_user_present {
-                let maybe_frunk = frunk_rx.get_current().await;
-                let maybe_boot = boot_rx.get_current().await;
-                let maybe_doors = doors_rx.get_current().await;
-                let maybe_windows = windows_rx.get_current().await;
+                let maybe_frunk = frunk_rx.get().await;
+                let maybe_boot = boot_rx.get().await;
+                let maybe_doors = doors_rx.get().await;
+                let maybe_windows = windows_rx.get().await;
 
                 debug!(
                     "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
@@ -157,20 +171,20 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
                 );
 
                 if Some(TeslaDoorState::Open) == maybe_frunk {
-                    open.push("frunk");
+                    open.push(Door::Frunk);
                 }
 
                 if Some(TeslaDoorState::Open) == maybe_boot {
-                    open.push("boot");
+                    open.push(Door::Boot);
                 }
 
                 if Some(TeslaDoorState::Open) == maybe_doors {
-                    open.push("door");
+                    open.push(Door::Doors);
                 }
 
                 // Ignore windows for now, as Tesla often reporting these are open when they are not.
                 // if let Some(TeslaDoorState::Open) = maybe_wo {
-                //     open.push("window")
+                //     open.push(Door::Windows)
                 // }
             } else {
                 debug!("up: {:?}", maybe_user_present);
@@ -183,23 +197,23 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
     // We only care if doors open for at least 120 seconds.
     let duration = Duration::from_secs(120);
-    let rx = delay_input("tesla_doors (delayed)", duration, rx);
+    let rx = delay_input("tesla_doors (delayed)", duration, rx, |c| !c.is_empty());
 
     // Discard initial [] value and duplicate events.
     let rx = rx
-        .map_into_stateful(|f| f)
-        .filter_into_stateless(|(p, c)| p.is_some() || c.is_active())
-        .map_into_stateless(|(_, c)| c);
+        .map_stateful(|f| f)
+        .filter(|(p, c)| p.is_some() || !c.is_empty());
 
     // Repeat the last value every 5 minutes.
     let duration = Duration::from_secs(300);
-    let rx = delay_repeat("tesla_doors (repeat)", duration, rx);
+    let rx = delay_repeat("tesla_doors (repeat)", duration, rx, |(_, c)| !c.is_empty());
 
     // Output the message.
     spawn(async move {
         let mut s = rx.subscribe().await;
         while let Ok(open) = s.recv().await {
             debug!("open received: {:?}", open);
+            let open = open.iter().map(Door::to_str).collect::<Vec<_>>();
             let msg = if open.is_empty() {
                 "The Tesla is secure".to_string()
             } else if open.len() == 1 {
@@ -290,7 +304,7 @@ pub enum MonitorChargingError {
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
-    price_summary_rx: Receiver<PriceSummary>,
+    price_summary_rx: StatelessReceiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
@@ -301,16 +315,14 @@ pub fn monitor_charging(
 
     let mqtt = state.mqtt.clone();
 
-    let price_category_rx = price_summary_rx.map_into_stateful(|ps| ps.category);
+    let price_category_rx = price_summary_rx.map_stateful(|ps| ps.category);
 
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(&format!(
-                "command/Tesla/{car_number}/AutoCharge"
-            ))
-            .map_into_stateless(move |Json(cmd)| {
+            .subscribe_into::<Json<Command>>(&format!("command/Tesla/{car_number}/AutoCharge"))
+            .map(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,
@@ -326,10 +338,8 @@ pub fn monitor_charging(
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(&format!(
-                "command/Tesla/{car_number}/ForceCharge"
-            ))
-            .map_into_stateless(move |Json(cmd)| {
+            .subscribe_into::<Json<Command>>(&format!("command/Tesla/{car_number}/ForceCharge"))
+            .map(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
                         DeviceAction::TurnOn => DevicePower::AutoOff,
@@ -344,8 +354,8 @@ pub fn monitor_charging(
     let is_home_rx = {
         state
             .subscriptions
-            .subscribe_into_stateless::<String>(&format!("state/Tesla/{car_number}/Location"))
-            .map_into_stateful(move |location| location == "home")
+            .subscribe_into::<String>(&format!("state/Tesla/{car_number}/Location"))
+            .map_stateful(move |location| location == "home")
     };
 
     let charging_state_rx = state
@@ -362,7 +372,7 @@ pub fn monitor_charging(
         spawn(async move {
             let mut charging_state_s = charging_state_rx.subscribe().await;
 
-            while let Ok((prev, charging_state)) = charging_state_s.recv().await {
+            while let Ok((prev, charging_state)) = charging_state_s.recv_value().await {
                 if prev.is_none() {
                     continue;
                 }
@@ -418,7 +428,7 @@ pub fn monitor_charging(
                     });
                     info!("Token expiration: {:?}", token.expires_at);
                 }
-                Ok((_, new_price_category)) = price_category_s.recv() => {
+                Ok(new_price_category) = price_category_s.recv() => {
                     info!("New price summary: {:?}", new_price_category);
                     price_category = Some(new_price_category);
                 }
@@ -452,7 +462,7 @@ pub fn monitor_charging(
                         info!("Ignoring invalid force_charge command: {cmd:?}");
                     }
                 }
-                Ok((_, new_is_home)) = location_charge_s.recv() => {
+                Ok(new_is_home) = location_charge_s.recv() => {
                     is_home = new_is_home;
                     info!("Location is home: {is_home}");
                     // If we left home we don't keep track of the charge state any more.
@@ -460,7 +470,7 @@ pub fn monitor_charging(
                     charge_state = None;
                 }
 
-                Ok((_, charging_state)) = charging_state_s.recv() => {
+                Ok(charging_state) = charging_state_s.recv() => {
                     info!("Charging state: {charging_state:?}");
                     charge_state = None;
                 }

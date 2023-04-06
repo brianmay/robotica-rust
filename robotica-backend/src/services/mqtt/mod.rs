@@ -18,7 +18,9 @@ use tracing::{debug, error};
 
 use robotica_common::mqtt::{MqttMessage, QoS};
 
-use crate::entities::{self, Receiver, StatefulData};
+use crate::entities::{
+    self, StatefulReceiver, StatelessReceiver, StatelessSender, StatelessWeakReceiver,
+};
 use crate::{get_env, is_debug_mode, spawn, EnvironmentError};
 
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
@@ -69,7 +71,7 @@ enum MqttCommand {
     MqttOut(MqttMessage),
     Subscribe(
         String,
-        oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
+        oneshot::Sender<Result<StatelessReceiver<MqttMessage>, SubscribeError>>,
     ),
     Unsubscribe(String),
 }
@@ -96,7 +98,7 @@ impl MqttTx {
     pub async fn subscribe(
         &self,
         topic: impl Into<String> + Send,
-    ) -> Result<Receiver<MqttMessage>, SubscribeError> {
+    ) -> Result<StatelessReceiver<MqttMessage>, SubscribeError> {
         let (tx, rx) = oneshot::channel();
         self.0
             .send(MqttCommand::Subscribe(topic.into(), tx))
@@ -110,15 +112,18 @@ impl MqttTx {
     /// # Errors
     ///
     /// Returns an error if the subscribe request could not be sent.
-    pub async fn subscribe_into_stateless<T>(
+    pub async fn subscribe_into<U>(
         &self,
         topic: impl Into<String> + Send,
-    ) -> Result<Receiver<T>, SubscribeError>
+    ) -> Result<StatelessReceiver<U>, SubscribeError>
     where
-        T: TryFrom<MqttMessage> + Clone + Send + 'static,
-        <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
+        // U: Data,
+        // T::Sent: Send + 'static,
+        U: TryFrom<MqttMessage> + Clone + Send + Eq + 'static,
+        <U as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
+        // T::Received: Send + 'static,
     {
-        Ok(self.subscribe(topic).await?.translate_into_stateless::<T>())
+        Ok(self.subscribe(topic).await?.translate::<U>())
     }
 
     /// Add new subscription and parse incoming data as type T
@@ -126,15 +131,18 @@ impl MqttTx {
     /// # Errors
     ///
     /// Returns an error if the subscribe request could not be sent.
-    pub async fn subscribe_into_stateful<T>(
+    pub async fn subscribe_into_stateful<U>(
         &self,
         topic: impl Into<String> + Send,
-    ) -> Result<Receiver<StatefulData<T>>, SubscribeError>
+    ) -> Result<StatefulReceiver<U>, SubscribeError>
     where
-        T: TryFrom<MqttMessage> + Clone + Eq + Send + 'static,
-        <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
+        // U: Data,
+        // T::Sent: Send + 'static,
+        U: TryFrom<MqttMessage> + Clone + Send + Eq + 'static,
+        <U as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
+        // T::Received: Send + 'static,
     {
-        Ok(self.subscribe(topic).await?.translate_into_stateful::<T>())
+        Ok(self.subscribe(topic).await?.translate_stateful::<U>())
     }
 }
 
@@ -287,7 +295,7 @@ fn process_subscribe(
     client: &AsyncClient,
     subscriptions: &mut Subscriptions,
     topic: impl Into<String>,
-    tx: oneshot::Sender<Result<Receiver<MqttMessage>, SubscribeError>>,
+    tx: oneshot::Sender<Result<StatelessReceiver<MqttMessage>, SubscribeError>>,
     channel_tx: mpsc::Sender<MqttCommand>,
 ) {
     let topic: String = topic.into();
@@ -329,7 +337,7 @@ fn process_subscribe(
 }
 
 fn watch_tx_closed(
-    tx: entities::Sender<MqttMessage>,
+    tx: StatelessSender<MqttMessage>,
     channel_tx: mpsc::Sender<MqttCommand>,
     topic: String,
 ) {
@@ -369,8 +377,8 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
 struct Subscription {
     #[allow(dead_code)]
     topic: String,
-    tx: entities::Sender<MqttMessage>,
-    rx: entities::WeakReceiver<MqttMessage>,
+    tx: StatelessSender<MqttMessage>,
+    rx: StatelessWeakReceiver<MqttMessage>,
 }
 
 /// List of all required subscriptions.
@@ -388,7 +396,7 @@ impl Subscriptions {
     }
 
     /// Add a new subscription.
-    pub fn subscribe(&mut self, topic: impl Into<String>) -> entities::Receiver<MqttMessage> {
+    pub fn subscribe(&mut self, topic: impl Into<String>) -> StatelessReceiver<MqttMessage> {
         // Per subscription incoming MQTT queue.
         let topic = topic.into();
         let subscription = self.0.get(&topic);
@@ -411,24 +419,21 @@ impl Subscriptions {
     }
 
     /// Add new subscription and parse incoming data as type T
-    pub fn subscribe_into_stateless<T>(&mut self, topic: impl Into<String>) -> entities::Receiver<T>
+    pub fn subscribe_into<T>(&mut self, topic: impl Into<String>) -> StatelessReceiver<T>
     where
         T: TryFrom<MqttMessage> + Clone + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
-        self.subscribe(topic).translate_into_stateless::<T>()
+        self.subscribe(topic).translate()
     }
 
     /// Add new subscription and parse incoming data as type T
-    pub fn subscribe_into_stateful<T>(
-        &mut self,
-        topic: impl Into<String>,
-    ) -> entities::Receiver<StatefulData<T>>
+    pub fn subscribe_into_stateful<T>(&mut self, topic: impl Into<String>) -> StatefulReceiver<T>
     where
         T: TryFrom<MqttMessage> + Clone + Eq + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
-        self.subscribe(topic).translate_into_stateful::<T>()
+        self.subscribe(topic).translate_stateful()
     }
 
     /// Iterate over all subscriptions.

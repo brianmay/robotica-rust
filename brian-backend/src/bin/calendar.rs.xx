@@ -1,0 +1,95 @@
+// use std::fs::File;
+// use std::io::BufReader;
+
+// fn main() -> Result<(), anyhow::Error> {
+//     let buf = BufReader::new(File::open("basic.ics").unwrap());
+
+//     let reader = ical::IcalParser::new(buf);
+
+//     for line in reader {
+//         let calendar = line?;
+
+//         for event in calendar.events {
+//             println!("{:?}\n\n", event);
+//             for property in event.properties {
+//                 println!(
+//                     "{} {:?} {:?}\n",
+//                     property.name, property.params, property.value
+//                 );
+//             }
+//         }
+//     }
+
+//     Ok(())
+// }
+
+use chrono::{DateTime, Local, TimeZone, Utc};
+use color_backtrace::default_output_stream;
+use icalendar::{Calendar, Component, Event};
+use rrule::{RRule, RRuleSet, Tz, Unvalidated};
+use tokio::{
+    fs::{read_to_string, File},
+    io::BufReader,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    let buf = read_to_string("basic.ics").await.unwrap();
+    let parsed_calendar = buf
+        .parse::<Calendar>()
+        .map_err(|e| anyhow::anyhow!("Error parsing calendar: {}", e))?;
+
+    for component in parsed_calendar.components {
+        let str = match component.as_event() {
+            Some(event) => process_event(event),
+            None => continue,
+        };
+
+        println!("{}\n\n", str);
+        // let rrule_set: RRuleSet = str.parse().unwrap();
+        // println!("{:?}", rrule_set);
+    }
+
+    Ok(())
+}
+
+fn process_event(event: &Event) -> String {
+    let props = event.properties();
+    println!("{:?}", props.get("DTSTART").unwrap().value());
+    println!(
+        "{:?}",
+        props
+            .get("DTSTART")
+            .unwrap()
+            .params()
+            .get("TZID")
+            .unwrap()
+            .value()
+    );
+
+    let dstart_tz = props
+        .get("DTSTART")
+        .unwrap()
+        .params()
+        .get("TZID")
+        .unwrap()
+        .value();
+
+    // let tz: chrono_tz::Tz = dstart_tz.parse().unwrap();
+    // // let tz = chrono_tz::timezone::Tz::Tz(tz);
+    // let tz = rrule::Tz::Tz(tz);
+
+    // let start = DateTime::parse_from_str(props.get("DTSTART").unwrap().value(), "%Y%m%dT%H%M%S")
+    //     .unwrap()
+    //     .and_local_timezone(tz)
+    //     .unwrap();
+
+    // if let Some(rrule) = props.get("RRULE") {
+    //     let rrule: RRule<Unvalidated> = rrule.value().parse().unwrap();
+    //     let rrule = rrule.validate(start).unwrap();
+
+    //     let rrule_set: RRuleSet = RRuleSet::new(start).rrule(rrule);
+    // } else {
+    // }
+    event.to_string()
+}

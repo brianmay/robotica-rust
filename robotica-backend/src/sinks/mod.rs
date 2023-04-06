@@ -2,10 +2,15 @@
 use crate::{entities, spawn};
 
 /// Create a sink that consumes incoming messages and discards them.
-pub async fn null<T: Send + Clone + 'static>(rx: entities::Receiver<T>) {
+pub async fn null<T>(rx: entities::Receiver<T>)
+where
+    T: entities::Data + Send + 'static,
+    T::Received: Send + 'static,
+    T::Sent: Send + 'static,
+{
     let mut s = rx.subscribe().await;
     spawn(async move {
-        while s.recv().await.is_ok() {
+        while s.recv_value().await.is_ok() {
             // do nothing
         }
     });

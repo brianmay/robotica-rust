@@ -17,7 +17,7 @@ use crate::{
 pub fn run(subscription: &mut Subscriptions, mqtt: MqttTx, topic_substr: impl Into<String>) {
     let topic_substr: String = topic_substr.into();
     let topic = format!("command/{topic_substr}");
-    let rx = subscription.subscribe_into_stateless::<Json<Command>>(&topic);
+    let rx = subscription.subscribe_into::<Json<Command>>(&topic);
 
     spawn(async move {
         let mut rx = rx.subscribe().await;

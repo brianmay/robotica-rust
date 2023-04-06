@@ -25,7 +25,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let command_rx = state
         .subscriptions
-        .subscribe_into_stateless::<Json<commands::Command>>(&topic);
+        .subscribe_into::<Json<commands::Command>>(&topic);
 
     let name = id.get_name("hdmi");
     let (tx, rx) = entities::create_stateless_entity(name);
@@ -61,7 +61,7 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
         loop {
             select! {
-                Ok((_, status)) = rx_s.recv() => {
+                Ok(status) = rx_s.recv() => {
                     debug!("HDMI {status:?}");
                     let status = match status {
                         Ok(values) => values,

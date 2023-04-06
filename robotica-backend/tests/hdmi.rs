@@ -129,7 +129,7 @@ async fn test_client_once() {
     client.try_send(Command::SetInput(2, 1));
 
     println!("test: waiting for client to finish");
-    let (_, state) = rx_s.recv().await.unwrap();
+    let state = rx_s.recv().await.unwrap();
     assert_eq!(state, Ok([Some(2), None, None, None]));
 
     println!("test: Shutting down client");
@@ -165,7 +165,7 @@ async fn test_client_reconnect() {
     client.try_send(Command::SetInput(2, 1));
 
     println!("test: waiting for client to finish");
-    let (_, state) = rx_s.recv().await.unwrap();
+    let state = rx_s.recv().await.unwrap();
     assert_eq!(state, Ok([Some(2), None, None, None]));
 
     println!("test: Restarting server");
@@ -178,7 +178,7 @@ async fn test_client_reconnect() {
     client.try_send(Command::SetInput(3, 2));
 
     println!("test: waiting for client to finish");
-    let (_, state) = rx_s.recv().await.unwrap();
+    let state = rx_s.recv().await.unwrap();
     assert_eq!(state, Ok([Some(2), Some(3), None, None]));
 
     println!("test: Shutting down client");

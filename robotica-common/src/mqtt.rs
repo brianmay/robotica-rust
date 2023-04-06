@@ -57,7 +57,7 @@ impl<'de> Deserialize<'de> for QoS {
 }
 
 /// A MQTT message.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct MqttMessage {
     /// MQTT topic to send the message to.
     pub topic: String,
