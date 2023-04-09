@@ -17,7 +17,7 @@ use tokio::select;
 use tokio::time::{sleep, Interval};
 use tracing::{debug, error, info};
 
-use robotica_backend::entities::{create_stateless_entity, StatelessReceiver};
+use robotica_backend::entities::{create_stateless_entity, StatelessReceiver, StatelessSender};
 use robotica_backend::spawn;
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, QoS};
 
@@ -300,6 +300,28 @@ pub enum MonitorChargingError {
     LoadPersistentState(#[from] persistent_state::Error),
 }
 
+fn announce_charging_state(
+    charging_state: ChargingState,
+    charge_state: &Option<ChargeState>,
+    message_sink: &StatelessSender<Message>,
+) {
+    let msg = match charging_state {
+        ChargingState::Disconnected => "The Tesla is disconnected",
+        ChargingState::Charging => "The Tesla is charging",
+        ChargingState::NoPower => "The Tesla plug failed",
+        ChargingState::Complete => "The Tesla is finished charging",
+        ChargingState::Stopped => "The Tesla has stopped charging",
+    };
+
+    let msg = charge_state.as_ref().map_or_else(
+        || msg.to_string(),
+        |charge_state| format!("{msg} at ({:.0}%)", charge_state.battery_level),
+    );
+
+    let msg = new_message(msg, MessagePriority::DaytimeOnly);
+    message_sink.try_send(msg);
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut State,
@@ -314,6 +336,7 @@ pub fn monitor_charging(
     let ps = psr.load().unwrap_or_default();
 
     let mqtt = state.mqtt.clone();
+    let message_sink = state.message_sink.clone();
 
     let price_category_rx = price_summary_rx.map_stateful(|ps| ps.category);
 
@@ -364,31 +387,6 @@ pub fn monitor_charging(
             "teslamate/cars/{car_number}/charging_state"
         ));
     let mut token = Token::get(&tesla_secret)?;
-
-    {
-        let message_sink = state.message_sink.clone();
-        let charging_state_rx = charging_state_rx.clone();
-
-        spawn(async move {
-            let mut charging_state_s = charging_state_rx.subscribe().await;
-
-            while let Ok((prev, charging_state)) = charging_state_s.recv_value().await {
-                if prev.is_none() {
-                    continue;
-                }
-
-                let msg = match charging_state {
-                    ChargingState::Disconnected => "The Tesla is disconnected",
-                    ChargingState::Charging => "The Tesla is charging",
-                    ChargingState::NoPower => "The Tesla is not connected to power",
-                    ChargingState::Complete => "The Tesla is fully charged",
-                    ChargingState::Stopped => "The Tesla charging has stopped",
-                };
-                let msg = new_message(msg, MessagePriority::DaytimeOnly);
-                message_sink.try_send(msg);
-            }
-        });
-    }
 
     spawn(async move {
         let car_id = match get_car_id(&mut token, car_number).await {
@@ -470,8 +468,11 @@ pub fn monitor_charging(
                     charge_state = None;
                 }
 
-                Ok(charging_state) = charging_state_s.recv() => {
+                Ok((old, charging_state)) = charging_state_s.recv_value() => {
                     info!("Charging state: {charging_state:?}");
+                    if old.is_some() {
+                        announce_charging_state(charging_state, &charge_state, &message_sink);
+                    }
                     charge_state = None;
                 }
             }
