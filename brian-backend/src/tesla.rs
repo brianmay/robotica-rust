@@ -315,7 +315,7 @@ fn announce_charging_state(
 
     let msg = charge_state.as_ref().map_or_else(
         || msg.to_string(),
-        |charge_state| format!("{msg} at ({:.0}%)", charge_state.battery_level),
+        |charge_state| format!("{msg} at ({}%)", charge_state.battery_level),
     );
 
     let msg = new_message(msg, MessagePriority::DaytimeOnly);
@@ -478,7 +478,7 @@ pub fn monitor_charging(
             }
 
             let new_interval = if is_home && ps.auto_charge {
-                if let Some(price_category) = &price_category {
+                if let Some(price_category) = price_category {
                     let result = check_charge(
                         car_id,
                         &token,
@@ -624,7 +624,7 @@ async fn check_charge(
     car_id: u64,
     token: &Token,
     charge_state: &mut Option<ChargeState>,
-    price_category: &PriceCategory,
+    price_category: PriceCategory,
     force_charge: bool,
 ) -> Result<CheckChargeState, CheckChargeError> {
     info!("Checking charge");
@@ -775,7 +775,7 @@ async fn check_charge(
 }
 
 const fn should_charge(
-    price_category: &PriceCategory,
+    price_category: PriceCategory,
     force_charge: bool,
     charge_state: &Option<ChargeState>,
 ) -> (bool, u8) {

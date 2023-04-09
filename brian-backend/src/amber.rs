@@ -343,7 +343,7 @@ async fn get_usage(
     response.json().await
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Copy, Debug, Clone, Eq, PartialEq)]
 pub enum PriceCategory {
     SuperCheap,
     Cheap,
@@ -358,26 +358,59 @@ pub struct PriceSummary {
     pub next_update: DateTime<Utc>,
 }
 
-fn prices_to_category(prices: &[PriceResponse]) -> PriceCategory {
-    let mut category: PriceCategory = PriceCategory::Normal;
-
-    prices
+fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>) -> PriceCategory {
+    let new_category = prices
         .iter()
-        .filter(|p| p.interval_type == IntervalType::CurrentInterval)
-        .map(|price| {
-            if price.per_kwh < 10.0 {
-                PriceCategory::SuperCheap
-            } else if price.per_kwh < 15.0 {
-                PriceCategory::Cheap
-            } else if price.per_kwh < 30.0 {
-                PriceCategory::Normal
-            } else {
-                PriceCategory::Expensive
-            }
-        })
-        .for_each(|new_pq| category = new_pq);
+        .find(|p| p.interval_type == IntervalType::CurrentInterval)
+        .map_or(PriceCategory::Normal, |price| {
+            get_price_category(category, price)
+        });
 
-    category
+    new_category
+}
+
+fn get_price_category(category: Option<PriceCategory>, price: &PriceResponse) -> PriceCategory {
+    let mut c = category.unwrap_or(PriceCategory::Normal);
+
+    let under = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
+        if price.per_kwh < threshold {
+            new_category
+        } else {
+            c
+        }
+    };
+    let over = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
+        if price.per_kwh > threshold {
+            new_category
+        } else {
+            c
+        }
+    };
+
+    match c {
+        PriceCategory::SuperCheap => {
+            c = over(c, 11.0, PriceCategory::Cheap);
+            c = over(c, 16.0, PriceCategory::Normal);
+            c = over(c, 31.0, PriceCategory::Expensive);
+        }
+        PriceCategory::Cheap => {
+            c = under(c, 9.0, PriceCategory::SuperCheap);
+            c = over(c, 16.0, PriceCategory::Normal);
+            c = over(c, 31.0, PriceCategory::Expensive);
+        }
+        PriceCategory::Normal => {
+            c = under(c, 9.0, PriceCategory::SuperCheap);
+            c = under(c, 14.0, PriceCategory::Cheap);
+            c = over(c, 31.0, PriceCategory::Expensive);
+        }
+        PriceCategory::Expensive => {
+            c = under(c, 9.0, PriceCategory::SuperCheap);
+            c = under(c, 14.0, PriceCategory::Cheap);
+            c = under(c, 29.0, PriceCategory::Normal);
+        }
+    }
+
+    c
 }
 
 async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: &PriceSummary) {
@@ -462,13 +495,17 @@ struct DayState {
 #[derive(Debug, Clone)]
 struct PriceProcessor {
     day: DayState,
+    category: Option<PriceCategory>,
 }
 
 impl PriceProcessor {
     #[cfg(test)]
     pub fn new(now: &DateTime<Utc>) -> Self {
         let day_state = new_day_state(now);
-        Self { day: day_state }
+        Self {
+            day: day_state,
+            category: None,
+        }
     }
 
     pub fn save(&self, psr: &PersistentStateRow<DayState>) {
@@ -483,7 +520,10 @@ impl PriceProcessor {
             new_day_state(now)
         });
 
-        Self { day }
+        Self {
+            day,
+            category: None,
+        }
     }
 
     pub fn prices_to_summary(
@@ -557,8 +597,10 @@ impl PriceProcessor {
 
         self.day = ds;
 
+        let category = prices_to_category(prices, self.category);
+
         let ps = PriceSummary {
-            category: prices_to_category(prices),
+            category,
             is_cheap_2hr: is_cheap,
             per_kwh: current_price.per_kwh,
             next_update: current_price.end_time,
