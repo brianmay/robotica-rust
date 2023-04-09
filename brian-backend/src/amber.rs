@@ -363,24 +363,24 @@ fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>)
         .iter()
         .find(|p| p.interval_type == IntervalType::CurrentInterval)
         .map_or(PriceCategory::Normal, |price| {
-            get_price_category(category, price)
+            get_price_category(category, price.per_kwh)
         });
 
     new_category
 }
 
-fn get_price_category(category: Option<PriceCategory>, price: &PriceResponse) -> PriceCategory {
+fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCategory {
     let mut c = category.unwrap_or(PriceCategory::Normal);
 
     let under = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
-        if price.per_kwh < threshold {
+        if price < threshold {
             new_category
         } else {
             c
         }
     };
     let over = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
-        if price.per_kwh > threshold {
+        if price > threshold {
             new_category
         } else {
             c
@@ -394,19 +394,19 @@ fn get_price_category(category: Option<PriceCategory>, price: &PriceResponse) ->
             c = over(c, 31.0, PriceCategory::Expensive);
         }
         PriceCategory::Cheap => {
-            c = under(c, 9.0, PriceCategory::SuperCheap);
             c = over(c, 16.0, PriceCategory::Normal);
             c = over(c, 31.0, PriceCategory::Expensive);
+            c = under(c, 9.0, PriceCategory::SuperCheap);
         }
         PriceCategory::Normal => {
-            c = under(c, 9.0, PriceCategory::SuperCheap);
-            c = under(c, 14.0, PriceCategory::Cheap);
             c = over(c, 31.0, PriceCategory::Expensive);
+            c = under(c, 14.0, PriceCategory::Cheap);
+            c = under(c, 9.0, PriceCategory::SuperCheap);
         }
         PriceCategory::Expensive => {
-            c = under(c, 9.0, PriceCategory::SuperCheap);
-            c = under(c, 14.0, PriceCategory::Cheap);
             c = under(c, 29.0, PriceCategory::Normal);
+            c = under(c, 14.0, PriceCategory::Cheap);
+            c = under(c, 9.0, PriceCategory::SuperCheap);
         }
     }
 
@@ -868,6 +868,51 @@ mod tests {
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
         let cp = ds.last_cheap_update;
         assert_eq!(cp, None);
+    }
+
+    #[test]
+    fn test_get_price_category() {
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 8.0);
+        assert_eq!(c, PriceCategory::SuperCheap);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 9.0);
+        assert_eq!(c, PriceCategory::SuperCheap);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 10.0);
+        assert_eq!(c, PriceCategory::SuperCheap);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 11.0);
+        assert_eq!(c, PriceCategory::SuperCheap);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 12.0);
+        assert_eq!(c, PriceCategory::Cheap);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 17.0);
+        assert_eq!(c, PriceCategory::Normal);
+
+        let c = get_price_category(Some(PriceCategory::SuperCheap), 32.0);
+        assert_eq!(c, PriceCategory::Expensive);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 8.0);
+        assert_eq!(c, PriceCategory::SuperCheap);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 9.0);
+        assert_eq!(c, PriceCategory::Cheap);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 10.0);
+        assert_eq!(c, PriceCategory::Cheap);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 11.0);
+        assert_eq!(c, PriceCategory::Cheap);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 12.0);
+        assert_eq!(c, PriceCategory::Cheap);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 17.0);
+        assert_eq!(c, PriceCategory::Normal);
+
+        let c = get_price_category(Some(PriceCategory::Cheap), 32.0);
+        assert_eq!(c, PriceCategory::Expensive);
     }
 
     #[test]
