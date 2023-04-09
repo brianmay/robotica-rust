@@ -598,7 +598,9 @@ impl PriceProcessor {
         self.day = ds;
 
         // let category = prices_to_category(prices, self.category);
-        let category = get_price_category(self.category, current_price.per_kwh);
+        let old_category = self.category;
+        let category = get_price_category(old_category, current_price.per_kwh);
+        self.category = Some(category);
 
         let ps = PriceSummary {
             category,
@@ -606,7 +608,8 @@ impl PriceProcessor {
             per_kwh: current_price.per_kwh,
             next_update: current_price.end_time,
         };
-        info!("Price summary: {:?} --> {ps:?}", self.category);
+        info!("Price summary: {:?} --> {ps:?}", old_category);
+
         ps
     }
 }
