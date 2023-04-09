@@ -605,7 +605,7 @@ impl PriceProcessor {
             per_kwh: current_price.per_kwh,
             next_update: current_price.end_time,
         };
-        info!("Price summary: {:?}", ps);
+        info!("Price summary: {:?} --> {ps:?}", self.category);
         ps
     }
 }
@@ -872,47 +872,39 @@ mod tests {
 
     #[test]
     fn test_get_price_category() {
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 8.0);
-        assert_eq!(c, PriceCategory::SuperCheap);
+        use PriceCategory::{Cheap, Expensive, Normal, SuperCheap};
 
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 9.0);
-        assert_eq!(c, PriceCategory::SuperCheap);
+        let data = [
+            (SuperCheap, 11.0, SuperCheap),
+            (SuperCheap, 11.1, Cheap),
+            (SuperCheap, 16.0, Cheap),
+            (SuperCheap, 16.1, Normal),
+            (SuperCheap, 31.0, Normal),
+            (SuperCheap, 31.1, Expensive),
+            (Cheap, 8.9, SuperCheap),
+            (Cheap, 9.0, Cheap),
+            (Cheap, 16.0, Cheap),
+            (Cheap, 16.1, Normal),
+            (Cheap, 31.0, Normal),
+            (Cheap, 31.1, Expensive),
+            (Normal, 8.9, SuperCheap),
+            (Normal, 9.0, Cheap),
+            (Normal, 13.9, Cheap),
+            (Normal, 14.0, Normal),
+            (Normal, 31.0, Normal),
+            (Normal, 31.1, Expensive),
+            (Expensive, 8.9, SuperCheap),
+            (Expensive, 9.0, Cheap),
+            (Expensive, 13.9, Cheap),
+            (Expensive, 14.0, Normal),
+            (Expensive, 28.9, Normal),
+            (Expensive, 29.0, Expensive),
+        ];
 
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 10.0);
-        assert_eq!(c, PriceCategory::SuperCheap);
-
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 11.0);
-        assert_eq!(c, PriceCategory::SuperCheap);
-
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 12.0);
-        assert_eq!(c, PriceCategory::Cheap);
-
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 17.0);
-        assert_eq!(c, PriceCategory::Normal);
-
-        let c = get_price_category(Some(PriceCategory::SuperCheap), 32.0);
-        assert_eq!(c, PriceCategory::Expensive);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 8.0);
-        assert_eq!(c, PriceCategory::SuperCheap);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 9.0);
-        assert_eq!(c, PriceCategory::Cheap);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 10.0);
-        assert_eq!(c, PriceCategory::Cheap);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 11.0);
-        assert_eq!(c, PriceCategory::Cheap);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 12.0);
-        assert_eq!(c, PriceCategory::Cheap);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 17.0);
-        assert_eq!(c, PriceCategory::Normal);
-
-        let c = get_price_category(Some(PriceCategory::Cheap), 32.0);
-        assert_eq!(c, PriceCategory::Expensive);
+        for d in data {
+            let c = get_price_category(Some(d.0), d.1);
+            assert_eq!(c, d.2, "get_price_category({:?}, {}) = {:?}", d.0, d.1, c);
+        }
     }
 
     #[test]
