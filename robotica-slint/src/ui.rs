@@ -148,16 +148,16 @@ impl TryFrom<Config> for LoadedConfig {
     }
 }
 
-async fn select_ok<F, FUTURES, A, B>(futs: FUTURES) -> Result<A, B>
+async fn select_ok<F, FUTURES, A, B>(futures: FUTURES) -> Result<A, B>
 where
     F: Future<Output = Result<A, B>> + Send,
     FUTURES: IntoIterator<Item = F> + Send,
     B: Send,
 {
-    let mut futs: FuturesUnordered<F> = futs.into_iter().collect();
+    let mut futures: FuturesUnordered<F> = futures.into_iter().collect();
 
     let mut last_error: Option<B> = None;
-    while let Some(next) = futs.next().await {
+    while let Some(next) = futures.next().await {
         match next {
             Ok(ok) => return Ok(ok),
             Err(err) => {
@@ -172,7 +172,7 @@ where
 
 async fn receive(
     label: Label,
-    subscription: &mut entities::Subscription<MqttMessage>,
+    subscription: &mut entities::StatelessSubscription<MqttMessage>,
 ) -> Result<(Label, MqttMessage), RecvError> {
     let msg = subscription.recv().await?;
     Ok((label, msg))
@@ -261,9 +261,9 @@ pub fn run_gui(
                     ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
                 };
 
-                let requested_subcriptions = controller.get_subscriptions();
+                let requested_subscriptions = controller.get_subscriptions();
 
-                let mut subscriptions = Vec::with_capacity(requested_subcriptions.len());
+                let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
                 for s in controller.get_subscriptions() {
                     let label = s.label;
                     let s = state.mqtt.subscribe(s.topic).await.unwrap();

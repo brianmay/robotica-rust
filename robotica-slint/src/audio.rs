@@ -7,7 +7,7 @@ use std::{
 };
 
 use robotica_backend::{
-    entities::Receiver,
+    entities::StatelessReceiver,
     get_env_os,
     services::{
         mqtt::{MqttTx, Subscriptions},
@@ -95,7 +95,7 @@ pub fn run(
 ) {
     let topic_substr = &config.topic_substr;
     let topic = format!("command/{topic_substr}");
-    let command_rx: Receiver<Json<Command>> = subscriptions.subscribe_into_stateless(topic);
+    let command_rx: StatelessReceiver<Json<Command>> = subscriptions.subscribe_into(topic);
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
