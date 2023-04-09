@@ -358,16 +358,16 @@ pub struct PriceSummary {
     pub next_update: DateTime<Utc>,
 }
 
-fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>) -> PriceCategory {
-    let new_category = prices
-        .iter()
-        .find(|p| p.interval_type == IntervalType::CurrentInterval)
-        .map_or(PriceCategory::Normal, |price| {
-            get_price_category(category, price.per_kwh)
-        });
+// fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>) -> PriceCategory {
+//     let new_category = prices
+//         .iter()
+//         .find(|p| p.interval_type == IntervalType::CurrentInterval)
+//         .map_or(PriceCategory::Normal, |price| {
+//             get_price_category(category, price.per_kwh)
+//         });
 
-    new_category
-}
+//     new_category
+// }
 
 fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCategory {
     let mut c = category.unwrap_or(PriceCategory::Normal);
@@ -597,7 +597,8 @@ impl PriceProcessor {
 
         self.day = ds;
 
-        let category = prices_to_category(prices, self.category);
+        // let category = prices_to_category(prices, self.category);
+        let category = get_price_category(self.category, current_price.per_kwh);
 
         let ps = PriceSummary {
             category,
