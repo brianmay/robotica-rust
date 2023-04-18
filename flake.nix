@@ -1,5 +1,5 @@
 {
-  description = "A very basic flake";
+  description = "IOT automation for people who think like programmers";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
@@ -68,6 +68,7 @@
             protobuf
             nodejs
             wasm-pack
+            slint-lsp
             (rust_pkgs.default.override {
               extensions = [ "rust-src" ];
               targets = [ "wasm32-unknown-unknown" ];

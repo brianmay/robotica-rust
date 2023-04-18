@@ -119,7 +119,7 @@ impl MqttTx {
     where
         // U: Data,
         // T::Sent: Send + 'static,
-        U: TryFrom<MqttMessage> + Clone + Send + Eq + 'static,
+        U: TryFrom<MqttMessage> + Clone + Send + 'static,
         <U as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
         // T::Received: Send + 'static,
     {

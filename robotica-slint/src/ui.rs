@@ -7,6 +7,7 @@ use std::{sync::Arc, time::Duration};
 mod slint {
     #![allow(clippy::wildcard_imports)]
     #![allow(clippy::use_self)]
+    #![allow(clippy::unused_self)]
     #![allow(clippy::used_underscore_binding)]
     #![allow(clippy::cast_possible_truncation)]
     #![allow(clippy::cast_sign_loss)]
@@ -27,6 +28,7 @@ mod slint {
     #![allow(clippy::similar_names)]
     #![allow(clippy::items_after_statements)]
     #![allow(clippy::cast_possible_wrap)]
+    #![allow(clippy::float_cmp)]
 
     slint::include_modules!();
 }
@@ -36,8 +38,10 @@ use crate::{
     RunningState,
 };
 use ::slint::{
-    ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, VecModel, Weak,
+    ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, SharedString, VecModel,
+    Weak,
 };
+use chrono::{Local, Timelike};
 use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
@@ -46,13 +50,14 @@ use robotica_common::{
     controllers::{
         hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
-    mqtt::MqttMessage,
+    mqtt::{Json, MqttMessage},
     robotica::audio::Message,
+    scheduler::Tags,
 };
 use tokio::{
     select,
     sync::mpsc,
-    time::{sleep_until, Instant},
+    time::{sleep, sleep_until, Instant},
 };
 use tracing::{error, info};
 
@@ -145,6 +150,21 @@ impl TryFrom<Config> for LoadedConfig {
             buttons: config.buttons,
             programs,
         })
+    }
+}
+
+impl From<Arc<Json<Tags>>> for slint::TagsData {
+    fn from(tags: Arc<Json<Tags>>) -> Self {
+        let yesterday: Vec<SharedString> =
+            tags.0.yesterday.iter().map(SharedString::from).collect();
+        let today: Vec<SharedString> = tags.0.today.iter().map(SharedString::from).collect();
+        let tomorrow: Vec<SharedString> = tags.0.tomorrow.iter().map(SharedString::from).collect();
+
+        Self {
+            yesterday: ModelRc::new(VecModel::from(yesterday)),
+            today: ModelRc::new(VecModel::from(today)),
+            tomorrow: ModelRc::new(VecModel::from(tomorrow)),
+        }
     }
 }
 
@@ -307,6 +327,53 @@ pub fn run_gui(
             });
         }
     }
+
+    let handle_weak = ui.as_weak();
+    tokio::spawn(async move {
+        let rx = state
+            .mqtt
+            .subscribe_into::<Arc<Json<Tags>>>("robotica/robotica.linuxpenguins.xyz/tags")
+            .await
+            .unwrap();
+        let mut rx = rx.subscribe().await;
+
+        loop {
+            let msg = rx.recv().await.unwrap();
+
+            handle_weak
+                .upgrade_in_event_loop(move |handle| {
+                    let tags: slint::TagsData = msg.into();
+                    handle.set_tags(tags);
+                })
+                .unwrap();
+        }
+    });
+
+    let handle_weak = ui.as_weak();
+    tokio::spawn(async move {
+        loop {
+            let time = Local::now();
+
+            #[allow(clippy::cast_possible_wrap)]
+            let hour = time.hour() as i32;
+
+            #[allow(clippy::cast_possible_wrap)]
+            let minute = time.minute() as i32;
+
+            #[allow(clippy::cast_possible_wrap)]
+            let second = time.second() as i32;
+
+            handle_weak
+                .upgrade_in_event_loop(move |handle| {
+                    handle.set_hour(hour);
+                    handle.set_minute(minute);
+                    handle.set_second(second);
+                })
+                .unwrap();
+
+            sleep(Duration::from_secs(1)).await;
+        }
+    });
 
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {

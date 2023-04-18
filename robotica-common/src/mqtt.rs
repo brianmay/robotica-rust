@@ -5,6 +5,7 @@ use std::{
     fmt::Formatter,
     str::{FromStr, Utf8Error},
     string::FromUtf8Error,
+    sync::Arc,
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -273,6 +274,16 @@ impl<Body: DeserializeOwned> TryFrom<MqttMessage> for Json<Body> {
         let payload: &str = msg.payload_as_str()?;
         let value = serde_json::from_str(payload)?;
         Ok(Json(value))
+    }
+}
+
+impl<Body: DeserializeOwned> TryFrom<MqttMessage> for Arc<Json<Body>> {
+    type Error = JsonError;
+
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let payload: &str = msg.payload_as_str()?;
+        let value = serde_json::from_str(payload)?;
+        Ok(Arc::new(Json(value)))
     }
 }
 

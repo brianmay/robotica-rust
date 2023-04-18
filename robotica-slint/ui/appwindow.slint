@@ -1,4 +1,4 @@
-import { Button, VerticalBox } from "std-widgets.slint";
+import { ScrollView, TabWidget, VerticalBox } from "std-widgets.slint";
 
 struct Icon {
     on: image,
@@ -26,6 +26,12 @@ struct WidgetData {
     image: image,
     color: color,
     text_color: color,
+}
+
+struct TagsData {
+    yesterday: [string],
+    today: [string],
+    tomorrow: [string],
 }
 
 component RoboticaButton inherits Rectangle {
@@ -100,7 +106,7 @@ component Title inherits Rectangle {
     }
 }
 
-component Widget inherits VerticalBox {
+component Widget inherits VerticalLayout {
     in property<WidgetData> widget;
     callback clicked;
 
@@ -122,6 +128,216 @@ component Widget inherits VerticalBox {
     }
 }
 
+component Buttons inherits ScrollView {
+    in-out property<int> number_per_row;
+    in property <[WidgetData]> widgets: [];
+    callback screen_reset;
+    callback clicked_widget(int);
+
+    viewport-width: number_per_row * 90px + 10px;
+    viewport-height: floor(widgets.length / number_per_row) * 90px;
+
+    for widget[i] in widgets : Widget {
+        widget: widget;
+        x: mod(i, number_per_row) * 90px + 10px;
+        y: floor(i / number_per_row) * 90px + 10px;
+        clicked => {
+            screen_reset();
+            root.clicked_widget(i);
+        }
+    }
+}
+
+component InlineTags inherits Rectangle {
+    in property <[string]> tags;
+    for tag[i] in tags : Rectangle {
+        Text {
+            text: tag;
+            color: white;
+            font-size: 10px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            x: 10px;
+            y: 10px;
+            width: parent.width - 20px;
+            height: parent.height - 20px;
+        }
+        background: green;
+        width: 200px;
+        height: 40px;
+        border-radius: 5px;
+        x: 10px + mod(i,3) * 220px;
+        y: 10px + floor(i/3) * 60px;
+    }
+    width: 10px + 3 * 220px;
+    height: 10px + ceil(tags.length/3) * 60px;
+    background: blue;
+}
+
+component Tags inherits VerticalLayout {
+    in property <TagsData> tags;
+    callback screen_reset;
+    alignment: start;
+
+    Text {
+        text: "Yesterday";
+        color: white;
+        font-size: 10px;
+        horizontal-alignment: center;
+    }
+
+    InlineTags {
+        tags: tags.yesterday;
+        x: parent.width/2 - self.width/2;
+    }
+
+    Rectangle {  height: 10px; }
+
+    Text {
+        text: "Today";
+        color: white;
+        font-size: 10px;
+        horizontal-alignment: center;
+    }
+
+    InlineTags {
+        tags: tags.today;
+        x: parent.width/2 - self.width/2;
+    }
+
+    Rectangle {  height: 10px; }
+
+    Text {
+        text: "Tomorrow";
+        color: white;
+        font-size: 10px;
+        horizontal-alignment: center;
+    }
+
+    InlineTags {
+        tags: tags.tomorrow;
+        x: parent.width/2 - self.width/2;
+    }
+}
+
+
+component Clock inherits VerticalLayout {
+    in property<int> hour;
+    in property<int> minute;
+    in property<int> second;
+
+    Text {
+        text: "Clock";
+        color: white;
+        horizontal-alignment: center;
+        font-size: 20px;
+    }
+    Rectangle {
+        background: black;
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: red;
+            stroke-width: 10px;
+
+            // LineTo {
+            //     x: 0;
+            //     y: 100;
+            // }
+            // ArcTo {
+            //     radius-x: 1;
+            //     radius-y: 1;
+            //     x: 100;
+            //     y: 100;
+            // }
+            // LineTo {
+            //     x: 100;
+            //     y: 0;
+            // }
+
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: sin(360deg*hour/12)*50 + 50;
+                y: -cos(360deg*hour/12)*50 + 50;
+            }
+
+        }
+
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: green;
+            stroke-width: 10px;
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: sin(360deg*minute/60)*50 + 50;
+                y: -cos(360deg*minute/60)*50 + 50;
+            }
+        }
+
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: blue;
+            stroke-width: 10px;
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: sin(360deg*second/60)*50 + 50;
+                y: -cos(360deg*second/60)*50 + 50;
+            }
+        }
+
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: white;
+            stroke-width: 10px;
+
+            MoveTo {
+                x: 50;
+                y: 0;
+            }
+            ArcTo {
+                x: 50;
+                y: 100;
+                radius-x: 50;
+                radius-y: 50;
+                x-rotation:0;
+                large-arc: true;
+                sweep: true;
+            }
+            ArcTo {
+                x: 50;
+                y: 0;
+                radius-x: 50;
+                radius-y: 50;
+                x-rotation:0;
+                large-arc: true;
+                sweep: true;
+            }
+        }
+    }
+}
 
 export component AppWindow inherits Window {
     in-out property<int> number_per_row;
@@ -129,6 +345,9 @@ export component AppWindow inherits Window {
     in property<string> msg_body;
     in property<string> msg_title;
     in property<bool> display_message;
+    in property<int> hour;
+    in property<int> minute;
+    in property<int> second;
 
     callback clicked_widget(int);
     callback screen_reset;
@@ -146,6 +365,11 @@ export component AppWindow inherits Window {
     };
 
     in property <[WidgetData]> widgets: [];
+    in property <TagsData> tags: {
+        yesterday: [],
+        today: [],
+        tomorrow: [],
+    };
 
     if !screen_off : TouchArea {
         clicked => {
@@ -153,15 +377,59 @@ export component AppWindow inherits Window {
         }
     }
 
-    for widget[i] in widgets : Widget {
-        widget: widget;
-        x: mod(i, number_per_row) * 90px + 10px;
-        y: floor(i / number_per_row) * 90px + 10px;
-        clicked => {
-            screen_reset();
-            root.clicked_widget(i);
+    TabWidget {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+
+        Tab {
+            title: "Clock";
+
+            Clock {
+                hour: hour;
+                minute: minute;
+                second: second;
+            }
+        }
+        Tab {
+            title: "Buttons";
+
+            Buttons {
+                number_per_row: root.number_per_row;
+                widgets: root.widgets;
+                screen_reset => {
+                    root.screen_reset();
+                }
+                clicked_widget(i) => {
+                    root.clicked_widget(i);
+                }
+            }
+        }
+        Tab {
+            title: "Tags";
+
+            Tags {
+                tags: root.tags;
+                screen_reset => {
+                    root.screen_reset();
+                }
+            }
+        }
+        Tab {
+            title: "Settings";
+
+            VerticalLayout {
+                Text {
+                    text: "Settings";
+                    color: white;
+                    horizontal-alignment: center;
+                    font-size: 20px;
+                }
+            }
         }
     }
+
 
     if display_message : Rectangle {
         x: 0px;

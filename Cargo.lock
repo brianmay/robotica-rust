@@ -4042,6 +4042,7 @@ name = "robotica-slint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "color-backtrace",
  "futures",
