@@ -608,7 +608,7 @@ impl PriceProcessor {
             per_kwh: current_price.per_kwh,
             next_update: current_price.end_time,
         };
-        info!("Price summary: {:?} --> {ps:?}", old_category);
+        info!("Price summary: {old_category:?} --> {ps:?}");
 
         ps
     }
