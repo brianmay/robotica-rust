@@ -234,6 +234,8 @@ component Clock inherits VerticalLayout {
     }
     Rectangle {
         background: black;
+
+        // hour hand
         Path {
             viewbox-height: 100;
             viewbox-width: 100;
@@ -242,58 +244,44 @@ component Clock inherits VerticalLayout {
             stroke: red;
             stroke-width: 10px;
 
-            // LineTo {
-            //     x: 0;
-            //     y: 100;
-            // }
-            // ArcTo {
-            //     radius-x: 1;
-            //     radius-y: 1;
-            //     x: 100;
-            //     y: 100;
-            // }
-            // LineTo {
-            //     x: 100;
-            //     y: 0;
-            // }
-
-
             MoveTo {
                 x: 50;
                 y: 50;
             }
             LineTo {
-                x: sin(360deg*hour/12)*50 + 50;
-                y: -cos(360deg*hour/12)*50 + 50;
+                x: sin(360deg*hour/12)*30 + 50;
+                y: -cos(360deg*hour/12)*30 + 50;
             }
 
         }
 
+        // minute hand
         Path {
             viewbox-height: 100;
             viewbox-width: 100;
             width: parent.width;
             height: parent.height;
             stroke: green;
-            stroke-width: 10px;
+            stroke-width: 5px;
 
             MoveTo {
                 x: 50;
                 y: 50;
             }
             LineTo {
-                x: sin(360deg*minute/60)*50 + 50;
-                y: -cos(360deg*minute/60)*50 + 50;
+                x: sin(360deg*minute/60)*40 + 50;
+                y: -cos(360deg*minute/60)*40 + 50;
             }
         }
 
+        // second hand
         Path {
             viewbox-height: 100;
             viewbox-width: 100;
             width: parent.width;
             height: parent.height;
             stroke: blue;
-            stroke-width: 10px;
+            stroke-width: 1px;
 
             MoveTo {
                 x: 50;
@@ -305,6 +293,7 @@ component Clock inherits VerticalLayout {
             }
         }
 
+        // clock
         Path {
             viewbox-height: 100;
             viewbox-width: 100;
