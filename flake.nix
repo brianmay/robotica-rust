@@ -4,8 +4,12 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
+  inputs.crane = {
+    url = "github:ipetkov/crane";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
     flake-utils.lib.eachSystem flake-utils.lib.allSystems (system:
       let
         pkgs = import nixpkgs {
@@ -14,27 +18,27 @@
         };
 
         rust_pkgs = pkgs.rust-bin.stable.latest;
-        rustPlatform = pkgs.makeRustPlatform {
-          cargo = rust_pkgs.minimal;
-          rustc = rust_pkgs.minimal;
+        rustPlatform = pkgs.rust-bin.stable.latest.default.override {
+          # targets = [ "wasm32-unknown-unknown" ];
         };
 
-        pkg = rustPlatform.buildRustPackage {
-          pname = "robotica-slint";
-          version = "0.0.1";
-          src = ./.;
-          cargoBuildFlags = "-p robotica-slint";
+        craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
+          rustc = rustPlatform;
+          cargo = rustPlatform;
+          rustfmt = rustPlatform;
+        });
+        src = ./.;
 
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-            outputHashes = {
-              "getrandom-0.2.8" =
-                "sha256-B6xHsgEgJMYG2xj2pNRnjD/b71fSTRVC9Jv/fH3b2Ok=";
-              "rumqttc-0.18.0" =
-                "sha256-bZA887J8+G8JReMYT2elBtq7iRSM/mNy7/9wlPCNxrI=";
-            };
-          };
+        # Build *just* the cargo dependencies, so we can reuse
+        # all of that work (e.g. via cachix) when running in CI
+        cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
 
+        pkg = craneLib.buildPackage {
+          inherit cargoArtifacts src;
+          cargoExtraArgs = "-p robotica-slint";
+
+          # Add extra inputs here or any other derivation settings
+          doCheck = true;
           nativeBuildInputs = with pkgs; [ pkgconfig ];
 
           buildInputs = with pkgs; [
@@ -48,12 +52,11 @@
             xorg.libXrandr
             xorg.libXi
             mesa
-            # dbus
-            # libGL
             wayland
             libxkbcommon
           ];
         };
+
         wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
           export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
           exec ${pkg}/bin/robotica-slint "$@"
@@ -69,22 +72,11 @@
             nodejs
             wasm-pack
             slint-lsp
-            (rust_pkgs.default.override {
-              extensions = [ "rust-src" ];
-              targets = [ "wasm32-unknown-unknown" ];
-            })
-            # fontconfig
-            # freetype
-            # xorg.libxcb
-            # xorg.libX11
-            # xorg.libXcursor
-            # xorg.libXrandr
-            # xorg.libXi
-            # mesa
-            # dbus
-            # libGL
-            # wayland
-            # libxkbcommon
+            rustPlatform
+            # (rust_pkgs.default.override {
+            #   extensions = [ "rust-src" ];
+            #   targets = [ "wasm32-unknown-unknown" ];
+            # })
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
