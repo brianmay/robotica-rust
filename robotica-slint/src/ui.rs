@@ -45,7 +45,10 @@ use chrono::{Local, Timelike};
 use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
-use robotica_backend::entities::{self, RecvError};
+use robotica_backend::{
+    entities::{self, RecvError},
+    services::mqtt::MqttTx,
+};
 use robotica_common::{
     controllers::{
         hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
@@ -206,25 +209,12 @@ pub enum ScreenCommand {
     Message(Message),
 }
 
-#[allow(clippy::too_many_lines)]
 pub fn run_gui(
     state: RunningState,
     config: Arc<LoadedConfig>,
     rx_screen_command: mpsc::Receiver<ScreenCommand>,
 ) {
     let state = Arc::new(state);
-
-    let (tx_click, rx_click) = {
-        let len = config.buttons.len();
-        let mut rx_click = Vec::with_capacity(len);
-        let mut tx_click = Vec::with_capacity(len);
-        for _ in 0..len {
-            let (tx, rx) = mpsc::channel::<()>(1);
-            rx_click.push(rx);
-            tx_click.push(tx);
-        }
-        (tx_click, rx_click)
-    };
 
     let ui = slint::AppWindow::new().unwrap();
     ui.set_screen_on(true);
@@ -247,6 +237,47 @@ pub fn run_gui(
         .collect();
     ui.set_widgets(ModelRc::new(VecModel::from(all_widgets)));
 
+    let (tx_click, rx_click) = create_button_click_pipes(&config);
+    monitor_buttons_presses(&ui, tx_click);
+    monitor_buttons_state(&config, rx_click, &state, &ui);
+
+    monitor_screen_reset(&state, &ui);
+    monitor_tags(&state.mqtt, &ui);
+    monitor_time(&ui);
+    monitor_display(config, &ui, rx_screen_command);
+
+    ui.run().unwrap();
+}
+
+fn create_button_click_pipes(
+    config: &Arc<LoadedConfig>,
+) -> (Vec<mpsc::Sender<()>>, Vec<mpsc::Receiver<()>>) {
+    let (tx_click, rx_click) = {
+        let len = config.buttons.len();
+        let mut rx_click = Vec::with_capacity(len);
+        let mut tx_click = Vec::with_capacity(len);
+        for _ in 0..len {
+            let (tx, rx) = mpsc::channel::<()>(1);
+            rx_click.push(rx);
+            tx_click.push(tx);
+        }
+        (tx_click, rx_click)
+    };
+    (tx_click, rx_click)
+}
+
+fn monitor_screen_reset(state: &Arc<RunningState>, ui: &slint::AppWindow) {
+    let tx_screen_command = state.tx_screen_command.clone();
+    ui.on_screen_reset(move || {
+        tx_screen_command
+            .try_send(ScreenCommand::TurnOn)
+            .unwrap_or_else(|_| {
+                error!("Failed to send screen reset event");
+            });
+    });
+}
+
+fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>>) {
     ui.on_clicked_widget(move |button| {
         let button = usize::try_from(button).unwrap_or(0);
         tx_click
@@ -257,16 +288,14 @@ pub fn run_gui(
                 error!("Failed to send click event");
             });
     });
+}
 
-    let tx_screen_command = state.tx_screen_command.clone();
-    ui.on_screen_reset(move || {
-        tx_screen_command
-            .try_send(ScreenCommand::TurnOn)
-            .unwrap_or_else(|_| {
-                error!("Failed to send screen reset event");
-            });
-    });
-
+fn monitor_buttons_state(
+    config: &Arc<LoadedConfig>,
+    rx_click: Vec<mpsc::Receiver<()>>,
+    state: &Arc<RunningState>,
+    ui: &slint::AppWindow,
+) {
     for (i, (lbc, rx_click)) in config.buttons.iter().zip(rx_click).enumerate() {
         if let WidgetConfig::Button(lbc) = lbc {
             let lbc = lbc.clone();
@@ -331,11 +360,13 @@ pub fn run_gui(
             });
         }
     }
+}
 
+fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
+    let mqtt = mqtt.clone();
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
-        let rx = state
-            .mqtt
+        let rx = mqtt
             .subscribe_into::<Arc<Json<Tags>>>("robotica/robotica.linuxpenguins.xyz/tags")
             .await
             .unwrap();
@@ -352,7 +383,9 @@ pub fn run_gui(
                 .unwrap();
         }
     });
+}
 
+fn monitor_time(ui: &slint::AppWindow) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         loop {
@@ -378,102 +411,18 @@ pub fn run_gui(
             sleep(Duration::from_secs(1)).await;
         }
     });
+}
 
+fn monitor_display(
+    config: Arc<LoadedConfig>,
+    ui: &slint::AppWindow,
+    rx_screen_command: mpsc::Receiver<ScreenCommand>,
+) {
     let screen_on_timeout = 30;
     let screen_message_timeout = 5 + config.backlight_on_time;
 
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
-        #[derive(Clone)]
-        enum BacklightState {
-            On,
-            DelayOn(Instant),
-            Off,
-        }
-
-        #[derive(Clone)]
-        struct ScreenState {
-            interaction: Option<Instant>,
-            message: Option<Instant>,
-            backlight: BacklightState,
-            screen_on: bool,
-        }
-
-        impl ScreenState {
-            const fn should_be_on(&self) -> bool {
-                self.interaction.is_some() || self.message.is_some()
-            }
-
-            const fn should_be_off(&self) -> bool {
-                !self.should_be_on()
-            }
-
-            const fn is_on(&self) -> bool {
-                matches!(
-                    self.backlight,
-                    BacklightState::On | BacklightState::DelayOn(_)
-                )
-            }
-
-            const fn is_off(&self) -> bool {
-                !self.is_on()
-            }
-
-            async fn sync(&mut self, handle_weak: Weak<slint::AppWindow>, config: &LoadedConfig) {
-                let turn_on_display = self.should_be_on() && !self.is_on();
-                let turn_off_display = self.should_be_off() && !self.is_off();
-
-                if turn_on_display {
-                    self.backlight =
-                        BacklightState::DelayOn(instant_from_now(config.backlight_on_time));
-                    turn_display_on(&config.programs).await;
-                } else if turn_off_display {
-                    self.screen_on = false;
-                    self.backlight = BacklightState::Off;
-                    turn_display_off(&config.programs).await;
-                }
-
-                let screen_on = self.screen_on;
-                let message_on = self.message.is_some();
-                handle_weak
-                    .upgrade_in_event_loop(move |handle| {
-                        handle.set_display_message(message_on);
-                        handle.set_screen_on(screen_on);
-                    })
-                    .unwrap();
-            }
-        }
-
-        async fn interaction_timer_wait(state: &ScreenState) -> Option<()> {
-            match state.interaction {
-                Some(instant) => {
-                    sleep_until(instant).await;
-                    Some(())
-                }
-                None => None,
-            }
-        }
-
-        async fn message_timer_wait(state: &ScreenState) -> Option<()> {
-            match state.message {
-                Some(instant) => {
-                    sleep_until(instant).await;
-                    Some(())
-                }
-                None => None,
-            }
-        }
-
-        async fn backlight_wait(state: &ScreenState) -> Option<()> {
-            match state.backlight {
-                BacklightState::DelayOn(instant) => {
-                    sleep_until(instant).await;
-                    Some(())
-                }
-                _ => None,
-            }
-        }
-
         let mut state = ScreenState {
             interaction: Some(instant_from_now(screen_on_timeout)),
             message: None,
@@ -529,12 +478,99 @@ pub fn run_gui(
             }
         }
     });
-
-    ui.run().unwrap();
 }
 
 fn instant_from_now(secs: u64) -> Instant {
     Instant::now() + Duration::from_secs(secs)
+}
+
+#[derive(Clone)]
+enum BacklightState {
+    On,
+    DelayOn(Instant),
+    Off,
+}
+
+#[derive(Clone)]
+struct ScreenState {
+    interaction: Option<Instant>,
+    message: Option<Instant>,
+    backlight: BacklightState,
+    screen_on: bool,
+}
+
+impl ScreenState {
+    const fn should_be_on(&self) -> bool {
+        self.interaction.is_some() || self.message.is_some()
+    }
+
+    const fn should_be_off(&self) -> bool {
+        !self.should_be_on()
+    }
+
+    const fn is_on(&self) -> bool {
+        matches!(
+            self.backlight,
+            BacklightState::On | BacklightState::DelayOn(_)
+        )
+    }
+
+    const fn is_off(&self) -> bool {
+        !self.is_on()
+    }
+
+    async fn sync(&mut self, handle_weak: Weak<slint::AppWindow>, config: &LoadedConfig) {
+        let turn_on_display = self.should_be_on() && !self.is_on();
+        let turn_off_display = self.should_be_off() && !self.is_off();
+
+        if turn_on_display {
+            self.backlight = BacklightState::DelayOn(instant_from_now(config.backlight_on_time));
+            turn_display_on(&config.programs).await;
+        } else if turn_off_display {
+            self.screen_on = false;
+            self.backlight = BacklightState::Off;
+            turn_display_off(&config.programs).await;
+        }
+
+        let screen_on = self.screen_on;
+        let message_on = self.message.is_some();
+        handle_weak
+            .upgrade_in_event_loop(move |handle| {
+                handle.set_display_message(message_on);
+                handle.set_screen_on(screen_on);
+            })
+            .unwrap();
+    }
+}
+
+async fn interaction_timer_wait(state: &ScreenState) -> Option<()> {
+    match state.interaction {
+        Some(instant) => {
+            sleep_until(instant).await;
+            Some(())
+        }
+        None => None,
+    }
+}
+
+async fn message_timer_wait(state: &ScreenState) -> Option<()> {
+    match state.message {
+        Some(instant) => {
+            sleep_until(instant).await;
+            Some(())
+        }
+        None => None,
+    }
+}
+
+async fn backlight_wait(state: &ScreenState) -> Option<()> {
+    match state.backlight {
+        BacklightState::DelayOn(instant) => {
+            sleep_until(instant).await;
+            Some(())
+        }
+        _ => None,
+    }
 }
 
 fn get_button_data(
