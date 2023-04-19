@@ -235,63 +235,6 @@ component Clock inherits VerticalLayout {
     Rectangle {
         background: black;
 
-        // hour hand
-        Path {
-            viewbox-height: 100;
-            viewbox-width: 100;
-            width: parent.width;
-            height: parent.height;
-            stroke: red;
-            stroke-width: 10px;
-
-            MoveTo {
-                x: 50;
-                y: 50;
-            }
-            LineTo {
-                x: 50 + sin(360deg*hour/12)*30;
-                y: 50 - cos(360deg*hour/12)*30;
-            }
-
-        }
-
-        // minute hand
-        Path {
-            viewbox-height: 100;
-            viewbox-width: 100;
-            width: parent.width;
-            height: parent.height;
-            stroke: green;
-            stroke-width: 5px;
-
-            MoveTo {
-                x: 50;
-                y: 50;
-            }
-            LineTo {
-                x: 50 + sin(360deg*minute/60)*40;
-                y: 50 - cos(360deg*minute/60)*40;
-            }
-        }
-
-        // second hand
-        Path {
-            viewbox-height: 100;
-            viewbox-width: 100;
-            width: parent.width;
-            height: parent.height;
-            stroke: blue;
-            stroke-width: 1px;
-
-            MoveTo {
-                x: 50;
-                y: 50;
-            }
-            LineTo {
-                x: 50 + sin(360deg*second/60)*50;
-                y: 50 - cos(360deg*second/60)*50;
-            }
-        }
 
         // hour marks
         for hour in [1,2,3,4,5,6,7,8,9,10,11,12] : Path {
@@ -378,6 +321,63 @@ component Clock inherits VerticalLayout {
             }
         }
 
+        // hour hand
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: red;
+            stroke-width: 10px;
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: 50 + sin(360deg*hour/12)*30;
+                y: 50 - cos(360deg*hour/12)*30;
+            }
+
+        }
+
+        // minute hand
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: green;
+            stroke-width: 5px;
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: 50 + sin(360deg*minute/60)*40;
+                y: 50 - cos(360deg*minute/60)*40;
+            }
+        }
+
+        // second hand
+        Path {
+            viewbox-height: 100;
+            viewbox-width: 100;
+            width: parent.width;
+            height: parent.height;
+            stroke: blue;
+            stroke-width: 1px;
+
+            MoveTo {
+                x: 50;
+                y: 50;
+            }
+            LineTo {
+                x: 50 + sin(360deg*second/60)*50;
+                y: 50 - cos(360deg*second/60)*50;
+            }
+        }
     }
 }
 
