@@ -10,7 +10,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
-    flake-utils.lib.eachSystem flake-utils.lib.allSystems (system:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -33,8 +33,23 @@
         # all of that work (e.g. via cachix) when running in CI
         cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
 
-        pkg = craneLib.buildPackage {
+        # Run clippy (and deny all warnings) on the crate source.
+        clippy = craneLib.cargoClippy {
           inherit cargoArtifacts src;
+          cargoClippyExtraArgs = "-- --deny warnings";
+        };
+
+        # Next, we want to run the tests and collect code-coverage, _but only if
+        # the clippy checks pass_ so we do not waste any extra cycles.
+        coverage = craneLib.cargoTarpaulin {
+          inherit src;
+          cargoArtifacts = clippy;
+        };
+
+        # Build the actual crate itself, _but only if the previous tests pass_.
+        pkg = craneLib.buildPackage {
+          inherit src;
+          cargoArtifacts = coverage;
           cargoExtraArgs = "-p robotica-slint";
 
           # Add extra inputs here or any other derivation settings
@@ -63,7 +78,9 @@
         '';
 
       in {
-        devShell = pkgs.mkShell {
+        checks = { inherit clippy coverage pkg; };
+
+        devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             rust-analyzer
             pkgconfig
