@@ -120,6 +120,7 @@ pub struct ProgramsConfig {
 #[derive(Deserialize)]
 pub struct Config {
     number_per_row: u8,
+    backlight_on_time: u64,
     buttons: Vec<WidgetConfig>,
     programs: ProgramsConfig,
 }
@@ -132,9 +133,10 @@ pub struct LoadedProgramsConfig {
 
 #[derive()]
 pub struct LoadedConfig {
-    pub number_per_row: u8,
-    pub buttons: Vec<WidgetConfig>,
-    pub programs: LoadedProgramsConfig,
+    number_per_row: u8,
+    backlight_on_time: u64,
+    buttons: Vec<WidgetConfig>,
+    programs: LoadedProgramsConfig,
 }
 
 impl TryFrom<Config> for LoadedConfig {
@@ -147,6 +149,7 @@ impl TryFrom<Config> for LoadedConfig {
         };
         Ok(Self {
             number_per_row: config.number_per_row,
+            backlight_on_time: config.backlight_on_time,
             buttons: config.buttons,
             programs,
         })
@@ -224,6 +227,7 @@ pub fn run_gui(
     };
 
     let ui = slint::AppWindow::new().unwrap();
+    ui.set_screen_on(true);
     ui.set_number_per_row(config.number_per_row.into());
     ui.hide().unwrap();
 
@@ -375,46 +379,73 @@ pub fn run_gui(
         }
     });
 
+    let screen_on_timeout = 30;
+    let screen_message_timeout = 5 + config.backlight_on_time;
+
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         #[derive(Clone)]
+        enum BacklightState {
+            On,
+            DelayOn(Instant),
+            Off,
+        }
+
+        #[derive(Clone)]
         struct ScreenState {
-            on: Option<Instant>,
+            interaction: Option<Instant>,
             message: Option<Instant>,
+            backlight: BacklightState,
+            screen_on: bool,
         }
 
         impl ScreenState {
+            const fn should_be_on(&self) -> bool {
+                self.interaction.is_some() || self.message.is_some()
+            }
+
+            const fn should_be_off(&self) -> bool {
+                !self.should_be_on()
+            }
+
             const fn is_on(&self) -> bool {
-                self.on.is_some() || self.message.is_some()
+                matches!(
+                    self.backlight,
+                    BacklightState::On | BacklightState::DelayOn(_)
+                )
             }
 
             const fn is_off(&self) -> bool {
                 !self.is_on()
             }
 
-            async fn sync(
-                &mut self,
-                prev: Self,
-                handle_weak: Weak<slint::AppWindow>,
-                config: &LoadedConfig,
-            ) {
-                if self.message.is_none() && prev.message.is_some() {
-                    handle_weak
-                        .upgrade_in_event_loop(|handle| {
-                            handle.set_display_message(false);
-                        })
-                        .unwrap();
+            async fn sync(&mut self, handle_weak: Weak<slint::AppWindow>, config: &LoadedConfig) {
+                let turn_on_display = self.should_be_on() && !self.is_on();
+                let turn_off_display = self.should_be_off() && !self.is_off();
+
+                if turn_on_display {
+                    self.backlight =
+                        BacklightState::DelayOn(instant_from_now(config.backlight_on_time));
+                    turn_display_on(&config.programs).await;
+                } else if turn_off_display {
+                    self.screen_on = false;
+                    self.backlight = BacklightState::Off;
+                    turn_display_off(&config.programs).await;
                 }
-                if self.is_on() && prev.is_off() {
-                    turn_screen_on(handle_weak, &config.programs).await;
-                } else if self.is_off() && prev.is_on() {
-                    turn_screen_off(handle_weak, &config.programs).await;
-                }
+
+                let screen_on = self.screen_on;
+                let message_on = self.message.is_some();
+                handle_weak
+                    .upgrade_in_event_loop(move |handle| {
+                        handle.set_display_message(message_on);
+                        handle.set_screen_on(screen_on);
+                    })
+                    .unwrap();
             }
         }
 
-        async fn on_timer_wait(state: &ScreenState) -> Option<()> {
-            match state.on {
+        async fn interaction_timer_wait(state: &ScreenState) -> Option<()> {
+            match state.interaction {
                 Some(instant) => {
                     sleep_until(instant).await;
                     Some(())
@@ -433,53 +464,77 @@ pub fn run_gui(
             }
         }
 
+        async fn backlight_wait(state: &ScreenState) -> Option<()> {
+            match state.backlight {
+                BacklightState::DelayOn(instant) => {
+                    sleep_until(instant).await;
+                    Some(())
+                }
+                _ => None,
+            }
+        }
+
         let mut state = ScreenState {
-            on: Some(Instant::now() + Duration::from_secs(30)),
+            interaction: Some(instant_from_now(screen_on_timeout)),
             message: None,
+            backlight: BacklightState::On,
+            screen_on: true,
         };
         let mut rx_screen_command = rx_screen_command;
 
         loop {
-            let prev = state.clone();
-
             select! {
+                // We received an external request.
                 Some(command) = rx_screen_command.recv() => {
                     match command {
                         ScreenCommand::TurnOn => {
-                            state.on = Some(Instant::now() + Duration::from_secs(30));
+                            state.interaction = Some(instant_from_now(screen_on_timeout));
                             state.message = None;
                         }
                         ScreenCommand::Message(message) => {
                             let (title, body, _priority) = message.into_owned();
-
-                            state.message = Some(Instant::now() + Duration::from_secs(5));
+                            state.message = Some(instant_from_now(screen_message_timeout));
                             handle_weak
                                 .upgrade_in_event_loop(|handle| {
                                     handle.set_msg_title(title.into());
                                     handle.set_msg_body(body.into());
-                                    handle.set_display_message(true);
                                 })
                                 .unwrap();
                         }
                     }
                     let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak, &config).await;
+                    state.sync(handle_weak, &config).await;
                 }
-                Some(_) = on_timer_wait(&state) => {
-                    state.on = None;
+
+                // Interaction timer has expired to turn display off.
+                Some(_) = interaction_timer_wait(&state) => {
+                    state.interaction = None;
                     let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak, &config).await;
+                    state.sync(handle_weak, &config).await;
                 }
+
+                // Timer has expired to turn off message.
                 Some(_) = message_timer_wait(&state) => {
                     state.message = None;
                     let handle_weak = handle_weak.clone();
-                    state.sync(prev, handle_weak, &config).await;
+                    state.sync(handle_weak, &config).await;
+                }
+
+                // Timer has expired to indicate backlight should be on.
+                Some(_) = backlight_wait(&state) => {
+                    state.screen_on = true;
+                    let handle_weak = handle_weak.clone();
+                    state.sync(handle_weak, &config).await;
                 }
             }
         }
     });
 
     ui.run().unwrap();
+}
+
+fn instant_from_now(secs: u64) -> Instant {
+    Instant::now() + Duration::from_secs(secs)
 }
 
 fn get_button_data(
@@ -666,32 +721,20 @@ const fn get_image<'a>(
     }
 }
 
-async fn turn_screen_off(handle_weak: Weak<slint::AppWindow>, programs: &LoadedProgramsConfig) {
+async fn turn_display_off(programs: &LoadedProgramsConfig) {
     info!("Turning off display");
     let cmd = programs.turn_screen_off.to_line();
     info!("Done turning off display");
     if let Err(err) = cmd.run().await {
         error!("Error turning off display: {}", err);
     };
-
-    handle_weak
-        .upgrade_in_event_loop(|handle| {
-            handle.set_screen_off(true);
-        })
-        .unwrap();
 }
 
-async fn turn_screen_on(handle_weak: Weak<slint::AppWindow>, programs: &LoadedProgramsConfig) {
+async fn turn_display_on(programs: &LoadedProgramsConfig) {
     info!("Turning on display");
     let cmd = programs.turn_screen_on.to_line();
     info!("Done turning on display");
     if let Err(err) = cmd.run().await {
         error!("Error turning on display: {}", err);
     };
-
-    handle_weak
-        .upgrade_in_event_loop(|handle| {
-            handle.set_screen_off(false);
-        })
-        .unwrap();
 }

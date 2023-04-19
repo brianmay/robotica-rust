@@ -330,7 +330,7 @@ component Clock inherits VerticalLayout {
 
 export component AppWindow inherits Window {
     in-out property<int> number_per_row;
-    in property<bool> screen_off;
+    in property<bool> screen_on;
     in property<string> msg_body;
     in property<string> msg_title;
     in property<bool> display_message;
@@ -360,7 +360,7 @@ export component AppWindow inherits Window {
         tomorrow: [],
     };
 
-    if !screen_off : TouchArea {
+    TouchArea {
         clicked => {
             screen_reset();
         }
@@ -444,7 +444,7 @@ export component AppWindow inherits Window {
         }
     }
 
-    if screen_off : Rectangle {
+    if !screen_on : Rectangle {
         x: 0px;
         y: 0px;
         width: parent.width;
@@ -453,7 +453,7 @@ export component AppWindow inherits Window {
         opacity: 0.9;
     }
 
-    if screen_off || display_message : TouchArea {
+    if !screen_on || display_message : TouchArea {
         clicked => {
             screen_reset();
         }
