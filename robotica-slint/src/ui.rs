@@ -217,17 +217,21 @@ pub fn run_gui(
     ui.hide().unwrap();
 
     let icons = ui.get_all_icons();
+    let mut id = 0;
 
     let all_buttons: Vec<slint::ButtonRowData> = config
         .buttons
         .iter()
         .map(|rc| {
-            // FIXME
             let buttons: Vec<slint::ButtonData> = rc
                 .buttons
                 .iter()
-                .map(|button| get_button_data(0, button, DisplayState::Unknown, &icons))
+                .enumerate()
+                .map(|(col, button)| {
+                    get_button_data(id + col, button, DisplayState::Unknown, &icons)
+                })
                 .collect();
+            id += buttons.len();
 
             let b: VecModel<slint::ButtonData> = VecModel::from(buttons);
             let c: ModelRc<slint::ButtonData> = ModelRc::new(b);
