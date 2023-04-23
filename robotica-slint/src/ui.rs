@@ -37,10 +37,7 @@ use crate::{
     partial_command::{self, PartialLine},
     RunningState,
 };
-use ::slint::{
-    ComponentHandle, Image, Model, ModelRc, RgbaColor, SharedPixelBuffer, SharedString, VecModel,
-    Weak,
-};
+use ::slint::{ComponentHandle, Model, ModelRc, RgbaColor, SharedString, VecModel, Weak};
 use chrono::{Local, Timelike};
 use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
@@ -99,19 +96,10 @@ pub struct ButtonConfig {
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize, Clone)]
-pub struct TitleConfig {
+#[derive(Deserialize)]
+pub struct ButtonRowConfig {
     title: String,
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize, Clone)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum WidgetConfig {
-    Button(Arc<ButtonConfig>),
-    Title(TitleConfig),
-    Nil,
+    buttons: Vec<Arc<ButtonConfig>>,
 }
 
 #[derive(Deserialize)]
@@ -124,7 +112,7 @@ pub struct ProgramsConfig {
 pub struct Config {
     number_per_row: u8,
     backlight_on_time: u64,
-    buttons: Vec<WidgetConfig>,
+    buttons: Vec<ButtonRowConfig>,
     programs: ProgramsConfig,
 }
 
@@ -138,8 +126,15 @@ pub struct LoadedProgramsConfig {
 pub struct LoadedConfig {
     number_per_row: u8,
     backlight_on_time: u64,
-    buttons: Vec<WidgetConfig>,
+    buttons: Vec<ButtonRowConfig>,
     programs: LoadedProgramsConfig,
+}
+
+pub struct Button {
+    row: usize,
+    col: usize,
+    config: Arc<ButtonConfig>,
+    rx_click: mpsc::Receiver<()>,
 }
 
 impl TryFrom<Config> for LoadedConfig {
@@ -218,28 +213,59 @@ pub fn run_gui(
 
     let ui = slint::AppWindow::new().unwrap();
     ui.set_screen_on(true);
-    ui.set_number_per_row(config.number_per_row.into());
+    ui.set_number_per_row(i32::from(config.number_per_row));
     ui.hide().unwrap();
 
     let icons = ui.get_all_icons();
 
-    let all_widgets: Vec<slint::WidgetData> = config
+    let all_buttons: Vec<slint::ButtonRowData> = config
         .buttons
         .iter()
-        .map(|wc| match wc {
-            WidgetConfig::Button(bc) => {
-                let display_state = DisplayState::Unknown;
-                get_button_data(bc, display_state, &icons)
+        .map(|rc| {
+            // FIXME
+            let buttons: Vec<slint::ButtonData> = rc
+                .buttons
+                .iter()
+                .map(|button| get_button_data(0, button, DisplayState::Unknown, &icons))
+                .collect();
+
+            let b: VecModel<slint::ButtonData> = VecModel::from(buttons);
+            let c: ModelRc<slint::ButtonData> = ModelRc::new(b);
+
+            slint::ButtonRowData {
+                title: rc.title.clone().into(),
+                buttons: c,
             }
-            WidgetConfig::Title(title) => get_title_data(title),
-            WidgetConfig::Nil => get_nil_data(),
         })
         .collect();
-    ui.set_widgets(ModelRc::new(VecModel::from(all_widgets)));
 
-    let (tx_click, rx_click) = create_button_click_pipes(&config);
-    monitor_buttons_presses(&ui, tx_click);
-    monitor_buttons_state(&config, rx_click, &state, &ui);
+    ui.set_buttons(ModelRc::new(VecModel::from(all_buttons)));
+
+    let tx_buttons: Vec<(mpsc::Sender<()>, Button)> = {
+        config
+            .buttons
+            .iter()
+            .enumerate()
+            .flat_map(|(row, rc)| {
+                rc.buttons.iter().enumerate().map(move |(col, bd)| {
+                    let (tx_click, rx_click) = mpsc::channel::<()>(1);
+                    (
+                        tx_click,
+                        Button {
+                            row,
+                            col,
+                            rx_click,
+                            config: bd.clone(),
+                        },
+                    )
+                })
+            })
+            .collect()
+    };
+
+    let (tx_clicks, buttons): (Vec<_>, Vec<_>) = tx_buttons.into_iter().unzip();
+    monitor_buttons_presses(&ui, tx_clicks);
+    monitor_buttons_state(buttons, &state, &ui);
 
     monitor_screen_reset(&state, &ui);
     monitor_tags(&state.mqtt, &ui);
@@ -247,23 +273,6 @@ pub fn run_gui(
     monitor_display(config, &ui, rx_screen_command);
 
     ui.run().unwrap();
-}
-
-fn create_button_click_pipes(
-    config: &Arc<LoadedConfig>,
-) -> (Vec<mpsc::Sender<()>>, Vec<mpsc::Receiver<()>>) {
-    let (tx_click, rx_click) = {
-        let len = config.buttons.len();
-        let mut rx_click = Vec::with_capacity(len);
-        let mut tx_click = Vec::with_capacity(len);
-        for _ in 0..len {
-            let (tx, rx) = mpsc::channel::<()>(1);
-            rx_click.push(rx);
-            tx_click.push(tx);
-        }
-        (tx_click, rx_click)
-    };
-    (tx_click, rx_click)
 }
 
 fn monitor_screen_reset(state: &Arc<RunningState>, ui: &slint::AppWindow) {
@@ -290,75 +299,69 @@ fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>
     });
 }
 
-fn monitor_buttons_state(
-    config: &Arc<LoadedConfig>,
-    rx_click: Vec<mpsc::Receiver<()>>,
-    state: &Arc<RunningState>,
-    ui: &slint::AppWindow,
-) {
-    for (i, (lbc, rx_click)) in config.buttons.iter().zip(rx_click).enumerate() {
-        if let WidgetConfig::Button(lbc) = lbc {
-            let lbc = lbc.clone();
-            let state = state.clone();
-            let handle_weak = ui.as_weak();
-            let mut rx_click = rx_click;
+fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &slint::AppWindow) {
+    for (id, button) in buttons.into_iter().enumerate() {
+        let state = state.clone();
+        let handle_weak = ui.as_weak();
 
-            tokio::spawn(async move {
-                let lbc = lbc;
+        tokio::spawn(async move {
+            let button = button;
+            let mut rx_click = button.rx_click;
+            let lbc = &button.config;
 
-                let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
-                    ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
-                    ControllerConfig::Light2(config) => Box::new(config.create_controller()),
-                    ControllerConfig::Switch(config) => Box::new(config.create_controller()),
-                    ControllerConfig::Music2(config) => Box::new(config.create_controller()),
-                    ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
-                };
+            let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
+                ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
+                ControllerConfig::Light2(config) => Box::new(config.create_controller()),
+                ControllerConfig::Switch(config) => Box::new(config.create_controller()),
+                ControllerConfig::Music2(config) => Box::new(config.create_controller()),
+                ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
+            };
 
-                let requested_subscriptions = controller.get_subscriptions();
+            let requested_subscriptions = controller.get_subscriptions();
 
-                let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
-                for s in controller.get_subscriptions() {
-                    let label = s.label;
-                    let s = state.mqtt.subscribe(s.topic).await.unwrap();
-                    let s = s.subscribe().await;
-                    subscriptions.push((label, s));
-                }
+            let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
+            for s in controller.get_subscriptions() {
+                let label = s.label;
+                let s = state.mqtt.subscribe(s.topic).await.unwrap();
+                let s = s.subscribe().await;
+                subscriptions.push((label, s));
+            }
 
-                loop {
-                    let f = subscriptions
-                        .iter_mut()
-                        .map(|(label, s)| receive(*label, s))
-                        .map(futures::FutureExt::boxed);
+            loop {
+                let f = subscriptions
+                    .iter_mut()
+                    .map(|(label, s)| receive(*label, s))
+                    .map(futures::FutureExt::boxed);
 
-                    select! {
-                        _ = rx_click.recv() => {
-                            controller.get_press_commands().into_iter().for_each(|message| {
-                                state.mqtt.try_send(message);
-                            });
-                        }
+                select! {
+                    _ = rx_click.recv() => {
+                        controller.get_press_commands().into_iter().for_each(|message| {
+                            state.mqtt.try_send(message);
+                        });
+                    }
 
-                        Ok((label, msg)) = select_ok(f) => {
-                            controller.process_message(label, msg);
+                    Ok((label, msg)) = select_ok(f) => {
+                        controller.process_message(label, msg);
 
-                            let display_state = controller.get_display_state();
-                            let lbc = lbc.clone();
-                            handle_weak
-                                .upgrade_in_event_loop(move |handle| {
-                                    let icons = handle.get_all_icons();
-                                    let button = get_button_data(&lbc, display_state, &icons);
-                                    // let all_buttons = vec![button];
+                        let display_state = controller.get_display_state();
+                        let lbc = button.config.clone();
+                        handle_weak
+                            .upgrade_in_event_loop(move |handle| {
+                                let icons = handle.get_all_icons();
+                                let bd = get_button_data(id, &lbc, display_state, &icons);
 
-                                    let buttons = handle.get_widgets();
-                                    buttons.set_row_data(i, button);
-                                    // *dst = button;
-                                    // ui.set_buttons
-                                })
-                                .unwrap();
-                        }
+                                let row = button.row;
+                                let col = button.col;
+                                let buttons = handle.get_buttons();
+                                if let Some(br) = buttons.row_data(row) {
+                                    br.buttons.set_row_data(col, bd);
+                                }
+                            })
+                            .unwrap();
                     }
                 }
-            });
-        }
+            }
+        });
     }
 }
 
@@ -574,19 +577,23 @@ async fn backlight_wait(state: &ScreenState) -> Option<()> {
 }
 
 fn get_button_data(
+    id: usize,
     lbc: &ButtonConfig,
     display_state: DisplayState,
     images: &slint::AllIcons,
-) -> slint::WidgetData {
+) -> slint::ButtonData {
     #[allow(clippy::redundant_clone)]
     let image = get_image(lbc, display_state, images).clone();
     let state = get_state_text(display_state).into();
     let color = get_color(display_state).into();
     let text_color = get_text_color(display_state).into();
 
-    slint::WidgetData {
-        is_button: true,
-        is_title: false,
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_wrap)]
+    let id = id as i32;
+
+    slint::ButtonData {
+        id,
         image,
         title: lbc.title.clone().into(),
         state,
@@ -595,68 +602,12 @@ fn get_button_data(
     }
 }
 
-fn get_title_data(lbc: &TitleConfig) -> slint::WidgetData {
-    let x = SharedPixelBuffer::new(1, 1);
-    let y = Image::from_rgba8(x);
-
-    #[allow(clippy::redundant_clone)]
-    slint::WidgetData {
-        is_button: false,
-        is_title: true,
-        image: y,
-        title: lbc.title.clone().into(),
-        state: "".into(),
-        color: RgbaColor {
-            red: 30u8,
-            green: 30u8,
-            blue: 30u8,
-            alpha: 255u8,
-        }
-        .into(),
-        text_color: RgbaColor {
-            red: 255u8,
-            green: 255u8,
-            blue: 255u8,
-            alpha: 255u8,
-        }
-        .into(),
-    }
-}
-
-fn get_nil_data() -> slint::WidgetData {
-    let x = SharedPixelBuffer::new(1, 1);
-    let y = Image::from_rgba8(x);
-
-    #[allow(clippy::redundant_clone)]
-    slint::WidgetData {
-        is_button: false,
-        is_title: true,
-        image: y,
-        title: "".into(),
-        state: "".into(),
-        color: RgbaColor {
-            red: 30u8,
-            green: 30u8,
-            blue: 30u8,
-            alpha: 255u8,
-        }
-        .into(),
-        text_color: RgbaColor {
-            red: 0u8,
-            green: 0u8,
-            blue: 0u8,
-            alpha: 255u8,
-        }
-        .into(),
-    }
-}
-
 const fn get_color(display_state: DisplayState) -> RgbaColor<u8> {
     match display_state {
         DisplayState::HardOff => RgbaColor {
-            red: 30u8,
-            green: 30u8,
-            blue: 30u8,
+            red: 0x20u8,
+            green: 0x20u8,
+            blue: 0x20u8,
             alpha: 255u8,
         },
         DisplayState::Error => RgbaColor {

@@ -1,4 +1,4 @@
-import { ScrollView, TabWidget, VerticalBox } from "std-widgets.slint";
+import { ScrollView, TabWidget, VerticalBox , HorizontalBox} from "std-widgets.slint";
 
 struct Icon {
     on: image,
@@ -18,14 +18,18 @@ struct AllIcons {
     tv: Icon,
 }
 
-struct WidgetData {
-    is_button: bool,
-    is_title: bool,
+struct ButtonData {
     title: string,
     state: string,
     image: image,
     color: color,
     text_color: color,
+    id: int,
+}
+
+struct ButtonRowData {
+    title: string,
+    buttons: [ButtonData],
 }
 
 struct TagsData {
@@ -36,18 +40,16 @@ struct TagsData {
 
 component RoboticaButton inherits Rectangle {
     callback clicked;
-    in property<image> icon;
-    in property<string> title;
-    in property<string> state;
-    in property<color> text_color;
+    in property<ButtonData> data;
 
     height: 80px;
     width: 80px;
     border-radius: 5px;
+    background: data.color;
     animate background { duration: 200ms; }
 
     Image {
-        source: icon;
+        source: data.image;
         x: parent.width/2 - self.width/2;
         y: 4px;
         width: 52px;
@@ -55,23 +57,23 @@ component RoboticaButton inherits Rectangle {
     }
 
     Text {
-        text: title;
+        text: data.title;
         x: 0px;
         y: parent.height - 20px - 4px;
         width: parent.width;
         // height: parent.height;
-        color: text_color;
+        color: data.text_color;
         font-size: 10px;
         horizontal-alignment: center;
     }
 
     Text {
-        text: state;
+        text: data.state;
         x: 0px;
         y: parent.height - 10px - 4px;
         width: parent.width;
         // height: parent.height;
-        color: text_color;
+        color: data.text_color;
         font-size: 10px;
         horizontal-alignment: center;
     }
@@ -87,11 +89,11 @@ component RoboticaButton inherits Rectangle {
 component Title inherits Rectangle {
     callback clicked;
     in property<string> title;
-    in property<color> text_color;
 
     height: 80px;
     width: 80px;
     border-radius: 5px;
+    background: #202020;
     animate background { duration: 200ms; }
 
     Text {
@@ -100,50 +102,46 @@ component Title inherits Rectangle {
         y: parent.height/2 - 10px/2;
         width: parent.width;
         // height: parent.height;
-        color: text_color;
+        color: white;
         font-size: 10px;
         horizontal-alignment: center;
     }
 }
 
-component Widget inherits VerticalLayout {
-    in property<WidgetData> widget;
-    callback clicked;
-
-    if widget.is_button : RoboticaButton {
-        icon: widget.image;
-        background: widget.color;
-        text_color: widget.text_color;
-        title: widget.title;
-        state: widget.state;
-        clicked => {
-            root.clicked();
-        }
-    }
-
-    if widget.is_title : Title {
-        background: widget.color;
-        text_color: widget.text_color;
-        title: widget.title;
-    }
-}
-
 component Buttons inherits ScrollView {
-    in-out property<int> number_per_row;
-    in property <[WidgetData]> widgets: [];
+    in property <[ButtonRowData]> rows: [];
     callback screen_reset;
     callback clicked_widget(int);
+    in property<int> number_per_row;
 
-    viewport-width: number_per_row * 90px + 10px;
-    viewport-height: floor(widgets.length / number_per_row) * 90px;
+    viewport-width: (80px + 10px) * number_per_row + 10px;
+    viewport-height: (80px + 10px) * rows.length + 10px;
 
-    for widget[i] in widgets : Widget {
-        widget: widget;
-        x: mod(i, number_per_row) * 90px + 10px;
-        y: floor(i / number_per_row) * 90px + 10px;
-        clicked => {
-            screen_reset();
-            root.clicked_widget(i);
+    VerticalLayout {
+        padding: 10px;
+        spacing: 10px;
+
+        for row[i] in rows : HorizontalLayout {
+            spacing: 10px;
+
+            Title {
+                title: row.title;
+                clicked => {
+                    screen_reset();
+                }
+            }
+            for column[i] in row.buttons : RoboticaButton{
+                data: column;
+                clicked => {
+                    screen_reset();
+                    root.clicked_widget(column.id);
+                }
+            }
+            for x in number_per_row - row.buttons.length : Rectangle {
+                width: 80px;
+                height: 80px;
+                background: #202020;
+            }
         }
     }
 }
@@ -406,7 +404,7 @@ export component AppWindow inherits Window {
         tv: { on: @image-url("images/tv_on.svg"), off: @image-url("images/tv_off.svg"), auto_off: @image-url("images/tv_auto.svg"), error: @image-url("images/tv_error.svg") },
     };
 
-    in property <[WidgetData]> widgets: [];
+    in property <[ButtonRowData]> buttons: [];
     in property <TagsData> tags: {
         yesterday: [],
         today: [],
@@ -438,8 +436,8 @@ export component AppWindow inherits Window {
             title: "Buttons";
 
             Buttons {
-                number_per_row: root.number_per_row;
-                widgets: root.widgets;
+                rows: buttons;
+                number_per_row: number_per_row;
                 screen_reset => {
                     root.screen_reset();
                 }
