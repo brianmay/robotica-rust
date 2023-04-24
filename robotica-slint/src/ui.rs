@@ -50,9 +50,10 @@ use robotica_common::{
     controllers::{
         hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
     },
+    datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     robotica::audio::Message,
-    scheduler::Tags,
+    scheduler::{Sequence, Tags},
 };
 use tokio::{
     select,
@@ -273,6 +274,7 @@ pub fn run_gui(
 
     monitor_screen_reset(&state, &ui);
     monitor_tags(&state.mqtt, &ui);
+    monitor_schedule(&state.mqtt, &ui);
     monitor_time(&ui);
     monitor_display(config, &ui, rx_screen_command);
 
@@ -386,6 +388,44 @@ fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
                 .upgrade_in_event_loop(move |handle| {
                     let tags: slint::TagsData = msg.into();
                     handle.set_tags(tags);
+                })
+                .unwrap();
+        }
+    });
+}
+
+fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
+    let mqtt = mqtt.clone();
+    let handle_weak = ui.as_weak();
+    tokio::spawn(async move {
+        let rx = mqtt
+            .subscribe_into::<Arc<Json<Vec<Sequence>>>>("schedule/robotica.linuxpenguins.xyz")
+            .await
+            .unwrap();
+        let mut rx = rx.subscribe().await;
+
+        while let Ok(msg) = rx.recv().await {
+            handle_weak
+                .upgrade_in_event_loop(move |handle| {
+                    let Json(schedule) = msg.as_ref();
+                    let schedule: Vec<slint::ScheduleData> = schedule
+                        .iter()
+                        .map(|s| {
+                            let tasks: Vec<SharedString> =
+                                s.tasks.iter().map(|t| t.to_string().into()).collect();
+                            let b: VecModel<SharedString> = VecModel::from(tasks);
+                            let c: ModelRc<SharedString> = ModelRc::new(b);
+
+                            slint::ScheduleData {
+                                time: datetime_to_string(&s.required_time).into(),
+                                tasks: c,
+                            }
+                        })
+                        .collect();
+
+                    let b: VecModel<slint::ScheduleData> = VecModel::from(schedule);
+                    let c: ModelRc<slint::ScheduleData> = ModelRc::new(b);
+                    handle.set_schedule(c);
                 })
                 .unwrap();
         }

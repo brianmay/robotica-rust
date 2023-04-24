@@ -38,6 +38,11 @@ struct TagsData {
     tomorrow: [string],
 }
 
+struct ScheduleData {
+    time: string,
+    tasks: [string],
+}
+
 component RoboticaButton inherits Rectangle {
     callback clicked;
     in property<ButtonData> data;
@@ -219,6 +224,45 @@ component Tags inherits VerticalLayout {
 }
 
 
+component Schedule inherits ScrollView {
+    in property <[ScheduleData]> schedule;
+    callback screen_reset;
+
+    viewport-width: 200px;
+    viewport-height: (90px + 10px) * schedule.length + 10px;
+
+    VerticalLayout {
+        x: 0;
+        y: 0;
+        padding: 10px;
+        spacing: 10px;
+        width: parent.width - 20px;
+
+        for entry[i] in schedule : Rectangle {
+            height: 90px;
+            background: green;
+
+            Text {
+                x: 10px;
+                y: 10px;
+                width: parent.width - 20px;
+                font-size: 10px;
+                text: entry.time;
+                color: white;
+            }
+            for task[i] in entry.tasks : Text{
+                x: 20px;
+                y: 30px + 20px * i;
+                width: parent.width - 40px;
+                font-size: 10px;
+                text: task;
+                color: white;
+            }
+        }
+    }
+}
+
+
 component Clock inherits VerticalLayout {
     in property<int> hour;
     in property<int> minute;
@@ -388,6 +432,7 @@ export component AppWindow inherits Window {
     in property<int> hour;
     in property<int> minute;
     in property<int> second;
+    in property <[ScheduleData]> schedule;
 
     callback clicked_widget(int);
     callback screen_reset;
@@ -451,6 +496,16 @@ export component AppWindow inherits Window {
 
             Tags {
                 tags: root.tags;
+                screen_reset => {
+                    root.screen_reset();
+                }
+            }
+        }
+        Tab {
+            title: "Schedule";
+
+            Schedule {
+                schedule: root.schedule;
                 screen_reset => {
                     root.screen_reset();
                 }
