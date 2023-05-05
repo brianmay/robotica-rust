@@ -23,7 +23,7 @@ serde_path_to_error = "0.1.11"
 gethostname = "0.4.0"
 thiserror = "1.0.40"
 chrono = "0.4.24"
-lalrpop-util = { version = "0.19.7", features = ["lexer"] }
+lalrpop-util = { version = "0.20.0", features = ["lexer"] }
 regex = "1.7.3"
 field-ref = "0.2.1"
 tracing = "0.1.35"
