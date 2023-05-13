@@ -735,14 +735,14 @@ enum ShouldCharge {
     // DontTouch,
 }
 
-const fn should_charge(
+fn should_charge(
     price_category: PriceCategory,
     force_charge: bool,
     tesla_state: &TeslaState,
 ) -> (ShouldCharge, u8) {
     #[allow(clippy::match_same_arms)]
     let requested_charge = match &price_category {
-        PriceCategory::Expensive => RequestedCharge::DontCharge,
+        PriceCategory::Expensive => RequestedCharge::ChargeTo(20),
         PriceCategory::Normal => RequestedCharge::ChargeTo(50),
         PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
         PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
@@ -768,5 +768,7 @@ const fn should_charge(
         (sc @ ShouldCharge::DoNotCharge, _) => sc,
         // (sc @ ShouldCharge::DontTouch, _) => sc,
     };
+
+    let charge_limit = charge_limit.max(50).min(90);
     (should_charge, charge_limit)
 }
