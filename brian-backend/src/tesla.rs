@@ -742,7 +742,7 @@ const fn should_charge(
 ) -> (ShouldCharge, u8) {
     #[allow(clippy::match_same_arms)]
     let requested_charge = match &price_category {
-        PriceCategory::Expensive => RequestedCharge::ChargeTo(20),
+        PriceCategory::Expensive => RequestedCharge::DontCharge,
         PriceCategory::Normal => RequestedCharge::ChargeTo(50),
         PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
         PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
