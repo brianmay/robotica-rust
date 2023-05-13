@@ -288,7 +288,7 @@ struct TeslaState {
     charge_limit: Option<u8>,
     battery_level: Option<u8>,
     charging_state: Option<ChargingStateEnum>,
-    is_home: Option<bool>,
+    is_at_home: Option<bool>,
 }
 
 impl TeslaState {
@@ -393,7 +393,7 @@ pub fn monitor_charging(
             charge_limit: None,
             battery_level: None,
             charging_state: None,
-            is_home: None,
+            is_at_home: None,
         };
 
         let mut interval = PollInterval::Long;
@@ -410,11 +410,12 @@ pub fn monitor_charging(
         // let mut charge_state = None;
         let mut price_category: Option<PriceCategory> = None;
         let mut ps = ps;
-        let mut is_home = false;
 
         // info!("Initial charge state: {charge_state:?}");
 
         loop {
+            let was_at_home = tesla_state.is_at_home;
+
             select! {
                 _ = timer.tick() => {
                     info!("Refreshing state, token expiration: {:?}", token.expires_at);
@@ -465,10 +466,9 @@ pub fn monitor_charging(
                     info!("Charge level: {new_charge_level}");
                     tesla_state.battery_level = Some(new_charge_level);
                 }
-                Ok(new_is_home) = location_charge_s.recv() => {
-                    is_home = new_is_home;
-                    info!("Location is home: {is_home}");
-                    tesla_state.is_home = Some(is_home);
+                Ok(new_is_at_home) = location_charge_s.recv() => {
+                    info!("Location is home: {new_is_at_home}");
+                    tesla_state.is_at_home = Some(new_is_at_home);
                 }
 
                 Ok((old, charging_state)) = charging_state_s.recv_value() => {
@@ -480,7 +480,27 @@ pub fn monitor_charging(
                 }
             }
 
-            let new_interval = if is_home && ps.auto_charge {
+            let is_at_home = tesla_state.is_at_home;
+
+            let new_interval = if was_at_home == Some(true) && is_at_home == Some(false) {
+                // Construct sequence of commands to send to Tesla.
+                let mut sequence = CommandSequence::new();
+
+                // Set charging limit to 90% when car leaves home.
+                sequence.add_wake_up();
+                sequence.add_set_chart_limit(90);
+
+                // Send the commands.
+                info!("Sending left home commands: {sequence:?}");
+                sequence
+                    .execute(&token, car_id)
+                    .await
+                    .unwrap_or_else(|err| {
+                        info!("Error executing command sequence: {}", err);
+                    });
+
+                PollInterval::Long
+            } else if is_at_home == Some(true) && ps.auto_charge {
                 if let Some(price_category) = price_category {
                     let result = check_charge(
                         car_id,
