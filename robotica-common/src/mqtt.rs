@@ -204,6 +204,20 @@ impl TryFrom<MqttMessage> for bool {
 /// A parsed MQTT message.
 pub struct Parsed<Body: FromStr>(pub Body);
 
+impl<T: FromStr + Clone> Clone for Parsed<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: FromStr + PartialEq> PartialEq for Parsed<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl<T: FromStr + Eq> Eq for Parsed<T> {}
+
 /// The error type for u8 conversion
 #[derive(Error, Debug)]
 pub enum ParsedError<ParserError> {

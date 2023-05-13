@@ -3,9 +3,7 @@ use crate::delays::{delay_input, delay_repeat};
 
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
-use robotica_backend::services::tesla::api::{
-    ChargeState, ChargingStateEnum, CommandSequence, Token,
-};
+use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
 use robotica_common::robotica::audio::{Message, MessagePriority};
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
@@ -14,12 +12,12 @@ use std::fmt::Display;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
-use tokio::time::{sleep, Interval};
+use tokio::time::Interval;
 use tracing::{debug, error, info};
 
 use robotica_backend::entities::{create_stateless_entity, StatelessReceiver, StatelessSender};
 use robotica_backend::spawn;
-use robotica_common::mqtt::{BoolError, Json, MqttMessage, QoS};
+use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
 use super::State;
 
@@ -230,50 +228,13 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PollInterval {
     Short,
-    Medium,
     Long,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ChargingState {
-    Disconnected,
-    Charging,
-    NoPower,
-    Complete,
-    Stopped,
-}
-
-/// Charging state error
-#[derive(Debug, Error)]
-pub enum ChargingStateError {
-    #[error("Invalid charging state: {0}")]
-    InvalidChargingState(String),
-
-    #[error("Invalid UTF-8: {0}")]
-    InvalidUtf8(#[from] std::str::Utf8Error),
-}
-
-impl TryFrom<MqttMessage> for ChargingState {
-    type Error = ChargingStateError;
-    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
-        let payload = msg.payload_as_str();
-        match payload {
-            Ok("Disconnected") => Ok(Self::Disconnected),
-            Ok("Charging") => Ok(Self::Charging),
-            Ok("NoPower") => Ok(Self::NoPower),
-            Ok("Complete") => Ok(Self::Complete),
-            Ok("Stopped") => Ok(Self::Stopped),
-            Ok(state) => Err(ChargingStateError::InvalidChargingState(state.to_string())),
-            Err(err) => Err(err.into()),
-        }
-    }
 }
 
 impl From<PollInterval> for Duration {
     fn from(pi: PollInterval) -> Self {
         match pi {
             PollInterval::Short => Self::from_secs(30),
-            PollInterval::Medium => Self::from_secs(60),
             PollInterval::Long => Self::from_secs(5 * 60),
         }
     }
@@ -301,25 +262,39 @@ pub enum MonitorChargingError {
 }
 
 fn announce_charging_state(
-    charging_state: ChargingState,
-    charge_state: &Option<ChargeState>,
+    charging_state: ChargingStateEnum,
+    tesla_state: &TeslaState,
     message_sink: &StatelessSender<Message>,
 ) {
     let msg = match charging_state {
-        ChargingState::Disconnected => "The Tesla is disconnected",
-        ChargingState::Charging => "The Tesla is charging",
-        ChargingState::NoPower => "The Tesla plug failed",
-        ChargingState::Complete => "The Tesla is finished charging",
-        ChargingState::Stopped => "The Tesla has stopped charging",
+        ChargingStateEnum::Disconnected => "The Tesla is disconnected",
+        ChargingStateEnum::Charging => "The Tesla is charging",
+        ChargingStateEnum::NoPower => "The Tesla plug failed",
+        ChargingStateEnum::Complete => "The Tesla is finished charging",
+        ChargingStateEnum::Starting => "The Tesla is starting to charge",
+        ChargingStateEnum::Stopped => "The Tesla has stopped charging",
     };
 
-    let msg = charge_state.as_ref().map_or_else(
-        || msg.to_string(),
-        |charge_state| format!("{msg} at ({}%)", charge_state.battery_level),
-    );
+    let msg = tesla_state
+        .battery_level
+        .map_or_else(|| msg.to_string(), |level| format!("{msg} at ({}%)", level));
 
     let msg = new_message(msg, MessagePriority::DaytimeOnly);
     message_sink.try_send(msg);
+}
+
+#[derive(Debug)]
+struct TeslaState {
+    charge_limit: Option<u8>,
+    battery_level: Option<u8>,
+    charging_state: Option<ChargingStateEnum>,
+    is_home: Option<bool>,
+}
+
+impl TeslaState {
+    fn is_charging(&self) -> bool {
+        self.charging_state.map_or(false, |cs| cs.is_charging())
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -383,9 +358,22 @@ pub fn monitor_charging(
 
     let charging_state_rx = state
         .subscriptions
-        .subscribe_into_stateful::<ChargingState>(&format!(
+        .subscribe_into_stateful::<ChargingStateEnum>(&format!(
             "teslamate/cars/{car_number}/charging_state"
         ));
+
+    let battery_level = state
+        .subscriptions
+        .subscribe_into_stateful::<Parsed<u8>>(&format!(
+            "teslamate/cars/{car_number}/battery_level"
+        ));
+
+    let charge_limit = state
+        .subscriptions
+        .subscribe_into_stateful::<Parsed<u8>>(&format!(
+            "teslamate/cars/{car_number}/charge_limit_soc"
+        ));
+
     let mut token = Token::get(&tesla_secret)?;
 
     spawn(async move {
@@ -401,6 +389,13 @@ pub fn monitor_charging(
             }
         };
 
+        let mut tesla_state = TeslaState {
+            charge_limit: None,
+            battery_level: None,
+            charging_state: None,
+            is_home: None,
+        };
+
         let mut interval = PollInterval::Long;
         let mut timer: Interval = interval.into();
 
@@ -408,14 +403,16 @@ pub fn monitor_charging(
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut force_charge_s = force_charge_rx.subscribe().await;
         let mut location_charge_s = is_home_rx.subscribe().await;
+        let mut battery_level_s = battery_level.subscribe().await;
+        let mut charge_limit_s = charge_limit.subscribe().await;
         let mut charging_state_s = charging_state_rx.subscribe().await;
 
-        let mut charge_state = None;
+        // let mut charge_state = None;
         let mut price_category: Option<PriceCategory> = None;
         let mut ps = ps;
         let mut is_home = false;
 
-        info!("Initial charge state: {charge_state:?}");
+        // info!("Initial charge state: {charge_state:?}");
 
         loop {
             select! {
@@ -440,7 +437,7 @@ pub fn monitor_charging(
                             error!("Error saving persistent state: {}", e);
                         });
                         info!("Auto charge: {}", ps.auto_charge);
-                        update_auto_charge(ps.auto_charge, car_number, &charge_state, &mqtt);
+                        update_auto_charge(ps.auto_charge, car_number, &tesla_state, &mqtt);
                     } else {
                         info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
@@ -455,25 +452,31 @@ pub fn monitor_charging(
                             error!("Error saving persistent state: {}", e);
                         });
                         info!("Force charge: {}", ps.force_charge);
-                        update_force_charge(&charge_state, car_number, ps.force_charge, &mqtt);
+                        update_force_charge(&tesla_state, car_number, ps.force_charge, &mqtt);
                     } else {
                         info!("Ignoring invalid force_charge command: {cmd:?}");
                     }
                 }
+                Ok(Parsed(new_charge_limit)) = charge_limit_s.recv() => {
+                    info!("Charge limit: {new_charge_limit}");
+                    tesla_state.charge_limit = Some(new_charge_limit);
+                }
+                Ok(Parsed(new_charge_level)) = battery_level_s.recv() => {
+                    info!("Charge level: {new_charge_level}");
+                    tesla_state.battery_level = Some(new_charge_level);
+                }
                 Ok(new_is_home) = location_charge_s.recv() => {
                     is_home = new_is_home;
                     info!("Location is home: {is_home}");
-                    // If we left home we don't keep track of the charge state any more.
-                    // If we arrived home we must refresh the charge state.
-                    charge_state = None;
+                    tesla_state.is_home = Some(is_home);
                 }
 
                 Ok((old, charging_state)) = charging_state_s.recv_value() => {
                     info!("Charging state: {charging_state:?}");
                     if old.is_some() {
-                        announce_charging_state(charging_state, &charge_state, &message_sink);
+                        announce_charging_state(charging_state, &tesla_state, &message_sink);
                     }
-                    charge_state = None;
+                    tesla_state.charging_state = Some(charging_state);
                 }
             }
 
@@ -482,14 +485,13 @@ pub fn monitor_charging(
                     let result = check_charge(
                         car_id,
                         &token,
-                        &mut charge_state,
+                        &tesla_state,
                         price_category,
                         ps.force_charge,
                     )
                     .await;
                     match result {
-                        Ok(CheckChargeState::Idle) => PollInterval::Long,
-                        Ok(CheckChargeState::Charging) => PollInterval::Medium,
+                        Ok(()) => PollInterval::Long,
                         Err(CheckChargeError::ScheduleRetry) => PollInterval::Short,
                     }
                 } else {
@@ -498,7 +500,6 @@ pub fn monitor_charging(
                 }
             } else {
                 info!("Skipping charge check");
-                charge_state = None;
                 PollInterval::Long
             };
 
@@ -510,8 +511,8 @@ pub fn monitor_charging(
 
             info!("Next poll {interval:?} {:?}", timer.period());
 
-            update_auto_charge(ps.auto_charge, car_number, &charge_state, &mqtt);
-            update_force_charge(&charge_state, car_number, ps.force_charge, &mqtt);
+            update_auto_charge(ps.auto_charge, car_number, &tesla_state, &mqtt);
+            update_force_charge(&tesla_state, car_number, ps.force_charge, &mqtt);
         }
     });
 
@@ -521,13 +522,10 @@ pub fn monitor_charging(
 fn update_auto_charge(
     auto_charge: bool,
     car_number: usize,
-    charge_state: &Option<ChargeState>,
+    tesla_state: &TeslaState,
     mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
-    let is_charging = charge_state
-        .as_ref()
-        .map_or_else(|| false, |s| s.charging_state.is_charging());
-
+    let is_charging = tesla_state.is_charging();
     let status = match (auto_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
         (true, true) => DevicePower::On,
@@ -549,14 +547,12 @@ fn publish_auto_charge(
 }
 
 fn update_force_charge(
-    charge_state: &Option<ChargeState>,
+    tesla_state: &TeslaState,
     car_number: usize,
     force_charge: bool,
     mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
-    let is_charging = charge_state
-        .as_ref()
-        .map_or_else(|| false, |s| s.charging_state.is_charging());
+    let is_charging = tesla_state.is_charging();
     let status = match (force_charge, is_charging) {
         (true, false) => DevicePower::AutoOff,
         (true, true) => DevicePower::On,
@@ -607,12 +603,6 @@ impl RequestedCharge {
     }
 }
 
-#[derive(Debug)]
-enum CheckChargeState {
-    Idle,
-    Charging,
-}
-
 #[derive(Error, Debug)]
 enum CheckChargeError {
     #[error("Error getting charge state")]
@@ -623,55 +613,28 @@ enum CheckChargeError {
 async fn check_charge(
     car_id: u64,
     token: &Token,
-    charge_state: &mut Option<ChargeState>,
+    tesla_state: &TeslaState,
     price_category: PriceCategory,
     force_charge: bool,
-) -> Result<CheckChargeState, CheckChargeError> {
+) -> Result<(), CheckChargeError> {
     info!("Checking charge");
     let mut rc_err = None;
 
-    // should refresh charge state if we don't have it, or if we're charging.
-    let should_refresh = charge_state
-        .as_ref()
-        .map_or_else(|| true, |s| s.charging_state.is_charging());
-
-    // true state means car is awake; false means not sure.
-    let car_is_awake = if should_refresh {
-        info!("Waking up car");
-        match token.wait_for_wake_up(car_id).await {
-            Ok(_) => {
-                info!("Car is awake; getting charge state");
-                *charge_state = get_charge_state(token, car_id).await;
-                if charge_state.is_none() {
-                    error!("Error getting charge state");
-                    rc_err = Some(CheckChargeError::ScheduleRetry);
-                }
-                true
-            }
-            Err(err) => {
-                error!("Error waking up car: {err}");
-                rc_err = Some(CheckChargeError::ScheduleRetry);
-                false
-            }
-        }
-    } else {
-        false
-    };
-
-    let (should_charge, charge_limit) = should_charge(price_category, force_charge, charge_state);
+    let (should_charge, charge_limit) = should_charge(price_category, force_charge, tesla_state);
 
     // We should not attempt to start charging if charging is complete.
-    let can_start_charge = match charge_state {
-        Some(state) => state.charging_state != ChargingStateEnum::Complete,
+    let charging_state = &tesla_state.charging_state;
+    let can_start_charge = match charging_state {
+        Some(state) => *state != ChargingStateEnum::Complete,
         None => true,
     };
 
-    info!("Current data: {price_category:?}, {charge_state:?}, force charge: {force_charge}");
+    info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}");
     info!("Desired State: should charge: {should_charge}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
-    let set_charge_limit = if let Some(charge_state) = charge_state {
-        charge_state.charge_limit_soc != charge_limit
+    let set_charge_limit = if let Some(current_limit) = tesla_state.charge_limit {
+        current_limit != charge_limit
     } else {
         true
     };
@@ -680,9 +643,7 @@ async fn check_charge(
     let mut sequence = CommandSequence::new();
 
     // Wake up the car if it's not already awake.
-    if !car_is_awake {
-        sequence.add_wake_up();
-    }
+    sequence.add_wake_up();
 
     // Set the charge limit if required.
     if set_charge_limit {
@@ -691,9 +652,8 @@ async fn check_charge(
     }
 
     // Get charging state
-    let charging = charge_state.as_ref().map(|s| s.charging_state);
     #[allow(clippy::match_same_arms)]
-    let charging_summary = match charging {
+    let charging_summary = match charging_state {
         Some(ChargingStateEnum::Starting) => ChargingSummary::Charging,
         Some(ChargingStateEnum::Charging) => ChargingSummary::Charging,
         Some(ChargingStateEnum::Complete) => ChargingSummary::NotCharging,
@@ -735,39 +695,13 @@ async fn check_charge(
         rc_err = Some(CheckChargeError::ScheduleRetry);
     });
 
-    // If we sent any commands, we need to wait for the car to adjust.
-    if !sequence.is_empty() {
-        info!("Sleeping");
-        sleep(Duration::from_secs(10)).await;
-    }
-
-    // Get the charge state again, vehicle should be awake now.
-    //
-    // We do this even if the execute failed, because the execute may have
-    // changed the cars state regardless.
-    if !sequence.is_empty() || charge_state.is_none() {
-        info!("Checking charge state");
-        *charge_state = get_charge_state(token, car_id).await;
-        if charge_state.is_none() {
-            error!("Error getting charge state");
-            rc_err = Some(CheckChargeError::ScheduleRetry);
-        }
-    }
-
     // Generate result.
-    let charging = charge_state.as_ref().map(|s| s.charging_state);
-    let result = match (rc_err, charging) {
+    let result = match rc_err {
         // Something went wrong above, we should retry.
-        (Some(err), _) => Err(err),
+        Some(err) => Err(err),
 
-        // We don't have a valid charge state, we should retry.
-        (None, None) => Err(CheckChargeError::ScheduleRetry),
-
-        // We are charging.
-        (None, Some(s)) if s.is_charging() => Ok(CheckChargeState::Charging),
-
-        // We are not charging.
-        (None, _) => Ok(CheckChargeState::Idle),
+        // Everything is OK. Supposedly.
+        None => Ok(()),
     };
 
     info!("All done. {result:?}");
@@ -777,7 +711,7 @@ async fn check_charge(
 const fn should_charge(
     price_category: PriceCategory,
     force_charge: bool,
-    charge_state: &Option<ChargeState>,
+    tesla_state: &TeslaState,
 ) -> (bool, u8) {
     #[allow(clippy::match_same_arms)]
     let requested_charge = match &price_category {
@@ -795,23 +729,9 @@ const fn should_charge(
         RequestedCharge::DontCharge => (false, 50),
         RequestedCharge::ChargeTo(limit) => (true, limit),
     };
-    let should_charge = match charge_state {
-        Some(state) => should_charge && state.battery_level < charge_limit,
+    let should_charge = match tesla_state.battery_level {
+        Some(level) => should_charge && level < charge_limit,
         None => should_charge,
     };
     (should_charge, charge_limit)
-}
-
-async fn get_charge_state(token: &Token, car_id: u64) -> Option<ChargeState> {
-    info!("Getting charge state");
-    let charge_state = token
-        .get_charge_state(car_id)
-        .await
-        .map_err(|err| {
-            info!("Failed to get charge state: {err}");
-            err
-        })
-        .ok();
-    info!("Got charge state: {charge_state:?}");
-    charge_state
 }

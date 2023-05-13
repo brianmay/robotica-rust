@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use reqwest::Error;
+use robotica_common::mqtt::MqttMessage;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{sleep, Instant};
@@ -183,6 +184,47 @@ impl ChargingStateEnum {
             | ChargingStateEnum::Disconnected
             | ChargingStateEnum::Stopped
             | ChargingStateEnum::NoPower => false,
+        }
+    }
+
+    /// Is the car plugged in?
+    #[must_use]
+    pub const fn is_plugged_in(self) -> bool {
+        match self {
+            ChargingStateEnum::Starting
+            | ChargingStateEnum::Charging
+            | ChargingStateEnum::Complete
+            | ChargingStateEnum::NoPower
+            | ChargingStateEnum::Stopped => true,
+            ChargingStateEnum::Disconnected => false,
+        }
+    }
+}
+
+/// Charging state error
+#[derive(Debug, Error)]
+pub enum ChargingStateError {
+    /// Invalid charging state.
+    #[error("Invalid charging state: {0}")]
+    InvalidChargingState(String),
+
+    /// Invalid UTF-8.
+    #[error("Invalid UTF-8: {0}")]
+    InvalidUtf8(#[from] std::str::Utf8Error),
+}
+
+impl TryFrom<MqttMessage> for ChargingStateEnum {
+    type Error = ChargingStateError;
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        let payload = msg.payload_as_str();
+        match payload {
+            Ok("Disconnected") => Ok(Self::Disconnected),
+            Ok("Charging") => Ok(Self::Charging),
+            Ok("NoPower") => Ok(Self::NoPower),
+            Ok("Complete") => Ok(Self::Complete),
+            Ok("Stopped") => Ok(Self::Stopped),
+            Ok(state) => Err(ChargingStateError::InvalidChargingState(state.to_string())),
+            Err(err) => Err(err.into()),
         }
     }
 }
