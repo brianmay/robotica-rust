@@ -407,11 +407,8 @@ pub fn monitor_charging(
         let mut charge_limit_s = charge_limit.subscribe().await;
         let mut charging_state_s = charging_state_rx.subscribe().await;
 
-        // let mut charge_state = None;
         let mut price_category: Option<PriceCategory> = None;
         let mut ps = ps;
-
-        // info!("Initial charge state: {charge_state:?}");
 
         loop {
             let was_at_home = tesla_state.is_at_home;
@@ -467,7 +464,7 @@ pub fn monitor_charging(
                     tesla_state.battery_level = Some(new_charge_level);
                 }
                 Ok(new_is_at_home) = location_charge_s.recv() => {
-                    info!("Location is home: {new_is_at_home}");
+                    info!("Location is at home: {new_is_at_home}");
                     tesla_state.is_at_home = Some(new_is_at_home);
                 }
 
@@ -601,6 +598,7 @@ async fn get_car_id(token: &mut Token, car_n: usize) -> Result<Option<u64>> {
     Ok(number)
 }
 
+#[allow(dead_code)]
 enum RequestedCharge {
     DontCharge,
     ChargeTo(u8),
@@ -650,7 +648,7 @@ async fn check_charge(
     };
 
     info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}");
-    info!("Desired State: should charge: {should_charge}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
+    info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
     let set_charge_limit = if let Some(current_limit) = tesla_state.charge_limit {
@@ -685,22 +683,24 @@ async fn check_charge(
 
     // Start/stop charging as required.
     #[allow(clippy::match_same_arms)]
+    use ShouldCharge::DoCharge;
+    use ShouldCharge::DoNotCharge;
     match charging_summary {
-        ChargingSummary::Charging if !should_charge => {
+        ChargingSummary::Charging if should_charge == DoNotCharge => {
             info!("Stopping charge");
             sequence.add_charge_stop();
         }
         ChargingSummary::Charging => {}
-        ChargingSummary::NotCharging if should_charge && can_start_charge => {
+        ChargingSummary::NotCharging if should_charge == DoCharge && can_start_charge => {
             info!("Starting charge");
             sequence.add_charge_start();
         }
         ChargingSummary::NotCharging => {}
-        ChargingSummary::Unknown if !should_charge => {
+        ChargingSummary::Unknown if should_charge == DoNotCharge => {
             info!("Stopping charge (unknown)");
             sequence.add_charge_stop();
         }
-        ChargingSummary::Unknown if should_charge && can_start_charge => {
+        ChargingSummary::Unknown if should_charge == DoCharge && can_start_charge => {
             info!("Starting charge (unknown)");
             sequence.add_charge_start();
         }
@@ -728,15 +728,22 @@ async fn check_charge(
     result
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum ShouldCharge {
+    DoCharge,
+    DoNotCharge,
+    // DontTouch,
+}
+
 const fn should_charge(
     price_category: PriceCategory,
     force_charge: bool,
     tesla_state: &TeslaState,
-) -> (bool, u8) {
+) -> (ShouldCharge, u8) {
     #[allow(clippy::match_same_arms)]
     let requested_charge = match &price_category {
-        PriceCategory::Expensive => RequestedCharge::DontCharge,
-        PriceCategory::Normal => RequestedCharge::DontCharge,
+        PriceCategory::Expensive => RequestedCharge::ChargeTo(20),
+        PriceCategory::Normal => RequestedCharge::ChargeTo(50),
         PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
         PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
     };
@@ -746,12 +753,20 @@ const fn should_charge(
         requested_charge
     };
     let (should_charge, charge_limit) = match requested_charge {
-        RequestedCharge::DontCharge => (false, 50),
-        RequestedCharge::ChargeTo(limit) => (true, limit),
+        RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
+        RequestedCharge::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
     };
-    let should_charge = match tesla_state.battery_level {
-        Some(level) => should_charge && level < charge_limit,
-        None => should_charge,
+    let should_charge = match (should_charge, tesla_state.battery_level) {
+        (sc @ ShouldCharge::DoCharge, Some(level)) => {
+            if level < charge_limit {
+                sc
+            } else {
+                ShouldCharge::DoNotCharge
+            }
+        }
+        (sc @ ShouldCharge::DoCharge, None) => sc,
+        (sc @ ShouldCharge::DoNotCharge, _) => sc,
+        // (sc @ ShouldCharge::DontTouch, _) => sc,
     };
     (should_charge, charge_limit)
 }
