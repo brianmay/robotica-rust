@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::mqtt::MqttMessage;
 
-use super::{
+use super::super::{
     get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };

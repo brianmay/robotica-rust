@@ -5,11 +5,7 @@ use crate::mqtt::MqttMessage;
 use serde::Deserialize;
 use tracing::error;
 
-pub mod hdmi;
-pub mod lights2;
-pub mod music;
-pub mod music2;
-pub mod switch;
+pub mod robotica;
 pub mod tasmota;
 
 /// A label is used to identity an incoming MQTT message

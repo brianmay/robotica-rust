@@ -17,7 +17,6 @@ use robotica_backend::services::{
     mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
     persistent_state::PersistentStateDatabase,
 };
-use robotica_common::controllers::{lights2, switch};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
@@ -96,16 +95,4 @@ fn start_services(config: &LoadedConfig) -> Result<(), anyhow::Error> {
 
     ui::run_gui(running_state, config.ui.clone(), rx_screen_command);
     Ok(())
-}
-
-#[allow(dead_code)]
-enum ButtonConfig {
-    Light2Config(lights2::Config),
-    DeviceConfig(switch::Config),
-}
-
-#[allow(dead_code)]
-enum Icon {
-    Light,
-    Fan,
 }

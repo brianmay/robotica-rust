@@ -46,10 +46,9 @@ use robotica_backend::{
     entities::{self, RecvError},
     services::mqtt::MqttTx,
 };
+use robotica_common::controllers::robotica::{hdmi, lights2, music2, switch};
 use robotica_common::{
-    controllers::{
-        hdmi, lights2, music2, switch, tasmota, ConfigTrait, ControllerTrait, DisplayState, Label,
-    },
+    controllers::{tasmota, ConfigTrait, ControllerTrait, DisplayState, Label},
     datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     robotica::audio::Message,

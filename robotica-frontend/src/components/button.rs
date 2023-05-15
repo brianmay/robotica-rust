@@ -1,9 +1,9 @@
 //! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
+use robotica_common::controllers::robotica::{hdmi, lights2, music, music2, switch};
 use robotica_common::controllers::{
-    hdmi, lights2, music, music2, switch, tasmota, Action, ConfigTrait, ControllerTrait,
-    DisplayState, Label,
+    tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
 use robotica_common::mqtt::MqttMessage;
 
