@@ -28,3 +28,6 @@ pub mod datetime;
 
 #[cfg(feature = "chrono")]
 pub mod scheduler;
+
+#[cfg(feature = "chrono")]
+pub mod zwave;

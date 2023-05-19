@@ -2,18 +2,61 @@ use chrono::{DateTime, Utc};
 use influxdb::{Client, InfluxDbWriteable};
 
 use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
-use robotica_common::anavi_thermometer::{self as anavi, GetReading};
+use robotica_common::anavi_thermometer::{self as anavi};
 use robotica_common::mqtt::{Json, MqttMessage};
+use robotica_common::zwave;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use tracing::{debug, error};
 
 use crate::State;
 
-#[derive(InfluxDbWriteable)]
-struct Reading {
+#[derive(Debug, InfluxDbWriteable)]
+struct InfluxReadingF64 {
     value: f64,
     time: DateTime<Utc>,
+}
+
+impl From<anavi::Temperature> for InfluxReadingF64 {
+    fn from(reading: anavi::Temperature) -> Self {
+        Self {
+            value: reading.temperature,
+            time: Utc::now(),
+        }
+    }
+}
+
+impl From<anavi::Humidity> for InfluxReadingF64 {
+    fn from(reading: anavi::Humidity) -> Self {
+        Self {
+            value: reading.humidity,
+            time: Utc::now(),
+        }
+    }
+}
+
+impl From<zwave::Data<f64>> for InfluxReadingF64 {
+    fn from(reading: zwave::Data<f64>) -> Self {
+        Self {
+            value: reading.value,
+            time: reading.get_datetime().unwrap_or_else(Utc::now),
+        }
+    }
+}
+
+#[derive(Debug, InfluxDbWriteable)]
+struct InfluxReadingU8 {
+    value: u8,
+    time: DateTime<Utc>,
+}
+
+impl From<zwave::Data<u8>> for InfluxReadingU8 {
+    fn from(reading: zwave::Data<u8>) -> Self {
+        Self {
+            value: reading.value,
+            time: reading.get_datetime().unwrap_or_else(Utc::now),
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -31,9 +74,10 @@ struct FishTankReading {
     time: DateTime<Utc>,
 }
 
-pub fn monitor_float_value<T>(state: &mut State, topic: &str) -> Result<(), EnvironmentError>
+pub fn monitor_reading<T, Influx>(state: &mut State, topic: &str) -> Result<(), EnvironmentError>
 where
-    T: Clone + Send + 'static + GetReading + DeserializeOwned,
+    T: Clone + Send + 'static + Into<Influx> + DeserializeOwned,
+    Influx: InfluxDbWriteable + Send,
     Json<T>: TryFrom<MqttMessage>,
     <Json<T> as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
 {
@@ -47,16 +91,12 @@ where
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
-            let value = data.get_reading();
-            let reading = Reading {
-                value,
-                time: Utc::now(),
-            }
-            .into_query(&topic);
+            let reading: Influx = data.into();
+            let query = reading.into_query(&topic);
 
             if is_debug_mode() {
-                debug!("would send {:?}", reading);
-            } else if let Err(e) = client.query(&reading).await {
+                debug!("would send {:?}", query);
+            } else if let Err(e) = client.query(&query).await {
                 error!("Failed to write to influxdb: {}", e);
             }
         }
@@ -98,18 +138,34 @@ pub fn monitor_fishtank(state: &mut State, topic: &str) -> Result<(), Environmen
 }
 
 pub fn run(state: &mut State) -> Result<(), EnvironmentError> {
-    monitor_float_value::<anavi::Temperature>(
+    monitor_reading::<anavi::Temperature, InfluxReadingF64>(
         state,
         "workgroup/3765653003a76f301ad767b4676d7065/air/temperature",
     )?;
-    monitor_float_value::<anavi::Humidity>(
+    monitor_reading::<anavi::Humidity, InfluxReadingF64>(
         state,
         "workgroup/3765653003a76f301ad767b4676d7065/air/humidity",
     )?;
-    monitor_float_value::<anavi::Temperature>(
+    monitor_reading::<anavi::Temperature, InfluxReadingF64>(
         state,
         "workgroup/3765653003a76f301ad767b4676d7065/water/temperature",
     )?;
+
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Air_temperature",
+    )?;
+
+    monitor_reading::<zwave::Data<u8>, InfluxReadingU8>(
+        state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Humidity",
+    )?;
+
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Dew_point",
+    )?;
+
     monitor_fishtank(state, "fishtank/sensors")?;
     Ok(())
 }
