@@ -16,6 +16,7 @@ pub mod user;
 pub mod version;
 pub mod websocket;
 pub mod zigbee2mqtt;
+pub mod zwave;
 
 #[cfg(feature = "websockets")]
 pub mod protobuf;
@@ -28,6 +29,3 @@ pub mod datetime;
 
 #[cfg(feature = "chrono")]
 pub mod scheduler;
-
-#[cfg(feature = "chrono")]
-pub mod zwave;

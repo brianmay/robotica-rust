@@ -203,9 +203,10 @@ const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
     "schedule/#",
     "robotica/#",
     "zigbee2mqtt/#",
+    "zwave/#",
     "workgroup/#",
 ];
-const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#"];
+const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#", "zwave/#"];
 
 #[must_use]
 fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {

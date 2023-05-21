@@ -18,7 +18,7 @@
         };
 
         rustPlatform = pkgs.rust-bin.stable.latest.default.override {
-          # targets = [ "wasm32-unknown-unknown" ];
+          targets = [ "wasm32-unknown-unknown" ];
         };
 
         craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {

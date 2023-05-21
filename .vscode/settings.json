@@ -78,6 +78,7 @@
         "websockets",
         "wifi",
         "Writable",
-        "zigbee"
+        "zigbee",
+        "zwave"
     ]
 }

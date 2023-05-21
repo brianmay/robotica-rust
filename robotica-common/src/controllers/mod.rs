@@ -7,6 +7,7 @@ use tracing::error;
 
 pub mod robotica;
 pub mod tasmota;
+pub mod zwave;
 
 /// A label is used to identity an incoming MQTT message
 pub type Label = u32;

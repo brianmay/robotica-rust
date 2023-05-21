@@ -46,7 +46,10 @@ use robotica_backend::{
     entities::{self, RecvError},
     services::mqtt::MqttTx,
 };
-use robotica_common::controllers::robotica::{hdmi, lights2, music2, switch};
+use robotica_common::controllers::{
+    robotica::{hdmi, lights2, music2, switch},
+    zwave,
+};
 use robotica_common::{
     controllers::{tasmota, ConfigTrait, ControllerTrait, DisplayState, Label},
     datetime::datetime_to_string,
@@ -70,6 +73,7 @@ enum ControllerConfig {
     Light2(lights2::Config),
     Music2(music2::Config),
     Switch(switch::Config),
+    Zwave(zwave::Config),
     Tasmota(tasmota::Config),
 }
 
@@ -318,6 +322,7 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
                 ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
                 ControllerConfig::Light2(config) => Box::new(config.create_controller()),
                 ControllerConfig::Switch(config) => Box::new(config.create_controller()),
+                ControllerConfig::Zwave(config) => Box::new(config.create_controller()),
                 ControllerConfig::Music2(config) => Box::new(config.create_controller()),
                 ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
             };

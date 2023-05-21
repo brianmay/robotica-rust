@@ -3,7 +3,7 @@ use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
-    Button, HdmiProps, Light2Props, Music2Props, MusicProps, SwitchProps, TasmotaProps,
+    Button, HdmiProps, Light2Props, Music2Props, MusicProps, SwitchProps, TasmotaProps, ZwaveProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
 
@@ -43,7 +43,7 @@ pub fn brian_room() -> Html {
 
             <h2>{"Switches"}</h2>
             <div class="buttons">
-                <Button<SwitchProps> name={"Fan"} topic_substr={"Brian/Fan"} action={Action::Toggle} icon={fan_icon} />
+                <Button<ZwaveProps> name={"Fan"} topic_substr={"Brians_Bedroom/Fan"} action={Action::Toggle} icon={fan_icon} />
                 <Button<SwitchProps> name={"Night"} topic_substr={"Brian/Night"} action={Action::Toggle} icon={night_icon} />
                 <Button<SwitchProps> name={"MSG"} topic_substr={"Brian/Messages"} action={Action::Toggle} icon={trumpet_icon} />
             </div>

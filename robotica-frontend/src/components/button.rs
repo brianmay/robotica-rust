@@ -3,7 +3,7 @@ use yew::prelude::*;
 
 use robotica_common::controllers::robotica::{hdmi, lights2, music, music2, switch};
 use robotica_common::controllers::{
-    tasmota, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
+    tasmota, zwave, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
 use robotica_common::mqtt::MqttMessage;
 
@@ -180,6 +180,46 @@ impl ConfigTrait for SwitchProps {
 }
 
 impl ButtonPropsTrait for SwitchProps {
+    fn get_icon(&self) -> &Icon {
+        &self.icon
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+/// The yew properties for a switch button.
+#[derive(Clone, Properties, Eq, PartialEq)]
+pub struct ZwaveProps {
+    /// The name of the switch button.
+    pub name: String,
+
+    /// The base string that all topics are derived from.
+    pub topic_substr: String,
+
+    /// The action that the button should perform.
+    pub action: Action,
+
+    /// The icon to display on the button.
+    pub icon: Icon,
+}
+
+impl ConfigTrait for ZwaveProps {
+    type Controller = zwave::Controller;
+
+    fn create_controller(&self) -> Self::Controller {
+        let config = (*self).clone();
+        let config = zwave::Config {
+            topic_substr: config.topic_substr,
+            action: config.action,
+        };
+
+        config.create_controller()
+    }
+}
+
+impl ButtonPropsTrait for ZwaveProps {
     fn get_icon(&self) -> &Icon {
         &self.icon
     }
