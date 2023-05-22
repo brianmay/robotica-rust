@@ -47,8 +47,6 @@ pub struct StatusMessage {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
-    use super::*;
-    use serde_json;
 
     #[test]
     #[cfg(feature = "chrono")]
@@ -58,7 +56,7 @@ mod tests {
             "value": 1.0
         }"#;
 
-        let data: Data<f32> = serde_json::from_str(data).unwrap();
+        let data: super::Data<f32> = serde_json::from_str(data).unwrap();
         let datetime = data.get_datetime().unwrap();
 
         assert_eq!(

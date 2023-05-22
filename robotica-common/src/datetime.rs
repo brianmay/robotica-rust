@@ -413,5 +413,20 @@ mod tests {
 
         let date = Date::from_str("2022-01-01").unwrap();
         assert_eq!(num_days_from_ce(&date), 738_521);
+
+        let date = Date::from_str("2023-01-01").unwrap();
+        assert_eq!(num_days_from_ce(&date), 738_886);
+
+        let date = Date::from_str("2023-03-06").unwrap();
+        assert_eq!(num_days_from_ce(&date), 738_950);
+
+        let date = Date::from_str("2023-04-03").unwrap();
+        assert_eq!(num_days_from_ce(&date), 738_978);
+
+        let date = Date::from_str("2023-05-01").unwrap();
+        assert_eq!(num_days_from_ce(&date), 739_006);
+
+        let date = Date::from_str("2023-05-15").unwrap();
+        assert_eq!(num_days_from_ce(&date), 739_020);
     }
 }
