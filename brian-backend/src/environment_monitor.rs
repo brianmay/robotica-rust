@@ -197,6 +197,7 @@ pub fn run(state: &mut State) -> Result<(), EnvironmentError> {
     monitor_zwave_switch(state, "Brians_Bedroom/Desk")?;
     monitor_zwave_switch(state, "Kitchen/Fridge")?;
     monitor_zwave_switch(state, "Laundry/Freezer")?;
+    monitor_zwave_switch(state, "Workshop/Pump")?;
 
     monitor_fishtank(state, "fishtank/sensors")?;
     Ok(())
