@@ -137,6 +137,34 @@ pub fn monitor_fishtank(state: &mut State, topic: &str) -> Result<(), Environmen
     Ok(())
 }
 
+fn monitor_zwave_switch(state: &mut State, topic_substr: &str) -> Result<(), EnvironmentError> {
+    // kwh
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        &format!("zwave/{topic_substr}/50/0/value/65537"),
+    )?;
+
+    // watts
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        &format!("zwave/{topic_substr}/50/0/value/66049"),
+    )?;
+
+    // voltage
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        &format!("zwave/{topic_substr}/50/0/value/66561"),
+    )?;
+
+    // current
+    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+        state,
+        &format!("zwave/{topic_substr}/50/0/value/66817"),
+    )?;
+
+    Ok(())
+}
+
 pub fn run(state: &mut State) -> Result<(), EnvironmentError> {
     monitor_reading::<anavi::Temperature, InfluxReadingF64>(
         state,
@@ -165,6 +193,9 @@ pub fn run(state: &mut State) -> Result<(), EnvironmentError> {
         state,
         "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Dew_point",
     )?;
+
+    monitor_zwave_switch(state, "Brians_Bedroom/Desk")?;
+    monitor_zwave_switch(state, "Kitchen/Fridge")?;
 
     monitor_fishtank(state, "fishtank/sensors")?;
     Ok(())
