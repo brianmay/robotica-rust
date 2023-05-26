@@ -12,7 +12,7 @@
     "autoprefixer": "^10.4.14",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.7.4",
-    "postcss-loader": "^7.3.0",
+    "postcss-loader": "^7.3.1",
     "rimraf": "^5.0.1",
     "sass": "^1.62.1",
     "sass-loader": "^13.3.0",
