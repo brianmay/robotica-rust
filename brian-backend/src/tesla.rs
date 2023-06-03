@@ -263,22 +263,41 @@ pub enum MonitorChargingError {
 
 fn announce_charging_state(
     charging_state: ChargingStateEnum,
-    tesla_state: &TeslaState,
+    old_tesla_state: &TeslaState,
     message_sink: &StatelessSender<Message>,
 ) {
-    let msg = match charging_state {
-        ChargingStateEnum::Disconnected => "The Tesla is disconnected",
-        ChargingStateEnum::Charging => "The Tesla is charging",
-        ChargingStateEnum::NoPower => "The Tesla plug failed",
-        ChargingStateEnum::Complete => "The Tesla is finished charging",
-        ChargingStateEnum::Starting => "The Tesla is starting to charge",
-        ChargingStateEnum::Stopped => "The Tesla has stopped charging",
+    let was_plugged_in = old_tesla_state.charging_state.map(|c| c.is_plugged_in());
+    let is_plugged_in = charging_state.is_plugged_in();
+
+    let plugged_in_msg = if was_plugged_in == Some(true) && is_plugged_in == false {
+        Some("has been freed".to_string())
+    } else if was_plugged_in == Some(false) && is_plugged_in == true {
+        Some("has been leashed".to_string())
+    } else {
+        None
     };
 
-    let msg = tesla_state
-        .battery_level
-        .map_or_else(|| msg.to_string(), |level| format!("{msg} at ({}%)", level));
+    let charge_msg = match charging_state {
+        ChargingStateEnum::Disconnected => "is disconnected",
+        ChargingStateEnum::Charging => "is charging",
+        ChargingStateEnum::NoPower => "plug failed",
+        ChargingStateEnum::Complete => "is finished charging",
+        ChargingStateEnum::Starting => "is starting to charge",
+        ChargingStateEnum::Stopped => "has stopped charging",
+    };
 
+    let charge_msg = old_tesla_state.battery_level.map_or_else(
+        || charge_msg.to_string(),
+        |level| format!("{charge_msg} at ({}%)", level),
+    );
+
+    let msg = [plugged_in_msg, Some(charge_msg)]
+        .into_iter()
+        .filter_map(|m| m)
+        .collect::<Vec<_>>()
+        .join(" and ");
+
+    let msg = format!("The Tesla {}", msg);
     let msg = new_message(msg, MessagePriority::DaytimeOnly);
     message_sink.try_send(msg);
 }
