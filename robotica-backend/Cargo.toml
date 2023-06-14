@@ -11,7 +11,7 @@ websockets = ["robotica-common/websockets"]
 [dependencies]
 bytes = "1.2.1"
 rumqttc = { version = "0.18.0", git = "https://github.com/brianmay/rumqtt", branch = "fixes" }
-rustls = "0.20.7"
+rustls = "0.21.2"
 webpki-roots = "0.23.0"
 tokio = { version = "1.26.0", features = ["full"] }
 serde = { version = "1.0.158", features = ["derive"] }
