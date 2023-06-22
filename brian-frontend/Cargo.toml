@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 console_error_panic_hook = "0.1.7"
-itertools = "0.10.0"
+itertools = "0.11.0"
 tracing = "0.1.35"
 tracing-wasm = "0.2.1"
 robotica-frontend = { path = "../robotica-frontend" }
