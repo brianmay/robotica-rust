@@ -14,7 +14,7 @@
     "css-loader": "^6.8.1",
     "postcss-loader": "^7.3.3",
     "rimraf": "^5.0.1",
-    "sass": "^1.63.4",
+    "sass": "^1.63.6",
     "sass-loader": "^13.3.2",
     "style-loader": "^3.3.3",
     "webpack": "^5.88.0",
