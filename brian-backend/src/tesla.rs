@@ -118,7 +118,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         loop {
             while let Ok((old_location, new_location)) = location_s.recv_value().await {
                 let old_location = if old_location.is_none() {
-                    None
+                    continue;
                 } else if old_location.as_deref() == Some("not_home") {
                     None
                 } else {
