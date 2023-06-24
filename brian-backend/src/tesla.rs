@@ -1,5 +1,5 @@
 use crate::amber::{PriceCategory, PriceSummary};
-use crate::delays::{delay_input, delay_repeat};
+use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
@@ -117,6 +117,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         duration,
         location,
         |(old_location, location)| old_location.is_some() && location != "not_home",
+        DelayInputOptions::default(),
     );
 
     let mqtt = state.mqtt.clone();
@@ -255,7 +256,15 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
     // We only care if doors open for at least 120 seconds.
     let duration = Duration::from_secs(120);
-    let rx = delay_input("tesla_doors (delayed)", duration, rx, |c| !c.is_empty());
+    let rx = delay_input(
+        "tesla_doors (delayed)",
+        duration,
+        rx,
+        |c| !c.is_empty(),
+        DelayInputOptions {
+            skip_subsequent_delay: true,
+        },
+    );
 
     // Discard initial [] value and duplicate events.
     let rx = rx

@@ -30,11 +30,17 @@ where
 //     fn is_active(&self) -> bool;
 // }
 
+#[derive(Default)]
+pub struct DelayInputOptions {
+    pub skip_subsequent_delay: bool,
+}
+
 pub fn delay_input<T>(
     name: &str,
     duration: Duration,
     rx: robotica_backend::entities::Receiver<T>,
     is_active: impl Fn(&T::Received) -> bool + Send + 'static,
+    options: DelayInputOptions,
 ) -> robotica_backend::entities::Receiver<T>
 where
     T: Data + Send + 'static,
@@ -76,7 +82,7 @@ where
                     } else {
                         // debug!("delay timer, not sending anything (shouldn't happen)");
                     }
-                    state = DelayInputState::NoDelay;
+                    state = if options.skip_subsequent_delay { DelayInputState::NoDelay } else { DelayInputState::Idle };
                 },
                 else => { break; }
             }
