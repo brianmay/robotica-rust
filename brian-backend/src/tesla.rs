@@ -111,25 +111,28 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         .subscriptions
         .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"));
 
+    let duration = Duration::from_secs(30);
+    let location = delay_input("tesla_location", duration, location, |(_, location)| {
+        location != "not_home"
+    });
+
     let mqtt = state.mqtt.clone();
     spawn(async move {
         let mut location_s = location.subscribe().await;
+        let mut old_location: Option<String> = None;
 
         loop {
-            while let Ok((old_location, new_location)) = location_s.recv_value().await {
-                let old_location = if old_location.is_none() {
+            while let Ok(new_location_raw) = location_s.recv().await {
+                let new_location = if new_location_raw == "not_home" {
+                    None
+                } else {
+                    Some(new_location_raw)
+                };
+                if old_location.is_none() {
+                    old_location = new_location;
                     continue;
-                } else if old_location.as_deref() == Some("not_home") {
-                    None
-                } else {
-                    old_location
                 };
-                let new_location = if new_location == "not_home" {
-                    None
-                } else {
-                    Some(new_location)
-                };
-                let msg = match (old_location, new_location) {
+                let msg = match (&old_location, &new_location) {
                     (None, Some(new_location)) => {
                         format!("Tesla arrived at {new_location}")
                     }
@@ -141,6 +144,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                     }
                     (None, None) => continue,
                 };
+                old_location = new_location;
 
                 let msg = new_message(msg, MessagePriority::Low).into_ha_message();
                 let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
