@@ -106,6 +106,59 @@ impl Door {
     }
 }
 
+pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
+    let location = state
+        .subscriptions
+        .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"));
+
+    let mqtt = state.mqtt.clone();
+    spawn(async move {
+        let mut location_s = location.subscribe().await;
+
+        loop {
+            while let Ok((old_location, new_location)) = location_s.recv_value().await {
+                let old_location = if old_location.is_none() {
+                    None
+                } else if old_location.as_deref() == Some("not_home") {
+                    None
+                } else {
+                    old_location
+                };
+                let new_location = if new_location == "not_home" {
+                    None
+                } else {
+                    Some(new_location)
+                };
+                let msg = match (old_location, new_location) {
+                    (None, Some(new_location)) => {
+                        format!("Tesla arrived at {new_location}")
+                    }
+                    (Some(old_location), None) => {
+                        format!("Tesla left {old_location}")
+                    }
+                    (Some(old_location), Some(new_location)) => {
+                        format!("Tesla left {old_location} and arrived at {new_location}")
+                    }
+                    (None, None) => continue,
+                };
+
+                let msg = new_message(msg, MessagePriority::Low).into_ha_message();
+                let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
+                    error!("Failed to serialize message: {msg:?}");
+                    "{}".into()
+                });
+                let msg = MqttMessage::new(
+                    "ha/event/message/brian/private",
+                    payload,
+                    false,
+                    QoS::ExactlyOnce,
+                );
+                mqtt.try_send(msg);
+            }
+        }
+    });
+}
+
 pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
     let frunk_rx = state
         .subscriptions

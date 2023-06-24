@@ -97,6 +97,7 @@ async fn setup_pipes(state: &mut State) {
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
     hdmi::run(state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_location(state, 1);
     tesla::monitor_tesla_doors(state, 1);
 
     environment_monitor::run(state).unwrap_or_else(|err| {
