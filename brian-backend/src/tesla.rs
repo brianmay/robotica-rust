@@ -124,6 +124,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
     spawn(async move {
         let mut location_s = location.subscribe().await;
         let mut old_location: Option<String> = None;
+        let mut old_location_set = false;
 
         loop {
             while let Ok(new_location_raw) = location_s.recv().await {
@@ -132,10 +133,14 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                 } else {
                     Some(new_location_raw)
                 };
-                if old_location.is_none() {
+                if !old_location_set {
                     old_location = new_location;
+                    old_location_set = true;
                     continue;
                 };
+                if old_location == new_location {
+                    continue;
+                }
                 let msg = match (&old_location, &new_location) {
                     (None, Some(new_location)) => {
                         format!("Tesla arrived at {new_location}")
@@ -149,6 +154,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                     (None, None) => continue,
                 };
                 old_location = new_location;
+                old_location_set = true;
 
                 let msg = new_message(msg, MessagePriority::Low).into_ha_message();
                 let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
