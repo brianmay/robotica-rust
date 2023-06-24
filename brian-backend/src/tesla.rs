@@ -112,9 +112,12 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"));
 
     let duration = Duration::from_secs(30);
-    let location = delay_input("tesla_location", duration, location, |(_, location)| {
-        location != "not_home"
-    });
+    let location = delay_input(
+        "tesla_location",
+        duration,
+        location,
+        |(old_location, location)| old_location.is_some() && location != "not_home",
+    );
 
     let mqtt = state.mqtt.clone();
     spawn(async move {
