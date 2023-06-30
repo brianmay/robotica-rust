@@ -149,7 +149,7 @@ impl Message {
                 title,
                 body,
                 priority,
-            } => (body, title, priority),
+            } => (title, body, priority),
         }
     }
 
