@@ -470,7 +470,7 @@ fn monitor_display(
     rx_screen_command: mpsc::Receiver<ScreenCommand>,
 ) {
     let screen_on_timeout = 30;
-    let screen_message_timeout = 5 + config.backlight_on_time;
+    let screen_message_timeout = 15 + config.backlight_on_time;
 
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
