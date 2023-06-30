@@ -85,6 +85,7 @@
             pkgconfig
             openssl
             protobuf
+            fontconfig
             nodejs
             wasm-pack
             slint-lsp
