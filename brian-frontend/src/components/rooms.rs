@@ -106,7 +106,7 @@ pub fn twins_room() -> Html {
                 <Button<MusicProps> name={"Star Trek"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"startrek"} />
                 <Button<MusicProps> name={"Doom"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"dragons_doom"} />
                 <Button<MusicProps> name={"Dragon"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
+                <Button<MusicProps> name={"Wakeup"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"twins_wake_up"} />
             </div>
         </RequireConnection>
     )
