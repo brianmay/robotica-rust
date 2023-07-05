@@ -48,7 +48,7 @@
         # Build the actual crate itself, _but only if the previous tests pass_.
         pkg = craneLib.buildPackage {
           inherit src;
-          cargoArtifacts = coverage;
+          cargoArtifacts = clippy;
           cargoExtraArgs = "-p robotica-slint";
 
           # Add extra inputs here or any other derivation settings
