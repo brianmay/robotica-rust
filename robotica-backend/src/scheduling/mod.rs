@@ -14,6 +14,8 @@ lalrpop_mod!(
     #[allow(clippy::option_if_let_else)]
     #[allow(clippy::uninlined_format_args)]
     #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unnecessary_box_returns)]
+    #[allow(clippy::match_same_arms)]
     conditions,
     "/scheduling/conditions.rs"
 ); // synthesized by LALRPOP

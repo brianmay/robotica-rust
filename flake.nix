@@ -21,21 +21,51 @@
           targets = [ "wasm32-unknown-unknown" ];
         };
 
-        craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
-          rustc = rustPlatform;
-          cargo = rustPlatform;
-          rustfmt = rustPlatform;
-        });
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
         src = ./.;
 
         # Build *just* the cargo dependencies, so we can reuse
         # all of that work (e.g. via cachix) when running in CI
-        cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
+        cargoArtifacts = craneLib.buildDepsOnly {
+          inherit src;
+          cargoExtraArgs = "-p robotica-slint";
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
+          buildInputs = with pkgs; [
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            wayland
+            libxkbcommon
+          ];
+        };
 
         # Run clippy (and deny all warnings) on the crate source.
         clippy = craneLib.cargoClippy {
           inherit cargoArtifacts src;
+          cargoExtraArgs = "-p robotica-slint";
           cargoClippyExtraArgs = "-- --deny warnings";
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
+          buildInputs = with pkgs; [
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            wayland
+            libxkbcommon
+          ];
         };
 
         # Next, we want to run the tests and collect code-coverage, _but only if
@@ -43,6 +73,22 @@
         coverage = craneLib.cargoTarpaulin {
           inherit src;
           cargoArtifacts = clippy;
+          cargoExtraArgs = "-p robotica-slint";
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
+          buildInputs = with pkgs; [
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            wayland
+            libxkbcommon
+          ];
         };
 
         # Build the actual crate itself, _but only if the previous tests pass_.
@@ -53,8 +99,8 @@
 
           # Add extra inputs here or any other derivation settings
           doCheck = true;
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
 
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
           buildInputs = with pkgs; [
             openssl
             protobuf
