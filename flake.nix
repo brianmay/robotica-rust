@@ -22,100 +22,47 @@
         };
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
-        src = ./.;
+
+        common = {
+          src = ./.;
+          cargoExtraArgs = "-p robotica-slint";
+          nativeBuildInputs = with pkgs; [ pkgconfig ];
+          buildInputs = with pkgs; [
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            xorg.libxcb
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            mesa
+            wayland
+            libxkbcommon
+          ];
+        };
 
         # Build *just* the cargo dependencies, so we can reuse
         # all of that work (e.g. via cachix) when running in CI
-        cargoArtifacts = craneLib.buildDepsOnly {
-          inherit src;
-          cargoExtraArgs = "-p robotica-slint";
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
-          buildInputs = with pkgs; [
-            openssl
-            protobuf
-            fontconfig
-            freetype
-            xorg.libxcb
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXi
-            mesa
-            wayland
-            libxkbcommon
-          ];
-        };
+        cargoArtifacts = craneLib.buildDepsOnly common;
 
         # Run clippy (and deny all warnings) on the crate source.
-        clippy = craneLib.cargoClippy {
-          inherit cargoArtifacts src;
-          cargoExtraArgs = "-p robotica-slint";
+        clippy = craneLib.cargoClippy ({
+          inherit cargoArtifacts;
           cargoClippyExtraArgs = "-- --deny warnings";
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
-          buildInputs = with pkgs; [
-            openssl
-            protobuf
-            fontconfig
-            freetype
-            xorg.libxcb
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXi
-            mesa
-            wayland
-            libxkbcommon
-          ];
-        };
+        } // common);
 
         # Next, we want to run the tests and collect code-coverage, _but only if
         # the clippy checks pass_ so we do not waste any extra cycles.
-        coverage = craneLib.cargoTarpaulin {
-          inherit src;
-          cargoArtifacts = clippy;
-          cargoExtraArgs = "-p robotica-slint";
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
-          buildInputs = with pkgs; [
-            openssl
-            protobuf
-            fontconfig
-            freetype
-            xorg.libxcb
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXi
-            mesa
-            wayland
-            libxkbcommon
-          ];
-        };
+        coverage =
+          craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
 
         # Build the actual crate itself, _but only if the previous tests pass_.
-        pkg = craneLib.buildPackage {
-          inherit src;
+        pkg = craneLib.buildPackage ({
           cargoArtifacts = clippy;
-          cargoExtraArgs = "-p robotica-slint";
-
-          # Add extra inputs here or any other derivation settings
           doCheck = true;
-
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
-          buildInputs = with pkgs; [
-            openssl
-            protobuf
-            fontconfig
-            freetype
-            xorg.libxcb
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXi
-            mesa
-            wayland
-            libxkbcommon
-          ];
-        };
+        } // common);
 
         wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
           export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
@@ -136,10 +83,6 @@
             wasm-pack
             slint-lsp
             rustPlatform
-            # (rust_pkgs.default.override {
-            #   extensions = [ "rust-src" ];
-            #   targets = [ "wasm32-unknown-unknown" ];
-            # })
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
