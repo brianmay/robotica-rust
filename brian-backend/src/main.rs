@@ -110,9 +110,18 @@ async fn setup_pipes(state: &mut State) {
 
     fake_switch(state, "Dining/Messages");
     fake_switch(state, "Dining/Request_Bathroom");
+
     fake_switch(state, "Brian/Night");
     fake_switch(state, "Brian/Messages");
     fake_switch(state, "Brian/Request_Bathroom");
+
+    fake_switch(state, "Jan/Messages");
+
+    fake_switch(state, "Twins/Messages");
+
+    fake_switch(state, "Extension/Messages");
+
+    fake_switch(state, "Akira/Messages");
 
     setup_lights(state).await;
 
