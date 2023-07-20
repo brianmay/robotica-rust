@@ -239,7 +239,6 @@ pub struct HaMessageCommand {
     pub title: String,
 
     /// The message to send.
-    #[serde(rename = "message")]
     pub body: String,
 
     /// The priority of the message
