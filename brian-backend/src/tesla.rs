@@ -341,9 +341,12 @@ fn announce_charging_state(
     old_tesla_state: &TeslaState,
     message_sink: &StatelessSender<Message>,
 ) {
-    let was_plugged_in = old_tesla_state.charging_state.map(|c| c.is_plugged_in());
+    let was_plugged_in = old_tesla_state
+        .charging_state
+        .map(ChargingStateEnum::is_plugged_in);
     let is_plugged_in = charging_state.is_plugged_in();
 
+    #[allow(clippy::bool_comparison)]
     let plugged_in_msg = if was_plugged_in == Some(true) && is_plugged_in == false {
         Some("has been freed".to_string())
     } else if was_plugged_in == Some(false) && is_plugged_in == true {
@@ -363,16 +366,16 @@ fn announce_charging_state(
 
     let charge_msg = old_tesla_state.battery_level.map_or_else(
         || charge_msg.to_string(),
-        |level| format!("{charge_msg} at ({}%)", level),
+        |level| format!("{charge_msg} at ({level}%)"),
     );
 
     let msg = [plugged_in_msg, Some(charge_msg)]
         .into_iter()
-        .filter_map(|m| m)
+        .flatten()
         .collect::<Vec<_>>()
         .join(" and ");
 
-    let msg = format!("The Tesla {}", msg);
+    let msg = format!("The Tesla {msg}");
     let msg = new_message(msg, MessagePriority::DaytimeOnly);
     message_sink.try_send(msg);
 }
@@ -387,7 +390,8 @@ struct TeslaState {
 
 impl TeslaState {
     fn is_charging(&self) -> bool {
-        self.charging_state.map_or(false, |cs| cs.is_charging())
+        self.charging_state
+            .map_or(false, ChargingStateEnum::is_charging)
     }
 }
 
@@ -736,20 +740,16 @@ async fn check_charge(
 
     // We should not attempt to start charging if charging is complete.
     let charging_state = &tesla_state.charging_state;
-    let can_start_charge = match charging_state {
-        Some(state) => *state != ChargingStateEnum::Complete,
-        None => true,
-    };
+    let can_start_charge =
+        charging_state.map_or(true, |state| state != ChargingStateEnum::Complete);
 
     info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}");
     info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
-    let set_charge_limit = if let Some(current_limit) = tesla_state.charge_limit {
-        current_limit != charge_limit
-    } else {
-        true
-    };
+    let set_charge_limit = tesla_state
+        .charge_limit
+        .map_or(true, |current_limit| current_limit != charge_limit);
 
     // Construct sequence of commands to send to Tesla.
     let mut sequence = CommandSequence::new();
@@ -776,30 +776,32 @@ async fn check_charge(
     };
 
     // Start/stop charging as required.
-    #[allow(clippy::match_same_arms)]
-    use ShouldCharge::DoCharge;
-    use ShouldCharge::DoNotCharge;
-    match charging_summary {
-        ChargingSummary::Charging if should_charge == DoNotCharge => {
-            info!("Stopping charge");
-            sequence.add_charge_stop();
+    {
+        use ShouldCharge::DoCharge;
+        use ShouldCharge::DoNotCharge;
+        #[allow(clippy::match_same_arms)]
+        match charging_summary {
+            ChargingSummary::Charging if should_charge == DoNotCharge => {
+                info!("Stopping charge");
+                sequence.add_charge_stop();
+            }
+            ChargingSummary::Charging => {}
+            ChargingSummary::NotCharging if should_charge == DoCharge && can_start_charge => {
+                info!("Starting charge");
+                sequence.add_charge_start();
+            }
+            ChargingSummary::NotCharging => {}
+            ChargingSummary::Unknown if should_charge == DoNotCharge => {
+                info!("Stopping charge (unknown)");
+                sequence.add_charge_stop();
+            }
+            ChargingSummary::Unknown if should_charge == DoCharge && can_start_charge => {
+                info!("Starting charge (unknown)");
+                sequence.add_charge_start();
+            }
+            ChargingSummary::Unknown => {}
+            ChargingSummary::Disconnected => info!("Car is disconnected"),
         }
-        ChargingSummary::Charging => {}
-        ChargingSummary::NotCharging if should_charge == DoCharge && can_start_charge => {
-            info!("Starting charge");
-            sequence.add_charge_start();
-        }
-        ChargingSummary::NotCharging => {}
-        ChargingSummary::Unknown if should_charge == DoNotCharge => {
-            info!("Stopping charge (unknown)");
-            sequence.add_charge_stop();
-        }
-        ChargingSummary::Unknown if should_charge == DoCharge && can_start_charge => {
-            info!("Starting charge (unknown)");
-            sequence.add_charge_start();
-        }
-        ChargingSummary::Unknown => {}
-        ChargingSummary::Disconnected => info!("Car is disconnected"),
     }
 
     // Send the commands.
@@ -810,13 +812,7 @@ async fn check_charge(
     });
 
     // Generate result.
-    let result = match rc_err {
-        // Something went wrong above, we should retry.
-        Some(err) => Err(err),
-
-        // Everything is OK. Supposedly.
-        None => Ok(()),
-    };
+    let result = rc_err.map_or(Ok(()), Err);
 
     info!("All done. {result:?}");
     result
@@ -850,6 +846,8 @@ fn should_charge(
         RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
         RequestedCharge::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
     };
+
+    #[allow(clippy::match_same_arms)]
     let should_charge = match (should_charge, tesla_state.battery_level) {
         (sc @ ShouldCharge::DoCharge, Some(level)) => {
             if level < charge_limit {
@@ -863,6 +861,6 @@ fn should_charge(
         // (sc @ ShouldCharge::DontTouch, _) => sc,
     };
 
-    let charge_limit = charge_limit.max(50).min(90);
+    let charge_limit = charge_limit.clamp(50, 90);
     (should_charge, charge_limit)
 }

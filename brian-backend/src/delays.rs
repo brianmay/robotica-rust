@@ -35,6 +35,7 @@ pub struct DelayInputOptions {
     pub skip_subsequent_delay: bool,
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn delay_input<T>(
     name: &str,
     duration: Duration,
