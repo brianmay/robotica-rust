@@ -197,7 +197,7 @@ where
 
 async fn receive(
     label: Label,
-    subscription: &mut entities::StatelessSubscription<MqttMessage>,
+    subscription: &mut entities::StatefulSubscription<MqttMessage>,
 ) -> Result<(Label, MqttMessage), RecvError> {
     let msg = subscription.recv().await?;
     Ok((label, msg))
@@ -332,7 +332,7 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
             let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
             for s in controller.get_subscriptions() {
                 let label = s.label;
-                let s = state.mqtt.subscribe(s.topic).await.unwrap();
+                let s = state.mqtt.subscribe_into_stateful(s.topic).await.unwrap();
                 let s = s.subscribe().await;
                 subscriptions.push((label, s));
             }
