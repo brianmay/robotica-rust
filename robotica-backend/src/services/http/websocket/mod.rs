@@ -85,7 +85,7 @@ async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
         for topic in &add_subscriptions {
             let already_subscribed = subscriptions.contains_key(topic);
             if !already_subscribed {
-                match config.mqtt.subscribe_into_stateful(&topic).await {
+                match config.mqtt.subscribe_into_stateful(topic).await {
                     Ok(entity) => {
                         info!("Subscribed to topic: {}", topic);
                         let subscription = entity.subscribe().await;
