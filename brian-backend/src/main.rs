@@ -21,7 +21,7 @@ use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::StatelessSender;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
-use robotica_common::robotica::audio::Message;
+use robotica_common::robotica::audio::HaMessageCommand;
 use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
@@ -65,7 +65,7 @@ pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt: MqttTx,
-    message_sink: StatelessSender<Message>,
+    message_sink: StatelessSender<HaMessageCommand>,
     persistent_state_database: PersistentStateDatabase,
 }
 

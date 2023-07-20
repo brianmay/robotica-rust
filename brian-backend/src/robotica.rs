@@ -3,7 +3,7 @@ use robotica_backend::entities::StatelessSender;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
-use robotica_common::robotica::audio::Message;
+use robotica_common::robotica::audio::HaMessageCommand;
 use robotica_common::robotica::switch::DevicePower;
 use serde::Serialize;
 use tracing::error;
@@ -54,9 +54,8 @@ struct AutoColor {
 }
 
 #[allow(dead_code)]
-pub fn string_to_message(msg: Message) -> MqttMessage {
+pub fn string_to_message(msg: &HaMessageCommand) -> MqttMessage {
     let topic = "ha/event/message/everyone";
-    let msg = msg.into_ha_message();
     let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
         error!("Failed to serialize message: {msg:?}");
         "{}".into()
@@ -64,21 +63,14 @@ pub fn string_to_message(msg: Message) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub fn create_message_sink(mqtt: MqttTx) -> StatelessSender<Message> {
-    let (tx, rx) = create_stateless_entity::<Message>("messages");
+pub fn create_message_sink(mqtt: MqttTx) -> StatelessSender<HaMessageCommand> {
+    let (tx, rx) = create_stateless_entity::<HaMessageCommand>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
-            let now = chrono::Local::now();
-
-            // FIXME: Should move this logic to audio player.
-            if msg.should_play(now, true) {
-                info!("Sending message {:?}", msg);
-                let msg = string_to_message(msg);
-                mqtt.try_send(msg);
-            } else {
-                info!("Not sending message {:?}", msg);
-            }
+            info!("Sending message {:?}", msg);
+            let msg = string_to_message(&msg);
+            mqtt.try_send(msg);
         }
     });
     tx

@@ -200,28 +200,35 @@ async fn handle_command(
         state.volume.message = message_volume;
     }
 
+    let should_play = {
+        let now = chrono::Local::now();
+        command.should_play(now, messages_enabled)
+    };
+
     if let Some(message) = &command.message {
-        let message = message.clone();
+        let message_clone = message.clone();
         tx_screen_command
-            .try_send(ScreenCommand::Message(message))
+            .try_send(ScreenCommand::Message(message_clone))
             .unwrap_or_else(|err| {
                 error!("Failed to send message to screen: {err}");
             });
-    }
+    };
 
-    let pre_tasks = command.pre_tasks.clone().unwrap_or_default();
-    let post_tasks = command.post_tasks.clone().unwrap_or_default();
+    if should_play {
+        let pre_tasks = command.pre_tasks.clone().unwrap_or_default();
+        let post_tasks = command.post_tasks.clone().unwrap_or_default();
 
-    for task in pre_tasks {
-        let task = task.to_task(&config.targets);
-        send_task(mqtt, &task);
-    }
+        for task in pre_tasks {
+            let task = task.to_task(&config.targets);
+            send_task(mqtt, &task);
+        }
 
-    process_command(state, command, config, messages_enabled).await;
+        process_command(state, command, config).await;
 
-    for task in post_tasks {
-        let task = task.to_task(&config.targets);
-        send_task(mqtt, &task);
+        for task in post_tasks {
+            let task = task.to_task(&config.targets);
+            send_task(mqtt, &task);
+        }
     }
 }
 
@@ -255,7 +262,7 @@ impl Action {
     }
 }
 
-fn get_actions_for_command(command: AudioCommand, messages_enabled: bool) -> Vec<Action> {
+fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
     let mut actions = Vec::new();
 
     if let Some(sound) = command.sound {
@@ -263,10 +270,7 @@ fn get_actions_for_command(command: AudioCommand, messages_enabled: bool) -> Vec
     }
 
     if let Some(msg) = command.message {
-        let now = chrono::Local::now();
-        if msg.should_play(now, messages_enabled) {
-            actions.push(Action::Say(msg.into_body()));
-        }
+        actions.push(Action::Say(msg.into_body()));
     }
 
     if let Some(music) = command.music {
@@ -282,15 +286,10 @@ fn get_actions_for_command(command: AudioCommand, messages_enabled: bool) -> Vec
     actions
 }
 
-async fn process_command(
-    state: &mut State,
-    command: AudioCommand,
-    config: &LoadedConfig,
-    messages_enabled: bool,
-) {
+async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig) {
     let play_list = command.music.clone().and_then(|m| m.play_list);
 
-    let actions = get_actions_for_command(command, messages_enabled);
+    let actions = get_actions_for_command(command);
 
     if actions.is_empty() {
         set_volume(state.volume.music, &config.programs)

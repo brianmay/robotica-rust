@@ -492,7 +492,7 @@ fn monitor_display(
                             state.message = None;
                         }
                         ScreenCommand::Message(message) => {
-                            let (title, body, _priority) = message.into_owned();
+                            let (title, body) = message.into_owned();
                             state.message = Some(instant_from_now(screen_message_timeout));
                             handle_weak
                                 .upgrade_in_event_loop(|handle| {

@@ -66,6 +66,12 @@ pub enum MessagePriority {
     DaytimeOnly,
 }
 
+impl Default for MessagePriority {
+    fn default() -> Self {
+        Self::Low
+    }
+}
+
 /// A message to send
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -82,26 +88,10 @@ pub enum Message {
 
         /// The message to send.
         body: String,
-
-        /// The priority of the message.
-        priority: MessagePriority,
     },
 }
 
 impl Message {
-    /// Create a new message
-    pub fn new(
-        title: impl Into<String>,
-        body: impl Into<String>,
-        priority: MessagePriority,
-    ) -> Self {
-        Self::Details {
-            title: title.into(),
-            body: body.into(),
-            priority,
-        }
-    }
-
     /// What is the title?
     #[must_use]
     pub fn title(&self) -> &str {
@@ -120,15 +110,6 @@ impl Message {
         }
     }
 
-    /// What is the priority?
-    #[must_use]
-    pub const fn priority(&self) -> MessagePriority {
-        match self {
-            Self::String(_) => MessagePriority::Low,
-            Self::Details { priority, .. } => *priority,
-        }
-    }
-
     /// Get owned body
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
@@ -142,54 +123,10 @@ impl Message {
     /// Get owned strings
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
-    pub fn into_owned(self) -> (String, String, MessagePriority) {
+    pub fn into_owned(self) -> (String, String) {
         match self {
-            Self::String(s) => ("No title".to_string(), s, MessagePriority::Low),
-            Self::Details {
-                title,
-                body,
-                priority,
-            } => (title, body, priority),
-        }
-    }
-
-    /// Turn into a HA message
-    #[must_use]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn into_ha_message(self) -> HaMessageCommand {
-        match self {
-            Self::String(s) => HaMessageCommand {
-                title: "No title".to_string(),
-                body: s,
-                priority: MessagePriority::Low,
-            },
-            Self::Details {
-                title,
-                body,
-                priority,
-            } => HaMessageCommand {
-                title,
-                body,
-                priority,
-            },
-        }
-    }
-
-    /// Decide if we should play this message
-    #[cfg(feature = "chrono")]
-    #[must_use]
-    pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
-        use chrono::Timelike;
-        let day_hour = matches!(now.hour(), 7..=21);
-
-        let priority = self.priority();
-        #[allow(clippy::match_same_arms)]
-        match (priority, day_hour, enabled) {
-            (MessagePriority::Urgent, _, _) => true,
-            (MessagePriority::Low, _, true) => true,
-            (MessagePriority::Low, _, _) => false,
-            (MessagePriority::DaytimeOnly, true, true) => true,
-            (MessagePriority::DaytimeOnly, _, _) => false,
+            Self::String(s) => ("No title".to_string(), s),
+            Self::Details { title, body } => (title, body),
         }
     }
 }
@@ -203,6 +140,10 @@ pub struct AudioCommand {
 
     /// The message to send.
     pub message: Option<Message>,
+
+    /// The priority of this command.
+    #[serde(default)]
+    pub priority: MessagePriority,
 
     /// The sounds to play.
     pub sound: Option<String>,
@@ -230,6 +171,24 @@ impl AudioCommand {
             self.legacy_title.as_deref()
         }
     }
+
+    /// Decide if we should play this message
+    #[cfg(feature = "chrono")]
+    #[must_use]
+    pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
+        use chrono::Timelike;
+        let day_hour = matches!(now.hour(), 7..=21);
+
+        let priority = self.priority;
+        #[allow(clippy::match_same_arms)]
+        match (priority, day_hour, enabled) {
+            (MessagePriority::Urgent, _, _) => true,
+            (MessagePriority::Low, _, true) => true,
+            (MessagePriority::Low, _, _) => false,
+            (MessagePriority::DaytimeOnly, true, true) => true,
+            (MessagePriority::DaytimeOnly, _, _) => false,
+        }
+    }
 }
 
 /// A HA audio command
@@ -243,4 +202,19 @@ pub struct HaMessageCommand {
 
     /// The priority of the message
     pub priority: MessagePriority,
+}
+
+impl HaMessageCommand {
+    /// Create a new message
+    pub fn new(
+        title: impl Into<String>,
+        body: impl Into<String>,
+        priority: MessagePriority,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            body: body.into(),
+            priority,
+        }
+    }
 }

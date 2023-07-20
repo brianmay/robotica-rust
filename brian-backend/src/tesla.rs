@@ -4,7 +4,7 @@ use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
-use robotica_common::robotica::audio::{Message, MessagePriority};
+use robotica_common::robotica::audio::{HaMessageCommand, MessagePriority};
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
@@ -21,8 +21,8 @@ use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
 use super::State;
 
-fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
-    Message::new("Tesla", message.into(), priority)
+fn new_message(message: impl Into<String>, priority: MessagePriority) -> HaMessageCommand {
+    HaMessageCommand::new("Tesla", message.into(), priority)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -156,7 +156,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                 old_location = new_location;
                 old_location_set = true;
 
-                let msg = new_message(msg, MessagePriority::Low).into_ha_message();
+                let msg = new_message(msg, MessagePriority::Low);
                 let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
                     error!("Failed to serialize message: {msg:?}");
                     "{}".into()
@@ -339,7 +339,7 @@ pub enum MonitorChargingError {
 fn announce_charging_state(
     charging_state: ChargingStateEnum,
     old_tesla_state: &TeslaState,
-    message_sink: &StatelessSender<Message>,
+    message_sink: &StatelessSender<HaMessageCommand>,
 ) {
     let was_plugged_in = old_tesla_state
         .charging_state
