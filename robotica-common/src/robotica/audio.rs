@@ -160,13 +160,18 @@ impl Message {
         match self {
             Self::String(s) => HaMessageCommand {
                 title: "No title".to_string(),
-                text: s,
+                body: s,
+                priority: MessagePriority::Low,
             },
             Self::Details {
                 title,
                 body,
-                priority: _,
-            } => HaMessageCommand { title, text: body },
+                priority,
+            } => HaMessageCommand {
+                title,
+                body,
+                priority,
+            },
         }
     }
 
@@ -216,21 +221,6 @@ pub struct AudioCommand {
 }
 
 impl AudioCommand {
-    /// Create a new message only command
-    // #[must_use]
-    // pub fn new_message(title: impl Into<String>, message: impl Into<String>) -> Self {
-    //     let message = Message::new(title, message);
-    //     Self {
-    //         legacy_title: None,
-    //         message: Some(message),
-    //         sound: None,
-    //         music: None,
-    //         volume: None,
-    //         pre_tasks: None,
-    //         post_tasks: None,
-    //     }
-    // }
-
     /// What is the title?
     #[must_use]
     pub fn title(&self) -> Option<&str> {
@@ -250,16 +240,8 @@ pub struct HaMessageCommand {
 
     /// The message to send.
     #[serde(rename = "message")]
-    pub text: String,
-}
+    pub body: String,
 
-impl HaMessageCommand {
-    /// Create a new message only command
-    #[must_use]
-    pub fn new_message(title: impl Into<String>, text: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            text: text.into(),
-        }
-    }
+    /// The priority of the message
+    pub priority: MessagePriority,
 }
