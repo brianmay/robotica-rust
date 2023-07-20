@@ -7,7 +7,7 @@ use std::{
 };
 
 use robotica_backend::{
-    entities::StatelessReceiver,
+    entities::{StatefulReceiver, StatelessReceiver},
     get_env_os,
     services::{
         mqtt::{MqttTx, Subscriptions},
@@ -21,11 +21,12 @@ use robotica_common::{
     robotica::{
         audio::{AudioCommand, State},
         commands::Command,
+        switch::DevicePower,
         tasks::Task,
     },
 };
 use serde::Deserialize;
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc};
 use tracing::{debug, error};
 
 use crate::{
@@ -47,6 +48,7 @@ pub struct Config {
     programs: ProgramsConfig,
     topic_substr: String,
     targets: HashMap<String, String>,
+    messages_enabled_topic: String,
 }
 
 #[derive()]
@@ -62,6 +64,7 @@ pub struct LoadedConfig {
     programs: LoadedProgramsConfig,
     topic_substr: String,
     targets: HashMap<String, String>,
+    messages_enabled_topic: String,
 }
 
 impl TryFrom<Config> for LoadedConfig {
@@ -78,6 +81,7 @@ impl TryFrom<Config> for LoadedConfig {
             programs,
             topic_substr: config.topic_substr,
             targets: config.targets,
+            messages_enabled_topic: config.messages_enabled_topic,
         })
     }
 }
@@ -96,6 +100,8 @@ pub fn run(
     let topic_substr = &config.topic_substr;
     let topic = format!("command/{topic_substr}");
     let command_rx: StatelessReceiver<Json<Command>> = subscriptions.subscribe_into(topic);
+    let messages_enabled_rx: StatefulReceiver<DevicePower> =
+        subscriptions.subscribe_into_stateful(&config.messages_enabled_topic);
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
@@ -103,23 +109,41 @@ pub fn run(
         let topic_substr = &config.topic_substr;
 
         let mut command_s = command_rx.subscribe().await;
+        let mut messages_enabled_s = messages_enabled_rx.subscribe().await;
+        let mut messages_enabled = false;
+
         init_all(&state, &config).await.unwrap_or_else(|err| {
             state.error = Some(err);
             state.play_list = None;
         });
 
-        while let Ok(Json(command)) = command_s.recv().await {
-            if let Command::Audio(command) = command {
-                state.error = None;
-                handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
-                send_state(&mqtt, &state, topic_substr);
-                psr.save(&state).unwrap_or_else(|e| {
-                    error!("Failed to save state: {}", e);
-                });
-            } else {
-                error!("Got unexpected audio command: {command:?}");
-                state.error = Some(format!("Unexpected command: {command:?}"));
-                state.play_list = None;
+        #[allow(clippy::match_same_arms)]
+        loop {
+            select! {
+                Ok(Json(command)) = command_s.recv() => {
+                    if let Command::Audio(command) = command {
+                        state.error = None;
+                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command, messages_enabled).await;
+                        send_state(&mqtt, &state, topic_substr);
+                        psr.save(&state).unwrap_or_else(|e| {
+                            error!("Failed to save state: {}", e);
+                        });
+                    } else {
+                        error!("Got unexpected audio command: {command:?}");
+                        state.error = Some(format!("Unexpected command: {command:?}"));
+                        state.play_list = None;
+                    }
+                }
+                Ok(me) = messages_enabled_s.recv() => {
+                    messages_enabled = match me {
+                        DevicePower::On => true,
+                        DevicePower::Off => false,
+                        DevicePower::AutoOff => false,
+                        DevicePower::HardOff => false,
+                        DevicePower::DeviceError => false,
+                    };
+                }
+                else => break,
             }
         }
     });
@@ -163,6 +187,7 @@ async fn handle_command(
     config: &Arc<LoadedConfig>,
     mqtt: &MqttTx,
     command: AudioCommand,
+    messages_enabled: bool,
 ) {
     let music_volume = command.volume.as_ref().and_then(|v| v.music);
     let message_volume = command.volume.as_ref().and_then(|v| v.message);
@@ -192,7 +217,7 @@ async fn handle_command(
         send_task(mqtt, &task);
     }
 
-    process_command(state, command, config).await;
+    process_command(state, command, config, messages_enabled).await;
 
     for task in post_tasks {
         let task = task.to_task(&config.targets);
@@ -230,7 +255,7 @@ impl Action {
     }
 }
 
-fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
+fn get_actions_for_command(command: AudioCommand, messages_enabled: bool) -> Vec<Action> {
     let mut actions = Vec::new();
 
     if let Some(sound) = command.sound {
@@ -238,7 +263,10 @@ fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
     }
 
     if let Some(msg) = command.message {
-        actions.push(Action::Say(msg.into_body()));
+        let now = chrono::Local::now();
+        if msg.should_play(now, messages_enabled) {
+            actions.push(Action::Say(msg.into_body()));
+        }
     }
 
     if let Some(music) = command.music {
@@ -254,10 +282,15 @@ fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
     actions
 }
 
-async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig) {
+async fn process_command(
+    state: &mut State,
+    command: AudioCommand,
+    config: &LoadedConfig,
+    messages_enabled: bool,
+) {
     let play_list = command.music.clone().and_then(|m| m.play_list);
 
-    let actions = get_actions_for_command(command);
+    let actions = get_actions_for_command(command, messages_enabled);
 
     if actions.is_empty() {
         set_volume(state.volume.music, &config.programs)
