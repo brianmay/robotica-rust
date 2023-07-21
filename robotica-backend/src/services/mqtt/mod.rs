@@ -214,7 +214,7 @@ pub fn run_client(
     mqtt_options.set_max_packet_size(100 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
-    let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
+    let (client, mut event_loop) = AsyncClient::new(mqtt_options, 100);
 
     // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
     for subscription in subscriptions.iter() {
