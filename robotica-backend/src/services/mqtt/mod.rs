@@ -299,8 +299,12 @@ fn process_subscribe(
     channel_tx: mpsc::Sender<MqttCommand>,
 ) {
     let topic: String = topic.into();
+    let topic2 = topic.clone();
 
     debug!("Subscribing to topic: {}.", topic);
+    if topic == "state/Brian/Messages/power" {
+        println!("Subscribing to topic: {}.", topic);
+    }
     let subscription = subscriptions.0.get(&topic);
     let maybe_rx = subscription.and_then(|s| s.rx.upgrade());
 
@@ -334,6 +338,10 @@ fn process_subscribe(
     if let Err(err) = tx.send(response) {
         error!("Failed to send subscribe response: {:?}.", err);
     }
+
+    if topic2 == "state/Brian/Messages/power" {
+        println!("Subscribed to topic: {}.", topic2);
+    }
 }
 
 fn watch_tx_closed(
@@ -360,7 +368,13 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
                 let msg: MqttMessage = msg;
                 let topic = &msg.topic;
                 debug!("Received message: {msg:?}.");
+                if topic == "state/Brian/Messages/power" {
+                    println!("Received message: {:?}", msg);
+                }
                 if let Some(subscription) = subscriptions.get(topic) {
+                    if topic == "state/Brian/Messages/power" {
+                        println!("Dispatched message: {:?}", msg);
+                    }
                     subscription.tx.try_send(msg);
                 }
             }
