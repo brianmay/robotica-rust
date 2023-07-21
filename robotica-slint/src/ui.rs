@@ -340,7 +340,7 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
                 let s = s.subscribe().await;
                 subscriptions.push((label, s));
                 if topic == "state/Brian/Messages/power" {
-                    println!("{id}: Done subscribing to {} {}", label, topic);
+                    println!("{id}: Done subscribing to {label} {topic}");
                 }
             }
 
