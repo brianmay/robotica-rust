@@ -331,17 +331,10 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
 
             let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
             for s in controller.get_subscriptions() {
-                if s.topic == "state/Brian/Messages/power" {
-                    println!("{id}: Subscribing to {} {}", s.label, s.topic);
-                }
                 let label = s.label;
-                let topic = s.topic.clone();
                 let s = state.mqtt.subscribe_into_stateful(s.topic).await.unwrap();
                 let s = s.subscribe().await;
                 subscriptions.push((label, s));
-                if topic == "state/Brian/Messages/power" {
-                    println!("{id}: Done subscribing to {label} {topic}");
-                }
             }
 
             loop {
@@ -358,9 +351,6 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
                     }
 
                     Ok((label, msg)) = select_ok(f) => {
-                        if msg.topic == "state/Brian/Messages/power" {
-                            println!("{id}: Got data for {label} {}", msg.topic);
-                        }
                         controller.process_message(label, msg);
 
                         let display_state = controller.get_display_state();
