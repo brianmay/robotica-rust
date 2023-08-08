@@ -1,5 +1,6 @@
 //! Audio player Service
 
+use monostate::MustBe;
 use serde::{Deserialize, Serialize};
 
 use super::tasks::SubTask;
@@ -194,6 +195,10 @@ impl AudioCommand {
 /// A HA audio command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HaMessageCommand {
+    /// The type of the command
+    #[serde(rename = "type")]
+    pub cmd_type: MustBe!("message"),
+
     /// The title of the message.
     pub title: String,
 
@@ -212,9 +217,49 @@ impl HaMessageCommand {
         priority: MessagePriority,
     ) -> Self {
         Self {
+            cmd_type: monostate::MustBeStr,
             title: title.into(),
             body: body.into(),
             priority,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_ha_message_command() {
+        let command = HaMessageCommand {
+            cmd_type: monostate::MustBeStr,
+            title: "Title".to_string(),
+            body: "Body".to_string(),
+            priority: MessagePriority::Low,
+        };
+        let json = json!({
+            "type": "message",
+            "title": "Title",
+            "body": "Body",
+            "priority": "Low",
+        });
+        assert_eq!(json, serde_json::to_value(command).unwrap());
+    }
+
+    #[test]
+    fn test_parse_ha_message_command() {
+        let json = json!({
+            "type": "message",
+            "title": "Title",
+            "body": "Body",
+            "priority": "Low",
+        });
+        let value = serde_json::from_value::<HaMessageCommand>(json).unwrap();
+        assert_eq!(value.title, "Title".to_string());
+        assert_eq!(value.body, "Body".to_string());
+        assert!(matches!(value.priority, MessagePriority::Low));
     }
 }

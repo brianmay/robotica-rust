@@ -14,6 +14,7 @@ tracing = "0.1.35"
 bytes = "1.1.0"
 prost = { version = "0.11.5", optional = true }
 prost-types = { version = "0.11.5", optional = true }
+monostate = "0.1.9"
 
 [build-dependencies]
 prost-build = { version = "0.11.5", optional = true }
