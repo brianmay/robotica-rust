@@ -3,7 +3,7 @@ use robotica_frontend::services::icons::Icon;
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
-    Button, HdmiProps, Light2Props, Music2Props, MusicProps, SwitchProps, TasmotaProps, ZwaveProps,
+    Button, HdmiProps, Light2Props, Music2Props, SwitchProps, TasmotaProps, ZwaveProps,
 };
 use robotica_frontend::components::mqtt_last::MqttLast;
 
@@ -71,10 +71,10 @@ pub fn jan_room() -> Html {
 
             <h2>{"Music"}</h2>
             <div class="buttons">
-                <Button<MusicProps> name={"Stargate"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
-                <Button<MusicProps> name={"Frozen"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
-                <Button<MusicProps> name={"Dragon"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
+                <Button<Music2Props> name={"Stargate"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
+                <Button<Music2Props> name={"Frozen"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
+                <Button<Music2Props> name={"Dragon"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
+                <Button<Music2Props> name={"Wakeup"} topic_substr={"Jan/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
             </div>
         </RequireConnection>
     )
@@ -102,11 +102,11 @@ pub fn twins_room() -> Html {
 
             <h2>{"Music"}</h2>
             <div class="buttons">
-                <Button<MusicProps> name={"Stargate"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
-                <Button<MusicProps> name={"Star Trek"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"startrek"} />
-                <Button<MusicProps> name={"Doom"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"dragons_doom"} />
-                <Button<MusicProps> name={"Dragon"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"twins_wake_up"} />
+                <Button<Music2Props> name={"Stargate"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
+                <Button<Music2Props> name={"Star Trek"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"startrek"} />
+                <Button<Music2Props> name={"Doom"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"dragons_doom"} />
+                <Button<Music2Props> name={"Dragon"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
+                <Button<Music2Props> name={"Wakeup"} topic_substr={"Twins/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"twins_wake_up"} />
             </div>
         </RequireConnection>
     )
@@ -152,10 +152,10 @@ pub fn akira_room() -> Html {
 
             <h2>{"Music"}</h2>
             <div class="buttons">
-                <Button<MusicProps> name={"Stargate"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
-                <Button<MusicProps> name={"Frozen"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
-                <Button<MusicProps> name={"Dragon"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
-                <Button<MusicProps> name={"Wakeup"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
+                <Button<Music2Props> name={"Stargate"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"stargate"} />
+                <Button<Music2Props> name={"Frozen"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"frozen"} />
+                <Button<Music2Props> name={"Dragon"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon.clone()} play_list={"train_dragon"} />
+                <Button<Music2Props> name={"Wakeup"} topic_substr={"Akira/Robotica"} action={Action::Toggle} icon={speaker_icon} play_list={"wake_up"} />
             </div>
         </RequireConnection>
     )

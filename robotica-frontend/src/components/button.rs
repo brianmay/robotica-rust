@@ -1,7 +1,7 @@
 //! An interactive button that receives MQTT messages
 use yew::prelude::*;
 
-use robotica_common::controllers::robotica::{hdmi, lights2, music, music2, switch};
+use robotica_common::controllers::robotica::{hdmi, lights2, music2, switch};
 use robotica_common::controllers::{
     tasmota, zwave, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
@@ -52,50 +52,6 @@ impl ConfigTrait for Light2Props {
 }
 
 impl ButtonPropsTrait for Light2Props {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
-    }
-
-    fn get_name(&self) -> &str {
-        self.name.as_str()
-    }
-}
-
-/// The yew properties for a music button.
-#[derive(Clone, Properties, Eq, PartialEq)]
-pub struct MusicProps {
-    /// The name of the music button.
-    pub name: String,
-
-    /// The base string that all topics are derived from.
-    pub topic_substr: String,
-
-    /// The action that the button should perform.
-    pub action: Action,
-
-    /// The icon to display on the button.
-    pub icon: Icon,
-
-    /// The play list to play when this button is pressed.
-    pub play_list: String,
-}
-
-impl ConfigTrait for MusicProps {
-    type Controller = music::Controller;
-
-    fn create_controller(&self) -> Self::Controller {
-        let props = (*self).clone();
-        let config = music::Config {
-            topic_substr: props.topic_substr,
-            action: props.action,
-            play_list: props.play_list,
-        };
-
-        config.create_controller()
-    }
-}
-
-impl ButtonPropsTrait for MusicProps {
     fn get_icon(&self) -> &Icon {
         &self.icon
     }
