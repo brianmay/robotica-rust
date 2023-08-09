@@ -105,11 +105,20 @@ fn command_to_text(command: &Value) -> String {
 
     match mtype {
         Some("audio") => audio_command_to_text(command),
-        Some("light" | "light2") => light_command_to_text(command),
+        Some("message") => message_command_to_text(command),
+        Some("light2") => light_command_to_text(command),
         Some("device") => device_command_to_text(command),
         Some("hdmi") => hdmi_command_to_text(command),
         _ => command.to_string(),
     }
+}
+
+fn message_command_to_text(command: &Value) -> String {
+    let message = command.get("body").and_then(Value::as_str);
+    message.map_or_else(
+        || "unknown message command".to_string(),
+        |message| format!("say {message}"),
+    )
 }
 
 fn audio_command_to_text(command: &Value) -> String {
