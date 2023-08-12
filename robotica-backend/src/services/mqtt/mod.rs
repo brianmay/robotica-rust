@@ -1,7 +1,7 @@
 //! Source (and sink) for MQTT data.
 pub mod topics;
 
-use rumqttc::tokio_rustls::rustls::ClientConfig;
+use rumqttc::tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
@@ -194,9 +194,9 @@ pub fn run_client(
     let hostname = hostname.to_str().unwrap_or("unknown");
     let client_id = format!("robotica-rust-{hostname}");
 
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+    let mut root_store = RootCertStore::empty();
+    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
             ta.name_constraints,

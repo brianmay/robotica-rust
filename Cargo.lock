@@ -1706,7 +1706,7 @@ dependencies = [
  "gloo-net 0.2.6",
  "gloo-render",
  "gloo-storage",
- "gloo-timers",
+ "gloo-timers 0.2.6",
  "gloo-utils",
  "gloo-worker",
 ]
@@ -1846,6 +1846,16 @@ checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
 dependencies = [
  "futures-channel",
  "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
@@ -3988,7 +3998,6 @@ dependencies = [
  "reqwest",
  "robotica-common",
  "rumqttc",
- "rustls",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -3999,7 +4008,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "url",
- "webpki-roots 0.24.0",
+ "webpki-roots 0.25.2",
 ]
 
 [[package]]
@@ -4027,7 +4036,7 @@ dependencies = [
  "chrono",
  "eyre",
  "futures",
- "gloo-timers",
+ "gloo-timers 0.3.0",
  "reqwasm",
  "robotica-common",
  "serde",
@@ -4200,16 +4209,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d194b56d58803a43635bdc398cd17e383d6f71f9182b9a192c127ca42494a59b"
 dependencies = [
  "base64 0.21.0",
-]
-
-[[package]]
-name = "rustls-webpki"
-version = "0.101.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f36a6828982f422756984e47912a7a51dcbc2a197aa791158f8ca61cd8204e"
-dependencies = [
- "ring",
- "untrusted",
 ]
 
 [[package]]
@@ -5738,12 +5737,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.24.0"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b291546d5d9d1eab74f069c77749f2cb8504a12caa20f0f2de93ddbf6f411888"
-dependencies = [
- "rustls-webpki",
-]
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
 
 [[package]]
 name = "weezl"
