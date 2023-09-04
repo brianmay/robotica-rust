@@ -140,7 +140,8 @@ const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
 
 #[must_use]
 fn json_command(topic: &str, payload: &serde_json::Value) -> Option<MqttMessage> {
-    let Ok(msg) = MqttMessage::from_json(topic, payload, false, crate::mqtt::QoS::ExactlyOnce) else {
+    let Ok(msg) = MqttMessage::from_json(topic, payload, false, crate::mqtt::QoS::ExactlyOnce)
+    else {
         error!("Failed to create MQTT message for topic {}", topic);
         return None;
     };

@@ -534,15 +534,15 @@ impl PriceProcessor {
         let Some(current_price) = prices
             .iter()
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
-            else {
-                error!("No current price found in prices: {prices:?}");
-                return PriceSummary{
-                    is_cheap_2hr: false,
-                    per_kwh: 100.0,
-                    next_update: *now + Duration::seconds(30),
-                    category: PriceCategory::Expensive
-                }
+        else {
+            error!("No current price found in prices: {prices:?}");
+            return PriceSummary {
+                is_cheap_2hr: false,
+                per_kwh: 100.0,
+                next_update: *now + Duration::seconds(30),
+                category: PriceCategory::Expensive,
             };
+        };
 
         let (start_day, end_day) = get_2hr_day(now);
 
