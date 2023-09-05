@@ -1,10 +1,11 @@
 use crate::amber::{PriceCategory, PriceSummary};
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
+use crate::ha::MessageCommand;
 
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
-use robotica_common::robotica::audio::{HaMessageCommand, MessagePriority};
+use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
@@ -21,8 +22,22 @@ use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
 use super::State;
 
-fn new_message(message: impl Into<String>, priority: MessagePriority) -> HaMessageCommand {
-    HaMessageCommand::new("Tesla", message.into(), priority)
+fn new_message(message: impl Into<String>, priority: MessagePriority) -> MessageCommand {
+    MessageCommand::new(
+        "Tesla",
+        message.into(),
+        priority,
+        crate::ha::MessageAudience::Everyone,
+    )
+}
+
+fn new_private_message(message: impl Into<String>, priority: MessagePriority) -> MessageCommand {
+    MessageCommand::new(
+        "Tesla",
+        message.into(),
+        priority,
+        crate::ha::MessageAudience::Brian { private: true },
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -119,8 +134,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         |(old_location, location)| old_location.is_some() && location != "not_home",
         DelayInputOptions::default(),
     );
-
-    let mqtt = state.mqtt.clone();
+    let message_sink = state.message_sink.clone();
     spawn(async move {
         let mut location_s = location.subscribe().await;
         let mut old_location: Option<String> = None;
@@ -156,18 +170,8 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                 old_location = new_location;
                 old_location_set = true;
 
-                let msg = new_message(msg, MessagePriority::Low);
-                let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
-                    error!("Failed to serialize message: {msg:?}");
-                    "{}".into()
-                });
-                let msg = MqttMessage::new(
-                    "ha/event/message/brian/private",
-                    payload,
-                    false,
-                    QoS::ExactlyOnce,
-                );
-                mqtt.try_send(msg);
+                let msg = new_private_message(msg, MessagePriority::Low);
+                message_sink.try_send(msg);
             }
         }
     });
@@ -339,7 +343,7 @@ pub enum MonitorChargingError {
 fn announce_charging_state(
     charging_state: ChargingStateEnum,
     old_tesla_state: &TeslaState,
-    message_sink: &StatelessSender<HaMessageCommand>,
+    message_sink: &StatelessSender<MessageCommand>,
 ) {
     let was_plugged_in = old_tesla_state
         .charging_state

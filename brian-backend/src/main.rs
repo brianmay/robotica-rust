@@ -9,19 +9,20 @@
 mod amber;
 mod delays;
 mod environment_monitor;
+mod ha;
 mod hdmi;
 mod lights;
 mod robotica;
 mod tesla;
 
 use anyhow::Result;
+use ha::MessageCommand;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::entities::StatelessSender;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
-use robotica_common::robotica::audio::HaMessageCommand;
 use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
@@ -37,7 +38,7 @@ async fn main() -> Result<()> {
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
-    let message_sink = robotica::create_message_sink(mqtt.clone());
+    let message_sink = ha::create_message_sink(mqtt.clone());
     let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
         panic!("Error getting persistent state loader: {e}");
     });
@@ -65,7 +66,7 @@ pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt: MqttTx,
-    message_sink: StatelessSender<HaMessageCommand>,
+    message_sink: StatelessSender<MessageCommand>,
     persistent_state_database: PersistentStateDatabase,
 }
 
