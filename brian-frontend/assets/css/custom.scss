@@ -1,20 +1,17 @@
-.buttons {
-    @extend .d-flex;
-    @extend .flex-row;
-    @extend .flex-wrap;
-}
-
 .button {
-    @extend .d-flex;
-    @extend .flex-column;
-    @extend .justify-content-between;
     @extend .btn;
     @extend .btn-lg;
-    width: 128px;
-    height: 256px;
+    width: 100px;
+    height: 100px;
     margin: 4px;
-    flex: 1 1 0px;
-    max-width: 196px;
+    font-size: 10px;
+}
+
+.button .icon {
+    width: 50px;
+    height: 50px;
+    margin-left: 50%;
+    transform: translate(-25px, 0);
 }
 
 footer {
