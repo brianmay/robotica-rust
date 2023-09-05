@@ -202,13 +202,13 @@ fn location_to_message(old_location: &Location, new_location: &Location) -> Opti
     } else {
         match (old_location, new_location) {
             (Location::Nowhere, Location::String(new_location)) => {
-                Some(format!("Tesla arrived at {new_location}"))
+                Some(format!("The Tesla arrived at {new_location}"))
             }
             (Location::String(old_location), Location::Nowhere) => {
-                Some(format!("Tesla left {old_location}"))
+                Some(format!("The Tesla left {old_location}"))
             }
             (Location::String(old_location), Location::String(new_location)) => Some(format!(
-                "Tesla left {old_location} and arrived at {new_location}"
+                "The Tesla left {old_location} and arrived at {new_location}"
             )),
             (Location::Nowhere, Location::Nowhere) => None,
         }
