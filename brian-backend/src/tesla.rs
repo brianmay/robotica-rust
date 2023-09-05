@@ -121,6 +121,35 @@ impl Door {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum Location {
+    String(String),
+    Nowhere,
+}
+
+impl Location {
+    fn from_string(s: String) -> Self {
+        if s == "not_home" {
+            Self::Nowhere
+        } else {
+            Self::String(s)
+        }
+    }
+
+    fn censor(&self) -> &Self {
+        let censor = match self {
+            Self::String(s) => s != "Home",
+            Self::Nowhere => false,
+        };
+
+        if censor {
+            &Self::Nowhere
+        } else {
+            self
+        }
+    }
+}
+
 pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
     let location = state
         .subscriptions
@@ -137,44 +166,53 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
     let message_sink = state.message_sink.clone();
     spawn(async move {
         let mut location_s = location.subscribe().await;
-        let mut old_location: Option<String> = None;
-        let mut old_location_set = false;
+        let mut maybe_old_location: Option<Location> = None;
 
         loop {
             while let Ok(new_location_raw) = location_s.recv().await {
-                let new_location = if new_location_raw == "not_home" {
-                    None
-                } else {
-                    Some(new_location_raw)
-                };
-                if !old_location_set {
-                    old_location = new_location;
-                    old_location_set = true;
-                    continue;
-                };
-                if old_location == new_location {
-                    continue;
-                }
-                let msg = match (&old_location, &new_location) {
-                    (None, Some(new_location)) => {
-                        format!("Tesla arrived at {new_location}")
-                    }
-                    (Some(old_location), None) => {
-                        format!("Tesla left {old_location}")
-                    }
-                    (Some(old_location), Some(new_location)) => {
-                        format!("Tesla left {old_location} and arrived at {new_location}")
-                    }
-                    (None, None) => continue,
-                };
-                old_location = new_location;
-                old_location_set = true;
+                let new_location = Location::from_string(new_location_raw);
 
-                let msg = new_private_message(msg, MessagePriority::Low);
-                message_sink.try_send(msg);
+                if let Some(old_location) = &maybe_old_location {
+                    // Send private message with true location details
+                    let msg = location_to_message(old_location, &new_location);
+                    if let Some(msg) = msg {
+                        let msg = new_private_message(msg, MessagePriority::Low);
+                        message_sink.try_send(msg);
+                    }
+
+                    // Send public message with censored location details
+                    let c_old_location = old_location.censor();
+                    let c_new_location = new_location.censor();
+                    let msg = location_to_message(c_old_location, c_new_location);
+                    if let Some(msg) = msg {
+                        let msg = new_message(msg, MessagePriority::Low);
+                        message_sink.try_send(msg);
+                    }
+                }
+
+                maybe_old_location = Some(new_location);
             }
         }
     });
+}
+
+fn location_to_message(old_location: &Location, new_location: &Location) -> Option<String> {
+    if old_location == new_location {
+        None
+    } else {
+        match (old_location, new_location) {
+            (Location::Nowhere, Location::String(new_location)) => {
+                Some(format!("Tesla arrived at {new_location}"))
+            }
+            (Location::String(old_location), Location::Nowhere) => {
+                Some(format!("Tesla left {old_location}"))
+            }
+            (Location::String(old_location), Location::String(new_location)) => Some(format!(
+                "Tesla left {old_location} and arrived at {new_location}"
+            )),
+            (Location::Nowhere, Location::Nowhere) => None,
+        }
+    }
 }
 
 pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
