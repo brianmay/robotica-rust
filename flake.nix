@@ -81,8 +81,11 @@
             fontconfig
             nodejs
             wasm-pack
+            wasm-bindgen-cli
             slint-lsp
             rustPlatform
+            # https://github.com/NixOS/nixpkgs/issues/156890
+            binaryen
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
