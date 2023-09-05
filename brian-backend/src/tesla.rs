@@ -138,7 +138,7 @@ impl Location {
 
     fn censor(&self) -> &Self {
         let censor = match self {
-            Self::String(s) => s != "Home",
+            Self::String(s) => s != "home",
             Self::Nowhere => false,
         };
 
