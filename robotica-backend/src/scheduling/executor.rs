@@ -204,10 +204,10 @@ impl<T: TimeZone + Debug> State<T> {
         let mut sequences = VecDeque::with_capacity(self.sequences.len() + new_schedule.len());
 
         // Add existing schedule.
-        sequences.extend(self.sequences.clone().into_iter());
+        sequences.extend(self.sequences.clone());
 
         // Add schedule for tomorrow.
-        sequences.extend(new_schedule.into_iter());
+        sequences.extend(new_schedule);
 
         // Sort by time.
         sequences.make_contiguous().sort();
