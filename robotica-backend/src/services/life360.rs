@@ -11,8 +11,8 @@ use tracing::error;
 
 use tokio::time;
 
-use crate::entities;
 use crate::get_env;
+use crate::pipes::stateless;
 use crate::spawn;
 use crate::EnvironmentError;
 
@@ -150,8 +150,8 @@ struct Circle {
 /// # Errors
 ///
 /// Will return an error if the environment variables `LIFE360_USERNAME` and `LIFE360_PASSWORD` are not set.
-pub fn circles(name: &str) -> Result<entities::StatelessReceiver<Vec<Member>>, EnvironmentError> {
-    let (tx, rx) = entities::create_stateless_entity(name);
+pub fn circles(name: &str) -> Result<stateless::Receiver<Vec<Member>>, EnvironmentError> {
+    let (tx, rx) = stateless::create_pipe(name);
     let username = get_env("LIFE360_USERNAME")?;
     let password = get_env("LIFE360_PASSWORD")?;
 
@@ -225,7 +225,7 @@ async fn get_circles_or_none(login: &Login) -> Option<List> {
 async fn dispatch_circle_details(
     login: &Login,
     circles: &List,
-    tx: &entities::StatelessSender<Vec<Member>>,
+    tx: &stateless::Sender<Vec<Member>>,
 ) {
     for circle in &circles.circles {
         match get_circle_details(login, circle).await {

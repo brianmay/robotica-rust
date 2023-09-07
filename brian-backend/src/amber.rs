@@ -8,10 +8,8 @@ use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use tracing::{debug, error, info};
 
 use robotica_backend::{
-    entities::{self, StatelessReceiver},
-    get_env, is_debug_mode,
-    services::persistent_state::PersistentStateRow,
-    spawn, EnvironmentError,
+    get_env, is_debug_mode, pipes::stateful, services::persistent_state::PersistentStateRow, spawn,
+    EnvironmentError,
 };
 use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, duration_from_hms, utc_now, Date, DateTime, Duration, Time,
@@ -75,7 +73,7 @@ const fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State) -> Result<StatelessReceiver<PriceSummary>, Error> {
+pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
     let token = get_env("AMBER_TOKEN")?;
     let site_id = get_env("AMBER_SITE_ID")?;
     let influx_url = get_env("INFLUXDB_URL")?;
@@ -87,7 +85,7 @@ pub fn run(state: &State) -> Result<StatelessReceiver<PriceSummary>, Error> {
         influx_database,
     };
 
-    let (tx, rx) = entities::create_stateless_entity("amber_summary");
+    let (tx, rx) = stateful::create_pipe("amber_summary");
 
     let psr = state
         .persistent_state_database
@@ -354,9 +352,22 @@ pub enum PriceCategory {
 pub struct PriceSummary {
     pub category: PriceCategory,
     pub is_cheap_2hr: bool,
-    pub per_kwh: f32,
+    pub c_per_kwh: f32,
+    pub dc_per_kwh: i32,
     pub next_update: DateTime<Utc>,
 }
+
+// Ignore the c_per_kwh when comparing.
+impl PartialEq for PriceSummary {
+    fn eq(&self, other: &Self) -> bool {
+        self.category == other.category
+            && self.is_cheap_2hr == other.is_cheap_2hr
+            && self.dc_per_kwh == other.dc_per_kwh
+            && self.next_update == other.next_update
+    }
+}
+
+impl Eq for PriceSummary {}
 
 // fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>) -> PriceCategory {
 //     let new_category = prices
@@ -438,7 +449,7 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
 
     let reading = PriceSummaryReading {
         is_cheap_2hr: summary.is_cheap_2hr,
-        per_kwh: summary.per_kwh,
+        per_kwh: summary.c_per_kwh,
         time: Utc::now(),
     }
     .into_query("amber/price_summary");
@@ -536,9 +547,11 @@ impl PriceProcessor {
             .find(|p| p.interval_type == IntervalType::CurrentInterval)
         else {
             error!("No current price found in prices: {prices:?}");
+            let default_c_per_kwh: u16 = 100;
             return PriceSummary {
                 is_cheap_2hr: false,
-                per_kwh: 100.0,
+                c_per_kwh: f32::from(default_c_per_kwh),
+                dc_per_kwh: i32::from(default_c_per_kwh) * 10,
                 next_update: *now + Duration::seconds(30),
                 category: PriceCategory::Expensive,
             };
@@ -602,10 +615,12 @@ impl PriceProcessor {
         let category = get_price_category(old_category, current_price.per_kwh);
         self.category = Some(category);
 
+        #[allow(clippy::cast_possible_truncation)]
         let ps = PriceSummary {
             category,
             is_cheap_2hr: is_cheap,
-            per_kwh: current_price.per_kwh,
+            c_per_kwh: current_price.per_kwh,
+            dc_per_kwh: (current_price.per_kwh * 10.0).round() as i32,
             next_update: current_price.end_time,
         };
         info!("Price summary: {old_category:?} --> {ps:?}");
@@ -841,7 +856,8 @@ mod tests {
         let summary = pp.prices_to_summary(&now, &prices);
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, true);
-        assert_approx_eq!(f32, summary.per_kwh, 0.0);
+        assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
+        assert_eq!(summary.dc_per_kwh, 0);
         assert_eq!(summary.next_update, dt("2020-01-01T01:00:00Z"));
         let ds = &pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
@@ -866,7 +882,8 @@ mod tests {
         let summary = pp.prices_to_summary(&now, &prices);
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, false);
-        assert_approx_eq!(f32, summary.per_kwh, 0.0);
+        assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
+        assert_eq!(summary.dc_per_kwh, 0);
         assert_eq!(summary.next_update, dt("2020-01-01T01:30:00Z"));
         let ds = pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));

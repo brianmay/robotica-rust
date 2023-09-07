@@ -3,13 +3,13 @@ use std::time::Duration;
 use tokio::time;
 use tokio::time::Instant;
 
-use crate::entities;
+use crate::pipes::stateless;
 use crate::spawn;
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
 #[must_use]
-pub fn timer(duration: Duration, name: &str) -> entities::StatelessReceiver<Instant> {
-    let (tx, rx) = entities::create_stateless_entity(name);
+pub fn timer(duration: Duration, name: &str) -> stateless::Receiver<Instant> {
+    let (tx, rx) = stateless::create_pipe(name);
 
     spawn(async move {
         let mut interval = time::interval(duration);
@@ -28,6 +28,8 @@ pub fn timer(duration: Duration, name: &str) -> entities::StatelessReceiver<Inst
 mod tests {
     #![allow(clippy::unwrap_used)]
     use tokio::time::sleep;
+
+    use crate::pipes::{Subscriber, Subscription};
 
     use super::*;
 

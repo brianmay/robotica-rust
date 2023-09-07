@@ -13,7 +13,7 @@ extern crate lalrpop_util;
 // extern crate robotica_backend_macros;
 
 pub mod devices;
-pub mod entities;
+pub mod pipes;
 pub mod scheduling;
 pub mod services;
 pub mod sinks;
@@ -24,9 +24,6 @@ use std::{env, ffi::OsString, future::Future};
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{debug, error};
-
-/// Size of all pipes.
-pub const PIPE_SIZE: usize = 10;
 
 /// Spawn a task and automatically monitor its execution.
 pub fn spawn<T>(future: T) -> JoinHandle<()>

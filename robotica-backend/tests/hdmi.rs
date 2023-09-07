@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 
 use robotica_backend::{
     devices::hdmi::{Command, Options},
-    entities,
+    pipes::{stateless, Subscriber, Subscription},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -121,7 +121,7 @@ async fn test_client_once() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, rx) = entities::create_stateless_entity("test");
+    let (client, rx) = stateless::create_pipe("test");
     let (rx, client_handle) = robotica_backend::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 
@@ -157,7 +157,7 @@ async fn test_client_reconnect() {
     let _ = started.await;
 
     println!("test: starting client");
-    let (client, rx) = entities::create_stateless_entity("test");
+    let (client, rx) = stateless::create_pipe("test");
     let (rx, client_handle) = robotica_backend::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 

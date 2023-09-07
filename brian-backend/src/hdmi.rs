@@ -1,8 +1,9 @@
+use robotica_backend::pipes::{Subscriber, Subscription};
 use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
-use robotica_backend::{devices::hdmi::Command, entities, spawn};
+use robotica_backend::{devices::hdmi::Command, pipes::stateless, spawn};
 use robotica_common::mqtt::{Json, MqttMessage, QoS};
 use robotica_common::robotica::commands;
 
@@ -25,10 +26,10 @@ pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
 
     let command_rx = state
         .subscriptions
-        .subscribe_into::<Json<commands::Command>>(&topic);
+        .subscribe_into_stateless::<Json<commands::Command>>(&topic);
 
     let name = id.get_name("hdmi");
-    let (tx, rx) = entities::create_stateless_entity(name);
+    let (tx, rx) = stateless::create_pipe(name);
 
     spawn(async move {
         let mut rx_s = command_rx.subscribe().await;

@@ -16,7 +16,7 @@ use tokio::select;
 use tokio::time::Interval;
 use tracing::{debug, error, info};
 
-use robotica_backend::entities::{create_stateless_entity, StatelessReceiver, StatelessSender};
+use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
 use robotica_backend::spawn;
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
@@ -244,7 +244,7 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
 
     let message_sink = state.message_sink.clone();
 
-    let (tx, rx) = create_stateless_entity("tesla_doors");
+    let (tx, rx) = stateful::create_pipe("tesla_doors");
 
     spawn(async move {
         let mut frunk_s = frunk_rx.subscribe().await;
@@ -308,16 +308,14 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         "tesla_doors (delayed)",
         duration,
         rx,
-        |c| !c.is_empty(),
+        |(_, c)| !c.is_empty(),
         DelayInputOptions {
             skip_subsequent_delay: true,
         },
     );
 
     // Discard initial [] value and duplicate events.
-    let rx = rx
-        .map_stateful(|f| f)
-        .filter(|(p, c)| p.is_some() || !c.is_empty());
+    let rx = rx.filter(|(p, c)| p.is_some() || !c.is_empty());
 
     // Repeat the last value every 5 minutes.
     let duration = Duration::from_secs(300);
@@ -381,7 +379,7 @@ pub enum MonitorChargingError {
 fn announce_charging_state(
     charging_state: ChargingStateEnum,
     old_tesla_state: &TeslaState,
-    message_sink: &StatelessSender<MessageCommand>,
+    message_sink: &stateless::Sender<MessageCommand>,
 ) {
     let was_plugged_in = old_tesla_state
         .charging_state
@@ -441,7 +439,7 @@ impl TeslaState {
 pub fn monitor_charging(
     state: &mut State,
     car_number: usize,
-    price_summary_rx: StatelessReceiver<PriceSummary>,
+    price_summary_rx: stateful::Receiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
@@ -453,13 +451,15 @@ pub fn monitor_charging(
     let mqtt = state.mqtt.clone();
     let message_sink = state.message_sink.clone();
 
-    let price_category_rx = price_summary_rx.map_stateful(|ps| ps.category);
+    let price_category_rx = price_summary_rx.map(|(_, ps)| ps.category);
 
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into::<Json<Command>>(&format!("command/Tesla/{car_number}/AutoCharge"))
+            .subscribe_into_stateless::<Json<Command>>(&format!(
+                "command/Tesla/{car_number}/AutoCharge"
+            ))
             .map(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
@@ -476,7 +476,9 @@ pub fn monitor_charging(
         let mqtt = mqtt.clone();
         state
             .subscriptions
-            .subscribe_into::<Json<Command>>(&format!("command/Tesla/{car_number}/ForceCharge"))
+            .subscribe_into_stateless::<Json<Command>>(&format!(
+                "command/Tesla/{car_number}/ForceCharge"
+            ))
             .map(move |Json(cmd)| {
                 if let Command::Device(cmd) = &cmd {
                     let status = match cmd.action {
@@ -492,8 +494,8 @@ pub fn monitor_charging(
     let is_home_rx = {
         state
             .subscriptions
-            .subscribe_into::<String>(&format!("state/Tesla/{car_number}/Location"))
-            .map_stateful(move |location| location == "home")
+            .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"))
+            .map(move |(_, location)| location == "home")
     };
 
     let charging_state_rx = state
@@ -608,7 +610,7 @@ pub fn monitor_charging(
                     tesla_state.is_at_home = Some(new_is_at_home);
                 }
 
-                Ok((old, charging_state)) = charging_state_s.recv_value() => {
+                Ok((old, charging_state)) = charging_state_s.recv_old_new() => {
                     info!("Charging state: {charging_state:?}");
                     if old.is_some() {
                         announce_charging_state(charging_state, &tesla_state, &message_sink);

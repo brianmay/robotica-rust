@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use influxdb::{Client, InfluxDbWriteable};
 
+use robotica_backend::pipes::{Subscriber, Subscription};
 use robotica_backend::{get_env, is_debug_mode, spawn, EnvironmentError};
 use robotica_common::anavi_thermometer::{self as anavi};
 use robotica_common::mqtt::{Json, MqttMessage};
@@ -81,7 +82,9 @@ where
     Json<T>: TryFrom<MqttMessage>,
     <Json<T> as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
 {
-    let rx = state.subscriptions.subscribe_into::<Json<T>>(topic);
+    let rx = state
+        .subscriptions
+        .subscribe_into_stateless::<Json<T>>(topic);
     let topic = topic.to_string();
     let influx_url = get_env("INFLUXDB_URL")?;
     let influx_database = get_env("INFLUXDB_DATABASE")?;
@@ -108,7 +111,7 @@ where
 pub fn monitor_fishtank(state: &mut State, topic: &str) -> Result<(), EnvironmentError> {
     let rx = state
         .subscriptions
-        .subscribe_into::<Json<FishTankData>>(topic);
+        .subscribe_into_stateless::<Json<FishTankData>>(topic);
     let topic = topic.to_string();
     let influx_url = get_env("INFLUXDB_URL")?;
     let influx_database = get_env("INFLUXDB_DATABASE")?;
