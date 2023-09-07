@@ -11,8 +11,8 @@ use tokio::{
 use tracing::{debug, info};
 
 use crate::{
-    entities::{self, StatefulReceiver, StatelessReceiver},
     is_debug_mode,
+    pipes::{stateful, stateless, Subscriber, Subscription},
 };
 
 /// A command to send to the HDMI matrix.
@@ -48,15 +48,15 @@ pub enum Error {
 /// This function will return an error if the connection to the HDMI matrix fails.
 pub fn run<A>(
     addr: A,
-    rx_cmd: StatelessReceiver<Command>,
+    rx_cmd: stateless::Receiver<Command>,
     options: &Options,
-) -> (StatefulReceiver<Result<Status, Error>>, JoinHandle<()>)
+) -> (stateful::Receiver<Result<Status, Error>>, JoinHandle<()>)
 where
     A: ToSocketAddrs + Clone + Send + Sync + Debug + 'static,
 {
     let options = options.clone();
     let name = format!("{addr:?}");
-    let (tx, rx) = entities::create_stateful_entity(name);
+    let (tx, rx) = stateful::create_pipe(name);
 
     let handle = spawn(async move {
         debug!("hdmi: Starting with addr {addr:?}");

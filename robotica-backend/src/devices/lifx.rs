@@ -13,7 +13,8 @@ use tokio::{
 use tracing::{debug, error, info};
 
 use crate::{
-    entities::{self, StatefulReceiver, StatefulSender, StatelessReceiver},
+    pipes::stateful,
+    pipes::{stateless, Subscriber, Subscription},
     spawn,
 };
 
@@ -50,8 +51,8 @@ pub enum DiscoverError {
 /// Returns an error if the UDP socket cannot be created.
 pub async fn discover(
     config: DiscoverConfig,
-) -> Result<entities::StatelessReceiver<Device>, DiscoverError> {
-    let (tx, rx) = entities::create_stateless_entity("lifx");
+) -> Result<stateless::Receiver<Device>, DiscoverError> {
+    let (tx, rx) = stateless::create_pipe("lifx");
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
     socket.set_broadcast(true)?;
@@ -451,10 +452,10 @@ pub struct DeviceConfig {
 ///
 /// This function will panic if something goes wrong.
 pub fn device_entity(
-    rx_pc: StatefulReceiver<PowerColor>,
-    tx_state: StatefulSender<State>,
+    rx_pc: stateful::Receiver<PowerColor>,
+    tx_state: stateful::Sender<State>,
     id: u64,
-    discover: StatelessReceiver<Device>,
+    discover: stateless::Receiver<Device>,
     config: DeviceConfig,
 ) {
     let discover = discover.filter(move |d| d.target == id);

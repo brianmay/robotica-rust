@@ -1,8 +1,10 @@
-use std::fmt::Debug;
 use std::time::Duration;
 
 // use tracing::debug;
-use robotica_backend::{entities::Data, spawn};
+use robotica_backend::{
+    pipes::{stateful, Subscriber},
+    spawn,
+};
 use tokio::{
     select,
     time::{self, sleep_until, Instant, Interval},
@@ -39,26 +41,24 @@ pub struct DelayInputOptions {
 pub fn delay_input<T>(
     name: &str,
     duration: Duration,
-    rx: robotica_backend::entities::Receiver<T>,
-    is_active: impl Fn(&T::Received) -> bool + Send + 'static,
+    rx: stateful::Receiver<T>,
+    is_active: impl Fn(&stateful::OldNewType<T>) -> bool + Send + 'static,
     options: DelayInputOptions,
-) -> robotica_backend::entities::Receiver<T>
+) -> stateful::Receiver<T>
 where
-    T: Data + Send + 'static,
-    T::Sent: Send + Sync,
-    T::Received: Clone + Debug + Send + Sync + Eq + 'static,
+    T: Clone + Eq + Send + Sync + 'static,
 {
-    let (tx_out, rx_out) = T::new_entity(name);
+    let (tx_out, rx_out) = stateful::create_pipe(name);
     spawn(async move {
         let mut state = DelayInputState::Idle;
         let mut s = rx.subscribe().await;
 
         loop {
             select! {
-                Ok(v) = s.recv_value() => {
+                Ok(v) = s.recv_old_new() => {
                     // debug!("delay received: {:?}", v);
                     let active_value = is_active(&v);
-                    let v = T::received_to_sent(v);
+                    let (_, v) = v;
                     match (active_value, &state) {
                         (false, _) => {
                             state = DelayInputState::Idle;
@@ -112,25 +112,23 @@ where
 pub fn delay_repeat<T>(
     name: &str,
     duration: Duration,
-    rx: robotica_backend::entities::Receiver<T>,
-    is_active: impl Fn(&T::Received) -> bool + Send + 'static,
-) -> robotica_backend::entities::Receiver<T>
+    rx: stateful::Receiver<T>,
+    is_active: impl Fn(&stateful::OldNewType<T>) -> bool + Send + 'static,
+) -> stateful::Receiver<T>
 where
-    T: Data + Send + 'static,
-    T::Sent: Send + Clone,
-    T::Received: Clone + Debug + Send + Sync + Eq + 'static,
+    T: Clone + Eq + Send + 'static,
 {
-    let (tx_out, rx_out) = T::new_entity(name);
+    let (tx_out, rx_out) = stateful::create_pipe(name);
     spawn(async move {
         let mut state = DelayRepeatState::Idle;
         let mut s = rx.subscribe().await;
 
         loop {
             select! {
-                Ok(v) = s.recv_value() => {
+                Ok(v) = s.recv_old_new() => {
                     // debug!("delay received: {:?}", v);
                     let active_value = is_active(&v);
-                    let v = T::received_to_sent(v);
+                    let (_, v)= v;
 
                     match (active_value, state) {
                         (false, _) => {

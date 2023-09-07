@@ -15,6 +15,7 @@ use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Mark;
 
+use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
 use crate::spawn;
@@ -272,7 +273,7 @@ pub enum ExecutorError {
 /// This function will return an error if the `config` is invalid.
 pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt)?;
-    let mark_rx = subscriptions.subscribe_into::<Json<Mark>>("mark");
+    let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;

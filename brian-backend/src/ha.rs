@@ -1,6 +1,7 @@
 use monostate::MustBe;
-use robotica_backend::entities::create_stateless_entity;
-use robotica_backend::entities::StatelessSender;
+use robotica_backend::pipes::stateless;
+use robotica_backend::pipes::Subscriber;
+use robotica_backend::pipes::Subscription;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::mqtt::QoS;
@@ -90,8 +91,8 @@ pub fn string_to_message(msg: &MessageCommand) -> MqttMessage {
     MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
 }
 
-pub fn create_message_sink(mqtt: MqttTx) -> StatelessSender<MessageCommand> {
-    let (tx, rx) = create_stateless_entity::<MessageCommand>("messages");
+pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<MessageCommand> {
+    let (tx, rx) = stateless::create_pipe::<MessageCommand>("messages");
     tokio::spawn(async move {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {

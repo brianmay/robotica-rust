@@ -43,7 +43,7 @@ use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
 use robotica_backend::{
-    entities::{self, RecvError},
+    pipes::{stateful, RecvError, Subscriber, Subscription},
     services::mqtt::MqttTx,
 };
 use robotica_common::controllers::{
@@ -197,7 +197,7 @@ where
 
 async fn receive(
     label: Label,
-    subscription: &mut entities::StatefulSubscription<MqttMessage>,
+    subscription: &mut stateful::Subscription<MqttMessage>,
 ) -> Result<(Label, MqttMessage), RecvError> {
     let msg = subscription.recv().await?;
     Ok((label, msg))
@@ -380,7 +380,7 @@ fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         let rx = mqtt
-            .subscribe_into::<Arc<Json<Tags>>>("robotica/robotica.linuxpenguins.xyz/tags")
+            .subscribe_into_stateless::<Arc<Json<Tags>>>("robotica/robotica.linuxpenguins.xyz/tags")
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
@@ -403,7 +403,9 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         let rx = mqtt
-            .subscribe_into::<Arc<Json<Vec<Sequence>>>>("schedule/robotica.linuxpenguins.xyz")
+            .subscribe_into_stateless::<Arc<Json<Vec<Sequence>>>>(
+                "schedule/robotica.linuxpenguins.xyz",
+            )
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
