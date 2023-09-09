@@ -23,7 +23,7 @@ use tokio::sync::mpsc;
 #[must_use]
 pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
-    T: Clone + Eq + Send + 'static,
+    T: Clone + Send + 'static,
 {
     let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
@@ -54,15 +54,11 @@ where
                 Some(msg) = send_rx.recv() => {
                     match msg {
                         SendMessage::Set(data) => {
-                            let changed = current_data.as_ref().map_or(true, |saved_data| data != *saved_data);
-                            if changed {
-                                // let prev_data = current_data;
-                                current_data = Some(data.clone());
-                                if let Err(_err) = out_tx.send(data) {
-                                    // It is not an error if there are no subscribers.
-                                    // debug!("stateful::create_pipe({name}): send to broadcast failed: {err} (not an error)");
-                                }
-                            };
+                            current_data = Some(data.clone());
+                            if let Err(_err) = out_tx.send(data) {
+                                // It is not an error if there are no subscribers.
+                                // debug!("stateful::create_pipe({name}): send to broadcast failed: {err} (not an error)");
+                            }
                         }
                     }
                 }
