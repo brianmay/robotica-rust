@@ -447,10 +447,6 @@ pub struct DeviceConfig {
 }
 
 /// Run the device.
-///
-/// # Panics
-///
-/// This function will panic if something goes wrong.
 pub fn device_entity(
     rx_pc: stateful::Receiver<PowerColor>,
     tx_state: stateful::Sender<State>,
