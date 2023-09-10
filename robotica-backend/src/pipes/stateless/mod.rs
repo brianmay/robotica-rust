@@ -10,7 +10,6 @@ use tokio::select;
 use tracing::debug;
 use tracing::error;
 
-use crate::pipes::try_receive;
 use crate::spawn;
 
 use super::PIPE_SIZE;
@@ -25,7 +24,7 @@ pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
     T: Clone + Send + 'static,
 {
-    let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
+    let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
 
@@ -44,21 +43,26 @@ where
 
     spawn(async move {
         let name = name;
-        let mut receive_rx = Some(receive_rx);
+        let mut send_rx = send_rx;
+        let mut receive_rx = receive_rx;
 
         loop {
             select! {
-                Some(msg) = send_rx.recv() => {
+                msg = send_rx.recv() => {
+                    #[allow(clippy::single_match_else)]
                     match msg {
-                        SendMessage::Set(data) => {
+                        Some(SendMessage::Set(data)) => {
                             if let Err(_err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
-                                // debug!("stateless::create_pipe({name}): send to broadcast failed: {err} (not an error)");
                             }
+                        }
+                        None => {
+                            debug!("stateless::create_pipe({name}): send channel closed");
+                            break;
                         }
                     }
                 }
-                Some(msg) = try_receive(&mut receive_rx) => {
+                msg = receive_rx.recv() => {
                     // This should create an error if we add messages in the future.
                     #[allow(clippy::single_match_else)]
                     match msg {
@@ -69,8 +73,8 @@ where
                             };
                         }
                         None => {
-                            debug!("stateless::create_pipe({name}): command channel closed");
-                            receive_rx = None;
+                            debug!("stateless::create_pipe({name}): receive channel closed");
+                            break;
                         }
                     }
                 }
@@ -78,13 +82,6 @@ where
                     debug!("stateless::create_pipe({name}): all inputs closed");
                     break;
                 }
-            }
-
-            if matches!((&receive_rx, out_tx.receiver_count()), (None, 0)) {
-                debug!(
-                    "stateless::create_pipe({name}): receiver closed and all subscriptions closed"
-                );
-                break;
             }
         }
     });

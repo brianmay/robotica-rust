@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use thiserror::Error;
-use tokio::sync::mpsc;
 
 pub mod generic;
 pub mod stateful;
@@ -10,13 +9,6 @@ pub mod stateless;
 
 /// Size of all pipes.
 pub const PIPE_SIZE: usize = 10;
-
-async fn try_receive<T: Send>(rx: &mut Option<mpsc::Receiver<T>>) -> Option<Option<T>> {
-    match rx {
-        Some(rx) => Some(rx.recv().await),
-        None => None,
-    }
-}
 
 /// Something went wrong in Receiver.
 #[derive(Error, Debug)]

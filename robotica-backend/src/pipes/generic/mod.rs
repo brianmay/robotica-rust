@@ -9,7 +9,6 @@ use tokio::select;
 use tracing::debug;
 use tracing::error;
 
-use crate::pipes::try_receive;
 use crate::spawn;
 
 use self::receiver::ReceiveMessage;
@@ -25,7 +24,7 @@ pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
     T: Clone + Send + 'static,
 {
-    let (send_tx, mut send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
+    let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
 
@@ -45,55 +44,46 @@ where
     spawn(async move {
         let name = name;
 
-        // let mut prev_data: Option<T> = None;
         let mut current_data: Option<T> = None;
-        let mut receive_rx = Some(receive_rx);
+        let mut send_rx = send_rx;
+        let mut receive_rx = receive_rx;
 
         loop {
             select! {
-                Some(msg) = send_rx.recv() => {
+                msg = send_rx.recv() => {
+                    #[allow(clippy::single_match_else)]
                     match msg {
-                        SendMessage::Set(data) => {
+                        Some(SendMessage::Set(data)) => {
                             current_data = Some(data.clone());
                             if let Err(_err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
-                                // debug!("stateful::create_pipe({name}): send to broadcast failed: {err} (not an error)");
                             }
+                        }
+                        None => {
+                            debug!("generic::create_pipe({name}): send channel closed");
+                            break;
                         }
                     }
                 }
-                Some(msg) = try_receive(&mut receive_rx) => {
+                msg = receive_rx.recv() => {
                     #[allow(clippy::single_match_else)]
                     match msg {
-                        // Some(ReceiveMessage::Get(tx)) => {
-                        //     let data = current_data.clone();
-                        //     if tx.send(data).is_err() {
-                        //         error!("stateful::create_pipe({name}): get send failed");
-                        //     };
-                        // }
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
                             if tx.send((rx, current_data.clone())).is_err() {
-                                error!("stateful::create_pipe{name}): subscribe send failed");
+                                error!("generic::create_pipe{name}): subscribe send failed");
                             };
                         }
                         None => {
-                            debug!("stateful::create_pipe({name}): command channel closed");
-                            receive_rx = None;
+                            debug!("generic::create_pipe({name}): receive channel closed");
+                            break;
                         }
                     }
                 }
                 else => {
-                    debug!("stateful::create_pipe({name}): all inputs closed");
+                    debug!("generic::create_pipe({name}): all inputs closed");
                     break;
                 }
-            }
-
-            if matches!((&receive_rx, out_tx.receiver_count()), (None, 0)) {
-                debug!(
-                    "stateful::create_pipe({name}): receiver closed and all subscriptions closed"
-                );
-                break;
             }
         }
     });
