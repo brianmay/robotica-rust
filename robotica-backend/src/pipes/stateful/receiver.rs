@@ -266,7 +266,7 @@ where
 {
     /// Create a null subscription that is already closed.
     fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
-        let (_tx, rx) = broadcast::channel(0);
+        let (_tx, rx) = broadcast::channel(1);
         Self {
             rx,
             _tx: tx,
