@@ -17,7 +17,7 @@ use robotica_common::{
         lights::{self, Colors, Light2Command, PowerColor, PowerLevel, PowerState, State, HSBK},
     },
 };
-use tokio::time::sleep;
+use tokio::{select, time::sleep};
 use tracing::{debug, error};
 
 trait GetSceneEntity {
@@ -184,14 +184,17 @@ impl GetSceneEntity for StandardSceneEntities {
 
 fn static_entity(pc: PowerColor, name: impl Into<String>) -> stateful::Receiver<PowerColor> {
     let (tx, rx) = stateful::create_pipe(name);
-    tx.try_send(pc);
+    spawn(async move {
+        tx.try_send(pc);
+        tx.closed().await;
+    });
     rx
 }
 
 fn busy_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
     let (tx, rx) = stateful::create_pipe(name);
     spawn(async move {
-        loop {
+        while !tx.is_closed() {
             let on_color = HSBK {
                 hue: 0.0,
                 saturation: 100.0,
@@ -224,7 +227,7 @@ fn rainbow_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
         let mut i = 0u16;
         let num_per_cycle = 10u16;
 
-        loop {
+        while !tx.is_closed() {
             let colors: Vec<HSBK> = (0..num_per_cycle)
                 .map(|j| {
                     let mut hue = f32::from(i + j) * 360.0 / f32::from(num_per_cycle);
@@ -265,8 +268,15 @@ fn mqtt_entity(
     let (tx, rx) = stateful::create_pipe(name);
     spawn(async move {
         let mut pc_s = pc_rx.subscribe().await;
-        while let Ok(pc) = pc_s.recv().await {
-            tx.try_send(pc);
+        loop {
+            select! {
+                Ok(pc) = pc_s.recv() => {
+                    tx.try_send(pc);
+                }
+                _ = tx.closed() => {
+                    break;
+                }
+            }
         }
     });
     rx
