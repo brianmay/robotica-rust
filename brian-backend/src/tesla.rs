@@ -169,31 +169,32 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                 // Departed location message.
                 if let Some(old_location) = &maybe_old_location {
                     let msg = left_location_message(old_location);
-                    let msg = if old_location.censor() {
-                        msg.map(|msg| new_private_message(msg, MessagePriority::Low))
-                    } else {
-                        msg.map(|msg| new_message(msg, MessagePriority::Low))
-                    };
-                    if let Some(msg) = msg {
-                        message_sink.try_send(msg);
-                    };
+                    output_location_message(old_location, msg, &message_sink);
                 }
 
                 // Arrived location message.
                 let msg = arrived_location_message(&new_location);
-                let msg = if new_location.censor() {
-                    msg.map(|msg| new_private_message(msg, MessagePriority::Low))
-                } else {
-                    msg.map(|msg| new_message(msg, MessagePriority::Low))
-                };
-                if let Some(msg) = msg {
-                    message_sink.try_send(msg);
-                };
+                output_location_message(&new_location, msg, &message_sink);
 
                 maybe_old_location = Some(new_location);
             }
         }
     });
+}
+
+fn output_location_message(
+    location: &Location,
+    msg: Option<String>,
+    message_sink: &stateless::Sender<MessageCommand>,
+) {
+    let msg = if location.censor() {
+        msg.map(|msg| new_private_message(msg, MessagePriority::Low))
+    } else {
+        msg.map(|msg| new_message(msg, MessagePriority::Low))
+    };
+    if let Some(msg) = msg {
+        message_sink.try_send(msg);
+    };
 }
 
 fn left_location_message(location: &Location) -> Option<String> {
