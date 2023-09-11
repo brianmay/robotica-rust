@@ -136,16 +136,10 @@ impl Location {
         }
     }
 
-    fn censor(&self) -> &Self {
-        let censor = match self {
+    fn censor(&self) -> bool {
+        match self {
             Self::String(s) => s != "home",
             Self::Nowhere => false,
-        };
-
-        if censor {
-            &Self::Nowhere
-        } else {
-            self
         }
     }
 }
@@ -172,23 +166,29 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
             while let Ok(new_location_raw) = location_s.recv().await {
                 let new_location = Location::from_string(new_location_raw);
 
+                // Departed location message.
                 if let Some(old_location) = &maybe_old_location {
-                    // Send private message with true location details
-                    let msg = location_to_message(old_location, &new_location);
+                    let msg = left_location_message(old_location);
+                    let msg = if old_location.censor() {
+                        msg.map(|msg| new_private_message(msg, MessagePriority::Low))
+                    } else {
+                        msg.map(|msg| new_message(msg, MessagePriority::Low))
+                    };
                     if let Some(msg) = msg {
-                        let msg = new_private_message(msg, MessagePriority::Low);
                         message_sink.try_send(msg);
-                    }
-
-                    // Send public message with censored location details
-                    let c_old_location = old_location.censor();
-                    let c_new_location = new_location.censor();
-                    let msg = location_to_message(c_old_location, c_new_location);
-                    if let Some(msg) = msg {
-                        let msg = new_message(msg, MessagePriority::Low);
-                        message_sink.try_send(msg);
-                    }
+                    };
                 }
+
+                // Arrived location message.
+                let msg = arrived_location_message(&new_location);
+                let msg = if new_location.censor() {
+                    msg.map(|msg| new_private_message(msg, MessagePriority::Low))
+                } else {
+                    msg.map(|msg| new_message(msg, MessagePriority::Low))
+                };
+                if let Some(msg) = msg {
+                    message_sink.try_send(msg);
+                };
 
                 maybe_old_location = Some(new_location);
             }
@@ -196,22 +196,17 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
     });
 }
 
-fn location_to_message(old_location: &Location, new_location: &Location) -> Option<String> {
-    if old_location == new_location {
-        None
-    } else {
-        match (old_location, new_location) {
-            (Location::Nowhere, Location::String(new_location)) => {
-                Some(format!("The Tesla arrived at {new_location}"))
-            }
-            (Location::String(old_location), Location::Nowhere) => {
-                Some(format!("The Tesla left {old_location}"))
-            }
-            (Location::String(old_location), Location::String(new_location)) => Some(format!(
-                "The Tesla left {old_location} and arrived at {new_location}"
-            )),
-            (Location::Nowhere, Location::Nowhere) => None,
-        }
+fn left_location_message(location: &Location) -> Option<String> {
+    match location {
+        Location::String(location) => Some(format!("The Tesla left {location}")),
+        Location::Nowhere => None,
+    }
+}
+
+fn arrived_location_message(location: &Location) -> Option<String> {
+    match location {
+        Location::String(location) => Some(format!("The Tesla arrived at {location}")),
+        Location::Nowhere => None,
     }
 }
 
