@@ -167,26 +167,29 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
         DelayInputOptions::default(),
     );
     let message_sink = state.message_sink.clone();
+
     spawn(async move {
         let mut location_s = location.subscribe().await;
-        let mut maybe_old_location: Option<Location> = None;
+        let mut old_location = {
+            let Ok(old_location_raw) = location_s.recv().await else {
+                error!("Failed to get initial Tesla location");
+                return;
+            };
+            Location::from_string(old_location_raw)
+        };
 
-        loop {
-            while let Ok(new_location_raw) = location_s.recv().await {
-                let new_location = Location::from_string(new_location_raw);
+        while let Ok(new_location_raw) = location_s.recv().await {
+            let new_location = Location::from_string(new_location_raw);
 
-                // Departed location message.
-                if let Some(old_location) = &maybe_old_location {
-                    let msg = left_location_message(old_location);
-                    output_location_message(old_location, msg, &message_sink);
+            // Departed location message.
+            let msg = left_location_message(&old_location);
+            output_location_message(&old_location, msg, &message_sink);
 
-                    // Arrived location message.
-                    let msg = arrived_location_message(&new_location);
-                    output_location_message(&new_location, msg, &message_sink);
-                }
+            // Arrived location message.
+            let msg = arrived_location_message(&new_location);
+            output_location_message(&new_location, msg, &message_sink);
 
-                maybe_old_location = Some(new_location);
-            }
+            old_location = new_location;
         }
     });
 }
