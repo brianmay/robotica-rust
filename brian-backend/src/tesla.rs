@@ -111,12 +111,21 @@ enum Door {
 }
 
 impl Door {
-    const fn to_str(&self) -> &'static str {
+    const fn is_plural(&self) -> bool {
         match self {
-            Self::Frunk => "frunk",
-            Self::Boot => "boot",
-            Self::Doors => "doors",
-            Self::Windows => "windows",
+            Self::Boot | Self::Frunk => false,
+            Self::Doors | Self::Windows => true,
+        }
+    }
+}
+
+impl Display for Door {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frunk => write!(f, "frunk"),
+            Self::Boot => write!(f, "boot"),
+            Self::Doors => write!(f, "doors"),
+            Self::Windows => write!(f, "windows"),
         }
     }
 }
@@ -322,18 +331,37 @@ pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
         let mut s = rx.subscribe().await;
         while let Ok(open) = s.recv().await {
             debug!("open received: {:?}", open);
-            let open = open.iter().map(Door::to_str).collect::<Vec<_>>();
-            let msg = if open.is_empty() {
-                "The Tesla is secure".to_string()
-            } else if open.len() == 1 {
-                format!("The Tesla {} is open", open.join(", "))
-            } else {
-                format!("The Tesla {} are open", open.join(", "))
-            };
+            let msg = doors_to_message(&open);
             let msg = new_message(msg, MessagePriority::Urgent);
             message_sink.try_send(msg);
         }
     });
+}
+
+fn doors_to_message(open: &[Door]) -> String {
+    let msg = match open {
+        [] => "The Tesla is secure".to_string(),
+        // The Tesla doors are open
+        [doors] if doors.is_plural() => {
+            format!("The Tesla {doors} are open")
+        }
+        // The Tesla frunk is open
+        [door] if !door.is_plural() => {
+            format!("The Tesla {door} is open")
+        }
+        // The Tesla frunk and boot are open
+        // The Tesla frunk, boot and doors are open
+        // The Tesla doors, boot and frunk are open
+        [doors @ .., last] => {
+            let doors = doors
+                .iter()
+                .map(Door::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("The Tesla {doors} and {last} are open")
+        }
+    };
+    msg
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
