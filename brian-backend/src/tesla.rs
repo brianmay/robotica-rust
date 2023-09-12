@@ -179,11 +179,11 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
                 if let Some(old_location) = &maybe_old_location {
                     let msg = left_location_message(old_location);
                     output_location_message(old_location, msg, &message_sink);
-                }
 
-                // Arrived location message.
-                let msg = arrived_location_message(&new_location);
-                output_location_message(&new_location, msg, &message_sink);
+                    // Arrived location message.
+                    let msg = arrived_location_message(&new_location);
+                    output_location_message(&new_location, msg, &message_sink);
+                }
 
                 maybe_old_location = Some(new_location);
             }
