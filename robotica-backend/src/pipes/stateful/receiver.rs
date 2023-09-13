@@ -367,3 +367,18 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_null_subscription() {
+        let (tx, _rx) = mpsc::channel::<ReceiveMessage<u8>>(1);
+        let mut sub = super::Subscription::null(tx);
+        assert!(sub.try_recv().is_err());
+        assert!(sub.try_recv_old_new().is_err());
+        assert!(sub.recv().await.is_err());
+        assert!(sub.recv_old_new().await.is_err());
+    }
+}
