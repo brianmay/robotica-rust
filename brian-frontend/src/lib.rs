@@ -6,6 +6,7 @@ use std::sync::Arc;
 use gloo_net::http::Request;
 use itertools::Itertools;
 use robotica_common::config::Rooms;
+use robotica_common::config::RoomConfig;
 use robotica_frontend::services::websocket::WebsocketService;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -154,9 +155,9 @@ fn nav_bar() -> Html {
         None => Arc::new(Vec::new()),
     };
 
-    let menus: HashMap<String, Rooms> = rooms
+    let menus: HashMap<&str, Vec<&RoomConfig>> = rooms
         .iter()
-        .map(|room| (room.menu.clone(), room.clone()))
+        .map(|room| (room.menu.as_str(), room))
         .into_group_map();
 
     let route: Option<&Route> = match use_location() {
