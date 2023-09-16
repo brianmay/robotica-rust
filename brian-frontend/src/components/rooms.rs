@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use yew::prelude::*;
 
 use robotica_frontend::components::button::{
@@ -6,12 +8,12 @@ use robotica_frontend::components::button::{
 use robotica_frontend::components::mqtt_last::MqttLast;
 
 use robotica_common::anavi_thermometer as anavi;
-use robotica_common::config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig};
+use robotica_common::config::{
+    ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms,
+};
 use robotica_common::controllers::Action;
 use robotica_common::mqtt::Json;
 use robotica_common::zigbee2mqtt;
-
-use crate::RoomContext;
 
 use super::require_connection::RequireConnection;
 
@@ -125,7 +127,7 @@ pub struct Props {
 
 #[function_component(Room)]
 pub fn room(props: &Props) -> Html {
-    let rooms = use_context::<RoomContext>().unwrap();
+    let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
 
     if let Some(rooms) = rooms {
         if let Some(room) = rooms.iter().find(|room| room.id == props.id) {

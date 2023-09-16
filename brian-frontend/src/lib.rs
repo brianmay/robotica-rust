@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gloo_net::http::Request;
 use itertools::Itertools;
-use robotica_common::config::{RoomConfig, Rooms};
+use robotica_common::config::Rooms;
 use robotica_frontend::services::websocket::WebsocketService;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -106,8 +106,6 @@ fn footer() -> Html {
     }
 }
 
-type RoomContext = Option<Arc<Vec<Arc<RoomConfig>>>>;
-
 #[function_component(App)]
 fn app() -> Html {
     let wss = WebsocketService::new();
@@ -116,26 +114,25 @@ fn app() -> Html {
 
     let rooms_setter = rooms.clone();
     spawn_local(async move {
-        let rooms = Request::get("/rooms")
-            .send()
-            .await
-            .unwrap()
-            .json::<Rooms>()
-            .await
-            .unwrap()
-            .into_iter()
-            .map(Arc::new)
-            .collect::<Vec<_>>();
-        rooms_setter.set(Some(Arc::new(rooms)));
+        let rooms = Arc::new(
+            Request::get("/rooms")
+                .send()
+                .await
+                .unwrap()
+                .json::<Rooms>()
+                .await
+                .unwrap(),
+        );
+        rooms_setter.set(Some(rooms));
     });
 
     html! {
         <ContextProvider<WebsocketService> context={wss}>
-            <ContextProvider<RoomContext> context={&*rooms}>
+            <ContextProvider<Option<Arc<Rooms>>> context={&*rooms}>
                 <BrowserRouter>
                     <Switch<Route> render={switch}/>
                 </BrowserRouter>
-            </ContextProvider<RoomContext>>
+            </ContextProvider<Option<Arc<Rooms>>>>
         </ContextProvider<WebsocketService>>
     }
 }
@@ -150,14 +147,14 @@ pub fn run() -> Result<(), JsValue> {
 
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
-    let rooms = use_context::<RoomContext>().unwrap();
+    let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
 
     let rooms = match rooms {
         Some(rooms) => rooms,
         None => Arc::new(Vec::new()),
     };
 
-    let menus: HashMap<String, Vec<Arc<RoomConfig>>> = rooms
+    let menus: HashMap<String, Rooms> = rooms
         .iter()
         .map(|room| (room.menu.clone(), room.clone()))
         .into_group_map();
