@@ -46,12 +46,9 @@ use robotica_backend::{
     pipes::{stateful, RecvError, Subscriber, Subscription},
     services::mqtt::MqttTx,
 };
-use robotica_common::controllers::{
-    robotica::{hdmi, lights2, music2, switch},
-    zwave,
-};
+use robotica_common::config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon};
 use robotica_common::{
-    controllers::{tasmota, ConfigTrait, ControllerTrait, DisplayState, Label},
+    controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
     datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     robotica::audio::Message,
@@ -63,48 +60,6 @@ use tokio::{
     time::{sleep, sleep_until, Instant},
 };
 use tracing::{error, info};
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-enum ControllerConfig {
-    Hdmi(hdmi::Config),
-    Light2(lights2::Config),
-    Music2(music2::Config),
-    Switch(switch::Config),
-    Zwave(zwave::Config),
-    Tasmota(tasmota::Config),
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Icon {
-    Fan,
-    Light,
-    Night,
-    Schedule,
-    Select,
-    Speaker,
-    Trumpet,
-    Tv,
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-pub struct ButtonConfig {
-    controller: ControllerConfig,
-    title: String,
-    icon: Icon,
-}
-
-#[allow(dead_code)]
-#[derive(Deserialize)]
-pub struct ButtonRowConfig {
-    title: String,
-    buttons: Vec<Arc<ButtonConfig>>,
-}
 
 #[derive(Deserialize)]
 pub struct ProgramsConfig {
@@ -263,7 +218,7 @@ pub fn run_gui(
                             row,
                             col,
                             rx_click,
-                            config: bd.clone(),
+                            config: Arc::new(bd.clone()),
                         },
                     )
                 })

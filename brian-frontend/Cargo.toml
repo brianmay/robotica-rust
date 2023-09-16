@@ -20,7 +20,7 @@ yew = { version = "0.20", features = ["csr"] }
 yew-router = "0.17.0"
 robotica-common = { path = "../robotica-common" }
 wasm-bindgen-futures = "0.4.27"
-
+gloo-net = "0.4.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

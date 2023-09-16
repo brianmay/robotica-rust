@@ -1,6 +1,6 @@
 //! A Tasmota switch controller
 use crate::mqtt::MqttMessage;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::{
@@ -9,7 +9,7 @@ use super::{
 };
 
 /// The configuration for a switch controller
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Config {
     /// The topic substring for the switch
     pub topic_substr: String,

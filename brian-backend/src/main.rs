@@ -23,6 +23,11 @@ use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::pipes::stateless;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
+use robotica_common::config::{
+    ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms,
+};
+use robotica_common::controllers::robotica::lights2;
+use robotica_common::controllers::Action;
 use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
@@ -70,6 +75,54 @@ pub struct State {
     persistent_state_database: PersistentStateDatabase,
 }
 
+fn get_rooms() -> Rooms {
+    let rows: Vec<ButtonRowConfig> = vec![ButtonRowConfig {
+        id: "lights".to_string(),
+        title: "Lights".to_string(),
+        buttons: vec![
+            ButtonConfig {
+                id: "auto".to_string(),
+                title: "Auto".to_string(),
+                icon: Icon::Light,
+                controller: ControllerConfig::Light2(lights2::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Brian/Light".to_string(),
+                    scene: "auto".to_string(),
+                }),
+            },
+            ButtonConfig {
+                id: "on".to_string(),
+                title: "On".to_string(),
+                icon: Icon::Light,
+                controller: ControllerConfig::Light2(lights2::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Brian/Light".to_string(),
+                    scene: "on".to_string(),
+                }),
+            },
+            ButtonConfig {
+                id: "rainbow".to_string(),
+                title: "Rainbow".to_string(),
+                icon: Icon::Light,
+                controller: ControllerConfig::Light2(lights2::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Brian/Light".to_string(),
+                    scene: "rainbow".to_string(),
+                }),
+            },
+        ],
+    }];
+
+    let rooms: Rooms = vec![RoomConfig {
+        id: "brian".to_string(),
+        title: "Brian's Room".to_string(),
+        menu: "Bedrooms".to_string(),
+        rows,
+    }];
+
+    rooms
+}
+
 async fn setup_pipes(state: &mut State) {
     let price_summary_rx = amber::run(state).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
@@ -93,7 +146,8 @@ async fn setup_pipes(state: &mut State) {
         panic!("Error running tesla charging monitor: {e}");
     });
 
-    http::run(state.mqtt.clone())
+    let rooms = get_rooms();
+    http::run(state.mqtt.clone(), rooms)
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 

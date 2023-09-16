@@ -2,7 +2,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::mqtt::MqttMessage;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 pub mod robotica;
@@ -13,7 +13,7 @@ pub mod zwave;
 pub type Label = u32;
 
 /// The action to happen when a button is pressed.
-#[derive(Copy, Clone, Eq, PartialEq, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[allow(dead_code)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {

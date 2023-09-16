@@ -1,6 +1,6 @@
 //! A robotica switch controller
 use crate::{mqtt::MqttMessage, robotica::switch::DevicePower};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::super::{
@@ -9,7 +9,7 @@ use super::super::{
 };
 
 /// The configuration for a switch controller
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Config {
     /// The topic substring for the switch
     pub topic_substr: String,

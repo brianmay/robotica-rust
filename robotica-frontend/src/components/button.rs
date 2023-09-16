@@ -1,4 +1,5 @@
 //! An interactive button that receives MQTT messages
+use robotica_common::config::Icon;
 use yew::prelude::*;
 
 use robotica_common::controllers::robotica::{hdmi, lights2, music2, switch};
@@ -7,13 +8,31 @@ use robotica_common::controllers::{
 };
 use robotica_common::mqtt::MqttMessage;
 
-use crate::services::{
-    icons::Icon,
-    websocket::{self, WebsocketService, WsEvent},
-};
+use crate::services::websocket::{self, WebsocketService, WsEvent};
+
+#[must_use]
+fn icon_to_href(icon: Icon, state: DisplayState) -> String {
+    let name = match icon {
+        Icon::Fan => "fan",
+        Icon::Light => "light",
+        Icon::Night => "night",
+        Icon::Schedule => "schedule",
+        Icon::Select => "select",
+        Icon::Speaker => "speaker",
+        Icon::Trumpet => "trumpet",
+        Icon::Tv => "tv",
+    };
+    let version = match state {
+        DisplayState::HardOff | DisplayState::Error | DisplayState::Unknown => "error",
+        DisplayState::On => "on",
+        DisplayState::AutoOff => "auto",
+        DisplayState::Off => "off",
+    };
+    format!("/images/{name}_{version}.svg")
+}
 
 trait ButtonPropsTrait {
-    fn get_icon(&self) -> &Icon;
+    fn get_icon(&self) -> Icon;
     fn get_name(&self) -> &str;
 }
 
@@ -52,8 +71,8 @@ impl ConfigTrait for Light2Props {
 }
 
 impl ButtonPropsTrait for Light2Props {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -96,8 +115,8 @@ impl ConfigTrait for Music2Props {
 }
 
 impl ButtonPropsTrait for Music2Props {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -136,8 +155,8 @@ impl ConfigTrait for SwitchProps {
 }
 
 impl ButtonPropsTrait for SwitchProps {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -176,8 +195,8 @@ impl ConfigTrait for ZwaveProps {
 }
 
 impl ButtonPropsTrait for ZwaveProps {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -221,8 +240,8 @@ impl ConfigTrait for TasmotaProps {
 }
 
 impl ButtonPropsTrait for TasmotaProps {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -269,8 +288,8 @@ impl ConfigTrait for HdmiProps {
 }
 
 impl ButtonPropsTrait for HdmiProps {
-    fn get_icon(&self) -> &Icon {
-        &self.icon
+    fn get_icon(&self) -> Icon {
+        self.icon
     }
 
     fn get_name(&self) -> &str {
@@ -380,7 +399,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                 onclick={click_callback}
             >
                 <div class="icon">
-                    <img src={icon.to_href(&display_state)}/>
+                    <img src={icon_to_href(icon, display_state)}/>
                 </div>
                 <div>{ display_state }</div>
                 <div>{ &name }</div>

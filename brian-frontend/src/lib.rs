@@ -1,7 +1,14 @@
 #![allow(clippy::let_unit_value)]
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use gloo_net::http::Request;
+use itertools::Itertools;
+use robotica_common::config::Rooms;
 use robotica_frontend::services::websocket::WebsocketService;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -16,10 +23,14 @@ use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Routable)]
+use crate::components::rooms::Room;
+
+#[derive(Debug, Clone, Eq, PartialEq, Routable)]
 pub enum Route {
     #[at("/welcome")]
     Welcome,
+    #[at("/room/:id")]
+    Room { id: String },
     #[at("/brian")]
     BrianRoom,
     #[at("/jan")]
@@ -52,6 +63,7 @@ pub enum Route {
 fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
+        Route::Room { id } => html! { <Room id={id}/> },
         Route::BrianRoom => html! { <BrianRoom/> },
         Route::JanRoom => html! { <JanRoom/> },
         Route::TwinsRoom => html! { <TwinsRoom/> },
@@ -98,11 +110,29 @@ fn footer() -> Html {
 fn app() -> Html {
     let wss = WebsocketService::new();
 
+    let rooms = use_state(|| None);
+
+    let rooms_setter = rooms.clone();
+    spawn_local(async move {
+        let rooms = Arc::new(
+            Request::get("/rooms")
+                .send()
+                .await
+                .unwrap()
+                .json::<Rooms>()
+                .await
+                .unwrap(),
+        );
+        rooms_setter.set(Some(rooms));
+    });
+
     html! {
         <ContextProvider<WebsocketService> context={wss}>
-            <BrowserRouter>
-                <Switch<Route> render={switch}/>
-            </BrowserRouter>
+            <ContextProvider<Option<Arc<Rooms>>> context={&*rooms}>
+                <BrowserRouter>
+                    <Switch<Route> render={switch}/>
+                </BrowserRouter>
+            </ContextProvider<Option<Arc<Rooms>>>>
         </ContextProvider<WebsocketService>>
     }
 }
@@ -117,12 +147,24 @@ pub fn run() -> Result<(), JsValue> {
 
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
-    let route: Option<Route> = match use_location() {
+    let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
+
+    let rooms = match rooms {
+        Some(rooms) => rooms,
+        None => Arc::new(Vec::new()),
+    };
+
+    let menus: HashMap<String, Rooms> = rooms
+        .iter()
+        .map(|room| (room.menu.clone(), room.clone()))
+        .into_group_map();
+
+    let route: Option<&Route> = match use_location() {
         Some(location) => location.state().map(|state| *state),
         None => None,
     };
 
-    let classes = |link_route| {
+    let classes = |link_route: &Route| {
         let mut classes = classes!("nav-link");
         if Some(link_route) == route {
             classes.push("active");
@@ -130,17 +172,15 @@ fn nav_bar() -> Html {
         classes
     };
 
-    // let active = |link_route| Some(link_route) == route;
-
-    let link = |link_route, text| {
+    let link = |link_route: Route, text| {
         html! {
-            <Link<Route> classes={classes(link_route)} to={link_route}>
+            <Link<Route> classes={classes(&link_route)} to={link_route}>
                 {text}
             </Link<Route>>
         }
     };
 
-    let dropdown_classes = |link_route| {
+    let dropdown_classes = |link_route: &Route| {
         let mut classes = classes!("dropdown-item");
         if Some(link_route) == route {
             classes.push("active");
@@ -150,7 +190,7 @@ fn nav_bar() -> Html {
 
     let dropdown_link = |link_route, text| {
         html! {
-            <Link<Route> classes={dropdown_classes(link_route)} to={link_route}>
+            <Link<Route> classes={dropdown_classes(&link_route)} to={link_route.clone()}>
                 {text}
             </Link<Route>>
         }
@@ -166,27 +206,41 @@ fn nav_bar() -> Html {
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item">
-                            { link(Route::Welcome, "Welcome") }
+                        { link(Route::Welcome, "Welcome") }
                         </li>
+                        {
+                            menus.iter().map(|(menu, rooms)| html! {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    {menu}
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        { rooms.iter().map(|room| html! {
+                                            <li>{dropdown_link(Route::Room {id: room.id.to_string()}, room.title.to_string())}</li>
+                                        }).collect::<Html>() }
+                                    </ul>
+                                </li>
+                            }).collect::<Html>()
+                        }
                         <li class="nav-item dropdown">
                           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             {"Bedrooms"}
                           </a>
                           <ul class="dropdown-menu">
                             <li>
-                                { dropdown_link(Route::BrianRoom, "Brian's Room") }
+                                { dropdown_link(Route::BrianRoom, "Brian's Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::JanRoom, "Jan's Room") }
+                                { dropdown_link(Route::JanRoom, "Jan's Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::TwinsRoom, "Twins' Room") }
+                                { dropdown_link(Route::TwinsRoom, "Twins' Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::ColinRoom, "Colin's Room") }
+                                { dropdown_link(Route::ColinRoom, "Colin's Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::AkiraRoom, "Akira's Room") }
+                                { dropdown_link(Route::AkiraRoom, "Akira's Room".to_string()) }
                             </li>
                           </ul>
                         </li>
@@ -196,19 +250,19 @@ fn nav_bar() -> Html {
                           </a>
                           <ul class="dropdown-menu">
                             <li>
-                                { dropdown_link(Route::LoungeRoom, "Lounge Room") }
+                                { dropdown_link(Route::LoungeRoom, "Lounge Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::DiningRoom, "Dining Room") }
+                                { dropdown_link(Route::DiningRoom, "Dining Room".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::Bathroom, "Bathroom") }
+                                { dropdown_link(Route::Bathroom, "Bathroom".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::Passage, "Passage") }
+                                { dropdown_link(Route::Passage, "Passage".to_string()) }
                             </li>
                             <li>
-                                { dropdown_link(Route::Tesla, "Tesla") }
+                                { dropdown_link(Route::Tesla, "Tesla".to_string()) }
                             </li>
                           </ul>
                         </li>
