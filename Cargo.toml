@@ -17,6 +17,5 @@ members = [
     "robotica-frontend",
     "robotica-common",
     "robotica-slint",
-    "brian-frontend",
     "brian-backend",
 ]

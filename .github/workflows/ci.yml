@@ -30,8 +30,6 @@ jobs:
         run: cargo test -p robotica-frontend
       - name: Test backend lib (Brian)
         run: cargo test -p brian-backend
-      - name: Test frontend lib (Brian)
-        run: cargo test -p brian-frontend
 
   push:
     name: Push

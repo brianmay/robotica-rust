@@ -1,5 +1,5 @@
 local/
 target/
 .envrc/
-brian-frontend/node_modules/
-robotica-frontenv/dist/
+robotica-frontend/node_modules/
+robotica-frontend/dist/

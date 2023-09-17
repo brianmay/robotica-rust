@@ -1,0 +1,27 @@
+#!/bin/sh
+set -ex
+
+cd "$(dirname "$0")"
+
+do_image() {
+    image="$1"
+    background="$2"
+    inkscape -w 64 -h 64 "$image.svg" --export-type="png" -o - | pngtopnm -mix -background "$background" | ppmtopgm | ppmtotga -mono > "$image"_64x64.tga
+}
+
+do_images() {
+    prefix="$1"
+    do_image "$prefix"_off black
+    do_image "$prefix"_error black
+    do_image "$prefix"_on white
+    do_image "$prefix"_auto white
+}
+
+do_images fan
+do_images light
+do_images night
+do_images schedule
+do_images select
+do_images speaker
+do_images trumpet
+do_images tv

@@ -510,28 +510,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "brian-frontend"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "gloo-net 0.4.0",
- "itertools 0.11.0",
- "robotica-common",
- "robotica-frontend",
- "serde",
- "serde_json",
- "tracing",
- "tracing-wasm",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "wasm-logger",
- "web-sys",
- "yew",
- "yew-router",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4083,19 +4061,25 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "chrono",
+ "console_error_panic_hook",
  "eyre",
  "futures",
+ "gloo-net 0.4.0",
  "gloo-timers 0.3.0",
+ "itertools 0.11.0",
  "reqwasm",
  "robotica-common",
  "serde",
  "serde_json",
  "thiserror",
  "tracing",
+ "tracing-wasm",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "yew",
+ "yew-router",
 ]
 
 [[package]]
@@ -5657,17 +5641,6 @@ checksum = "0734759ae6b3b1717d661fe4f016efcfb9828f5edb4520c18eaee05af3b43be9"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "wasm-logger"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "074649a66bb306c8f2068c9016395fa65d8e08d2affcbf95acf3c24c3ab19718"
-dependencies = [
- "log",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

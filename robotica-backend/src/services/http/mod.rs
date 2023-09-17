@@ -251,7 +251,7 @@ async fn fallback_handler(
         return Redirect::to(&auth_url).into_response();
     }
 
-    let static_path = "./brian-frontend/dist";
+    let static_path = "./robotica-frontend/dist";
     match ServeDir::new(static_path).oneshot(req).await {
         Ok(response) => {
             let status = response.status();

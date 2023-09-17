@@ -516,7 +516,8 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
         }
         Err(ConnectError::RetryableError(err)) => {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
-            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
+            // set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
+            state.timeout = None;
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(err.to_string()));
         }
