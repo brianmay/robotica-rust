@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use gloo_net::http::Request;
 use itertools::Itertools;
-use robotica_common::config::Rooms;
 use robotica_common::config::RoomConfig;
+use robotica_common::config::Rooms;
 use robotica_frontend::services::websocket::WebsocketService;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -159,6 +159,9 @@ fn nav_bar() -> Html {
         .iter()
         .map(|room| (room.menu.as_str(), room))
         .into_group_map();
+
+    // turn menus into a vector of tuples sorted by menu name
+    let menus: Vec<(&str, Vec<&RoomConfig>)> = menus.into_iter().sorted_by_key(|x| x.0).collect();
 
     let route: Option<&Route> = match use_location() {
         Some(location) => location.state().map(|state| *state),
