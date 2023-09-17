@@ -122,36 +122,89 @@ fn footer() -> Html {
     }
 }
 
-#[function_component(App)]
-fn app() -> Html {
-    let wss = WebsocketService::new();
+enum AppMsg {
+    Rooms(Arc<Rooms>),
+}
 
-    let rooms = use_state(|| None);
+struct App {
+    wss: WebsocketService,
+    rooms: Option<Arc<Rooms>>,
+}
 
-    let rooms_setter = rooms.clone();
-    spawn_local(async move {
-        let rooms = Arc::new(
-            Request::get("/rooms")
-                .send()
-                .await
-                .unwrap()
-                .json::<Rooms>()
-                .await
-                .unwrap(),
-        );
-        rooms_setter.set(Some(rooms));
-    });
+impl Component for App {
+    type Message = AppMsg;
+    type Properties = ();
 
-    html! {
-        <ContextProvider<WebsocketService> context={wss}>
-            <ContextProvider<Option<Arc<Rooms>>> context={&*rooms}>
-                <BrowserRouter>
-                    <Switch<Route> render={switch}/>
-                </BrowserRouter>
-            </ContextProvider<Option<Arc<Rooms>>>>
-        </ContextProvider<WebsocketService>>
+    fn create(ctx: &Context<Self>) -> Self {
+        let wss = WebsocketService::new();
+        let link = ctx.link().clone();
+        spawn_local(async move {
+            let rooms = Arc::new(
+                Request::get("/rooms")
+                    .send()
+                    .await
+                    .unwrap()
+                    .json::<Rooms>()
+                    .await
+                    .unwrap(),
+            );
+            link.send_message(AppMsg::Rooms(rooms));
+        });
+        App { wss, rooms: None }
+    }
+
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            AppMsg::Rooms(rooms) => {
+                self.rooms = Some(rooms);
+                true
+            }
+        }
+    }
+
+    fn view(&self, _ctx: &Context<Self>) -> Html {
+        html! {
+            <ContextProvider<WebsocketService> context={self.wss.clone()}>
+                <ContextProvider<Option<Arc<Rooms>>> context={&self.rooms}>
+                    <BrowserRouter>
+                        <Switch<Route> render={switch}/>
+                    </BrowserRouter>
+                </ContextProvider<Option<Arc<Rooms>>>>
+            </ContextProvider<WebsocketService>>
+        }
     }
 }
+
+// #[function_component(AppOld)]
+// fn app() -> Html {
+//     let wss = WebsocketService::new();
+
+//     let rooms = use_state(|| None);
+
+//     let rooms_setter = rooms.clone();
+//     spawn_local(async move {
+//         let rooms = Arc::new(
+//             Request::get("/rooms")
+//                 .send()
+//                 .await
+//                 .unwrap()
+//                 .json::<Rooms>()
+//                 .await
+//                 .unwrap(),
+//         );
+//         rooms_setter.set(Some(rooms));
+//     });
+
+//     html! {
+//         <ContextProvider<WebsocketService> context={wss}>
+//             <ContextProvider<Option<Arc<Rooms>>> context={&*rooms}>
+//                 <BrowserRouter>
+//                     <Switch<Route> render={switch}/>
+//                 </BrowserRouter>
+//             </ContextProvider<Option<Arc<Rooms>>>>
+//         </ContextProvider<WebsocketService>>
+//     }
+// }
 
 /// The entry point for the frontend
 #[wasm_bindgen(start)]
