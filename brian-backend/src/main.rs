@@ -200,7 +200,7 @@ fn brian_config(passage_light: &LightConfig) -> UiConfig {
                 },
             ],
         }],
-        hdmis: vec![],
+        hdmi_matrix: vec![],
     }
 }
 
@@ -224,7 +224,7 @@ fn jan_config(passage_light: &LightConfig) -> UiConfig {
             ..Default::default()
         }],
         switches: vec![],
-        hdmis: vec![],
+        hdmi_matrix: vec![],
     }
 }
 
@@ -255,7 +255,7 @@ fn twins_config() -> UiConfig {
             ..Default::default()
         }],
         switches: vec![],
-        hdmis: vec![],
+        hdmi_matrix: vec![],
     }
 }
 
@@ -308,7 +308,7 @@ fn dining_config(passage_light: &LightConfig, hdmi_inputs: &[HdmiInputConfig]) -
                 },
             ],
         }],
-        hdmis: vec![HdmiConfig {
+        hdmi_matrix: vec![HdmiConfig {
             title: "Dining TV".to_string(),
             topic_substr: "Dining/TV".to_string(),
             output_id: 1,
@@ -495,7 +495,7 @@ struct UiConfig {
     lights: Vec<LightConfig>,
     music: Vec<MusicConfig>,
     switches: Vec<ButtonRowConfig>,
-    hdmis: Vec<HdmiConfig>,
+    hdmi_matrix: Vec<HdmiConfig>,
 }
 
 impl From<LightConfig> for ButtonRowConfig {
@@ -620,7 +620,7 @@ impl From<UiConfig> for Vec<ButtonRowConfig> {
             buttons.push(switch);
         }
 
-        for hdmi in config.hdmis {
+        for hdmi in config.hdmi_matrix {
             buttons.push(ButtonRowConfig::from(hdmi));
         }
 

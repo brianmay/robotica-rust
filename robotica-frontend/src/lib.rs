@@ -9,6 +9,9 @@
 // This code will not be used on concurrent threads.
 #![allow(clippy::future_not_send)]
 #![allow(clippy::let_unit_value)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::option_if_let_else)]
 
 mod components;
 mod services;
@@ -39,7 +42,7 @@ use components::welcome::Welcome;
 use crate::components::rooms::Room;
 
 #[derive(Debug, Clone, Eq, PartialEq, Routable)]
-pub enum Route {
+enum Route {
     #[at("/welcome")]
     Welcome,
     #[at("/room/:id")]
@@ -150,6 +153,7 @@ fn app() -> Html {
     }
 }
 
+/// The entry point for the frontend
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
