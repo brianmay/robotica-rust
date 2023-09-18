@@ -175,37 +175,6 @@ impl Component for App {
     }
 }
 
-// #[function_component(AppOld)]
-// fn app() -> Html {
-//     let wss = WebsocketService::new();
-
-//     let rooms = use_state(|| None);
-
-//     let rooms_setter = rooms.clone();
-//     spawn_local(async move {
-//         let rooms = Arc::new(
-//             Request::get("/rooms")
-//                 .send()
-//                 .await
-//                 .unwrap()
-//                 .json::<Rooms>()
-//                 .await
-//                 .unwrap(),
-//         );
-//         rooms_setter.set(Some(rooms));
-//     });
-
-//     html! {
-//         <ContextProvider<WebsocketService> context={wss}>
-//             <ContextProvider<Option<Arc<Rooms>>> context={&*rooms}>
-//                 <BrowserRouter>
-//                     <Switch<Route> render={switch}/>
-//                 </BrowserRouter>
-//             </ContextProvider<Option<Arc<Rooms>>>>
-//         </ContextProvider<WebsocketService>>
-//     }
-// }
-
 /// The entry point for the frontend
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
