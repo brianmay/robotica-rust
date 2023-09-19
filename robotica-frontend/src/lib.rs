@@ -17,6 +17,7 @@ mod components;
 mod services;
 
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::services::websocket::WebsocketService;
@@ -167,14 +168,17 @@ fn nav_bar() -> Html {
     // turn menus into a vector of tuples sorted by menu name
     let menus: Vec<(&str, Vec<&RoomConfig>)> = menus.into_iter().sorted_by_key(|x| x.0).collect();
 
-    let route: Option<&Route> = match use_location() {
-        Some(location) => location.state().map(|state| *state),
-        None => None,
+    // get the current route
+    let route = Rc::new(use_route::<Route>());
+
+    let test_route = |link_route: &Route| match route.as_ref() {
+        Some(route) => *route == *link_route,
+        None => false,
     };
 
     let classes = |link_route: &Route| {
         let mut classes = classes!("nav-link");
-        if Some(link_route) == route {
+        if test_route(link_route) {
             classes.push("active");
         }
         classes
@@ -190,7 +194,7 @@ fn nav_bar() -> Html {
 
     let dropdown_classes = |link_route: &Route| {
         let mut classes = classes!("dropdown-item");
-        if Some(link_route) == route {
+        if test_route(link_route) {
             classes.push("active");
         }
         classes
