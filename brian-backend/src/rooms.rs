@@ -71,6 +71,18 @@ pub fn get() -> Rooms {
             menu: "Bedrooms".to_string(),
             rows: akira_config().into(),
         },
+        RoomConfig {
+            id: "passage".to_string(),
+            title: "Passage".to_string(),
+            menu: "Common".to_string(),
+            rows: passage_config(&passage_light).into(),
+        },
+        RoomConfig {
+            id: "tesla".to_string(),
+            title: "Tesla".to_string(),
+            menu: "Common".to_string(),
+            rows: tesla_config().into(),
+        },
     ];
 
     rooms
@@ -80,14 +92,14 @@ fn brian_config(passage_light: &LightConfig) -> UiConfig {
     UiConfig {
         lights: vec![
             LightConfig {
-                title: "Brian's Light".to_string(),
+                title: "Light".to_string(),
                 topic_substr: "Brian/Light".to_string(),
                 ..Default::default()
             },
             passage_light.clone(),
         ],
         music: vec![MusicConfig {
-            title: "Brian's Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Brian/Robotica".to_string(),
             extra_play_lists: vec![
                 PlaylistConfig {
@@ -151,14 +163,14 @@ fn jan_config(passage_light: &LightConfig) -> UiConfig {
     UiConfig {
         lights: vec![
             LightConfig {
-                title: "Jan's Light".to_string(),
+                title: "Light".to_string(),
                 topic_substr: "Jan/Light".to_string(),
                 ..Default::default()
             },
             passage_light.clone(),
         ],
         music: vec![MusicConfig {
-            title: "Jan's Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Jan/Robotica".to_string(),
             extra_play_lists: vec![PlaylistConfig {
                 id: "wake_up".to_string(),
@@ -174,7 +186,7 @@ fn jan_config(passage_light: &LightConfig) -> UiConfig {
 fn twins_config() -> UiConfig {
     UiConfig {
         lights: vec![LightConfig {
-            title: "Twins' Light".to_string(),
+            title: "Light".to_string(),
             topic_substr: "Twins/Light".to_string(),
             extra_scenes: vec![
                 SceneConfig {
@@ -189,7 +201,7 @@ fn twins_config() -> UiConfig {
             ..Default::default()
         }],
         music: vec![MusicConfig {
-            title: "Twins' Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Twins/Robotica".to_string(),
             extra_play_lists: vec![PlaylistConfig {
                 id: "wake_up".to_string(),
@@ -206,14 +218,14 @@ fn dining_room_config(passage_light: &LightConfig, hdmi_inputs: &[HdmiInputConfi
     UiConfig {
         lights: vec![
             LightConfig {
-                title: "Dining Light".to_string(),
+                title: "Light".to_string(),
                 topic_substr: "Dining/Light".to_string(),
                 ..Default::default()
             },
             passage_light.clone(),
         ],
         music: vec![MusicConfig {
-            title: "Dining Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Dining/Robotica".to_string(),
             ..Default::default()
         }],
@@ -252,7 +264,7 @@ fn dining_room_config(passage_light: &LightConfig, hdmi_inputs: &[HdmiInputConfi
             ],
         }],
         hdmi_matrix: vec![HdmiConfig {
-            title: "Dining TV".to_string(),
+            title: "TV".to_string(),
             topic_substr: "Dining/TV".to_string(),
             output_id: 1,
             inputs: hdmi_inputs.to_vec(),
@@ -268,13 +280,13 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
             ..Default::default()
         }],
         music: vec![MusicConfig {
-            title: "Living Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Extension/Robotica".to_string(),
             ..Default::default()
         }],
         switches: vec![],
         hdmi_matrix: vec![HdmiConfig {
-            title: "Living TV".to_string(),
+            title: "TV".to_string(),
             topic_substr: "Living/TV".to_string(),
             output_id: 1,
             inputs: hdmi_inputs.to_vec(),
@@ -285,16 +297,57 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
 fn akira_config() -> UiConfig {
     UiConfig {
         lights: vec![LightConfig {
-            title: "Akira's Light".to_string(),
+            title: "Light".to_string(),
             topic_substr: "Akira/Light".to_string(),
             ..Default::default()
         }],
         music: vec![MusicConfig {
-            title: "Living Music".to_string(),
+            title: "Music".to_string(),
             topic_substr: "Extension/Robotica".to_string(),
             ..Default::default()
         }],
         switches: vec![],
+        hdmi_matrix: vec![],
+    }
+}
+
+fn passage_config(passage_light: &LightConfig) -> UiConfig {
+    UiConfig {
+        lights: vec![passage_light.clone()],
+        music: vec![],
+        switches: vec![],
+        hdmi_matrix: vec![],
+    }
+}
+
+fn tesla_config() -> UiConfig {
+    UiConfig {
+        lights: vec![],
+        music: vec![],
+        switches: vec![ButtonRowConfig {
+            id: "switches".to_string(),
+            title: "Switches".to_string(),
+            buttons: vec![
+                ButtonConfig {
+                    id: "charge".to_string(),
+                    title: "Charge".to_string(),
+                    icon: Icon::Light,
+                    controller: ControllerConfig::Switch(switch::Config {
+                        action: Action::Toggle,
+                        topic_substr: "Tesla/1/AutoCharge".to_string(),
+                    }),
+                },
+                ButtonConfig {
+                    id: "force".to_string(),
+                    title: "Force".to_string(),
+                    icon: Icon::Light,
+                    controller: ControllerConfig::Switch(switch::Config {
+                        action: Action::Toggle,
+                        topic_substr: "Tesla/1/ForceCharge".to_string(),
+                    }),
+                },
+            ],
+        }],
         hdmi_matrix: vec![],
     }
 }
