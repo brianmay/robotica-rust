@@ -427,7 +427,7 @@ impl Default for MusicConfig {
                     title: "Frozen".to_string(),
                 },
                 PlaylistConfig {
-                    id: "dragon".to_string(),
+                    id: "train_dragon".to_string(),
                     title: "Dragon".to_string(),
                 },
             ],
