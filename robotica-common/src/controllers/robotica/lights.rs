@@ -105,6 +105,7 @@ impl ControllerTrait for Controller {
         };
 
         let payload = serde_json::json!({
+            // FIXME: change to light
             "type": "light2",
             "action": action,
             "scene": self.config.scene,

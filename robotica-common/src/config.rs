@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::controllers::{
-    robotica::{hdmi, lights2, music2, switch},
+    robotica::{hdmi, lights, music, switch},
     tasmota, zwave,
 };
 
@@ -16,10 +16,10 @@ pub enum ControllerConfig {
     Hdmi(hdmi::Config),
 
     /// This is a light button
-    Light2(lights2::Config),
+    Light(lights::Config),
 
     /// This is a music button
-    Music2(music2::Config),
+    Music(music::Config),
 
     /// This is a switch button
     Switch(switch::Config),

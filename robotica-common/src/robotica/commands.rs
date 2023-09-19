@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{audio::AudioCommand, hdmi::HdmiCommand, lights::Light2Command, switch::DeviceCommand};
+use super::{audio::AudioCommand, hdmi::HdmiCommand, lights::LightCommand, switch::DeviceCommand};
 
 /// A command to send to any device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,8 +15,12 @@ pub enum Command {
     /// Audio command
     Audio(AudioCommand),
 
-    /// Light V2 Command
-    Light2(Light2Command),
+    /// Light Command
+    Light(LightCommand),
+
+    // FIXME: Remove
+    /// Light Command (deprecated)
+    Light2(LightCommand),
 
     /// HDMI Command
     Hdmi(HdmiCommand),

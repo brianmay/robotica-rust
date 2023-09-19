@@ -2,7 +2,7 @@
 use robotica_common::config::Icon;
 use yew::prelude::*;
 
-use robotica_common::controllers::robotica::{hdmi, lights2, music2, switch};
+use robotica_common::controllers::robotica::{hdmi, lights, music, switch};
 use robotica_common::controllers::{
     tasmota, zwave, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
@@ -38,7 +38,7 @@ trait ButtonPropsTrait {
 
 /// The yew properties for a light button.
 #[derive(Clone, Properties, Eq, PartialEq)]
-pub struct Light2Props {
+pub struct LightProps {
     /// The name of the light.
     pub name: String,
 
@@ -55,12 +55,12 @@ pub struct Light2Props {
     pub scene: String,
 }
 
-impl ConfigTrait for Light2Props {
-    type Controller = lights2::Controller;
+impl ConfigTrait for LightProps {
+    type Controller = lights::Controller;
 
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
-        let config = lights2::Config {
+        let config = lights::Config {
             topic_substr: props.topic_substr,
             action: props.action,
             scene: props.scene,
@@ -70,7 +70,7 @@ impl ConfigTrait for Light2Props {
     }
 }
 
-impl ButtonPropsTrait for Light2Props {
+impl ButtonPropsTrait for LightProps {
     fn get_icon(&self) -> Icon {
         self.icon
     }
@@ -100,11 +100,11 @@ pub struct Music2Props {
 }
 
 impl ConfigTrait for Music2Props {
-    type Controller = music2::Controller;
+    type Controller = music::Controller;
 
     fn create_controller(&self) -> Self::Controller {
         let props = (*self).clone();
-        let config = music2::Config {
+        let config = music::Config {
             topic_substr: props.topic_substr,
             action: props.action,
             play_list: props.play_list,

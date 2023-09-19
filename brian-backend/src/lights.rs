@@ -14,7 +14,7 @@ use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
     robotica::{
         commands::Command,
-        lights::{self, Colors, Light2Command, PowerColor, PowerLevel, PowerState, State, HSBK},
+        lights::{self, Colors, LightCommand, PowerColor, PowerLevel, PowerState, State, HSBK},
     },
 };
 use tokio::{select, time::sleep};
@@ -476,11 +476,12 @@ where
                     Ok(Json(command)) = rx_command_s.recv() => {
                         debug!("Got command: {:?}", command);
                         match command {
-                            Command::Light2(command) => {
+                            // FIXME: Remove Light2
+                            Command::Light(command) | Command::Light2(command) => {
                                 process_command(&mut state, command).await;
                             }
                             _ => {
-                                error!("Invalid command, expected light2, got {:?}", command);
+                                error!("Invalid command, expected light, got {:?}", command);
                             }
                         }
                     }
@@ -495,26 +496,26 @@ where
     rx
 }
 
-async fn process_command<Entity>(state: &mut LightState<Entity>, command: Light2Command)
+async fn process_command<Entity>(state: &mut LightState<Entity>, command: LightCommand)
 where
     Entity: GetSceneEntity + Send + Sync + 'static,
     Entity::Scenes: ScenesTrait + Copy + Send + Sync + 'static,
     <Entity::Scenes as FromStr>::Err: Send + Sync + 'static,
 {
     match command {
-        Light2Command::TurnOn { scene } => {
+        LightCommand::TurnOn { scene } => {
             if let Ok(scene) = Entity::Scenes::from_str(&scene) {
                 set_scene(state, scene).await;
             } else {
                 error!("Invalid scene: {}", scene);
             }
         }
-        Light2Command::TurnOff => {
+        LightCommand::TurnOff => {
             let scene = Entity::Scenes::default();
             set_scene(state, scene).await;
         }
 
-        Light2Command::Flash => {
+        LightCommand::Flash => {
             let pc = (state.entity.get().await).map_or_else(|| PowerColor::Off, |pc| pc);
             state.tx.try_send(state.flash_color.clone());
             sleep(Duration::from_millis(500)).await;

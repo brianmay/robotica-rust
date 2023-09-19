@@ -110,7 +110,7 @@ pub struct RoboticaColor {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "action")]
-pub enum Light2Command {
+pub enum LightCommand {
     /// Turn the switch on.
     TurnOn {
         /// The scene to use

@@ -106,7 +106,8 @@ fn command_to_text(command: &Value) -> String {
     match mtype {
         Some("audio") => audio_command_to_text(command),
         Some("message") => message_command_to_text(command),
-        Some("light2") => light_command_to_text(command),
+        // FIXME: Remove light2
+        Some("light" | "light2") => light_command_to_text(command),
         Some("device") => device_command_to_text(command),
         Some("hdmi") => hdmi_command_to_text(command),
         _ => command.to_string(),

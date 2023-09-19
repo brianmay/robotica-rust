@@ -3,7 +3,7 @@ use std::sync::Arc;
 use yew::prelude::*;
 
 use crate::components::button::{
-    Button, HdmiProps, Light2Props, Music2Props, SwitchProps, TasmotaProps, ZwaveProps,
+    Button, HdmiProps, LightProps, Music2Props, SwitchProps, TasmotaProps, ZwaveProps,
 };
 use robotica_common::config::{
     ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms,
@@ -25,17 +25,17 @@ fn controller_to_html(title: String, icon: Icon, controller_config: &ControllerC
             };
             html! { <Button<HdmiProps> ..props /> }
         }
-        ControllerConfig::Light2(config) => {
-            let props = Light2Props {
+        ControllerConfig::Light(config) => {
+            let props = LightProps {
                 name: title,
                 icon,
                 action: config.action,
                 topic_substr: config.topic_substr.clone(),
                 scene: config.scene.clone(),
             };
-            html! { <Button<Light2Props> ..props /> }
+            html! { <Button<LightProps> ..props /> }
         }
-        ControllerConfig::Music2(config) => {
+        ControllerConfig::Music(config) => {
             let props = Music2Props {
                 name: title,
                 icon,

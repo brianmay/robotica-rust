@@ -275,10 +275,10 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
 
             let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
                 ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
-                ControllerConfig::Light2(config) => Box::new(config.create_controller()),
+                ControllerConfig::Light(config) => Box::new(config.create_controller()),
                 ControllerConfig::Switch(config) => Box::new(config.create_controller()),
                 ControllerConfig::Zwave(config) => Box::new(config.create_controller()),
-                ControllerConfig::Music2(config) => Box::new(config.create_controller()),
+                ControllerConfig::Music(config) => Box::new(config.create_controller()),
                 ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
             };
 

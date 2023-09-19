@@ -1,9 +1,9 @@
 use robotica_common::{
     config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms},
     controllers::{
-        robotica::lights2,
+        robotica::lights,
         robotica::switch,
-        robotica::{hdmi, music2},
+        robotica::{hdmi, music},
         tasmota, zwave, Action,
     },
 };
@@ -459,7 +459,7 @@ impl From<LightConfig> for ButtonRowConfig {
                 id: scene.id.clone(),
                 title: scene.title,
                 icon: Icon::Light,
-                controller: ControllerConfig::Light2(lights2::Config {
+                controller: ControllerConfig::Light(lights::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
                     scene: scene.id,
@@ -478,7 +478,7 @@ impl From<LightConfig> for ButtonRowConfig {
                 id: scene.id.clone(),
                 title: scene.title.clone(),
                 icon: Icon::Light,
-                controller: ControllerConfig::Light2(lights2::Config {
+                controller: ControllerConfig::Light(lights::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
                     scene: scene.id.clone(),
@@ -499,7 +499,7 @@ impl From<MusicConfig> for ButtonRowConfig {
                 id: play_list.id.clone(),
                 title: play_list.title,
                 icon: Icon::Trumpet,
-                controller: ControllerConfig::Music2(music2::Config {
+                controller: ControllerConfig::Music(music::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
                     play_list: play_list.id,
@@ -518,7 +518,7 @@ impl From<MusicConfig> for ButtonRowConfig {
                 id: play_list.id.clone(),
                 title: play_list.title.clone(),
                 icon: Icon::Trumpet,
-                controller: ControllerConfig::Music2(music2::Config {
+                controller: ControllerConfig::Music(music::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
                     play_list: play_list.id.clone(),
