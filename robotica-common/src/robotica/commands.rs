@@ -18,10 +18,6 @@ pub enum Command {
     /// Light Command
     Light(LightCommand),
 
-    // FIXME: Remove
-    /// Light Command (deprecated)
-    Light2(LightCommand),
-
     /// HDMI Command
     Hdmi(HdmiCommand),
 }

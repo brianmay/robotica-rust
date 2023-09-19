@@ -476,8 +476,7 @@ where
                     Ok(Json(command)) = rx_command_s.recv() => {
                         debug!("Got command: {:?}", command);
                         match command {
-                            // FIXME: Remove Light2
-                            Command::Light(command) | Command::Light2(command) => {
+                            Command::Light(command) => {
                                 process_command(&mut state, command).await;
                             }
                             _ => {
