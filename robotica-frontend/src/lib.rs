@@ -31,10 +31,6 @@ use yew_router::prelude::*;
 
 use robotica_common::version;
 
-use components::rooms::{
-    AkiraRoom, Bathroom, BrianRoom, ColinRoom, DiningRoom, JanRoom, LoungeRoom, Passage, Tesla,
-    TwinsRoom,
-};
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
@@ -47,26 +43,6 @@ enum Route {
     Welcome,
     #[at("/room/:id")]
     Room { id: String },
-    #[at("/brian")]
-    BrianRoom,
-    #[at("/jan")]
-    JanRoom,
-    #[at("/twins")]
-    TwinsRoom,
-    #[at("/colin")]
-    ColinRoom,
-    #[at("/akira")]
-    AkiraRoom,
-    #[at("/lounge")]
-    LoungeRoom,
-    #[at("/dining")]
-    DiningRoom,
-    #[at("/bathroom")]
-    Bathroom,
-    #[at("/passage")]
-    Passage,
-    #[at("/tesla")]
-    Tesla,
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -80,16 +56,6 @@ fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
         Route::Room { id } => html! { <Room id={id}/> },
-        Route::BrianRoom => html! { <BrianRoom/> },
-        Route::JanRoom => html! { <JanRoom/> },
-        Route::TwinsRoom => html! { <TwinsRoom/> },
-        Route::ColinRoom => html! { <ColinRoom/> },
-        Route::AkiraRoom => html! { <AkiraRoom/> },
-        Route::LoungeRoom => html! { <LoungeRoom/> },
-        Route::DiningRoom => html! { <DiningRoom/> },
-        Route::Bathroom => html! { <Bathroom/> },
-        Route::Passage => html! { <Passage/> },
-        Route::Tesla => html! { <Tesla/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
@@ -264,50 +230,6 @@ fn nav_bar() -> Html {
                                 </li>
                             }).collect::<Html>()
                         }
-                        <li class="nav-item dropdown">
-                          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            {"Bedrooms"}
-                          </a>
-                          <ul class="dropdown-menu">
-                            <li>
-                                { dropdown_link(Route::BrianRoom, "Brian's Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::JanRoom, "Jan's Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::TwinsRoom, "Twins' Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::ColinRoom, "Colin's Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::AkiraRoom, "Akira's Room".to_string()) }
-                            </li>
-                          </ul>
-                        </li>
-                        <li class="nav-item dropdown">
-                          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            {"Common"}
-                          </a>
-                          <ul class="dropdown-menu">
-                            <li>
-                                { dropdown_link(Route::LoungeRoom, "Lounge Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::DiningRoom, "Dining Room".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::Bathroom, "Bathroom".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::Passage, "Passage".to_string()) }
-                            </li>
-                            <li>
-                                { dropdown_link(Route::Tesla, "Tesla".to_string()) }
-                            </li>
-                          </ul>
-                        </li>
                         <li class="nav-item">
                             { link(Route::Schedule, "Schedule") }
                         </li>
