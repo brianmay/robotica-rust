@@ -510,27 +510,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "brian-frontend"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "itertools 0.11.0",
- "robotica-common",
- "robotica-frontend",
- "serde",
- "serde_json",
- "tracing",
- "tracing-wasm",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "wasm-logger",
- "web-sys",
- "yew",
- "yew-router",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1717,7 +1696,7 @@ dependencies = [
  "gloo-render",
  "gloo-storage",
  "gloo-timers 0.2.6",
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "gloo-worker",
 ]
 
@@ -1727,7 +1706,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82b7ce3c05debe147233596904981848862b068862e9ec3e34be446077190d3f"
 dependencies = [
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "js-sys",
  "serde",
  "wasm-bindgen",
@@ -1774,7 +1753,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd451019e0b7a2b8a7a7b23e74916601abf1135c54664e57ff71dcc26dfcdeb7"
 dependencies = [
  "gloo-events",
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "serde",
  "serde-wasm-bindgen",
  "serde_urlencoded",
@@ -1792,7 +1771,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-sink",
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "js-sys",
  "pin-project",
  "serde",
@@ -1812,7 +1791,28 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-sink",
- "gloo-utils",
+ "gloo-utils 0.1.6",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "gloo-net"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ac9e8288ae2c632fa9f8657ac70bfe38a1530f345282d7ba66a1f70b72b7dc4"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils 0.2.0",
+ "http",
  "js-sys",
  "pin-project",
  "serde",
@@ -1839,7 +1839,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d6ab60bf5dbfd6f0ed1f7843da31b41010515c745735c970e821945ca91e480"
 dependencies = [
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "js-sys",
  "serde",
  "serde_json",
@@ -1884,6 +1884,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloo-utils"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5555354113b18c547c1d3a98fbf7fb32a9ff4f6fa112ce823a21641a0ba3aa"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "gloo-worker"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1892,7 +1905,7 @@ dependencies = [
  "anymap2",
  "bincode",
  "gloo-console",
- "gloo-utils",
+ "gloo-utils 0.1.6",
  "js-sys",
  "serde",
  "wasm-bindgen",
@@ -4048,19 +4061,25 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "chrono",
+ "console_error_panic_hook",
  "eyre",
  "futures",
+ "gloo-net 0.4.0",
  "gloo-timers 0.3.0",
+ "itertools 0.11.0",
  "reqwasm",
  "robotica-common",
  "serde",
  "serde_json",
  "thiserror",
  "tracing",
+ "tracing-wasm",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "yew",
+ "yew-router",
 ]
 
 [[package]]
@@ -5622,17 +5641,6 @@ checksum = "0734759ae6b3b1717d661fe4f016efcfb9828f5edb4520c18eaee05af3b43be9"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "wasm-logger"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "074649a66bb306c8f2068c9016395fa65d8e08d2affcbf95acf3c24c3ab19718"
-dependencies = [
- "log",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

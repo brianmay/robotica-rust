@@ -4,7 +4,7 @@ use crate::{
     mqtt::{Json, MqttMessage},
     robotica::lights::{self, PowerState},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::super::{
@@ -13,7 +13,7 @@ use super::super::{
 };
 
 /// The configuration for a light controller
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Config {
     /// The topic substring for the light
     pub topic_substr: String,

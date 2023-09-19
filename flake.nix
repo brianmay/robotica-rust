@@ -19,6 +19,7 @@
 
         rustPlatform = pkgs.rust-bin.stable.latest.default.override {
           targets = [ "wasm32-unknown-unknown" ];
+          extensions = [ "rust-src" ];
         };
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;

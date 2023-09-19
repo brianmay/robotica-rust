@@ -1,7 +1,7 @@
-use robotica_frontend::services::websocket::WebsocketService;
-use robotica_frontend::services::websocket::WsEvent;
+use crate::services::websocket::WebsocketService;
+use crate::services::websocket::WsEvent;
 use wasm_bindgen_futures::spawn_local;
-use yew::functional::*;
+use yew::functional::{function_component, use_context, use_mut_ref, use_state};
 use yew::prelude::*;
 
 #[function_component(Welcome)]

@@ -13,6 +13,7 @@ mod ha;
 mod hdmi;
 mod lights;
 mod robotica;
+mod rooms;
 mod tesla;
 
 use anyhow::Result;
@@ -93,7 +94,8 @@ async fn setup_pipes(state: &mut State) {
         panic!("Error running tesla charging monitor: {e}");
     });
 
-    http::run(state.mqtt.clone())
+    let rooms = rooms::get();
+    http::run(state.mqtt.clone(), rooms)
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 

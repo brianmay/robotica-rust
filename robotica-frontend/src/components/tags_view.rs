@@ -4,9 +4,9 @@ use tracing::error;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
+use crate::services::websocket::WebsocketService;
 use robotica_common::mqtt::{Json, MqttMessage};
 use robotica_common::scheduler::Tags;
-use robotica_frontend::services::websocket::WebsocketService;
 
 use super::require_connection::RequireConnection;
 

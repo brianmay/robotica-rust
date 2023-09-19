@@ -1,6 +1,6 @@
 use yew::prelude::*;
 
-use robotica_frontend::components::schedule::Schedule;
+use crate::components::schedule::Schedule;
 
 use super::require_connection::RequireConnection;
 

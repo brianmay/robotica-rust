@@ -1,5 +1,5 @@
 //! A robotica HDMI controller
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::mqtt::MqttMessage;
 
@@ -9,7 +9,7 @@ use super::super::{
 };
 
 /// The configuration for a switch controller
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Config {
     /// The topic substring for the switch
     pub topic_substr: String,

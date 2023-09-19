@@ -20,9 +20,9 @@ ENV VCS_REF=${VCS_REF}
 
 RUN cargo build --release -p brian-backend
 RUN ls -l /brian-backend/target/release/brian-backend
-RUN npm -C brian-frontend install
-RUN npm -C brian-frontend run build
-RUN ls -l /brian-backend/brian-frontend/dist
+RUN npm -C robotica-frontend install
+RUN npm -C robotica-frontend run build
+RUN ls -l /brian-backend/robotica-frontend/dist
 
 FROM debian:bullseye-slim
 ARG APP=/usr/src/app
@@ -46,8 +46,8 @@ RUN groupadd $APP_USER \
     && mkdir -p ${APP}
 
 COPY --from=builder /brian-backend/target/release/brian-backend ${APP}/brian-backend
-COPY --from=builder /brian-backend/brian-frontend/dist ${APP}/brian-frontend/dist
-RUN ls -l ${APP}/brian-frontend/dist
+COPY --from=builder /brian-backend/robotica-frontend/dist ${APP}/robotica-frontend/dist
+RUN ls -l ${APP}/robotica-frontend/dist
 
 USER $APP_USER
 WORKDIR ${APP}

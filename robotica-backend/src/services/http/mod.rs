@@ -13,6 +13,7 @@ use axum::extract::{FromRef, State};
 use axum::http::uri::PathAndQuery;
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::Json;
 use axum::{extract::Query, routing::get, Router};
 use axum_sessions::async_session::CookieStore;
 use axum_sessions::extractors::ReadableSession;
@@ -23,6 +24,7 @@ use base64::Engine;
 use hyper::header::CONTENT_TYPE;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
+use robotica_common::config::Rooms;
 use serde::de::Error;
 use thiserror::Error;
 use tokio::fs;
@@ -60,6 +62,7 @@ impl HttpConfig {
 struct HttpState {
     http_config: HttpConfig,
     oidc_client: Arc<ArcSwap<Client>>,
+    rooms: Arc<Rooms>,
 }
 
 impl FromRef<HttpState> for HttpConfig {
@@ -72,6 +75,12 @@ impl FromRef<HttpState> for Arc<Client> {
     fn from_ref(state: &HttpState) -> Self {
         let x = state.oidc_client.load();
         x.clone()
+    }
+}
+
+impl FromRef<HttpState> for Arc<Rooms> {
+    fn from_ref(state: &HttpState) -> Self {
+        state.rooms.clone()
     }
 }
 
@@ -109,7 +118,7 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: MqttTx) -> Result<(), HttpError> {
+pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
     let http_config = HttpConfig {
         mqtt,
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
@@ -133,6 +142,8 @@ pub async fn run(mqtt: MqttTx) -> Result<(), HttpError> {
     let client = Client::new(config.clone()).await?;
     let client = Arc::new(ArcSwap::new(Arc::new(client)));
 
+    let rooms = Arc::new(rooms);
+
     {
         let client = client.clone();
         spawn(async move {
@@ -154,7 +165,7 @@ pub async fn run(mqtt: MqttTx) -> Result<(), HttpError> {
     }
 
     spawn(async {
-        server(http_config, client, session_layer)
+        server(http_config, client, rooms, session_layer)
             .await
             .unwrap_or_else(|err| {
                 error!("http server failed: {}", err);
@@ -167,17 +178,20 @@ pub async fn run(mqtt: MqttTx) -> Result<(), HttpError> {
 async fn server(
     http_config: HttpConfig,
     oidc_client: Arc<ArcSwap<Client>>,
+    rooms: Arc<Rooms>,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
     let state = HttpState {
         http_config,
         oidc_client,
+        rooms,
     };
 
     let app = Router::new()
         .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
+        .route("/rooms", get(rooms_handler))
         .fallback(fallback_handler)
         .with_state(state)
         .layer(session_layer)
@@ -237,7 +251,7 @@ async fn fallback_handler(
         return Redirect::to(&auth_url).into_response();
     }
 
-    let static_path = "./brian-frontend/dist";
+    let static_path = "./robotica-frontend/dist";
     match ServeDir::new(static_path).oneshot(req).await {
         Ok(response) => {
             let status = response.status();
@@ -364,4 +378,14 @@ async fn oidc_callback(
             .into_response()
         }
     }
+}
+
+#[allow(clippy::unused_async)]
+async fn rooms_handler(State(rooms): State<Arc<Rooms>>, session: ReadableSession) -> Json<Rooms> {
+    let rooms = if get_user(&session).is_some() {
+        rooms
+    } else {
+        Arc::new(Rooms::default())
+    };
+    Json((*rooms).clone())
 }

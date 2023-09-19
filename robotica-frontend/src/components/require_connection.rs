@@ -1,8 +1,8 @@
-use robotica_frontend::services::websocket::{WebsocketService, WsEvent};
+use crate::services::websocket::{WebsocketService, WsEvent};
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
-/// The yew properties for the RequireConnection component
+/// The yew properties for the `RequireConnection` component
 #[derive(Properties, PartialEq)]
 pub struct Props {
     /// The children to render

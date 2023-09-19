@@ -3,7 +3,7 @@ use crate::{
     mqtt::{Json, MqttMessage},
     robotica::audio,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::super::{
@@ -12,7 +12,7 @@ use super::super::{
 };
 
 /// The configuration for a music controller
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Config {
     /// The topic substring for the music
     pub topic_substr: String,
