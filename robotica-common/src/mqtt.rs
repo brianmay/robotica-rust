@@ -241,33 +241,33 @@ impl<Body: FromStr> TryFrom<MqttMessage> for Parsed<Body> {
 }
 
 /// A JSON MQTT message.
-pub struct Json<T: DeserializeOwned>(pub T);
+pub struct Json<T>(pub T);
 
-impl<T: DeserializeOwned + Clone> Clone for Json<T> {
+impl<T: Clone> Clone for Json<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<T: DeserializeOwned + std::fmt::Debug> std::fmt::Debug for Json<T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for Json<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<T: DeserializeOwned + std::fmt::Display> std::fmt::Display for Json<T> {
+impl<T: std::fmt::Display> std::fmt::Display for Json<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<T: DeserializeOwned + PartialEq> PartialEq for Json<T> {
+impl<T: PartialEq> PartialEq for Json<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
 
-impl<T: DeserializeOwned + Eq> Eq for Json<T> {}
+impl<T: Eq> Eq for Json<T> {}
 
 /// The error type for JSON conversion
 #[derive(Error, Debug)]
@@ -298,6 +298,44 @@ impl<Body: DeserializeOwned> TryFrom<MqttMessage> for Arc<Json<Body>> {
         let payload: &str = msg.payload_as_str()?;
         let value = serde_json::from_str(payload)?;
         Ok(Arc::new(Json(value)))
+    }
+}
+
+/// Serialize an object to a MQTT message.
+pub trait MqttSerializer {
+    /// Serialize an object to a MQTT message.
+    ///
+    /// # Errors
+    ///
+    /// If the object cannot be serialized.
+    fn serialize(
+        &self,
+        topic: impl Into<String>,
+        retain: bool,
+        qos: QoS,
+    ) -> Result<MqttMessage, JsonError>;
+}
+
+impl<T: Serialize> MqttSerializer for Json<T> {
+    fn serialize(
+        &self,
+        topic: impl Into<String>,
+        retain: bool,
+        qos: QoS,
+    ) -> Result<MqttMessage, JsonError> {
+        let payload = serde_json::to_string(&self.0)?;
+        Ok(MqttMessage::new(topic, payload, retain, qos))
+    }
+}
+
+impl MqttSerializer for String {
+    fn serialize(
+        &self,
+        topic: impl Into<String>,
+        retain: bool,
+        qos: QoS,
+    ) -> Result<MqttMessage, JsonError> {
+        Ok(MqttMessage::new(topic, self, retain, qos))
     }
 }
 

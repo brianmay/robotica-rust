@@ -1,7 +1,7 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
-use crate::mqtt::MqttMessage;
+use crate::mqtt::{MqttMessage, MqttSerializer, QoS};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -139,32 +139,20 @@ const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
 }
 
 #[must_use]
-fn json_command(topic: &str, payload: &serde_json::Value) -> Option<MqttMessage> {
-    let Ok(msg) = MqttMessage::from_json(topic, payload, false, crate::mqtt::QoS::ExactlyOnce)
-    else {
-        error!("Failed to create MQTT message for topic {}", topic);
-        return None;
-    };
-    Some(msg)
+fn mqtt_command(topic: &str, payload: &impl MqttSerializer) -> Option<MqttMessage> {
+    payload
+        .serialize(topic, false, QoS::ExactlyOnce)
+        .map_or_else(
+            |_| {
+                error!("Failed to serialize payload for topic {}", topic);
+                None
+            },
+            Some,
+        )
 }
 
 #[must_use]
-fn json_command_vec(topic: &str, payload: &serde_json::Value) -> Vec<MqttMessage> {
-    let msg = json_command(topic, payload);
+fn mqtt_command_vec(topic: &str, payload: &impl MqttSerializer) -> Vec<MqttMessage> {
+    let msg = mqtt_command(topic, payload);
     msg.map_or_else(std::vec::Vec::new, |msg| vec![msg])
-}
-
-#[must_use]
-fn string_command(topic: &str, payload: &str) -> MqttMessage {
-    MqttMessage::new(
-        topic,
-        payload.to_string(),
-        false,
-        crate::mqtt::QoS::ExactlyOnce,
-    )
-}
-
-#[must_use]
-fn string_command_vec(topic: &str, payload: &str) -> Vec<MqttMessage> {
-    vec![string_command(topic, payload)]
 }

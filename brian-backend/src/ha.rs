@@ -3,7 +3,9 @@ use robotica_backend::pipes::stateless;
 use robotica_backend::pipes::Subscriber;
 use robotica_backend::pipes::Subscription;
 use robotica_backend::services::mqtt::MqttTx;
+use robotica_common::mqtt::Json;
 use robotica_common::mqtt::MqttMessage;
+use robotica_common::mqtt::MqttSerializer;
 use robotica_common::mqtt::QoS;
 use robotica_common::robotica::audio::MessagePriority;
 use serde::Serialize;
@@ -84,11 +86,12 @@ pub fn message_topic(msg: &MessageCommand) -> String {
 #[allow(dead_code)]
 pub fn string_to_message(msg: &MessageCommand) -> MqttMessage {
     let topic = message_topic(msg);
-    let payload = serde_json::to_string(&msg).unwrap_or_else(|_| {
-        error!("Failed to serialize message: {msg:?}");
-        "{}".into()
-    });
-    MqttMessage::new(topic, payload, false, QoS::ExactlyOnce)
+    Json(msg)
+        .serialize(topic.clone(), false, QoS::ExactlyOnce)
+        .unwrap_or_else(|_| {
+            error!("Failed to serialize message: {msg:?}");
+            MqttMessage::new(topic, "{}", false, QoS::ExactlyOnce)
+        })
 }
 
 pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<MessageCommand> {

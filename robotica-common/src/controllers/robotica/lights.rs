@@ -2,13 +2,16 @@
 
 use crate::{
     mqtt::{Json, MqttMessage},
-    robotica::lights::{self, PowerState},
+    robotica::{
+        commands::Command,
+        lights::{self, LightCommand, PowerState},
+    },
 };
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::super::{
-    get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -100,18 +103,15 @@ impl ControllerTrait for Controller {
     fn get_press_commands(&self) -> Vec<MqttMessage> {
         let display_state = self.get_display_state();
         let action = match get_press_on_or_off(display_state, self.config.action) {
-            TurnOnOff::TurnOn => "turn_on",
-            TurnOnOff::TurnOff => "turn_off",
+            TurnOnOff::TurnOn => LightCommand::TurnOn {
+                scene: self.config.scene.clone(),
+            },
+            TurnOnOff::TurnOff => LightCommand::TurnOff,
         };
 
-        let payload = serde_json::json!({
-            "type": "light",
-            "action": action,
-            "scene": self.config.scene,
-        });
-
+        let payload = Json(Command::Light(action));
         let topic = format!("command/{}", self.config.topic_substr);
-        json_command_vec(&topic, &payload)
+        mqtt_command_vec(&topic, &payload)
     }
 
     fn get_action(&self) -> Action {
