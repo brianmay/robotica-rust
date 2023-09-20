@@ -1,10 +1,13 @@
 //! A robotica HDMI controller
 use serde::{Deserialize, Serialize};
 
-use crate::mqtt::MqttMessage;
+use crate::{
+    mqtt::{Json, MqttMessage},
+    robotica::{commands::Command, hdmi::HdmiCommand},
+};
 
 use super::super::{
-    get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -109,11 +112,10 @@ impl ControllerTrait for Controller {
     }
 
     fn get_press_commands(&self) -> Vec<MqttMessage> {
-        let payload = serde_json::json!({
-            "input": self.config.input,
-            "output": self.config.output,
-            "type": "hdmi",
-        });
+        let payload = Json(Command::Hdmi(HdmiCommand {
+            input: self.config.input,
+            output: self.config.output,
+        }));
 
         let display_state = self.get_display_state();
         if matches!(
@@ -121,7 +123,7 @@ impl ControllerTrait for Controller {
             TurnOnOff::TurnOn
         ) {
             let topic = format!("command/{}", self.config.topic_substr);
-            json_command_vec(&topic, &payload)
+            mqtt_command_vec(&topic, &payload)
         } else {
             // Not possible to turn off an input, so do nothing.
             vec![]

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::{
-    get_display_state_for_action, get_press_on_or_off, string_command_vec, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -109,7 +109,7 @@ impl ControllerTrait for Controller {
         };
 
         let topic = format!("cmnd/{}/POWER{}", config.topic_substr, config.power_postfix);
-        string_command_vec(&topic, payload)
+        mqtt_command_vec(&topic, &payload.to_string())
     }
 
     fn get_action(&self) -> Action {

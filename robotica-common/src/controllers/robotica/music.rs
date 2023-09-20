@@ -1,13 +1,16 @@
 //! A robotica music controller
 use crate::{
     mqtt::{Json, MqttMessage},
-    robotica::audio,
+    robotica::{
+        audio::{self, AudioCommand, MessagePriority, MusicCommand},
+        commands::Command,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use super::super::{
-    get_display_state_for_action, get_press_on_or_off, json_command_vec, Action, ConfigTrait,
+    get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
     ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
 };
 
@@ -108,23 +111,31 @@ impl ControllerTrait for Controller {
 
     fn get_press_commands(&self) -> Vec<MqttMessage> {
         let display_state = self.get_display_state();
-        let payload = match get_press_on_or_off(display_state, self.config.action) {
-            TurnOnOff::TurnOn => {
-                serde_json::json!({
-                    "music": {"play_list": self.config.play_list},
-                    "type": "audio"
-                })
-            }
-            TurnOnOff::TurnOff => {
-                serde_json::json!({
-                    "music": {"stop": true},
-                    "type": "audio",
-                })
-            }
+        let command = match get_press_on_or_off(display_state, self.config.action) {
+            TurnOnOff::TurnOn => MusicCommand {
+                play_list: Some(self.config.play_list.clone()),
+                stop: None,
+            },
+            TurnOnOff::TurnOff => MusicCommand {
+                play_list: None,
+                stop: Some(true),
+            },
         };
 
+        // FIXME: This is yuck.
+        let audio_command = AudioCommand {
+            legacy_title: None,
+            priority: MessagePriority::Low,
+            sound: None,
+            pre_tasks: None,
+            post_tasks: None,
+            message: None,
+            music: Some(command),
+            volume: None,
+        };
+        let payload = Json(Command::Audio(audio_command));
         let topic = format!("command/{}", self.config.topic_substr);
-        json_command_vec(&topic, &payload)
+        mqtt_command_vec(&topic, &payload)
     }
 
     fn get_action(&self) -> Action {
