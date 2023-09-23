@@ -16,7 +16,6 @@ use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Mark;
 
-use crate::calendar::Dt;
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
@@ -69,14 +68,9 @@ impl<T: TimeZone + Debug> State<T> {
         let mut sequences = Vec::new();
 
         for event in calendar {
-            let start = match event.start {
-                Dt::DateTime(dt) => dt,
-                Dt::Date(_date) => continue,
-            };
-
-            let stop = match event.end {
-                Dt::DateTime(dt) => dt,
-                Dt::Date(_date) => continue,
+            let (start, stop) = match event.start_end {
+                calendar::StartEnd::Date(_, _) => continue,
+                calendar::StartEnd::DateTime(start, stop) => (start, stop),
             };
 
             let duration = stop - start;

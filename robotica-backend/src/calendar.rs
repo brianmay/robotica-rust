@@ -5,10 +5,16 @@ use pyo3::prelude::*;
 use pyo3::{FromPyObject, PyAny};
 
 #[derive(Debug, FromPyObject)]
-pub(crate) enum Dt {
+enum Dt {
     // DateTime must come first here.
     DateTime(DateTime<Utc>),
     Date(NaiveDate),
+}
+
+#[derive(Debug)]
+pub(crate) enum StartEnd {
+    Date(NaiveDate, NaiveDate),
+    DateTime(DateTime<Utc>, DateTime<Utc>),
 }
 
 #[allow(dead_code)]
@@ -21,8 +27,7 @@ pub(crate) struct CalendarEntry {
     pub(crate) status: Option<String>,
     pub(crate) transp: String,
     pub(crate) sequence: u8,
-    pub(crate) start: Dt,
-    pub(crate) end: Dt,
+    pub(crate) start_end: StartEnd,
     pub(crate) stamp: DateTime<Utc>,
     pub(crate) created: DateTime<Utc>,
     pub(crate) last_modified: DateTime<Utc>,
@@ -31,6 +36,20 @@ pub(crate) struct CalendarEntry {
 
 impl FromPyObject<'_> for CalendarEntry {
     fn extract(ob: &'_ PyAny) -> pyo3::PyResult<Self> {
+        let start: Dt = ob.get_item("DTSTART")?.extract()?;
+        let end: Dt =  ob.get_item("DTEND")?.extract()?;
+
+        let start_end = match (start, end) {
+            (Dt::DateTime(start), Dt::DateTime(end)) => StartEnd::DateTime(start, end),
+            (Dt::Date(start), Dt::Date(end)) => StartEnd::Date(start, end),
+            (Dt::DateTime(_), Dt::Date(_)) => return Err(pyo3::exceptions::PyTypeError::new_err(
+                "DTSTART is a DateTime but DTEND is a Date",
+            )),
+            (Dt::Date(_), Dt::DateTime(_)) => return Err(pyo3::exceptions::PyTypeError::new_err(
+                "DTSTART is a Date but DTEND is a DateTime",
+            )),
+        };
+
         Ok(CalendarEntry {
             summary: ob.get_item("SUMMARY")?.extract()?,
             description: ob
@@ -45,8 +64,7 @@ impl FromPyObject<'_> for CalendarEntry {
                 .map_or_else(|_| Ok(None), PyAny::extract)?,
             transp: ob.get_item("TRANSP")?.extract()?,
             sequence: ob.get_item("SEQUENCE")?.extract()?,
-            start: ob.get_item("DTSTART")?.extract()?,
-            end: ob.get_item("DTEND")?.extract()?,
+            start_end,
             stamp: ob.get_item("DTSTAMP")?.extract()?,
             created: ob.get_item("CREATED")?.extract()?,
             last_modified: ob.get_item("LAST-MODIFIED")?.extract()?,
