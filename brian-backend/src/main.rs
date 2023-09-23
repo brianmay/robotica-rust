@@ -73,7 +73,7 @@ pub struct State {
 }
 
 async fn setup_pipes(state: &mut State) {
-    let config  = config::load_config_from_default_file().unwrap_or_else(|e| {
+    let config = config::load_config_from_default_file().unwrap_or_else(|e| {
         panic!("Error loading config: {e}");
     });
 
@@ -112,7 +112,12 @@ async fn setup_pipes(state: &mut State) {
         panic!("Environment monitor failed: {err}");
     });
 
-    executor(&mut state.subscriptions, state.mqtt.clone(), config.executor).unwrap_or_else(|err| {
+    executor(
+        &mut state.subscriptions,
+        state.mqtt.clone(),
+        config.executor,
+    )
+    .unwrap_or_else(|err| {
         panic!("Failed to start executor: {err}");
     });
 

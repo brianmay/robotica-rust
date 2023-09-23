@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
 use robotica_common::mqtt::{Json, QoS};
-use robotica_common::robotica::tasks::{Task, Payload};
+use robotica_common::robotica::tasks::{Payload, Task};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
@@ -20,8 +20,8 @@ use crate::calendar::Dt;
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
-use crate::{spawn, calendar};
 use crate::tasks::get_task_messages;
+use crate::{calendar, spawn};
 
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
@@ -60,10 +60,11 @@ struct State<T: TimeZone> {
 
 impl<T: TimeZone + Debug> State<T> {
     pub fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
-        let calendar = calendar::load(&self.config.extra_config.calendar_url, start, stop).unwrap_or_else(|e| {
-            error!("Error loading calendar: {e}");
-            Vec::new()
-        });
+        let calendar = calendar::load(&self.config.extra_config.calendar_url, start, stop)
+            .unwrap_or_else(|e| {
+                error!("Error loading calendar: {e}");
+                Vec::new()
+            });
 
         let mut sequences = Vec::new();
 
@@ -347,7 +348,11 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx, extra_config: ExtraConfig) -> Result<(), ExecutorError> {
+pub fn executor(
+    subscriptions: &mut Subscriptions,
+    mqtt: MqttTx,
+    extra_config: ExtraConfig,
+) -> Result<(), ExecutorError> {
     let mut state = get_initial_state(mqtt, extra_config)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
@@ -408,7 +413,10 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx, extra_config: E
     Ok(())
 }
 
-fn get_initial_state(mqtt: MqttTx, extra_config: ExtraConfig) -> Result<State<Local>, ExecutorError> {
+fn get_initial_state(
+    mqtt: MqttTx,
+    extra_config: ExtraConfig,
+) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = Utc::now();
     let date = now.with_timezone::<Local>(&timezone).date_naive();
@@ -425,7 +433,7 @@ fn get_initial_state(mqtt: MqttTx, extra_config: ExtraConfig) -> Result<State<Lo
                 scheduler,
                 sequencer,
                 hostname,
-                extra_config
+                extra_config,
             }
         };
 

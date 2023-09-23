@@ -1,6 +1,6 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
-use robotica_backend::{EnvironmentOsError, get_env_os, scheduling::executor::ExtraConfig};
+use robotica_backend::{get_env_os, scheduling::executor::ExtraConfig, EnvironmentOsError};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -8,7 +8,6 @@ use thiserror::Error;
 pub struct Config {
     pub executor: ExtraConfig,
 }
-
 
 /// An error loading the Config
 #[derive(Error, Debug)]
@@ -32,11 +31,10 @@ pub enum Error {
 ///
 /// If the file cannot be read or parsed.
 pub fn load(filename: &Path) -> Result<Config, Error> {
-    let f = std::fs::File::open(filename)
-        .map_err(|e| Error::File(filename.to_path_buf(), e))?;
+    let f = std::fs::File::open(filename).map_err(|e| Error::File(filename.to_path_buf(), e))?;
 
-    let config: Config = serde_yaml::from_reader(f)
-        .map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
+    let config: Config =
+        serde_yaml::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
 
     Ok(config)
 }
