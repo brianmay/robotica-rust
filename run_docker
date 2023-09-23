@@ -1,0 +1,38 @@
+#!/usr/bin/env sh
+set -ex
+docker run --rm -ti --name=brian-node-rust \
+	--user brian \
+	--userns=keep-id:uid=$(id -u brian),gid=$(id -g brian) \
+    --env AMBER_TOKEN="$AMBER_TOKEN" \
+	--env AMBER_SITE_ID="$AMBER_SITE_ID" \
+	--env INFLUXDB_URL="$INFLUXDB_URL" \
+	--env INFLUXDB_DATABASE="$INFLUXDB_DATABASE" \
+	--env HOSTNAME="$HOSTNAME" \
+	--env ROOT_URL="$ROOT_URL" \
+	--env RUST_LOG="$RUST_LOG" \
+  	--env ROBOTICA_DEBUG="true" \
+	--env MQTT_USERNAME="$MQTT_USERNAME" \
+	--env MQTT_PASSWORD="$MQTT_PASSWORD" \
+	--env MQTT_HOST="$MQTT_HOST" \
+	--env MQTT_PORT="$MQTT_PORT" \
+	--env LIFE360_USERNAME="$LIFE360_PASSWORD" \
+	--env LIFE360_PASSWORD="$LIFE360_USERNAME" \
+	-v /etc/passwd:/etc/passwd:ro \
+ 	-v /home/brian/tree/personal/robotica/local/config:/robotica \
+	-v "$STATE_DIR:/state" \
+	--env CONFIG_FILE="/robotica/config.yaml" \
+	--env CLASSIFICATIONS_FILE="/robotica/classifications.yaml" \
+	--env SCHEDULE_FILE="/robotica/schedule.yaml" \
+	--env SEQUENCES_FILE="/robotica/sequences.yaml" \
+	--env TZ="$TZ" \
+	--env SESSION_SECRET="$SESSION_SECRET" \
+	--env OIDC_DISCOVERY_URL="$OIDC_DISCOVERY_URL" \
+	--env OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+	--env OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
+	--env OIDC_SCOPES="$OIDC_SCOPES" \
+	--env STATE_DIR="/state" \
+	--env HTTP_LISTENER="[::]:4001" \
+	--net host \
+	--init \
+	-p 4000:4000 \
+	ghcr.io/brianmay/robotica-rust:main "$@"

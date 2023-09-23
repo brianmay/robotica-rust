@@ -12,6 +12,7 @@ extern crate lalrpop_util;
 
 // extern crate robotica_backend_macros;
 
+pub mod calendar;
 pub mod devices;
 pub mod pipes;
 pub mod scheduling;

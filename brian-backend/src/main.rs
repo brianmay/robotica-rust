@@ -7,6 +7,7 @@
 #![deny(clippy::expect_used)]
 
 mod amber;
+mod config;
 mod delays;
 mod environment_monitor;
 mod ha;
@@ -72,6 +73,10 @@ pub struct State {
 }
 
 async fn setup_pipes(state: &mut State) {
+    let config  = config::load_config_from_default_file().unwrap_or_else(|e| {
+        panic!("Error loading config: {e}");
+    });
+
     let price_summary_rx = amber::run(state).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
@@ -107,7 +112,7 @@ async fn setup_pipes(state: &mut State) {
         panic!("Environment monitor failed: {err}");
     });
 
-    executor(&mut state.subscriptions, state.mqtt.clone()).unwrap_or_else(|err| {
+    executor(&mut state.subscriptions, state.mqtt.clone(), config.executor).unwrap_or_else(|err| {
         panic!("Failed to start executor: {err}");
     });
 

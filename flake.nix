@@ -8,8 +8,12 @@
     url = "github:ipetkov/crane";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.poetry2nix = {
+    url = "github:nix-community/poetry2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
@@ -17,6 +21,21 @@
           overlays = [ (import rust-overlay) ];
         };
 
+        poetry = poetry2nix.legacyPackages.${system};
+        poetry_env = poetry.mkPoetryEnv {
+          python = pkgs.python3;
+          projectDir = ./robotica-backend/python;
+          overrides = poetry.defaultPoetryOverrides.extend (self: super: {
+            x-wr-timezone = super.x-wr-timezone.overridePythonAttrs (old: {
+              buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];
+            });
+            recurring-ical-events =
+              super.recurring-ical-events.overridePythonAttrs (old: {
+                buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];
+              });
+          });
+
+        };
         rustPlatform = pkgs.rust-bin.stable.latest.default.override {
           targets = [ "wasm32-unknown-unknown" ];
           extensions = [ "rust-src" ];
@@ -75,6 +94,8 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
+            poetry2nix.packages.${system}.poetry
+            poetry_env
             rust-analyzer
             pkgconfig
             openssl

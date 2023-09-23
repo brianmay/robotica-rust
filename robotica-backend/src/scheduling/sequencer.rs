@@ -120,32 +120,32 @@ pub struct Sequence {
 
     /// The conditions that must be true before this is scheduled.
     #[serde(skip)]
-    if_cond: Option<Vec<Boolean<Context>>>,
+    pub if_cond: Option<Vec<Boolean<Context>>>,
 
     /// The required classifications for this step.
     #[serde(skip)]
-    classifications: Option<HashSet<String>>,
+    pub classifications: Option<HashSet<String>>,
 
-    // The required options for this step.
+    /// The required options for this step.
     #[serde(skip)]
-    options: Option<HashSet<String>>,
+    pub options: Option<HashSet<String>>,
 
     /// If true this is considered the "zero time" for this sequence.
     #[serde(skip)]
-    zero_time: bool,
+    pub zero_time: bool,
 
     /// The start time of this step.
     pub required_time: DateTime<Utc>,
 
     /// The required duration of this step.
     #[serde(with = "robotica_common::datetime::with_duration")]
-    required_duration: Duration,
+    pub required_duration: Duration,
 
     /// The latest time this step can be completed.
     pub latest_time: DateTime<Utc>,
 
-    /// The number of the repeat.
-    repeat_number: usize,
+    /// The number of the repeat, starting from 1.
+    pub repeat_number: usize,
 
     /// The tasks to execute.
     pub tasks: Vec<Task>,
@@ -176,8 +176,9 @@ impl PartialEq for Sequence {
     }
 }
 
+/// The context for the sequencer operation.
 #[derive(Debug, Clone)]
-struct Context {
+pub struct Context {
     today: HashSet<String>,
     tomorrow: HashSet<String>,
     options: HashSet<String>,

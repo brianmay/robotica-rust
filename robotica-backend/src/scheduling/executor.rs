@@ -5,6 +5,7 @@ use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
 use robotica_common::mqtt::{Json, QoS};
+use robotica_common::robotica::tasks::{Task, Payload};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
@@ -15,20 +16,29 @@ use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
 use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Mark;
 
+use crate::calendar::Dt;
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
-use crate::spawn;
+use crate::{spawn, calendar};
 use crate::tasks::get_task_messages;
 
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
+
+/// Extra configuration settings for the executor.
+#[derive(serde::Deserialize)]
+pub struct ExtraConfig {
+    /// The URL of the calendar to use for extra events.
+    pub calendar_url: String,
+}
 
 struct Config {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
     hostname: String,
+    extra_config: ExtraConfig,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,6 +59,66 @@ struct State<T: TimeZone> {
 }
 
 impl<T: TimeZone + Debug> State<T> {
+    pub fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
+        let calendar = calendar::load(&self.config.extra_config.calendar_url, start, stop).unwrap_or_else(|e| {
+            error!("Error loading calendar: {e}");
+            Vec::new()
+        });
+
+        let mut sequences = Vec::new();
+
+        for event in calendar {
+            let start = match event.start {
+                Dt::DateTime(dt) => dt,
+                Dt::Date(_date) => continue,
+            };
+
+            let stop = match event.end {
+                Dt::DateTime(dt) => dt,
+                Dt::Date(_date) => continue,
+            };
+
+            let duration = stop - start;
+
+            // FIXME: This should not be hardcoded here.
+            let payload = serde_json::json!( {
+                "type": "message",
+                "title": "Calendar Event",
+                "body": event.summary.clone(),
+                "priority": "Low",
+            });
+
+            let task = Task {
+                description: Some(event.summary.clone()),
+                payload: Payload::Json(payload),
+                qos: QoS::ExactlyOnce,
+                retain: false,
+                locations: ["Dining".to_string(), "Brian".to_string(), "Jan".to_string()].to_vec(),
+                devices: ["Robotica".to_string()].to_vec(),
+                topics: ["ha/event/message/everyone".to_string()].to_vec(),
+            };
+
+            let sequence = Sequence {
+                sequence_name: event.summary,
+                id: event.uid,
+                required_time: start,
+                latest_time: stop,
+                required_duration: duration,
+                tasks: vec![task],
+                mark: None,
+                if_cond: None,
+                classifications: None,
+                options: None,
+                zero_time: true,
+                repeat_number: 1,
+            };
+
+            sequences.push(sequence);
+        }
+
+        sequences
+    }
+
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
         let today = now.with_timezone::<T>(&self.timezone).date_naive();
 
@@ -146,7 +216,7 @@ impl<T: TimeZone + Debug> State<T> {
             Vec::new()
         });
 
-        sequencer::schedule_list_to_sequence(
+        let s = sequencer::schedule_list_to_sequence(
             &self.config.sequencer,
             &schedule,
             &c_date,
@@ -155,7 +225,13 @@ impl<T: TimeZone + Debug> State<T> {
         .unwrap_or_else(|e| {
             error!("Error getting sequences for {date}: {e}");
             Vec::new()
-        })
+        });
+
+        let calendar = self.load_calendar(date, date + Duration::days(1));
+        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
+        sequences.extend(s);
+        sequences.extend(calendar);
+        sequences
     }
 
     fn get_tags(&self, today: Date) -> Tags {
@@ -271,8 +347,8 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), ExecutorError> {
-    let mut state = get_initial_state(mqtt)?;
+pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx, extra_config: ExtraConfig) -> Result<(), ExecutorError> {
+    let mut state = get_initial_state(mqtt, extra_config)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
     spawn(async move {
@@ -332,7 +408,7 @@ pub fn executor(subscriptions: &mut Subscriptions, mqtt: MqttTx) -> Result<(), E
     Ok(())
 }
 
-fn get_initial_state(mqtt: MqttTx) -> Result<State<Local>, ExecutorError> {
+fn get_initial_state(mqtt: MqttTx, extra_config: ExtraConfig) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = Utc::now();
     let date = now.with_timezone::<Local>(&timezone).date_naive();
@@ -349,17 +425,17 @@ fn get_initial_state(mqtt: MqttTx) -> Result<State<Local>, ExecutorError> {
                 scheduler,
                 sequencer,
                 hostname,
+                extra_config
             }
         };
 
         let timer = Instant::now();
-        let sequence = VecDeque::new();
         let marks = HashMap::new();
 
         State {
             date,
             timer,
-            sequences: sequence,
+            sequences: VecDeque::new(),
             marks,
             timezone,
             config,
