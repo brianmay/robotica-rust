@@ -37,17 +37,21 @@ pub(crate) struct CalendarEntry {
 impl FromPyObject<'_> for CalendarEntry {
     fn extract(ob: &'_ PyAny) -> pyo3::PyResult<Self> {
         let start: Dt = ob.get_item("DTSTART")?.extract()?;
-        let end: Dt =  ob.get_item("DTEND")?.extract()?;
+        let end: Dt = ob.get_item("DTEND")?.extract()?;
 
         let start_end = match (start, end) {
             (Dt::DateTime(start), Dt::DateTime(end)) => StartEnd::DateTime(start, end),
             (Dt::Date(start), Dt::Date(end)) => StartEnd::Date(start, end),
-            (Dt::DateTime(_), Dt::Date(_)) => return Err(pyo3::exceptions::PyTypeError::new_err(
-                "DTSTART is a DateTime but DTEND is a Date",
-            )),
-            (Dt::Date(_), Dt::DateTime(_)) => return Err(pyo3::exceptions::PyTypeError::new_err(
-                "DTSTART is a Date but DTEND is a DateTime",
-            )),
+            (Dt::DateTime(_), Dt::Date(_)) => {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "DTSTART is a DateTime but DTEND is a Date",
+                ))
+            }
+            (Dt::Date(_), Dt::DateTime(_)) => {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "DTSTART is a Date but DTEND is a DateTime",
+                ))
+            }
         };
 
         Ok(CalendarEntry {
