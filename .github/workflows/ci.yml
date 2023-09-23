@@ -25,11 +25,13 @@ jobs:
         with:
           poetry-version: 1.3.0
       - uses: actions/cache@v3
-        name: Define a cache for the virtual environment based on the dependencies lock file
+        name: Cache Python dependancies
+        id: cached-poetry-dependencies
         with:
           path: robotica-backend/python/.venv
           key: venv-${{ hashFiles('robotica-backend/python/poetry.lock') }}
       - name: Install the python dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry -C robotica-backend/python install --without dev --no-root
       - uses: actions-rs/toolchain@v1
         with:
