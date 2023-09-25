@@ -4,7 +4,7 @@ use std::env::{self, VarError};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
-use robotica_common::mqtt::{Json, QoS};
+use robotica_common::mqtt::{Json, QoS, MqttSerializer};
 use robotica_common::robotica::tasks::{Payload, Task};
 use serde::Serialize;
 use thiserror::Error;
@@ -13,7 +13,6 @@ use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
-use robotica_common::mqtt::MqttMessage;
 use robotica_common::scheduler::Mark;
 
 use crate::pipes::{Subscriber, Subscription};
@@ -51,10 +50,13 @@ struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
     sequences: VecDeque<Sequence>,
+    tags: Tags,
     marks: HashMap<String, Mark>,
     timezone: T,
     config: Config,
     mqtt: MqttTx,
+    done: HashSet<(Date, String)>,
+    calendar_refresh_time: DateTime<Utc>,
 }
 
 impl<T: TimeZone + Debug> State<T> {
@@ -117,63 +119,67 @@ impl<T: TimeZone + Debug> State<T> {
     pub fn finalize(&mut self, now: &DateTime<Utc>) {
         let today = now.with_timezone::<T>(&self.timezone).date_naive();
 
-        if let Some(sequences) = self.check_time_travel(today) {
-            self.publish_sequences(&sequences);
-            self.sequences = sequences;
+        if self.check_time_travel(today) {
+            self.calendar_refresh_time = *now;
+            self.publish_tags(&self.tags);
+            self.publish_sequences(&self.sequences);
+        } else if *now  > self.calendar_refresh_time + Duration::minutes(5) {
+            self.sequences = self.get_sequences_all(today);
+            self.publish_sequences(&self.sequences);
+            self.calendar_refresh_time = *now;
         }
 
-        self.publish_sequences(&self.sequences);
         self.timer = self.get_next_timer(now);
         self.date = today;
     }
 
-    fn check_time_travel(&self, today: Date) -> Option<VecDeque<Sequence>> {
+    fn check_time_travel(&mut self, today: Date) -> bool {
         let yesterday = today - Duration::days(1);
 
         if today < self.date {
             // If we have travelled back in time, we should drop the list entirely
             // to avoid duplicating future events.
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            Some(self.get_sequences_all(today))
+            self.tags = self.get_tags(today);
+            self.sequences = self.get_sequences_all(today);
+            self.done = HashSet::new();
+            true
         } else if yesterday == self.date {
             // If we have travelled forward in time by one day, we only need to
             // add events for tomorrow.
-            // let mut steps = self.sequence.chain(self.get_steps_for_date(&tomorrow));
-            // self.sequence = Box::new(steps);
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            Some(self.add_sequences_tomorrow(today))
+            self.tags = self.get_tags(today);
+            self.sequences = self.add_sequences_tomorrow(today);
+            true
         } else if today > self.date {
             // If we have travelled forward in time more then one day, regenerate
             // entire events list.
-            let tags = self.get_tags(today);
-            self.publish_tags(&tags);
-            Some(self.get_sequences_all(today))
+            self.tags = self.get_tags(today);
+            self.sequences = self.get_sequences_all(today);
+            self.done = HashSet::new();
+            true
         } else {
             // No change in date.
-            None
+            false
         }
     }
 
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.hostname);
-        let Ok(message) = serde_json::to_string(&tags) else {
+        let msg = Json(tags);
+        let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize tags: {:?}", tags);
             return;
         };
-        let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
     fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
         let topic = format!("schedule/{}", self.config.hostname);
-        let Ok(message) = serde_json::to_string(&sequences) else {
+        let msg = Json(sequences);
+        let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize sequences: {:?}", sequences);
             return;
         };
-        let message = MqttMessage::new(topic, message, true, QoS::ExactlyOnce);
         self.mqtt.try_send(message);
     }
 
@@ -240,6 +246,13 @@ impl<T: TimeZone + Debug> State<T> {
         }
     }
 
+    fn drop_done_sequences(&self, sequences: VecDeque<Sequence>) -> VecDeque<Sequence> {
+        sequences.into_iter().filter(|sequence| {
+            let sequence_date = sequence.required_time.date_naive();
+            !self.done.contains(&(sequence_date, sequence.id.clone()))
+        }).collect()
+    }
+
     fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
         let date = date - Duration::days(1);
         let yesterday = self.get_sequences_for_date(date);
@@ -259,10 +272,13 @@ impl<T: TimeZone + Debug> State<T> {
         sequences.extend(tomorrow);
 
         // Sort by time.
-        sequences.make_contiguous().sort();
+        sequences.make_contiguous().sort_by(Sequence::cmp_required_time);
 
         // Set marks.
         set_all_marks(&mut sequences, &self.marks);
+
+        // drop done sequences.
+        sequences = self.drop_done_sequences(sequences);
 
         // Return.
         sequences
@@ -282,7 +298,7 @@ impl<T: TimeZone + Debug> State<T> {
         sequences.extend(new_schedule);
 
         // Sort by time.
-        sequences.make_contiguous().sort();
+        sequences.make_contiguous().sort_by(Sequence::cmp_required_time);
 
         // Set marks.
         set_all_marks(&mut sequences, &self.marks);
@@ -366,14 +382,16 @@ pub fn executor(
 
                     while let Some(sequence) = state.sequences.front() {
                         let now = utc_now();
+                        let sequence_date = sequence.required_time.date_naive();
 
-                        if now < sequence.required_time {
+                        if state.done.contains(&(sequence_date, sequence.id.clone())) {
+                            debug!("Already done with {sequence:?}");
+                        } else if now < sequence.required_time {
                             // Too early, wait for next timer.
                             debug!("Too early for {sequence:?}");
                             break;
                         } else if sequence.mark.is_some() {
                             debug!("Ignoring step with mark {:?}", sequence.mark);
-                            state.sequences.pop_front();
                         } else if now < sequence.latest_time {
                             // Send message.
                             info!("Processing step {sequence:?}");
@@ -383,12 +401,12 @@ pub fn executor(
                                     state.mqtt.try_send(message.clone());
                                 }
                             }
-                            state.sequences.pop_front();
                         } else {
                             // Too late, drop event.
                             debug!("Too late for {sequence:?}");
-                            state.sequences.pop_front();
                         }
+                        state.done.insert((sequence_date, sequence.id.clone()));
+                        state.sequences.pop_front();
                     }
 
                     let now = utc_now();
@@ -442,17 +460,25 @@ fn get_initial_state(
             timezone,
             config,
             mqtt,
+            done: HashSet::new(),
+            calendar_refresh_time: now,
+            tags: Tags {
+                yesterday: HashSet::new(),
+                today: HashSet::new(),
+                tomorrow: HashSet::new(),
+            },
         }
     };
-    let sequences = state.get_sequences_all(state.date);
-    let mut state = State { sequences, ..state };
+    let state = {
+        let mut state = state;
+        state.tags = state.get_tags(state.date);
+        state.publish_tags(&state.tags);
+        state.sequences = state.get_sequences_all(state.date);
+        state.publish_sequences(&state.sequences);
+        state.finalize(&now);
+        state
+    };
 
-    {
-        let tags = state.get_tags(state.date);
-        state.publish_tags(&tags);
-    }
-
-    state.finalize(&now);
 
     debug!(
         "{:?}: Starting executor, Next task {:?}, timer at {:?}",

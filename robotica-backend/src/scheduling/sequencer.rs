@@ -154,25 +154,11 @@ pub struct Sequence {
     pub mark: Option<Mark>,
 }
 
-/// A Map of Sequences.
-pub type SequenceMap = HashMap<String, Vec<Sequence>>;
-
-impl Ord for Sequence {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+impl Sequence {
+    /// Compare the required time of two sequences.
+    #[must_use]
+    pub fn cmp_required_time(&self, other: &Self) -> std::cmp::Ordering {
         self.required_time.cmp(&other.required_time)
-    }
-}
-
-impl PartialOrd for Sequence {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.required_time.partial_cmp(&other.required_time)
-    }
-}
-impl Eq for Sequence {}
-
-impl PartialEq for Sequence {
-    fn eq(&self, other: &Self) -> bool {
-        self.required_time == other.required_time
     }
 }
 
@@ -499,7 +485,7 @@ pub fn schedule_list_to_sequence(
     }
 
     // Sort the sequences by the required time.
-    sequences.sort();
+    sequences.sort_by(Sequence::cmp_required_time);
 
     Ok(sequences)
 }
