@@ -84,14 +84,14 @@ pub fn message_topic(msg: &MessageCommand) -> String {
 }
 
 #[allow(dead_code)]
-pub fn string_to_message(msg: &MessageCommand) -> MqttMessage {
+fn string_to_message(msg: &MessageCommand) -> Option<MqttMessage> {
     let topic = message_topic(msg);
     Json(msg)
-        .serialize(topic.clone(), false, QoS::ExactlyOnce)
-        .unwrap_or_else(|_| {
+        .serialize(topic, false, QoS::ExactlyOnce)
+        .map_err(|err| {
             error!("Failed to serialize message: {msg:?}");
-            MqttMessage::new(topic, "{}", false, QoS::ExactlyOnce)
-        })
+            err
+        }).ok()
 }
 
 pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<MessageCommand> {
@@ -100,8 +100,9 @@ pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<MessageCommand> {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
             info!("Sending message {:?}", msg);
-            let msg = string_to_message(&msg);
-            mqtt.try_send(msg);
+            if let Some(msg) = string_to_message(&msg) {
+                mqtt.try_send(msg);
+            }
         }
     });
     tx
