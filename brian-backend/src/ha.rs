@@ -91,7 +91,8 @@ fn string_to_message(msg: &MessageCommand) -> Option<MqttMessage> {
         .map_err(|err| {
             error!("Failed to serialize message: {msg:?}");
             err
-        }).ok()
+        })
+        .ok()
 }
 
 pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<MessageCommand> {

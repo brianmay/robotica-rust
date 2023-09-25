@@ -4,7 +4,7 @@ use std::env::{self, VarError};
 use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
-use robotica_common::mqtt::{Json, QoS, MqttSerializer};
+use robotica_common::mqtt::{Json, MqttSerializer, QoS};
 use robotica_common::robotica::tasks::{Payload, Task};
 use serde::Serialize;
 use thiserror::Error;
@@ -123,7 +123,7 @@ impl<T: TimeZone + Debug> State<T> {
             self.calendar_refresh_time = *now;
             self.publish_tags(&self.tags);
             self.publish_sequences(&self.sequences);
-        } else if *now  > self.calendar_refresh_time + Duration::minutes(5) {
+        } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.sequences = self.get_sequences_all(today);
             self.publish_sequences(&self.sequences);
             self.calendar_refresh_time = *now;
@@ -247,10 +247,13 @@ impl<T: TimeZone + Debug> State<T> {
     }
 
     fn drop_done_sequences(&self, sequences: VecDeque<Sequence>) -> VecDeque<Sequence> {
-        sequences.into_iter().filter(|sequence| {
-            let sequence_date = sequence.required_time.date_naive();
-            !self.done.contains(&(sequence_date, sequence.id.clone()))
-        }).collect()
+        sequences
+            .into_iter()
+            .filter(|sequence| {
+                let sequence_date = sequence.required_time.date_naive();
+                !self.done.contains(&(sequence_date, sequence.id.clone()))
+            })
+            .collect()
     }
 
     fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
@@ -272,7 +275,9 @@ impl<T: TimeZone + Debug> State<T> {
         sequences.extend(tomorrow);
 
         // Sort by time.
-        sequences.make_contiguous().sort_by(Sequence::cmp_required_time);
+        sequences
+            .make_contiguous()
+            .sort_by(Sequence::cmp_required_time);
 
         // Set marks.
         set_all_marks(&mut sequences, &self.marks);
@@ -298,7 +303,9 @@ impl<T: TimeZone + Debug> State<T> {
         sequences.extend(new_schedule);
 
         // Sort by time.
-        sequences.make_contiguous().sort_by(Sequence::cmp_required_time);
+        sequences
+            .make_contiguous()
+            .sort_by(Sequence::cmp_required_time);
 
         // Set marks.
         set_all_marks(&mut sequences, &self.marks);
@@ -478,7 +485,6 @@ fn get_initial_state(
         state.finalize(&now);
         state
     };
-
 
     debug!(
         "{:?}: Starting executor, Next task {:?}, timer at {:?}",
