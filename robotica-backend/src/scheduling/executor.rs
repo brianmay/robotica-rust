@@ -122,13 +122,12 @@ impl<T: TimeZone + Debug> State<T> {
         if self.check_time_travel(today) {
             self.calendar_refresh_time = *now;
             self.publish_tags(&self.tags);
-            self.publish_sequences(&self.sequences);
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.sequences = self.get_sequences_all(today);
-            self.publish_sequences(&self.sequences);
             self.calendar_refresh_time = *now;
         }
 
+        self.publish_sequences(&self.sequences);
         self.timer = self.get_next_timer(now);
         self.date = today;
     }
@@ -481,7 +480,8 @@ fn get_initial_state(
         state.tags = state.get_tags(state.date);
         state.publish_tags(&state.tags);
         state.sequences = state.get_sequences_all(state.date);
-        state.publish_sequences(&state.sequences);
+        // Don't do this here, will happen after first timer.
+        // state.publish_sequences(&state.sequences);
         state.finalize(&now);
         state
     };
