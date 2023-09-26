@@ -48,11 +48,11 @@ jobs:
       - name: Test backend lib
         run: |
           export PATH="$PWD/robotica-backend/python/.venv/bin:$PATH"
-          cargo test -p robotica-backend
+          cargo test -p robotica-backend --features scheduler
       - name: Test frontend lib
         run: cargo test -p robotica-frontend
       - name: Test backend lib (Brian)
-        run: cargo test -p brian-backend --features scheduler
+        run: cargo test -p brian-backend
 
   push:
     name: Push
