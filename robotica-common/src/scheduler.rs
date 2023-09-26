@@ -50,6 +50,17 @@ pub enum MarkError {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
+/// The importance of a Sequence
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub enum Importance {
+    /// The sequence is not important.
+    #[default]
+    NotImportant,
+
+    /// The sequence is important.
+    Important,
+}
+
 /// The schedule with all values completed.
 ///
 /// Note this is not used in the backend, which has its own copy.
@@ -58,6 +69,9 @@ pub enum MarkError {
 pub struct Sequence {
     /// The id of the step.
     pub id: String,
+
+    /// The importance of the sequence.
+    pub importance: Importance,
 
     /// The name of this sequence.
     // #[serde(skip)]

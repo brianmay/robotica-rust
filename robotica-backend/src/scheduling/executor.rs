@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
-use robotica_common::scheduler::Mark;
+use robotica_common::scheduler::{Mark, Importance};
 
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
@@ -74,8 +74,9 @@ impl<T: TimeZone> Config<T> {
             };
 
             let sequence = Sequence {
-                sequence_name: event.summary,
                 id: event.uid,
+                importance: Importance::Important,
+                sequence_name: event.summary,
                 required_time: start,
                 latest_time: stop,
                 required_duration: duration,
