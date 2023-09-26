@@ -6,8 +6,8 @@
       if:
         - "'christmas' in today and 'boxing' in tomorrow"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -16,8 +16,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -26,8 +26,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -36,8 +36,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -46,8 +46,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -56,8 +56,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Wakeup
@@ -68,8 +68,8 @@
       latest_time: "01:00:00"
       zero_time: true
       tasks:
-        - locations: ["kids"]
-          devices: ["robotica"]
+        - topics:
+            - "kids/robotica"
           payload_json:
             type: "audio"
             title: Presents
