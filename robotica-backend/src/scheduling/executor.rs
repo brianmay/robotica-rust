@@ -19,7 +19,7 @@ use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
 use crate::tasks::get_task_messages;
-use crate::{calendar, spawn};
+use crate::{scheduling::calendar, spawn};
 
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};

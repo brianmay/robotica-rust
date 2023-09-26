@@ -21,6 +21,7 @@ lalrpop_mod!(
 ); // synthesized by LALRPOP
 
 mod ast;
+pub mod calendar;
 pub mod classifier;
 pub mod executor;
 pub mod scheduler;

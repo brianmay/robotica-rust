@@ -50,7 +50,7 @@ jobs:
           export PATH="$PWD/robotica-backend/python/.venv/bin:$PATH"
           cargo test -p robotica-backend
       - name: Test frontend lib
-        run: cargo test -p robotica-frontend
+        run: cargo test -p robotica-frontend --features scheduler
       - name: Test backend lib (Brian)
         run: cargo test -p brian-backend
 

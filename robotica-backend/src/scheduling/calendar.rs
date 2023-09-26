@@ -34,6 +34,23 @@ pub(crate) struct CalendarEntry {
     pub(crate) recurrence_id: Option<DateTime<Utc>>,
 }
 
+// impl CalendarEntry {
+//     /// Compare the start time of two calendar entries.
+//     ///
+//     /// Note if one sequence has a `NaiveDate` and the other has a `DateTime`, then the `DateTime` will be converted to a `NaiveDate`.
+//     ///
+//     /// Otherwise the comparison is done on the `NaiveDate` or `DateTime` directly.
+//     #[must_use]
+//     pub fn cmp_start_time(&self, other: &Self) -> std::cmp::Ordering {
+//         match (&self.start_end, &other.start_end) {
+//             (StartEnd::Date(start1, _), StartEnd::Date(start2, _)) => start1.cmp(start2),
+//             (StartEnd::DateTime(start1, _), StartEnd::DateTime(start2, _)) => start1.cmp(start2),
+//             (StartEnd::Date(start1, _), StartEnd::DateTime(start2, _)) => start1.cmp(&start2.date_naive()),
+//             (StartEnd::DateTime(start1, _), StartEnd::Date(start2, _)) => start1.date_naive().cmp(start2),
+//         }
+//     }
+// }
+
 impl FromPyObject<'_> for CalendarEntry {
     fn extract(ob: &'_ PyAny) -> pyo3::PyResult<Self> {
         let start: Dt = ob.get_item("DTSTART")?.extract()?;

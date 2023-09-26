@@ -7,19 +7,21 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::use_self)]
 
+#[cfg(feature = "scheduler")]
 #[macro_use]
 extern crate lalrpop_util;
 
 // extern crate robotica_backend_macros;
 
-pub mod calendar;
 pub mod devices;
 pub mod pipes;
-pub mod scheduling;
 pub mod services;
 pub mod sinks;
 pub mod sources;
 pub mod tasks;
+
+#[cfg(feature = "scheduler")]
+pub mod scheduling;
 
 use std::{env, ffi::OsString, future::Future};
 use thiserror::Error;

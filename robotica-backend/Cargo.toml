@@ -7,6 +7,7 @@ edition = "2021"
 
 [features]
 websockets = ["robotica-common/websockets"]
+scheduler = ["pyo3", "lalrpop-util"]
 
 [dependencies]
 bytes = "1.2.1"
@@ -22,14 +23,14 @@ serde_path_to_error = "0.1.11"
 gethostname = "0.4.0"
 thiserror = "1.0.40"
 chrono = "0.4.24"
-lalrpop-util = { version = "0.20.0", features = ["lexer"] }
+lalrpop-util = { version = "0.20.0", features = ["lexer"], optional = true }
 regex = "1.7.3"
 field-ref = "0.2.1"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 lifx-core = "0.4.0"
 async-trait = "0.1.51"
-pyo3 = { version = "0.19.2", features = ["auto-initialize", "chrono"] }
+pyo3 = { version = "0.19.2", features = ["auto-initialize", "chrono"], optional = true }
 
 # http server
 axum-core = "0.3.0"
