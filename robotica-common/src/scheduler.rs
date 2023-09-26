@@ -84,13 +84,13 @@ pub struct Sequence {
 
     /// The required duration of this step.
     #[serde(with = "crate::datetime::with_duration")]
-    required_duration: Duration,
+    pub required_duration: Duration,
 
     /// The latest time this step can be completed.
     pub latest_time: DateTime<Utc>,
 
     /// The number of the repeat.
-    repeat_number: usize,
+    pub repeat_number: usize,
 
     /// The tasks to execute.
     pub tasks: Vec<Task>,
