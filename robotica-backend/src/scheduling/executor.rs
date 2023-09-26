@@ -31,38 +31,18 @@ pub struct ExtraConfig {
     pub calendar_url: String,
 }
 
-struct Config {
+struct Config<T: TimeZone> {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
     hostname: String,
     extra_config: ExtraConfig,
-}
-
-#[derive(Debug, Serialize)]
-struct Tags {
-    yesterday: HashSet<String>,
-    today: HashSet<String>,
-    tomorrow: HashSet<String>,
-}
-
-struct State<T: TimeZone> {
-    date: Date,
-    timer: Instant,
-    sequences: VecDeque<Sequence>,
-    tags: Tags,
-    marks: HashMap<String, Mark>,
     timezone: T,
-    config: Config,
-    mqtt: MqttTx,
-    done: HashSet<(Date, String)>,
-    calendar_refresh_time: DateTime<Utc>,
 }
-
-impl<T: TimeZone + Debug> State<T> {
-    pub fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
-        let calendar = calendar::load(&self.config.extra_config.calendar_url, start, stop)
-            .unwrap_or_else(|e| {
+impl<T: TimeZone> Config<T> {
+    fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
+        let calendar =
+            calendar::load(&self.extra_config.calendar_url, start, stop).unwrap_or_else(|e| {
                 error!("Error loading calendar: {e}");
                 Vec::new()
             });
@@ -116,15 +96,134 @@ impl<T: TimeZone + Debug> State<T> {
         sequences
     }
 
-    pub fn finalize(&mut self, now: &DateTime<Utc>) {
-        let today = now.with_timezone::<T>(&self.timezone).date_naive();
+    fn get_sequences_for_date(&self, date: Date) -> Vec<Sequence> {
+        let tomorrow = date + Duration::days(1);
+        let c_date = classifier::classify_date_with_config(&date, &self.classifier);
+        let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.classifier);
+
+        let schedule = scheduler::get_schedule_with_config(
+            &date,
+            &c_date,
+            &c_tomorrow,
+            &self.scheduler,
+            &self.timezone,
+        )
+        .unwrap_or_else(|e| {
+            error!("Error getting schedule for {date}: {e}");
+            Vec::new()
+        });
+
+        let s =
+            sequencer::schedule_list_to_sequence(&self.sequencer, &schedule, &c_date, &c_tomorrow)
+                .unwrap_or_else(|e| {
+                    error!("Error getting sequences for {date}: {e}");
+                    Vec::new()
+                });
+
+        let calendar = self.load_calendar(date, date + Duration::days(1));
+        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
+        sequences.extend(s);
+        sequences.extend(calendar);
+        sequences
+    }
+
+    fn get_tags(&self, today: Date) -> Tags {
+        let yesterday = today - Duration::days(1);
+        let tomorrow = today + Duration::days(1);
+
+        Tags {
+            yesterday: classifier::classify_date_with_config(&yesterday, &self.classifier),
+            today: classifier::classify_date_with_config(&today, &self.classifier),
+            tomorrow: classifier::classify_date_with_config(&tomorrow, &self.classifier),
+        }
+    }
+    fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
+        let date = date - Duration::days(1);
+        let yesterday = self.get_sequences_for_date(date);
+
+        let date = date + Duration::days(1);
+        let today = self.get_sequences_for_date(date);
+
+        let date = date + Duration::days(1);
+        let tomorrow = self.get_sequences_for_date(date);
+
+        // Allocate result vector.
+        let mut sequences = VecDeque::with_capacity(yesterday.len() + today.len() + tomorrow.len());
+
+        // Add schedule for yesterday, today, and tomorrow.
+        sequences.extend(yesterday);
+        sequences.extend(today);
+        sequences.extend(tomorrow);
+
+        // Sort by time.
+        sequences
+            .make_contiguous()
+            .sort_by(Sequence::cmp_required_time);
+
+        // Return.
+        sequences
+    }
+
+    fn add_sequences_tomorrow(&self, date: Date, sequences: &mut VecDeque<Sequence>) {
+        let tomorrow = date + Duration::days(1);
+        let new_schedule = self.get_sequences_for_date(tomorrow);
+
+        // Add schedule for tomorrow.
+        sequences.extend(new_schedule);
+
+        // Sort by time.
+        sequences
+            .make_contiguous()
+            .sort_by(Sequence::cmp_required_time);
+    }
+}
+
+fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
+    for sequence in &mut *sequences {
+        let mark = if let Some(mark) = marks.get(&sequence.id) {
+            if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
+            {
+                Some(mark.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        sequence.mark = mark;
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Tags {
+    yesterday: HashSet<String>,
+    today: HashSet<String>,
+    tomorrow: HashSet<String>,
+}
+
+struct State<T: TimeZone> {
+    date: Date,
+    timer: Instant,
+    sequences: VecDeque<Sequence>,
+    tags: Tags,
+    marks: HashMap<String, Mark>,
+    config: Config<T>,
+    mqtt: MqttTx,
+    done: HashSet<(Date, String)>,
+    calendar_refresh_time: DateTime<Utc>,
+}
+
+impl<T: TimeZone> State<T> {
+    fn finalize(&mut self, now: &DateTime<Utc>) {
+        let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if self.check_time_travel(today) {
             self.calendar_refresh_time = *now;
             self.publish_tags(&self.tags);
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
-            self.sequences = self.get_sequences_all(today);
             self.calendar_refresh_time = *now;
+            self.set_sequences_all();
         }
 
         self.publish_sequences(&self.sequences);
@@ -138,21 +237,22 @@ impl<T: TimeZone + Debug> State<T> {
         if today < self.date {
             // If we have travelled back in time, we should drop the list entirely
             // to avoid duplicating future events.
-            self.tags = self.get_tags(today);
-            self.sequences = self.get_sequences_all(today);
+            self.set_tags();
+            self.set_sequences_all();
             self.done = HashSet::new();
             true
         } else if yesterday == self.date {
             // If we have travelled forward in time by one day, we only need to
             // add events for tomorrow.
-            self.tags = self.get_tags(today);
-            self.sequences = self.add_sequences_tomorrow(today);
+            self.set_tags();
+            self.add_sequences_tomorrow();
+            self.done = HashSet::new();
             true
         } else if today > self.date {
             // If we have travelled forward in time more then one day, regenerate
             // entire events list.
-            self.tags = self.get_tags(today);
-            self.sequences = self.get_sequences_all(today);
+            self.set_tags();
+            self.set_sequences_all();
             self.done = HashSet::new();
             true
         } else {
@@ -185,149 +285,44 @@ impl<T: TimeZone + Debug> State<T> {
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
         let next = self.sequences.front();
         next.map_or_else(
-            || Instant::now() + tokio::time::Duration::from_secs(60),
+            || Instant::now() + tokio::time::Duration::from_secs(120),
             |next| {
                 let next = next.required_time;
                 let mut next = next - *now;
                 // We poll at least every two minutes just in case system time changes.
-                if next > chrono::Duration::minutes(2) {
-                    next = chrono::Duration::minutes(2);
+                if next > chrono::Duration::minutes(1) {
+                    next = chrono::Duration::minutes(1);
                 }
-                let next = next.to_std().unwrap_or(std::time::Duration::from_secs(0));
+                let next = next.to_std().unwrap_or(std::time::Duration::from_secs(60));
                 Instant::now() + next
             },
         )
     }
 
-    fn get_sequences_for_date(&self, date: Date) -> Vec<Sequence> {
-        let tomorrow = date + Duration::days(1);
-        let c_date = classifier::classify_date_with_config(&date, &self.config.classifier);
-        let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.config.classifier);
+    fn set_tags(&mut self) {
+        let today = self.date;
+        self.tags = self.config.get_tags(today);
+    }
 
-        let schedule = scheduler::get_schedule_with_config(
-            &date,
-            &c_date,
-            &c_tomorrow,
-            &self.config.scheduler,
-            &self.timezone,
-        )
-        .unwrap_or_else(|e| {
-            error!("Error getting schedule for {date}: {e}");
-            Vec::new()
+    fn set_sequences_all(&mut self) {
+        let today = self.date;
+        self.sequences = self.config.get_sequences_all(today);
+        self.drop_done_sequences();
+        set_all_marks(&mut self.sequences, &self.marks);
+    }
+
+    fn add_sequences_tomorrow(&mut self) {
+        let today = self.date;
+        self.config
+            .add_sequences_tomorrow(today, &mut self.sequences);
+        set_all_marks(&mut self.sequences, &self.marks);
+    }
+
+    fn drop_done_sequences(&mut self) {
+        self.sequences.retain(|sequence| {
+            let sequence_date = sequence.required_time.date_naive();
+            !self.done.contains(&(sequence_date, sequence.id.clone()))
         });
-
-        let s = sequencer::schedule_list_to_sequence(
-            &self.config.sequencer,
-            &schedule,
-            &c_date,
-            &c_tomorrow,
-        )
-        .unwrap_or_else(|e| {
-            error!("Error getting sequences for {date}: {e}");
-            Vec::new()
-        });
-
-        let calendar = self.load_calendar(date, date + Duration::days(1));
-        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
-        sequences.extend(s);
-        sequences.extend(calendar);
-        sequences
-    }
-
-    fn get_tags(&self, today: Date) -> Tags {
-        let yesterday = today - Duration::days(1);
-        let tomorrow = today + Duration::days(1);
-
-        Tags {
-            yesterday: classifier::classify_date_with_config(&yesterday, &self.config.classifier),
-            today: classifier::classify_date_with_config(&today, &self.config.classifier),
-            tomorrow: classifier::classify_date_with_config(&tomorrow, &self.config.classifier),
-        }
-    }
-
-    fn drop_done_sequences(&self, sequences: VecDeque<Sequence>) -> VecDeque<Sequence> {
-        sequences
-            .into_iter()
-            .filter(|sequence| {
-                let sequence_date = sequence.required_time.date_naive();
-                !self.done.contains(&(sequence_date, sequence.id.clone()))
-            })
-            .collect()
-    }
-
-    fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
-        let date = date - Duration::days(1);
-        let yesterday = self.get_sequences_for_date(date);
-
-        let date = date + Duration::days(1);
-        let today = self.get_sequences_for_date(date);
-
-        let date = date + Duration::days(1);
-        let tomorrow = self.get_sequences_for_date(date);
-
-        // Allocate result vector.
-        let mut sequences = VecDeque::with_capacity(yesterday.len() + today.len() + tomorrow.len());
-
-        // Add schedule for yesterday, today, and tomorrow.
-        sequences.extend(yesterday);
-        sequences.extend(today);
-        sequences.extend(tomorrow);
-
-        // Sort by time.
-        sequences
-            .make_contiguous()
-            .sort_by(Sequence::cmp_required_time);
-
-        // Set marks.
-        set_all_marks(&mut sequences, &self.marks);
-
-        // drop done sequences.
-        sequences = self.drop_done_sequences(sequences);
-
-        // Return.
-        sequences
-    }
-
-    fn add_sequences_tomorrow(&self, date: Date) -> VecDeque<Sequence> {
-        let tomorrow = date + Duration::days(1);
-        let new_schedule = self.get_sequences_for_date(tomorrow);
-
-        // Allocate result vector.
-        let mut sequences = VecDeque::with_capacity(self.sequences.len() + new_schedule.len());
-
-        // Add existing schedule.
-        sequences.extend(self.sequences.clone());
-
-        // Add schedule for tomorrow.
-        sequences.extend(new_schedule);
-
-        // Sort by time.
-        sequences
-            .make_contiguous()
-            .sort_by(Sequence::cmp_required_time);
-
-        // Set marks.
-        set_all_marks(&mut sequences, &self.marks);
-
-        // return.
-        sequences
-    }
-}
-
-fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
-    for sequence in &mut *sequences {
-        let mark = if let Some(mark) = marks.get(&sequence.id) {
-            if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
-            {
-                Some(mark.clone())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        sequence.mark = mark;
     }
 }
 
@@ -452,6 +447,7 @@ fn get_initial_state(
                 sequencer,
                 hostname,
                 extra_config,
+                timezone,
             }
         };
 
@@ -463,7 +459,6 @@ fn get_initial_state(
             timer,
             sequences: VecDeque::new(),
             marks,
-            timezone,
             config,
             mqtt,
             done: HashSet::new(),
@@ -477,9 +472,11 @@ fn get_initial_state(
     };
     let state = {
         let mut state = state;
-        state.tags = state.get_tags(state.date);
+        state.tags = state.config.get_tags(state.date);
         state.publish_tags(&state.tags);
-        state.sequences = state.get_sequences_all(state.date);
+        state.sequences = state.config.get_sequences_all(state.date);
+        state.drop_done_sequences();
+        set_all_marks(&mut state.sequences, &state.marks);
         // Don't do this here, will happen after first timer.
         // state.publish_sequences(&state.sequences);
         state.finalize(&now);
