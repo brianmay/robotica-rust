@@ -112,10 +112,12 @@ fn task_to_html(
     }
 }
 
-
 fn popover_content(sequence: &Sequence, task: &Task) -> Html {
     use robotica_common::robotica::tasks::Payload;
-    let description = task.description.clone().unwrap_or_else(|| "None".to_string());
+    let description = task
+        .description
+        .clone()
+        .unwrap_or_else(|| "None".to_string());
     let payload = match &task.payload {
         Payload::String(string) => string.clone(),
         Payload::Json(json) => json.to_string(),
