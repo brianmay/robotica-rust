@@ -133,7 +133,7 @@ fn popover_content(sequence: &Sequence, task: &Task) -> Html {
                     <tbody>
                         <tr>
                             <th scope="row">{"Required Time"}</th>
-                            <td>{sequence.required_time}</td>
+                            <td>{datetime_to_string(&sequence.required_time)}</td>
                         </tr>
                         <tr>
                             <th scope="row">{"Required Time"}</th>
@@ -141,7 +141,7 @@ fn popover_content(sequence: &Sequence, task: &Task) -> Html {
                         </tr>
                         <tr>
                             <th scope="row">{"Latest Time"}</th>
-                            <td>{sequence.latest_time}</td>
+                            <td>{datetime_to_string(&sequence.latest_time)}</td>
                         </tr>
                         <tr>
                             <th scope="row">{"Repeat Number"}</th>
