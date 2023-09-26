@@ -162,11 +162,11 @@ fn light_command_to_text(command: &Value) -> String {
 }
 
 fn device_command_to_text(command: &Value) -> String {
-    let action = command.get("lights").and_then(Value::as_str);
+    let action = command.get("action").and_then(Value::as_str);
 
     action.map_or_else(
         || "unknown device command".to_string(),
-        |action| format!("Device #{action}"),
+        |action| format!("Device {action}"),
     )
 }
 

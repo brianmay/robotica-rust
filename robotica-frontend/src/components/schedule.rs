@@ -138,7 +138,7 @@ fn popover_content(sequence: &Sequence, task: &Task) -> Html {
                             <td>{datetime_to_string(&sequence.required_time)}</td>
                         </tr>
                         <tr>
-                            <th scope="row">{"Required Time"}</th>
+                            <th scope="row">{"Required Duration"}</th>
                             <td>{sequence.required_duration}</td>
                         </tr>
                         <tr>
