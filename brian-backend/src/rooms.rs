@@ -204,7 +204,7 @@ fn twins_config() -> UiConfig {
             title: "Music".to_string(),
             topic_substr: "Twins/Robotica".to_string(),
             extra_play_lists: vec![PlaylistConfig {
-                id: "wake_up".to_string(),
+                id: "twins_wake_up".to_string(),
                 title: "Wake Up".to_string(),
             }],
             ..Default::default()
