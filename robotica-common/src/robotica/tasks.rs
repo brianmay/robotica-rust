@@ -48,18 +48,18 @@ pub struct Task {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubTask {
-    /// The title of the task.
-    pub title: Option<String>,
+    /// The with a target instead of the required topic.
+    pub title: String,
 
     /// The payload of the task.
     #[serde(flatten)]
     pub payload: Payload,
 
     /// The qos to be used when sending the message.
-    pub qos: Option<mqtt::QoS>,
+    pub qos: mqtt::QoS,
 
     /// The retain value to be used when sending the message.
-    pub retain: Option<bool>,
+    pub retain: bool,
 
     /// The target of this subtask
     pub target: String,
@@ -78,10 +78,10 @@ impl SubTask {
         );
 
         Task {
-            title: self.title.unwrap_or_else(|| "Subtask".to_string()),
+            title: self.title,
             payload: self.payload,
-            qos: self.qos.unwrap_or(mqtt::QoS::ExactlyOnce),
-            retain: self.retain.unwrap_or(false),
+            qos: self.qos,
+            retain: self.retain,
             topics,
         }
     }
