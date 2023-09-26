@@ -479,7 +479,7 @@ fn get_initial_state(
         set_all_marks(&mut state.sequences, &state.marks);
         // Don't do this here, will happen after first timer.
         // state.publish_sequences(&state.sequences);
-        state.finalize(&now);
+        // state.finalize(&now);
         state
     };
 
