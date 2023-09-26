@@ -70,8 +70,6 @@ impl<T: TimeZone> Config<T> {
                 payload: Payload::Json(payload),
                 qos: QoS::ExactlyOnce,
                 retain: false,
-                locations: ["Dining".to_string(), "Brian".to_string(), "Jan".to_string()].to_vec(),
-                devices: ["Robotica".to_string()].to_vec(),
                 topics: ["ha/event/message/everyone".to_string()].to_vec(),
             };
 

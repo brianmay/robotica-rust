@@ -40,16 +40,8 @@ pub struct ConfigTask {
     /// The retain flag to be used when sending the message.
     retain: Option<bool>,
 
-    /// The locations this task acts on.
-    locations: Vec<String>,
-
-    /// The devices this task acts on.
-    devices: Vec<String>,
-
     /// The topics this task will send to.
-    ///
-    /// If this is not specified, the topic will be generated from the locations and devices.
-    topics: Option<Vec<String>>,
+    topics: Vec<String>,
 }
 
 /// The source schedule loaded from the config file.
@@ -299,35 +291,19 @@ fn config_to_sequence(
     id: String,
     repeat_number: usize,
 ) -> Sequence {
-    let mut tasks = Vec::with_capacity(config.tasks.len());
-    config.tasks.into_iter().for_each(|src_task| {
-        let topics = if let Some(topics) = src_task.topics {
-            topics
-        } else {
-            let mut topics = Vec::with_capacity(src_task.locations.len() * src_task.devices.len());
-            src_task.locations.iter().for_each(|l| {
-                src_task
-                    .devices
-                    .iter()
-                    .for_each(|d| topics.push(format!("command/{l}/{d}")));
-            });
-            topics
-        };
-
-        let task = Task {
+    let tasks = config
+        .tasks
+        .into_iter()
+        .map(|src_task| Task {
             description: src_task.description,
             payload: src_task
                 .payload
                 .unwrap_or_else(|| Payload::String(String::new())),
             qos: map_qos(src_task.qos),
             retain: src_task.retain.unwrap_or(false),
-            locations: src_task.locations,
-            devices: src_task.devices,
-            topics,
-        };
-
-        tasks.push(task);
-    });
+            topics: src_task.topics,
+        })
+        .collect();
 
     let default_latest_time = Duration::minutes(1);
     let latest_time = *start_time + config.latest_time.unwrap_or(default_latest_time);
@@ -541,9 +517,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -561,9 +535,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -621,9 +593,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -641,9 +611,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -696,9 +664,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         }];
 
@@ -725,9 +691,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         }];
 
@@ -759,9 +723,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -779,9 +741,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -836,9 +796,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         };
 
@@ -883,9 +841,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         };
 
@@ -930,9 +886,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         };
 
@@ -983,9 +937,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -1003,9 +955,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -1062,9 +1012,7 @@ mod tests {
                 payload: None,
                 qos: None,
                 retain: None,
-                locations: vec!["test".to_string()],
-                devices: vec!["test".to_string()],
-                topics: None,
+                topics: vec!["test/test".to_string()],
             }],
         }];
 
@@ -1135,9 +1083,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -1155,9 +1101,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -1178,9 +1122,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
             Config {
@@ -1198,9 +1140,7 @@ mod tests {
                     payload: None,
                     qos: None,
                     retain: None,
-                    locations: vec!["test".to_string()],
-                    devices: vec!["test".to_string()],
-                    topics: None,
+                    topics: vec!["test/test".to_string()],
                 }],
             },
         ];
@@ -1291,9 +1231,7 @@ mod tests {
                         payload: None,
                         qos: None,
                         retain: None,
-                        locations: vec!["test".to_string()],
-                        devices: vec!["test".to_string()],
-                        topics: None,
+                        topics: vec!["test/test".to_string()],
                     }],
                 }],
             ),
@@ -1314,9 +1252,7 @@ mod tests {
                         payload: None,
                         qos: None,
                         retain: None,
-                        locations: vec!["test".to_string()],
-                        devices: vec!["test".to_string()],
-                        topics: None,
+                        topics: vec!["test/test".to_string()],
                     }],
                 }],
             ),

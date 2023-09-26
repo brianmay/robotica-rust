@@ -40,19 +40,11 @@ pub struct Task {
     /// The retain value to be used when sending the message.
     pub retain: bool,
 
-    /// The locations this task acts on.
-    pub locations: Vec<String>,
-
-    /// The devices this task acts on.
-    pub devices: Vec<String>,
-
     /// The topics this task will send to.
-    ///
-    /// If this is not specified, the topic will be generated from the locations and devices.
     pub topics: Vec<String>,
 }
 
-/// A task with all values completed.
+/// A task with optional values.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubTask {
@@ -90,8 +82,6 @@ impl SubTask {
             payload: self.payload,
             qos: self.qos.unwrap_or(mqtt::QoS::ExactlyOnce),
             retain: self.retain.unwrap_or(false),
-            locations: vec![],
-            devices: vec![],
             topics,
         }
     }
