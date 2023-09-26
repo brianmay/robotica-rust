@@ -96,9 +96,6 @@ impl SubTask {
         }
     }
 }
-fn location_device_to_text(location: &str, device: &str) -> String {
-    format!("{location}/{device}")
-}
 
 fn command_to_text(command: &Value) -> String {
     let mtype = command.get("type").and_then(Value::as_str);
@@ -194,20 +191,6 @@ fn hdmi_command_to_text(command: &Value) -> String {
 
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut location_list = vec![];
-
-        for location in &self.locations {
-            for device in &self.devices {
-                location_list.push(location_device_to_text(location, device));
-            }
-        }
-
-        if location_list.is_empty() {
-            write!(f, "Nowhere: ")?;
-        } else {
-            write!(f, "{}: ", location_list.join(", "))?;
-        }
-
         let action_str = match &self {
             Task {
                 description: Some(description),
