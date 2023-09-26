@@ -13,7 +13,7 @@ use robotica_common::{
     datetime::{DateTime, Duration},
     mqtt::QoS,
     robotica::tasks::{Payload, Task},
-    scheduler::{Mark, Importance},
+    scheduler::{Importance, Mark},
 };
 
 use crate::{get_env_os, EnvironmentOsError};

@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
-use robotica_common::scheduler::{Mark, Importance};
+use robotica_common::scheduler::{Importance, Mark};
 
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
