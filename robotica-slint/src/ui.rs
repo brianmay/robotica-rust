@@ -46,7 +46,7 @@ use robotica_backend::{
     pipes::{stateful, RecvError, Subscriber, Subscription},
     services::mqtt::MqttTx,
 };
-use robotica_common::config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon};
+use robotica_common::{config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon}, scheduler::Importance};
 use robotica_common::{
     controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
     datetime::datetime_to_string,
@@ -373,12 +373,13 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
                         .iter()
                         .map(|s| {
                             let tasks: Vec<SharedString> =
-                                s.tasks.iter().map(|t| t.to_string().into()).collect();
+                                s.tasks.iter().map(|t| t.title.clone().into()).collect();
                             let b: VecModel<SharedString> = VecModel::from(tasks);
                             let c: ModelRc<SharedString> = ModelRc::new(b);
 
                             slint::ScheduleData {
                                 time: datetime_to_string(&s.required_time).into(),
+                                important: matches!(s.importance, Importance::Important),
                                 tasks: c,
                             }
                         })
