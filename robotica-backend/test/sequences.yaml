@@ -6,7 +6,8 @@
       if:
         - "'christmas' in today and 'boxing' in tomorrow"
       tasks:
-        - topics:
+        - title: "Wakeup for Christmas"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -16,7 +17,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - topics:
+        - title: "Wakeup for adults (1)"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -26,7 +28,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - topics:
+        - title: "Wakeup for the adults (2)"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -36,7 +39,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - topics:
+        - title: "Wakeup for the adults (3)"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -46,7 +50,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - topics:
+        - title: "Wakeup for the adults (4)"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -56,7 +61,8 @@
               play_list: wake_up
     - required_time: "00:05:00"
       tasks:
-        - topics:
+        - title: "Wakeup for the adults (5)"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"
@@ -68,7 +74,8 @@
       latest_time: "01:00:00"
       zero_time: true
       tasks:
-        - topics:
+        - title: "Open presents"
+          topics:
             - "kids/robotica"
           payload_json:
             type: "audio"

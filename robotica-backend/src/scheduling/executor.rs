@@ -66,7 +66,7 @@ impl<T: TimeZone> Config<T> {
             });
 
             let task = Task {
-                description: Some(event.summary.clone()),
+                title: event.summary.clone(),
                 payload: Payload::Json(payload),
                 qos: QoS::ExactlyOnce,
                 retain: false,

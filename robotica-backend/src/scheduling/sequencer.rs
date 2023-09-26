@@ -27,8 +27,8 @@ use super::{
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
 pub struct ConfigTask {
-    /// The description of the task.
-    pub description: Option<String>,
+    /// The title of the task.
+    pub title: String,
 
     /// The payload of the task.
     #[serde(flatten)]
@@ -295,7 +295,7 @@ fn config_to_sequence(
         .tasks
         .into_iter()
         .map(|src_task| Task {
-            description: src_task.description,
+            title: src_task.title,
             payload: src_task
                 .payload
                 .unwrap_or_else(|| Payload::String(String::new())),
@@ -513,7 +513,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -531,7 +531,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -562,6 +562,7 @@ mod tests {
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].title, "task 1");
 
         assert_eq!(
             sequence[1].required_time,
@@ -573,6 +574,7 @@ mod tests {
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].title, "task 2");
     }
 
     #[test]
@@ -589,7 +591,7 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -607,7 +609,7 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -660,7 +662,7 @@ mod tests {
             repeat_count: Some(0),
             repeat_time: Some(Duration::minutes(5)),
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -687,7 +689,7 @@ mod tests {
             repeat_count: Some(1),
             repeat_time: Some(Duration::minutes(5)),
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -719,7 +721,7 @@ mod tests {
                 repeat_count: Some(3),
                 repeat_time: Some(Duration::minutes(5)),
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -737,7 +739,7 @@ mod tests {
                 repeat_count: Some(3),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -792,7 +794,7 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -837,7 +839,7 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -882,7 +884,7 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -933,7 +935,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -951,7 +953,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1008,7 +1010,7 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: Some(Duration::minutes(10)),
             tasks: vec![ConfigTask {
-                description: None,
+                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
@@ -1079,7 +1081,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1097,7 +1099,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1118,7 +1120,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 3".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1136,7 +1138,7 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    description: None,
+                    title: "task 4".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1164,6 +1166,7 @@ mod tests {
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
+        assert_eq!(sequence[0].tasks[0].title, "task 1");
 
         assert_eq!(
             sequence[1].required_time,
@@ -1175,6 +1178,7 @@ mod tests {
         );
         assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
+        assert_eq!(sequence[1].tasks[0].title, "task 3");
 
         assert_eq!(
             sequence[2].required_time,
@@ -1186,6 +1190,7 @@ mod tests {
         );
         assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
+        assert_eq!(sequence[2].tasks[0].title, "task 2");
 
         assert_eq!(
             sequence[3].required_time,
@@ -1197,6 +1202,7 @@ mod tests {
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);
+        assert_eq!(sequence[3].tasks[0].title, "task 4");
     }
 
     #[test]
@@ -1227,7 +1233,7 @@ mod tests {
                     repeat_count: None,
                     repeat_time: None,
                     tasks: vec![ConfigTask {
-                        description: None,
+                        title: "task".to_string(),
                         payload: None,
                         qos: None,
                         retain: None,
@@ -1248,7 +1254,7 @@ mod tests {
                     repeat_count: None,
                     repeat_time: None,
                     tasks: vec![ConfigTask {
-                        description: None,
+                        title: "task 1".to_string(),
                         payload: None,
                         qos: None,
                         retain: None,

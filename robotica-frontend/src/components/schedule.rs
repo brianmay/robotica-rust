@@ -101,7 +101,7 @@ fn task_to_html(
     html! {
         html! {
             <>
-                <div onclick={move |_| on_click.emit(id.clone())}>{task}</div>
+                <div onclick={move |_| on_click.emit(id.clone())}>{&task.title}</div>
                 {
                     if Some(id_clone) == *expanded_id {
                         popover_content(sequence, task)
@@ -115,9 +115,8 @@ fn task_to_html(
 fn popover_content(sequence: &Sequence, task: &Task) -> Html {
     use robotica_common::robotica::tasks::Payload;
     let description = task
-        .description
-        .clone()
-        .unwrap_or_else(|| "None".to_string());
+        .title
+        .clone();
     let payload = match &task.payload {
         Payload::String(string) => string.clone(),
         Payload::Json(json) => json.to_string(),
@@ -156,6 +155,10 @@ fn popover_content(sequence: &Sequence, task: &Task) -> Html {
                         <tr>
                             <th scope="row">{"Topics"}</th>
                             <td>{task.topics.clone()}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">{"Summary"}</th>
+                            <td>{task}</td>
                         </tr>
                         <tr>
                             <th scope="row">{"Payload"}</th>

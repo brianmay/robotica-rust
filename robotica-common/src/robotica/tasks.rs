@@ -27,8 +27,8 @@ pub enum Payload {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Task {
-    /// The description of the task.
-    pub description: Option<String>,
+    /// The title of the task.
+    pub title: String,
 
     /// The payload of the task.
     #[serde(flatten)]
@@ -48,8 +48,8 @@ pub struct Task {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubTask {
-    /// The description of the task.
-    pub description: Option<String>,
+    /// The title of the task.
+    pub title: Option<String>,
 
     /// The payload of the task.
     #[serde(flatten)]
@@ -78,7 +78,7 @@ impl SubTask {
         );
 
         Task {
-            description: self.description,
+            title: self.title.unwrap_or_else(|| "Subtask".to_string()),
             payload: self.payload,
             qos: self.qos.unwrap_or(mqtt::QoS::ExactlyOnce),
             retain: self.retain.unwrap_or(false),
@@ -182,10 +182,6 @@ fn hdmi_command_to_text(command: &Value) -> String {
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let action_str = match &self {
-            Task {
-                description: Some(description),
-                ..
-            } => description.clone(),
             Task {
                 payload: Payload::String(payload),
                 ..
