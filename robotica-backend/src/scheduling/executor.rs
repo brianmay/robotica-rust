@@ -74,6 +74,7 @@ impl<T: TimeZone> Config<T> {
             };
 
             let sequence = Sequence {
+                title: event.summary.clone(),
                 id: event.uid,
                 importance: Importance::Important,
                 sequence_name: event.summary,

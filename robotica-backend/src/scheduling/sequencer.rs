@@ -47,6 +47,9 @@ pub struct ConfigTask {
 /// The source schedule loaded from the config file.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    /// The title of the sequence.
+    pub title: String,
+
     /// The id of the step.
     pub id: Option<String>,
 
@@ -107,7 +110,10 @@ pub type ConfigMap = HashMap<String, Vec<Config>>;
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct Sequence {
-    /// The id of the step.
+    /// The title of the sequence.
+    pub title: String,
+
+    /// The id of the sequence.
     pub id: String,
 
     /// The importance of the sequence.
@@ -316,6 +322,7 @@ fn config_to_sequence(
     let latest_time = *start_time + config.latest_time.unwrap_or(default_latest_time);
 
     Sequence {
+        title: config.title,
         id,
         importance: config.importance,
         sequence_name: sequence_name.to_string(),
@@ -511,6 +518,7 @@ mod tests {
     fn test_get_sequence() {
         let config = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -530,6 +538,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -591,6 +600,7 @@ mod tests {
     fn test_filter_sequence() {
         let config = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -610,6 +620,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -664,6 +675,7 @@ mod tests {
     #[test]
     fn test_expand_0() {
         let config = vec![Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -692,6 +704,7 @@ mod tests {
     #[test]
     fn test_expand_1() {
         let config = vec![Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -725,6 +738,7 @@ mod tests {
     fn test_expand_3() {
         let config = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -744,6 +758,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -800,6 +815,7 @@ mod tests {
     #[test]
     fn test_get_corrected_start_time_0() {
         let config = Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -846,6 +862,7 @@ mod tests {
     #[test]
     fn test_get_corrected_start_time_1() {
         let config = Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -892,6 +909,7 @@ mod tests {
     #[test]
     fn test_get_corrected_start_time_2() {
         let config = Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -944,6 +962,7 @@ mod tests {
     fn test_get_sequence_zero_time() {
         let config = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -963,6 +982,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -1021,6 +1041,7 @@ mod tests {
     #[test]
     fn test_get_sequence_repeat() {
         let config = vec![Config {
+            title: "test".to_string(),
             id: None,
             importance: Importance::NotImportant,
             classifications: Some(HashSet::from(["christmas".to_string()])),
@@ -1093,6 +1114,7 @@ mod tests {
 
         let config_test = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -1112,6 +1134,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -1134,6 +1157,7 @@ mod tests {
 
         let config_christmas = vec![
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -1153,6 +1177,7 @@ mod tests {
                 }],
             },
             Config {
+                title: "test".to_string(),
                 id: None,
                 importance: Importance::NotImportant,
                 classifications: None,
@@ -1249,6 +1274,7 @@ mod tests {
             (
                 "wake_up".to_string(),
                 vec![Config {
+                    title: "test".to_string(),
                     id: None,
                     importance: Importance::NotImportant,
                     classifications: None,
@@ -1271,6 +1297,7 @@ mod tests {
             (
                 "sleep".to_string(),
                 vec![Config {
+                    title: "test".to_string(),
                     id: None,
                     importance: Importance::NotImportant,
                     classifications: None,

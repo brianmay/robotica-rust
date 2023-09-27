@@ -79,7 +79,10 @@ impl Display for Importance {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Sequence {
-    /// The id of the step.
+    /// The title of the sequence.
+    pub title: String,
+
+    /// The id of the sequence.
     pub id: String,
 
     /// The importance of the sequence.
