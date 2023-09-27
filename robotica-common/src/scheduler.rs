@@ -1,5 +1,8 @@
 //! Scheduler struct shared between robotica-backend and robotica-frontend
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    fmt::{Display, Formatter},
+};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -51,7 +54,7 @@ pub enum MarkError {
 }
 
 /// The importance of a Sequence
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 pub enum Importance {
     /// The sequence is not important.
     #[default]
@@ -59,6 +62,15 @@ pub enum Importance {
 
     /// The sequence is important.
     Important,
+}
+
+impl Display for Importance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Importance::NotImportant => write!(f, "Not Important"),
+            Importance::Important => write!(f, "Important"),
+        }
+    }
 }
 
 /// The schedule with all values completed.

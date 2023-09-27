@@ -1,5 +1,6 @@
 //! Component that shows the schedule
 
+use serde_json::Value;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
@@ -7,7 +8,7 @@ use robotica_common::{
     datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     robotica::tasks::Task,
-    scheduler::Sequence,
+    scheduler::{Mark, MarkStatus, Sequence},
 };
 
 use crate::services::websocket::WebsocketService;
@@ -45,6 +46,11 @@ pub fn schedule(props: &Props) -> Html {
         expanded_id_clone.set(Some(id));
     });
 
+    let expanded_id_clone: UseStateHandle<Option<String>> = expanded_id.clone();
+    let on_close = Callback::from(move |_| {
+        expanded_id_clone.set(None);
+    });
+
     use_mut_ref(move || {
         let topic = props.topic.clone();
         let mut wss = wss;
@@ -54,12 +60,18 @@ pub fn schedule(props: &Props) -> Html {
         });
     });
 
+    let modal_open_class = match *expanded_id {
+        Some(_) => "modal-open",
+        None => "",
+    };
+    let classes = classes!("sequence_list", modal_open_class);
+
     let expanded_id = &*expanded_id;
     html! {
-        <div class="sequence_list">
+        <div class={classes}>
         {
             sequence_list.iter().map(move |sequence| {
-                sequence_to_html(sequence, expanded_id, &on_click)
+                sequence_to_html(sequence, expanded_id, &on_click, &on_close)
             }).collect::<Html>()
         }
         </div>
@@ -70,14 +82,32 @@ fn sequence_to_html(
     sequence: &Sequence,
     expanded_id: &Option<String>,
     on_click: &Callback<String>,
+    on_close: &Callback<()>,
 ) -> Html {
+    let importance_class = match sequence.importance {
+        robotica_common::scheduler::Importance::NotImportant => "not_important",
+        robotica_common::scheduler::Importance::Important => "important",
+    };
+    let mark_class = match sequence.mark {
+        Some(Mark {
+            status: MarkStatus::Cancelled,
+            ..
+        }) => Some("cancelled"),
+        Some(Mark {
+            status: MarkStatus::Done,
+            ..
+        }) => Some("done"),
+        None => None,
+    };
+
+    let classes = classes!("sequence", importance_class, mark_class);
     html! {
-        <div class="sequence" id={sequence.id.clone()}>
+        <div class={classes} id={sequence.id.clone()}>
             <div>{datetime_to_string(&sequence.required_time)}</div>
             <div>
             {
                 sequence.tasks.iter().enumerate().map(|(i, task)| {
-                    task_to_html(sequence, task, i, expanded_id, on_click.clone())
+                    task_to_html(sequence, task, i, expanded_id, on_click.clone(), on_close.clone())
                 }).collect::<Html>()
             }
             </div>
@@ -91,6 +121,7 @@ fn task_to_html(
     i: usize,
     expanded_id: &Option<String>,
     on_click: Callback<String>,
+    on_close: Callback<()>,
 ) -> Html {
     let date = sequence.required_time.date_naive();
     let seq_id = &sequence.id;
@@ -101,10 +132,10 @@ fn task_to_html(
     html! {
         html! {
             <>
-                <div onclick={move |_| on_click.emit(id.clone())}>{&task.title}</div>
+                <div class="task" onclick={move |_| on_click.emit(id.clone())}>{&task.title}</div>
                 {
                     if Some(id_clone) == *expanded_id {
-                        popover_content(sequence, task)
+                        popover_content(sequence, task, on_close)
                     } else { html! {} }
                 }
             </>
@@ -112,67 +143,131 @@ fn task_to_html(
     }
 }
 
-fn popover_content(sequence: &Sequence, task: &Task) -> Html {
+fn json_to_html(json: &Value) -> Html {
+    match json {
+        Value::Null => html! { <span class="null">{"null"}</span> },
+        Value::Bool(b) => html! { <span class="bool">{b}</span> },
+        Value::Number(n) => html! { <span class="number">{n}</span> },
+        Value::String(s) => html! { <span class="string">{s}</span> },
+        Value::Array(a) => {
+            html! {
+                <ul class="array">
+                    {
+                        a.iter().map(|v| {
+                            html! {
+                                <li>{json_to_html(v)}</li>
+                            }
+                        }).collect::<Html>()
+                    }
+                </ul>
+            }
+        }
+        Value::Object(o) => {
+            html! {
+                <table class="table">
+                    <tbody>
+                    {
+                        o.iter().map(|(k, v)| {
+                            html! {
+                                <tr>
+                                    <th scope="row">{k}</th>
+                                    <td>{json_to_html(v)}</td>
+                                </tr>
+                            }
+                        }).collect::<Html>()
+                    }
+                    </tbody>
+                </table>
+            }
+        }
+    }
+}
+
+fn popover_content(sequence: &Sequence, task: &Task, on_close: Callback<()>) -> Html {
     use robotica_common::robotica::tasks::Payload;
-    let description = task.title.clone();
     let payload = match &task.payload {
-        Payload::String(string) => string.clone(),
-        Payload::Json(json) => json.to_string(),
+        Payload::String(string) => html!({ string.clone() }),
+        Payload::Json(json) => json_to_html(json),
     };
     let mark = match sequence.mark.clone() {
         Some(mark) => format!("{mark:?}"),
         None => "None".to_string(),
     };
 
+    let on_close = move |_| {
+        on_close.emit(());
+    };
+
     html! {
-        <div role="tooltip">
-            <h3 class="popover-title">{description}</h3>
-            <div class="popover-content">
-                <table class="table">
-                    <tbody>
-                        <tr>
-                            <th scope="row">{"Required Time"}</th>
-                            <td>{datetime_to_string(&sequence.required_time)}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Required Duration"}</th>
-                            <td>{sequence.required_duration}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Latest Time"}</th>
-                            <td>{datetime_to_string(&sequence.latest_time)}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Repeat Number"}</th>
-                            <td>{sequence.repeat_number}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Mark"}</th>
-                            <td>{mark}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Topics"}</th>
-                            <td>{task.topics.clone()}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Summary"}</th>
-                            <td>{task}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Payload"}</th>
-                            <td>{payload}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"QoS"}</th>
-                            <td>{format!("{:?}", task.qos)}</td>
-                        </tr>
-                        <tr>
-                            <th scope="row">{"Retain"}</th>
-                            <td>{task.retain}</td>
-                        </tr>
-                    </tbody>
-                </table>
+        <>
+            <div class="modal fade show" tabindex="-1" style="display:block">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h1 class="modal-title fs-5" id="exampleModalLabel">{"Details"}</h1>
+                            <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
+                        </div>
+                        <div class="modal-body">
+                        <table class="table">
+                        <tbody>
+                            <tr>
+                                <th scope="row">{"Required Time"}</th>
+                                <td>{datetime_to_string(&sequence.required_time)}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Required Duration"}</th>
+                                <td>{sequence.required_duration}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Latest Time"}</th>
+                                <td>{datetime_to_string(&sequence.latest_time)}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Repeat Number"}</th>
+                                <td>{sequence.repeat_number}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Importance"}</th>
+                                <td>{sequence.importance}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Mark"}</th>
+                                <td>{mark}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Topics"}</th>
+                                <td>{task.topics.clone()}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Title"}</th>
+                                <td>{task.title.clone()}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Summary"}</th>
+                                <td>{task}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Payload"}</th>
+                                <td>{payload}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"QoS"}</th>
+                                <td>{format!("{:?}", task.qos)}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Retain"}</th>
+                                <td>{task.retain}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick={on_close.clone()}>{"Close"}</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
+            <div class="modal-backdrop fade show" onclick={on_close}></div>
+        </>
     }
 }

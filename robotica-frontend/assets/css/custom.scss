@@ -37,10 +37,6 @@ footer {
         @extend .row;
         @extend .border-top;
 
-        &:hover {
-            background-color: aqua;
-        }
-
         &>:nth-child(1) {
             @extend .col-sm-3;
         }
@@ -52,6 +48,27 @@ footer {
         }
     }
 }
+
+.sequence.not_important {
+    background-color: white;
+
+    .task {
+        &:hover {
+            background-color: lightgray;
+        }
+    }
+}
+
+.sequence.important {
+    background-color: lightgreen;
+
+    .task {
+        &:hover {
+            background-color: green;
+        }
+}
+}
+
 
 .tags {
     @extend .d-flex;
@@ -69,4 +86,12 @@ footer {
             background-color: aqua;
         }
     }
+}
+
+.table .table td {
+    padding: 0;
+}
+
+.table .table th {
+    padding: 0;
 }

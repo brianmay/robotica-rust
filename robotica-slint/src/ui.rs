@@ -46,7 +46,10 @@ use robotica_backend::{
     pipes::{stateful, RecvError, Subscriber, Subscription},
     services::mqtt::MqttTx,
 };
-use robotica_common::{config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon}, scheduler::Importance};
+use robotica_common::{
+    config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon},
+    scheduler::Importance,
+};
 use robotica_common::{
     controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
     datetime::datetime_to_string,
