@@ -380,22 +380,10 @@ async fn play_sound(sound: &str, programs: &LoadedProgramsConfig) -> Result<(), 
 
 async fn say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let cl = programs.say.to_line_with_arg(message);
-
-    play_sound("start.wav", programs).await?;
-
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
     };
-
-    play_sound("middle.wav", programs).await?;
-
-    if let Err(err) = cl.run().await {
-        error!("Failed to say message: {err}");
-        return Err(format!("Failed to say message: {err}"));
-    };
-
-    play_sound("stop.wav", programs).await?;
     Ok(())
 }
 
