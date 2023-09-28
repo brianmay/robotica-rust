@@ -434,11 +434,9 @@ fn get_initial_state(
     };
     let state = {
         let mut state = state;
-        state.tags = state.config.get_tags(state.date);
+        state.set_tags();
         state.publish_tags(&state.tags);
-        state.sequences = state.config.get_sequences_all(state.date);
-        state.drop_done_sequences();
-        set_all_marks(&mut state.sequences, &state.marks);
+        state.set_sequences_all();
         // Don't do this here, will happen after first timer.
         // state.publish_sequences(&state.sequences);
         // state.finalize(&now);
