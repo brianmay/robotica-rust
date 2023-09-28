@@ -1,5 +1,5 @@
 //! Run tasks based on schedule.
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::env::{self, VarError};
 use std::fmt::Debug;
 
@@ -137,7 +137,7 @@ impl<T: TimeZone> Config<T> {
             tomorrow: classifier::classify_date_with_config(&tomorrow, &self.classifier),
         }
     }
-    fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
+    fn get_sequences_all(&self, date: Date) -> Vec<Sequence> {
         // Get Yesterday, Today, and next 3 days.
         let mut sequences: Vec<_> = (-1..=4)
             .flat_map(|day| {
@@ -147,11 +147,11 @@ impl<T: TimeZone> Config<T> {
             .collect();
 
         sequences.sort_by(Sequence::cmp_required_time);
-        VecDeque::from(sequences)
+        sequences
     }
 }
 
-fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
+fn set_all_marks(sequences: &mut [Sequence], marks: &HashMap<String, Mark>) {
     for sequence in &mut *sequences {
         let mark = if let Some(mark) = marks.get(&sequence.id) {
             if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
@@ -178,7 +178,7 @@ struct Tags {
 struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
-    sequences: VecDeque<Sequence>,
+    sequences: Vec<Sequence>,
     marks: HashMap<String, Mark>,
     config: Config<T>,
     mqtt: MqttTx,
@@ -187,7 +187,7 @@ struct State<T: TimeZone> {
 }
 
 impl<T: TimeZone> State<T> {
-    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
+    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool, next_index: Option<usize>) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if today != self.date {
@@ -204,7 +204,7 @@ impl<T: TimeZone> State<T> {
             self.publish_pending_sequences();
         }
 
-        self.timer = self.get_next_timer(now);
+        self.timer = self.get_next_timer(now, next_index);
         self.date = today;
     }
 
@@ -219,11 +219,11 @@ impl<T: TimeZone> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn publish_all_sequences(&self, sequences: &VecDeque<Sequence>) {
+    fn publish_all_sequences(&self, sequences: &[Sequence]) {
         let topic = format!("schedule/{}/all", self.config.hostname);
         self.publish_sequences(sequences, topic);
 
-        let important: VecDeque<Sequence> = sequences
+        let important: Vec<Sequence> = sequences
             .iter()
             .filter(|sequence| matches!(sequence.importance, Importance::Important))
             .cloned()
@@ -233,11 +233,17 @@ impl<T: TimeZone> State<T> {
     }
 
     fn publish_pending_sequences(&self) {
+        let pending: Vec<Sequence> = self
+            .sequences
+            .iter()
+            .filter(|sequence| !is_done(sequence, &self.done))
+            .cloned()
+            .collect();
         let topic = format!("schedule/{}/pending", self.config.hostname);
-        self.publish_sequences(&self.sequences, topic);
+        self.publish_sequences(&pending, topic);
     }
 
-    fn publish_sequences(&self, sequences: &VecDeque<Sequence>, topic: String) {
+    fn publish_sequences(&self, sequences: &[Sequence], topic: String) {
         let msg = Json(sequences);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize sequences: {:?}", sequences);
@@ -246,8 +252,8 @@ impl<T: TimeZone> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
-        let next = self.sequences.front();
+    fn get_next_timer(&self, now: &DateTime<Utc>, next_index: Option<usize>) -> Instant {
+        let next = next_index.and_then(|index| self.sequences.get(index));
         next.map_or_else(
             || Instant::now() + tokio::time::Duration::from_secs(120),
             |next| {
@@ -273,20 +279,17 @@ impl<T: TimeZone> State<T> {
         let today = self.date;
         self.sequences = self.config.get_sequences_all(today);
         self.publish_all_sequences(&self.sequences);
-        self.drop_done_sequences();
         set_all_marks(&mut self.sequences, &self.marks);
-    }
-
-    fn drop_done_sequences(&mut self) {
-        self.sequences.retain(|sequence| {
-            let sequence_date = sequence.required_time.date_naive();
-            !self.done.contains(&(sequence_date, sequence.id.clone()))
-        });
     }
 }
 
 fn expire_marks(marks: &mut HashMap<String, Mark>, now: &DateTime<Utc>) {
     marks.retain(|_, mark| mark.stop_time > *now);
+}
+
+fn is_done(sequence: &Sequence, done: &HashSet<(Date, String)>) -> bool {
+    let sequence_date = sequence.required_time.date_naive();
+    done.contains(&(sequence_date, sequence.id.clone()))
 }
 
 /// An error occurred in the executor.
@@ -330,26 +333,22 @@ pub fn executor(
         let mut mark_s = mark_rx.subscribe().await;
 
         loop {
-            debug!(
-                "Next task {:?}, timer at {:?}",
-                state.sequences.front(),
-                state.timer
-            );
-
             select! {
                 _ = tokio::time::sleep_until(state.timer) => {
                     debug!("Timer expired");
                     let mut publish_sequences = false;
+                    let mut next_index = None;
 
-                    while let Some(sequence) = state.sequences.front() {
+                    for (index, sequence) in state.sequences.iter().enumerate() {
                         let now = utc_now();
                         let sequence_date = sequence.required_time.date_naive();
 
                         if state.done.contains(&(sequence_date, sequence.id.clone())) {
-                            debug!("Already done with {sequence:?}");
+                            // Already done, skip.
                         } else if now < sequence.required_time {
                             // Too early, wait for next timer.
                             debug!("Too early for {sequence:?}");
+                            next_index = Some(index);
                             break;
                         } else if sequence.mark.is_some() {
                             debug!("Ignoring step with mark {:?}", sequence.mark);
@@ -367,12 +366,11 @@ pub fn executor(
                             debug!("Too late for {sequence:?}");
                         }
                         state.done.insert((sequence_date, sequence.id.clone()));
-                        state.sequences.pop_front();
                         publish_sequences = true;
                     }
 
                     let now = utc_now();
-                    state.finalize(&now, publish_sequences);
+                    state.finalize(&now, publish_sequences, next_index);
                     expire_marks(&mut state.marks, &now);
                 },
                 Ok(Json(mark)) = mark_s.recv() => {
@@ -418,7 +416,7 @@ fn get_initial_state(
         State {
             date,
             timer,
-            sequences: VecDeque::new(),
+            sequences: Vec::new(),
             marks,
             config,
             mqtt,
@@ -437,9 +435,8 @@ fn get_initial_state(
     };
 
     debug!(
-        "{:?}: Starting executor, Next task {:?}, timer at {:?}",
+        "{:?}: Starting executor, timer at {:?}",
         Utc::now(),
-        state.sequences.front(),
         state.timer
     );
     Ok(state)
