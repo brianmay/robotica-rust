@@ -139,10 +139,12 @@ impl<T: TimeZone> Config<T> {
     }
     fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
         // Get Yesterday, Today, Tomorrow, and next 2 days.
-        let mut sequences: Vec<_> = (-1..3).flat_map(|day| {
-            let date = date - Duration::days(day);
-            self.get_sequences_for_date(date)
-        }).collect();
+        let mut sequences: Vec<_> = (-1..3)
+            .flat_map(|day| {
+                let date = date - Duration::days(day);
+                self.get_sequences_for_date(date)
+            })
+            .collect();
 
         sequences.sort_by(Sequence::cmp_required_time);
         VecDeque::from(sequences)
@@ -223,7 +225,11 @@ impl<T: TimeZone> State<T> {
         let topic = format!("schedule/{}/important", self.config.hostname);
         self.publish_sequences(sequences, topic);
 
-        let important: VecDeque<Sequence> = sequences.iter().filter(|sequence| matches!(sequence.importance, Importance::Important)).cloned().collect();
+        let important: VecDeque<Sequence> = sequences
+            .iter()
+            .filter(|sequence| matches!(sequence.importance, Importance::Important))
+            .cloned()
+            .collect();
         let topic = format!("schedule/{}/all", self.config.hostname);
         self.publish_sequences(&important, topic);
     }
