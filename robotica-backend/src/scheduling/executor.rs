@@ -138,8 +138,8 @@ impl<T: TimeZone> Config<T> {
         }
     }
     fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
-        // Get Yesterday, Today, Tomorrow, and next 2 days.
-        let mut sequences: Vec<_> = (-1..3)
+        // Get Yesterday, Today, and next 3 days.
+        let mut sequences: Vec<_> = (-1..=4)
             .flat_map(|day| {
                 let date = date + Duration::days(day);
                 self.get_sequences_for_date(date)
