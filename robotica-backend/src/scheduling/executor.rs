@@ -187,7 +187,12 @@ struct State<T: TimeZone> {
 }
 
 impl<T: TimeZone> State<T> {
-    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool, next_index: Option<usize>) {
+    fn finalize(
+        &mut self,
+        now: &DateTime<Utc>,
+        publish_sequences: bool,
+        next_index: Option<usize>,
+    ) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if today != self.date {
