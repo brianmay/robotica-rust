@@ -1,5 +1,7 @@
 //! Component that shows the schedule
 
+use chrono::Local;
+use itertools::Itertools;
 use serde_json::Value;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -70,8 +72,38 @@ pub fn schedule(props: &Props) -> Html {
     html! {
         <div class={classes}>
         {
-            sequence_list.iter().map(move |sequence| {
-                sequence_to_html(sequence, expanded_id, &on_click, &on_close)
+            sequence_list.iter().group_by(|s| get_local_date_for_sequence(s)).into_iter().map(|(date, sequence_list)| {
+                let date_string = date.format("%A, %e %B, %Y").to_string();
+                html! {
+                    <>
+                        <h2>{date_string}</h2>
+                        {
+                            sequence_list_to_html(sequence_list, expanded_id, &on_click, &on_close)
+                        }
+                    </>
+                }
+            }).collect::<Html>()
+
+        }
+        </div>
+    }
+}
+
+fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
+    sequence.required_time.with_timezone(&Local).date_naive()
+}
+
+fn sequence_list_to_html<'a>(
+    sequence_list: impl Iterator<Item = &'a Sequence>,
+    expanded_id: &Option<String>,
+    on_click: &Callback<String>,
+    on_close: &Callback<()>,
+) -> Html {
+    html! {
+        <div class="sequence_list">
+        {
+            sequence_list.map(|sequence| {
+                sequence_to_html(sequence, expanded_id, on_click, on_close)
             }).collect::<Html>()
         }
         </div>
@@ -105,11 +137,12 @@ fn sequence_to_html(
         <div class={classes} id={sequence.id.clone()}>
             <div>{datetime_to_string(&sequence.required_time)}</div>
             <div>
-            {
-                sequence.tasks.iter().enumerate().map(|(i, task)| {
-                    task_to_html(sequence, task, i, expanded_id, on_click.clone(), on_close.clone())
-                }).collect::<Html>()
-            }
+                <div class="title">{&sequence.title}</div>
+                {
+                    sequence.tasks.iter().enumerate().map(|(i, task)| {
+                        task_to_html(sequence, task, i, expanded_id, on_click, on_close)
+                    }).collect::<Html>()
+                }
             </div>
         </div>
     }
@@ -120,14 +153,15 @@ fn task_to_html(
     task: &Task,
     i: usize,
     expanded_id: &Option<String>,
-    on_click: Callback<String>,
-    on_close: Callback<()>,
+    on_click: &Callback<String>,
+    on_close: &Callback<()>,
 ) -> Html {
     let date = sequence.required_time.date_naive();
     let seq_id = &sequence.id;
     let repeat_number = sequence.repeat_number;
     let id = format!("{date}-{seq_id}-{i}-{repeat_number}");
     let id_clone = id.clone();
+    let on_click = on_click.clone();
 
     html! {
         html! {
@@ -183,7 +217,7 @@ fn json_to_html(json: &Value) -> Html {
     }
 }
 
-fn popover_content(sequence: &Sequence, task: &Task, on_close: Callback<()>) -> Html {
+fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) -> Html {
     use robotica_common::robotica::tasks::Payload;
     let payload = match &task.payload {
         Payload::String(string) => html!({ string.clone() }),
@@ -194,6 +228,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: Callback<()>) -> 
         None => "None".to_string(),
     };
 
+    let on_close = on_close.clone();
     let on_close = move |_| {
         on_close.emit(());
     };
