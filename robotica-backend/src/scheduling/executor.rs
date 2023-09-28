@@ -215,18 +215,21 @@ struct State<T: TimeZone> {
 }
 
 impl<T: TimeZone> State<T> {
-    fn finalize(&mut self, now: &DateTime<Utc>) {
+    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if self.check_time_travel(today) {
             self.calendar_refresh_time = *now;
             self.publish_tags(&self.tags);
+            self.publish_sequences(&self.sequences);
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.calendar_refresh_time = *now;
             self.set_sequences_all();
+            self.publish_sequences(&self.sequences);
+        } else if publish_sequences {
+            self.publish_sequences(&self.sequences);
         }
 
-        self.publish_sequences(&self.sequences);
         self.timer = self.get_next_timer(now);
         self.date = today;
     }
@@ -380,6 +383,7 @@ pub fn executor(
             select! {
                 _ = tokio::time::sleep_until(state.timer) => {
                     debug!("Timer expired");
+                    let mut publish_sequences = false;
 
                     while let Some(sequence) = state.sequences.front() {
                         let now = utc_now();
@@ -408,10 +412,11 @@ pub fn executor(
                         }
                         state.done.insert((sequence_date, sequence.id.clone()));
                         state.sequences.pop_front();
+                        publish_sequences = true;
                     }
 
                     let now = utc_now();
-                    state.finalize(&now);
+                    state.finalize(&now, publish_sequences);
                     expire_marks(&mut state.marks, &now);
                 },
                 Ok(Json(mark)) = mark_s.recv() => {
