@@ -222,7 +222,7 @@ impl<T: TimeZone> State<T> {
     }
 
     fn publish_all_sequences(&self, sequences: &VecDeque<Sequence>) {
-        let topic = format!("schedule/{}/important", self.config.hostname);
+        let topic = format!("schedule/{}/all", self.config.hostname);
         self.publish_sequences(sequences, topic);
 
         let important: VecDeque<Sequence> = sequences
@@ -230,7 +230,7 @@ impl<T: TimeZone> State<T> {
             .filter(|sequence| matches!(sequence.importance, Importance::Important))
             .cloned()
             .collect();
-        let topic = format!("schedule/{}/all", self.config.hostname);
+        let topic = format!("schedule/{}/important", self.config.hostname);
         self.publish_sequences(&important, topic);
     }
 
