@@ -138,30 +138,14 @@ impl<T: TimeZone> Config<T> {
         }
     }
     fn get_sequences_all(&self, date: Date) -> VecDeque<Sequence> {
-        let date = date - Duration::days(1);
-        let yesterday = self.get_sequences_for_date(date);
+        // Get Yesterday, Today, Tomorrow, and next 2 days.
+        let mut sequences: Vec<_> = (-1..3).flat_map(|day| {
+            let date = date - Duration::days(day);
+            self.get_sequences_for_date(date)
+        }).collect();
 
-        let date = date + Duration::days(1);
-        let today = self.get_sequences_for_date(date);
-
-        let date = date + Duration::days(1);
-        let tomorrow = self.get_sequences_for_date(date);
-
-        // Allocate result vector.
-        let mut sequences = VecDeque::with_capacity(yesterday.len() + today.len() + tomorrow.len());
-
-        // Add schedule for yesterday, today, and tomorrow.
-        sequences.extend(yesterday);
-        sequences.extend(today);
-        sequences.extend(tomorrow);
-
-        // Sort by time.
-        sequences
-            .make_contiguous()
-            .sort_by(Sequence::cmp_required_time);
-
-        // Return.
-        sequences
+        sequences.sort_by(Sequence::cmp_required_time);
+        VecDeque::from(sequences)
     }
 }
 
