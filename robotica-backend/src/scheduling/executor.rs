@@ -163,19 +163,6 @@ impl<T: TimeZone> Config<T> {
         // Return.
         sequences
     }
-
-    fn add_sequences_tomorrow(&self, date: Date, sequences: &mut VecDeque<Sequence>) {
-        let tomorrow = date + Duration::days(1);
-        let new_schedule = self.get_sequences_for_date(tomorrow);
-
-        // Add schedule for tomorrow.
-        sequences.extend(new_schedule);
-
-        // Sort by time.
-        sequences
-            .make_contiguous()
-            .sort_by(Sequence::cmp_required_time);
-    }
 }
 
 fn set_all_marks(sequences: &mut VecDeque<Sequence>, marks: &HashMap<String, Mark>) {
@@ -218,50 +205,23 @@ impl<T: TimeZone> State<T> {
     fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
-        if self.check_time_travel(today) {
+        if today != self.date {
+            self.set_tags();
+            self.set_sequences_all();
+            self.done = HashSet::new();
             self.calendar_refresh_time = *now;
             self.publish_tags(&self.tags);
-            self.publish_sequences(&self.sequences);
+            self.publish_pending_sequences();
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.calendar_refresh_time = *now;
             self.set_sequences_all();
-            self.publish_sequences(&self.sequences);
+            self.publish_pending_sequences();
         } else if publish_sequences {
-            self.publish_sequences(&self.sequences);
+            self.publish_pending_sequences();
         }
 
         self.timer = self.get_next_timer(now);
         self.date = today;
-    }
-
-    fn check_time_travel(&mut self, today: Date) -> bool {
-        let yesterday = today - Duration::days(1);
-
-        if today < self.date {
-            // If we have travelled back in time, we should drop the list entirely
-            // to avoid duplicating future events.
-            self.set_tags();
-            self.set_sequences_all();
-            self.done = HashSet::new();
-            true
-        } else if yesterday == self.date {
-            // If we have travelled forward in time by one day, we only need to
-            // add events for tomorrow.
-            self.set_tags();
-            self.add_sequences_tomorrow();
-            self.done = HashSet::new();
-            true
-        } else if today > self.date {
-            // If we have travelled forward in time more then one day, regenerate
-            // entire events list.
-            self.set_tags();
-            self.set_sequences_all();
-            self.done = HashSet::new();
-            true
-        } else {
-            // No change in date.
-            false
-        }
     }
 
     fn publish_tags(&self, tags: &Tags) {
@@ -275,8 +235,21 @@ impl<T: TimeZone> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn publish_sequences(&self, sequences: &VecDeque<Sequence>) {
-        let topic = format!("schedule/{}", self.config.hostname);
+    fn publish_all_sequences(&self, sequences: &VecDeque<Sequence>) {
+        let topic = format!("schedule/{}/important", self.config.hostname);
+        self.publish_sequences(sequences, topic);
+
+        let important: VecDeque<Sequence> = sequences.iter().filter(|sequence| matches!(sequence.importance, Importance::Important)).cloned().collect();
+        let topic = format!("schedule/{}/all", self.config.hostname);
+        self.publish_sequences(&important, topic);
+    }
+
+    fn publish_pending_sequences(&self) {
+        let topic = format!("schedule/{}/pending", self.config.hostname);
+        self.publish_sequences(&self.sequences, topic);
+    }
+
+    fn publish_sequences(&self, sequences: &VecDeque<Sequence>, topic: String) {
         let msg = Json(sequences);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize sequences: {:?}", sequences);
@@ -310,14 +283,8 @@ impl<T: TimeZone> State<T> {
     fn set_sequences_all(&mut self) {
         let today = self.date;
         self.sequences = self.config.get_sequences_all(today);
+        self.publish_all_sequences(&self.sequences);
         self.drop_done_sequences();
-        set_all_marks(&mut self.sequences, &self.marks);
-    }
-
-    fn add_sequences_tomorrow(&mut self) {
-        let today = self.date;
-        self.config
-            .add_sequences_tomorrow(today, &mut self.sequences);
         set_all_marks(&mut self.sequences, &self.marks);
     }
 

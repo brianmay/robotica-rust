@@ -9,7 +9,7 @@ pub fn schedule_view() -> Html {
     html!(
         <RequireConnection>
             <h1>{ "Schedule" }</h1>
-            <Schedule topic={"schedule/robotica.linuxpenguins.xyz"} />
+            <Schedule topic={"schedule/robotica.linuxpenguins.xyz/pending"} />
         </RequireConnection>
     )
 }

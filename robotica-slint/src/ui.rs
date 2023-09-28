@@ -362,7 +362,7 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
     tokio::spawn(async move {
         let rx = mqtt
             .subscribe_into_stateless::<Arc<Json<Vec<Sequence>>>>(
-                "schedule/robotica.linuxpenguins.xyz",
+                "schedule/robotica.linuxpenguins.xyz/pending",
             )
             .await
             .unwrap();

@@ -200,7 +200,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: Callback<()>) -> 
 
     html! {
         <>
-            <div class="modal fade show" tabindex="-1" style="display:block">
+            <div class="modal fade show" tabindex="-1" style="display:block" onclick={on_close.clone()}>
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
@@ -262,12 +262,12 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: Callback<()>) -> 
                     </table>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" onclick={on_close.clone()}>{"Close"}</button>
+                            <button type="button" class="btn btn-secondary" onclick={on_close}>{"Close"}</button>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="modal-backdrop fade show" onclick={on_close}></div>
+            <div class="modal-backdrop fade show"></div>
         </>
     }
 }
