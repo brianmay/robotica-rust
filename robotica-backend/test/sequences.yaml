@@ -2,7 +2,8 @@
 "sleep": []
 
 "open_presents":
-    - required_time: "00:05:00"
+    - title: "Wakeup for Christmas"
+      required_time: "00:05:00"
       if:
         - "'christmas' in today and 'boxing' in tomorrow"
       tasks:
@@ -15,7 +16,8 @@
             message: Time to wakeup. It is am emergency!
             music:
               play_list: wake_up
-    - required_time: "00:05:00"
+    - title: "Wakeup for adults (1)"
+      required_time: "00:05:00"
       tasks:
         - title: "Wakeup for adults (1)"
           topics:
@@ -26,7 +28,8 @@
             message: Time to wakeup the adults.
             music:
               play_list: wake_up
-    - required_time: "00:05:00"
+    - title: "Wakeup for the adults (2)"
+      required_time: "00:05:00"
       tasks:
         - title: "Wakeup for the adults (2)"
           topics:
@@ -37,7 +40,8 @@
             message: Time to wakeup the adults.
             music:
               play_list: wake_up
-    - required_time: "00:05:00"
+    - title: "Wakeup for the adults (3)"
+      required_time: "00:05:00"
       tasks:
         - title: "Wakeup for the adults (3)"
           topics:
@@ -48,7 +52,8 @@
             message: Time to wakeup the adults.
             music:
               play_list: wake_up
-    - required_time: "00:05:00"
+    - title: "Wakeup for the adults (4)"
+      required_time: "00:05:00"
       tasks:
         - title: "Wakeup for the adults (4)"
           topics:
@@ -59,7 +64,8 @@
             message: Time to wakeup the adults.
             music:
               play_list: wake_up
-    - required_time: "00:05:00"
+    - title: "Wakeup for the adults (5)"
+      required_time: "00:05:00"
       tasks:
         - title: "Wakeup for the adults (5)"
           topics:
@@ -70,7 +76,8 @@
             message: Time to wakeup the adults.
             music:
               play_list: wake_up
-    - required_time: "00:30:00"
+    - title: "Open presents"
+      required_time: "00:30:00"
       latest_time: "01:00:00"
       zero_time: true
       tasks:
