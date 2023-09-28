@@ -179,7 +179,6 @@ struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
     sequences: VecDeque<Sequence>,
-    tags: Tags,
     marks: HashMap<String, Mark>,
     config: Config<T>,
     mqtt: MqttTx,
@@ -196,7 +195,6 @@ impl<T: TimeZone> State<T> {
             self.set_sequences_all();
             self.done = HashSet::new();
             self.calendar_refresh_time = *now;
-            self.publish_tags(&self.tags);
             self.publish_pending_sequences();
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.calendar_refresh_time = *now;
@@ -267,7 +265,8 @@ impl<T: TimeZone> State<T> {
 
     fn set_tags(&mut self) {
         let today = self.date;
-        self.tags = self.config.get_tags(today);
+        let tags = self.config.get_tags(today);
+        self.publish_tags(&tags);
     }
 
     fn set_sequences_all(&mut self) {
@@ -425,17 +424,11 @@ fn get_initial_state(
             mqtt,
             done: HashSet::new(),
             calendar_refresh_time: now,
-            tags: Tags {
-                yesterday: HashSet::new(),
-                today: HashSet::new(),
-                tomorrow: HashSet::new(),
-            },
         }
     };
     let state = {
         let mut state = state;
         state.set_tags();
-        state.publish_tags(&state.tags);
         state.set_sequences_all();
         // Don't do this here, will happen after first timer.
         // state.publish_sequences(&state.sequences);
