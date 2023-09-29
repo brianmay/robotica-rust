@@ -88,10 +88,10 @@ impl Display for MessagePriority {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     /// The title of the message.
-    title: String,
+    pub title: String,
 
     /// The message to send.
-    body: String,
+    pub body: String,
 }
 
 /// An audio command

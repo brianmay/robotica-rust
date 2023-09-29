@@ -270,7 +270,7 @@ fn get_actions_for_command(command: AudioCommand) -> Vec<Action> {
     }
 
     if let Some(msg) = command.message {
-        actions.push(Action::Say(msg.into_body()));
+        actions.push(Action::Say(msg.body));
     }
 
     if let Some(music) = command.music {
