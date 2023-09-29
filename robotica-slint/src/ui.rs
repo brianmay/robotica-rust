@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use std::{sync::Arc, time::Duration};
+use itertools::Itertools;
 
 mod slint {
     #![allow(clippy::wildcard_imports)]
@@ -52,7 +53,6 @@ use robotica_common::{
 };
 use robotica_common::{
     controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
-    datetime::datetime_to_string,
     mqtt::{Json, MqttMessage},
     robotica::audio::Message,
     scheduler::{Sequence, Tags},
@@ -356,6 +356,30 @@ fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
     });
 }
 
+fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
+    sequence.required_time.with_timezone(&Local).date_naive()
+}
+
+fn sequences_to_slint<'a>(sequences: impl Iterator<Item = &'a Sequence>) -> Vec<slint::SequenceData> {
+    sequences
+        .map(|s| {
+            let tasks: Vec<SharedString> = s.tasks.iter().map(|t| t.title.clone().into()).collect();
+            let b: VecModel<SharedString> = VecModel::from(tasks);
+            let c: ModelRc<SharedString> = ModelRc::new(b);
+
+            let local = s.required_time.with_timezone(&Local);
+            let time = local.format("%H:%M:%S").to_string();
+
+            slint::SequenceData {
+                time: time.into(),
+                title: s.title.clone().into(),
+                important: matches!(s.importance, Importance::Important),
+                tasks: c,
+            }
+        })
+        .collect()
+}
+
 fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
     let mqtt = mqtt.clone();
     let handle_weak = ui.as_weak();
@@ -372,26 +396,18 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
             handle_weak
                 .upgrade_in_event_loop(move |handle| {
                     let Json(schedule) = msg.as_ref();
-                    let schedule: Vec<slint::ScheduleData> = schedule
-                        .iter()
-                        .map(|s| {
-                            let tasks: Vec<SharedString> =
-                                s.tasks.iter().map(|t| t.title.clone().into()).collect();
-                            let b: VecModel<SharedString> = VecModel::from(tasks);
-                            let c: ModelRc<SharedString> = ModelRc::new(b);
-
-                            slint::ScheduleData {
-                                time: datetime_to_string(&s.required_time).into(),
-                                title: s.title.clone().into(),
-                                important: matches!(s.importance, Importance::Important),
-                                tasks: c,
-                            }
-                        })
-                        .collect();
+                    let schedule = schedule.iter().group_by(|s| get_local_date_for_sequence(s)).into_iter().map(|(date, sequences)| {
+                        let date = date.format("%A, %e %B, %Y").to_string();
+                        let sequences: Vec<slint::SequenceData> = sequences_to_slint(sequences);
+                        slint::ScheduleData {
+                            date: date.into(),
+                            sequences: ModelRc::new(VecModel::from(sequences)),
+                        }
+                    }).collect::<Vec<_>>();
 
                     let b: VecModel<slint::ScheduleData> = VecModel::from(schedule);
                     let c: ModelRc<slint::ScheduleData> = ModelRc::new(b);
-                    handle.set_schedule(c);
+                    handle.set_schedule_list(c);
                 })
                 .unwrap();
         }

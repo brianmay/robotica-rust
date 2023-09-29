@@ -38,11 +38,16 @@ struct TagsData {
     tomorrow: [string],
 }
 
-struct ScheduleData {
+struct SequenceData {
     time: string,
     title: string,
     important: bool,
     tasks: [string],
+}
+
+struct ScheduleData {
+    date: string,
+    sequences: [SequenceData],
 }
 
 component RoboticaButton inherits Rectangle {
@@ -226,48 +231,62 @@ component Tags inherits VerticalLayout {
 
 
 component Schedule inherits ScrollView {
-    in property <[ScheduleData]> schedule;
+    in property <[ScheduleData]> schedule_list;
     callback screen_reset;
 
-    viewport-width: 200px;
+    // viewport-width: 200px;
     // viewport-height: (90px + 10px) * schedule.length + 10px;
 
     VerticalLayout {
-        x: 0;
-        y: 0;
         padding: 10px;
         spacing: 10px;
-        width: parent.width - 20px;
 
-        for entry[i] in schedule : Rectangle {
-            property <bool> open;
-            property <[string]> tasks;
-            open: false;
-            tasks: open ? entry.tasks : [];
-            height: open ? 30px + 20px * entry.tasks.length : 30px;
-            background: schedule[i].important ? green : grey;
+        for schedule[i] in schedule_list : VerticalLayout {
+            padding: 0px;
+            spacing: 10px;
 
-            Text {
-                x: 10px;
-                y: 10px;
-                width: parent.width - 20px;
-                font-size: 10px;
-                text: entry.time + " " + entry.title;
-                color: white;
-            }
-            for task[i] in tasks : Text{
-                x: 20px;
-                y: 30px + 20px * i;
-                width: parent.width - 40px;
-                font-size: 10px;
-                text: task;
-                color: white;
+            Rectangle {
+                Text {
+                    text: schedule.date;
+                    color: white;
+                    font-size: 20px;
+                    width: parent.width;
+                    horizontal-alignment: left;
+                    y: 20px;
+                }
+                height: 20px + 20px;
             }
 
-            TouchArea {
-                clicked => {
-                    screen_reset();
-                    parent.open = !parent.open;
+            for entry[i] in schedule.sequences : Rectangle {
+                property <bool> open;
+                property <[string]> tasks;
+                open: false;
+                tasks: open ? entry.tasks :  [];
+                height: open ? 30px + 20px * entry.tasks.length : 30px;
+                background: entry.important ? green : grey;
+
+                Text {
+                    x: 10px;
+                    y: 10px;
+                    width: parent.width;
+                    font-size: 10px;
+                    text: entry.time + " " + entry.title;
+                    color: white;
+                }
+                for task[i] in tasks : Text{
+                    x: 20px;
+                    y: 30px + 20px * i;
+                    width: parent.width - 40px;
+                    font-size: 10px;
+                    text: task;
+                    color: white;
+                }
+
+                TouchArea {
+                    clicked => {
+                        screen_reset();
+                        parent.open = !parent.open;
+                    }
                 }
             }
         }
@@ -444,7 +463,7 @@ export component AppWindow inherits Window {
     in property<int> hour;
     in property<int> minute;
     in property<int> second;
-    in property <[ScheduleData]> schedule;
+    in property <[ScheduleData]> schedule_list;
 
     callback clicked_widget(int);
     callback screen_reset;
@@ -517,7 +536,7 @@ export component AppWindow inherits Window {
             title: "Schedule";
 
             Schedule {
-                schedule: root.schedule;
+                schedule_list: root.schedule_list;
                 screen_reset => {
                     root.screen_reset();
                 }

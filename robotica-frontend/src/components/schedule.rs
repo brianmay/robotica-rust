@@ -132,10 +132,14 @@ fn sequence_to_html(
         None => None,
     };
 
+    let local = sequence.required_time.with_timezone(&Local);
+    let time = local.format("%H:%M:%S").to_string();
+
+
     let classes = classes!("sequence", importance_class, mark_class);
     html! {
         <div class={classes} id={sequence.id.clone()}>
-            <div>{datetime_to_string(&sequence.required_time)}</div>
+            <div>{time}</div>
             <div>
                 <div class="title">{&sequence.title}</div>
                 {
