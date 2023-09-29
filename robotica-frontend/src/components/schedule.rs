@@ -184,7 +184,7 @@ fn json_to_html(json: &Value) -> Html {
     match json {
         Value::Null => html! { <span class="null">{"null"}</span> },
         Value::Bool(b) => html! { <span class="bool">{b}</span> },
-        Value::Number(n) => html! { <span class="number">{n}</span> },
+        Value::Number(n) => html! { <span class="number">{n.to_string()}</span> },
         Value::String(s) => html! { <span class="string">{s}</span> },
         Value::Array(a) => {
             html! {
@@ -229,7 +229,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
         Payload::Command(command) => html!({
             match serde_json::to_value(command) {
                 Ok(value) => json_to_html(&value),
-                Err(err) => html! { <span class="error">{err}</span> },
+                Err(err) => html! { <span class="error">{err.to_string()}</span> },
             }
         }),
     };
@@ -262,7 +262,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             </tr>
                             <tr>
                                 <th scope="row">{"Required Duration"}</th>
-                                <td>{sequence.required_duration}</td>
+                                <td>{sequence.required_duration.to_string()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Latest Time"}</th>
@@ -274,7 +274,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             </tr>
                             <tr>
                                 <th scope="row">{"Importance"}</th>
-                                <td>{sequence.importance}</td>
+                                <td>{sequence.importance.to_string()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Mark"}</th>
@@ -290,7 +290,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             </tr>
                             <tr>
                                 <th scope="row">{"Summary"}</th>
-                                <td>{task}</td>
+                                <td>{task.to_string()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Payload"}</th>
