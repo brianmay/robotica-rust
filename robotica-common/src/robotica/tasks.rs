@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::error;
 
-use crate::mqtt;
+use crate::mqtt::{self, MqttMessage};
+
+use super::commands::Command;
 
 /// Payload in a task.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -21,6 +23,10 @@ pub enum Payload {
     /// A JSON payload.
     #[serde(rename = "payload_json")]
     Json(Value),
+
+    /// A Robotica command.
+    #[serde(rename = "payload_command")]
+    Command(Command),
 }
 
 /// A task with all values completed.
@@ -42,6 +48,35 @@ pub struct Task {
 
     /// The topics this task will send to.
     pub topics: Vec<String>,
+}
+
+impl Task {
+    /// Get the MQTT message for this task.
+    #[must_use]
+    pub fn get_mqtt_payload(&self) -> Option<String> {
+        match &self.payload {
+            Payload::String(s) => Some(s.to_string()),
+            Payload::Json(v) => Some(v.to_string()),
+            Payload::Command(c) => serde_json::to_string(c)
+                .map_err(|err| {
+                    error!("Failed to serialize command: {:?}", c);
+                    err
+                })
+                .ok(),
+        }
+    }
+
+    /// Get the MQTT messages for this task.
+    #[must_use]
+    pub fn get_mqtt_messages(&self) -> Vec<MqttMessage> {
+        let maybe_payload = self.get_mqtt_payload();
+        maybe_payload.map_or_else(Vec::new, |payload| {
+            self.topics
+                .iter()
+                .map(|topic| MqttMessage::new(topic, payload.clone(), self.retain, self.qos))
+                .collect()
+        })
+    }
 }
 
 /// A task with optional values.
@@ -87,109 +122,21 @@ impl SubTask {
     }
 }
 
-fn command_to_text(command: &Value) -> String {
-    let mtype = command.get("type").and_then(Value::as_str);
-
-    match mtype {
-        Some("audio") => audio_command_to_text(command),
-        Some("message") => message_command_to_text(command),
-        Some("light") => light_command_to_text(command),
-        Some("device") => device_command_to_text(command),
-        Some("hdmi") => hdmi_command_to_text(command),
-        _ => command.to_string(),
-    }
-}
-
-fn message_command_to_text(command: &Value) -> String {
-    let message = command.get("body").and_then(Value::as_str);
-    message.map_or_else(
-        || "unknown message command".to_string(),
-        |message| format!("say {message}"),
-    )
-}
-
-fn audio_command_to_text(command: &Value) -> String {
-    let message = command.get("message").and_then(Value::as_str);
-    let music = command.get("music");
-    let play_list = music
-        .and_then(|music| music.get("play_list"))
-        .and_then(Value::as_str);
-    let music_stop = music
-        .and_then(|music| music.get("stop"))
-        .and_then(Value::as_bool);
-    let volume = command.get("volume");
-    let music_volume = volume
-        .and_then(|volume| volume.get("music"))
-        .and_then(Value::as_u64);
-    let message_volume = volume
-        .and_then(|volume| volume.get("message"))
-        .and_then(Value::as_u64);
-    let mut results = vec![];
-    if let Some(volume) = message_volume {
-        results.push(format!("set message volume {volume}"));
-    }
-    if let Some(message) = message {
-        results.push(format!("say {message}"));
-    }
-    if let Some(music_stop) = music_stop {
-        if music_stop {
-            results.push("stop music".to_string());
+fn json_command_to_text(command: &Value) -> String {
+    match serde_json::from_value::<Command>(command.clone()) {
+        Ok(command) => command.to_string(),
+        Err(err) => {
+            format!("Error parsing command: {err}")
         }
     }
-    if let Some(volume) = music_volume {
-        results.push(format!("set music volume {volume}"));
-    }
-    if let Some(play_list) = play_list {
-        results.push(format!("play {play_list}"));
-    }
-    if results.is_empty() {
-        "unknown audio command".to_string()
-    } else {
-        results.join(", ")
-    }
-}
-
-fn light_command_to_text(command: &Value) -> String {
-    let action = command.get("action").and_then(Value::as_str);
-    let scene = command.get("scene").and_then(Value::as_str);
-
-    match (action, scene) {
-        (Some(command), Some(scene)) => format!("{command} scene {scene}"),
-        (Some(command), None) => command.to_string(),
-        (None, Some(scene)) => format!("turn_on scene {scene}"),
-        _ => "unknown light command".to_string(),
-    }
-}
-
-fn device_command_to_text(command: &Value) -> String {
-    let action = command.get("action").and_then(Value::as_str);
-
-    action.map_or_else(
-        || "unknown device command".to_string(),
-        |action| format!("Device {action}"),
-    )
-}
-
-fn hdmi_command_to_text(command: &Value) -> String {
-    let source = command.get("source").and_then(Value::as_str);
-
-    source.map_or_else(
-        || "unknown hdmi command".to_string(),
-        |source| format!("HDMI source #{source}"),
-    )
 }
 
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let action_str = match &self {
-            Task {
-                payload: Payload::String(payload),
-                ..
-            } => payload.clone(),
-            Task {
-                payload: Payload::Json(payload),
-                ..
-            } => command_to_text(payload),
+        let action_str = match &self.payload {
+            Payload::String(payload) => payload.clone(),
+            Payload::Json(payload) => json_command_to_text(payload),
+            Payload::Command(payload) => payload.to_string(),
         };
 
         write!(f, "{action_str}")?;

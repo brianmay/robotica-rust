@@ -1,8 +1,13 @@
 //! Commands for Robotica
 
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 
-use super::{audio::AudioCommand, hdmi::HdmiCommand, lights::LightCommand, switch::DeviceCommand};
+use super::{
+    audio::AudioCommand, hdmi::HdmiCommand, lights::LightCommand, message::Message,
+    switch::DeviceCommand,
+};
 
 /// A command to send to any device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +17,9 @@ pub enum Command {
     /// A command to send to a switch.
     Device(DeviceCommand),
 
+    /// Message to say
+    Message(Message),
+
     /// Audio command
     Audio(AudioCommand),
 
@@ -20,6 +28,22 @@ pub enum Command {
 
     /// HDMI Command
     Hdmi(HdmiCommand),
+}
+
+impl Display for Command {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let action_str = match self {
+            Command::Audio(command) => command.to_string(),
+            Command::Message(command) => command.to_string(),
+            Command::Light(command) => command.to_string(),
+            Command::Device(command) => command.to_string(),
+            Command::Hdmi(command) => command.to_string(),
+        };
+
+        write!(f, "{action_str}")?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

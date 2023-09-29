@@ -2,8 +2,8 @@
 
 #![allow(clippy::unwrap_used)]
 
-use std::{sync::Arc, time::Duration};
 use itertools::Itertools;
+use std::{sync::Arc, time::Duration};
 
 mod slint {
     #![allow(clippy::wildcard_imports)]
@@ -360,7 +360,9 @@ fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
     sequence.required_time.with_timezone(&Local).date_naive()
 }
 
-fn sequences_to_slint<'a>(sequences: impl Iterator<Item = &'a Sequence>) -> Vec<slint::SequenceData> {
+fn sequences_to_slint<'a>(
+    sequences: impl Iterator<Item = &'a Sequence>,
+) -> Vec<slint::SequenceData> {
     sequences
         .map(|s| {
             let tasks: Vec<SharedString> = s.tasks.iter().map(|t| t.title.clone().into()).collect();
@@ -396,14 +398,19 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
             handle_weak
                 .upgrade_in_event_loop(move |handle| {
                     let Json(schedule) = msg.as_ref();
-                    let schedule = schedule.iter().group_by(|s| get_local_date_for_sequence(s)).into_iter().map(|(date, sequences)| {
-                        let date = date.format("%A, %e %B, %Y").to_string();
-                        let sequences: Vec<slint::SequenceData> = sequences_to_slint(sequences);
-                        slint::ScheduleData {
-                            date: date.into(),
-                            sequences: ModelRc::new(VecModel::from(sequences)),
-                        }
-                    }).collect::<Vec<_>>();
+                    let schedule = schedule
+                        .iter()
+                        .group_by(|s| get_local_date_for_sequence(s))
+                        .into_iter()
+                        .map(|(date, sequences)| {
+                            let date = date.format("%A, %e %B, %Y").to_string();
+                            let sequences: Vec<slint::SequenceData> = sequences_to_slint(sequences);
+                            slint::ScheduleData {
+                                date: date.into(),
+                                sequences: ModelRc::new(VecModel::from(sequences)),
+                            }
+                        })
+                        .collect::<Vec<_>>();
 
                     let b: VecModel<slint::ScheduleData> = VecModel::from(schedule);
                     let c: ModelRc<slint::ScheduleData> = ModelRc::new(b);

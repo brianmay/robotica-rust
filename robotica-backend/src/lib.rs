@@ -18,7 +18,6 @@ pub mod pipes;
 pub mod services;
 pub mod sinks;
 pub mod sources;
-pub mod tasks;
 
 #[cfg(feature = "scheduler")]
 pub mod scheduling;

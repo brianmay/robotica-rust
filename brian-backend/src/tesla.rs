@@ -1,12 +1,12 @@
 use crate::amber::{PriceCategory, PriceSummary};
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
-use crate::ha::MessageCommand;
 
 use anyhow::Result;
 use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::message::{Message, MessageAudience};
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -22,21 +22,16 @@ use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
 use super::State;
 
-fn new_message(message: impl Into<String>, priority: MessagePriority) -> MessageCommand {
-    MessageCommand::new(
-        "Tesla",
-        message.into(),
-        priority,
-        crate::ha::MessageAudience::Everyone,
-    )
+fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
+    Message::new("Tesla", message.into(), priority, MessageAudience::Everyone)
 }
 
-fn new_private_message(message: impl Into<String>, priority: MessagePriority) -> MessageCommand {
-    MessageCommand::new(
+fn new_private_message(message: impl Into<String>, priority: MessagePriority) -> Message {
+    Message::new(
         "Tesla",
         message.into(),
         priority,
-        crate::ha::MessageAudience::Brian { private: true },
+        MessageAudience::Brian { private: true },
     )
 }
 
@@ -197,7 +192,7 @@ pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
 fn output_location_message(
     location: &Location,
     msg: Option<String>,
-    message_sink: &stateless::Sender<MessageCommand>,
+    message_sink: &stateless::Sender<Message>,
 ) {
     let msg = if location.censor() {
         msg.map(|msg| new_private_message(msg, MessagePriority::Low))
@@ -406,7 +401,7 @@ pub enum MonitorChargingError {
 fn announce_charging_state(
     charging_state: ChargingStateEnum,
     old_tesla_state: &TeslaState,
-    message_sink: &stateless::Sender<MessageCommand>,
+    message_sink: &stateless::Sender<Message>,
 ) {
     let was_plugged_in = old_tesla_state
         .charging_state

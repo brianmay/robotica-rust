@@ -1,5 +1,7 @@
 //! Messages for robotica lights
 
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 
 /// A LIFX device's power level.
@@ -122,4 +124,18 @@ pub enum LightCommand {
 
     /// Flash the light.
     Flash,
+}
+
+impl Display for LightCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LightCommand::TurnOn { scene } => {
+                write!(f, "turn_on scene {scene}")
+            }
+            LightCommand::TurnOff => write!(f, "turn_off"),
+            LightCommand::Flash => {
+                write!(f, "flash")
+            }
+        }
+    }
 }

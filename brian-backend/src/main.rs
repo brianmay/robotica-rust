@@ -18,13 +18,13 @@ mod rooms;
 mod tesla;
 
 use anyhow::Result;
-use ha::MessageCommand;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::pipes::stateless;
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
+use robotica_common::robotica::message::Message;
 use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
@@ -68,7 +68,7 @@ pub struct State {
     subscriptions: Subscriptions,
     #[allow(dead_code)]
     mqtt: MqttTx,
-    message_sink: stateless::Sender<MessageCommand>,
+    message_sink: stateless::Sender<Message>,
     persistent_state_database: PersistentStateDatabase,
 }
 

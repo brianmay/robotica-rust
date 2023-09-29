@@ -1,5 +1,7 @@
 //! Audio player Service
 
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 
 use super::tasks::SubTask;
@@ -72,72 +74,29 @@ impl Default for MessagePriority {
     }
 }
 
-/// A message to send
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Message {
-    /// Legacy format: just a string
-    String(String),
-
-    /// New format: a struct with more details
-    ///
-    /// This format is not supported by old code and should not be used yet.
-    Details {
-        /// The title of the message.
-        title: String,
-
-        /// The message to send.
-        body: String,
-    },
+impl Display for MessagePriority {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Urgent => write!(f, "Urgent"),
+            Self::Low => write!(f, "Low"),
+            Self::DaytimeOnly => write!(f, "Daytime Only"),
+        }
+    }
 }
 
-impl Message {
-    /// What is the title?
-    #[must_use]
-    pub fn title(&self) -> &str {
-        match self {
-            Self::String(_) => "No title",
-            Self::Details { title, .. } => title,
-        }
-    }
+/// A message to send
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    /// The title of the message.
+    title: String,
 
-    /// What is the message?
-    #[must_use]
-    pub fn body(&self) -> &str {
-        match self {
-            Self::String(s) => s,
-            Self::Details { body, .. } => body,
-        }
-    }
-
-    /// Get owned body
-    #[must_use]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn into_body(self) -> String {
-        match self {
-            Self::String(s) => s,
-            Self::Details { body, .. } => body,
-        }
-    }
-
-    /// Get owned strings
-    #[must_use]
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn into_owned(self) -> (String, String) {
-        match self {
-            Self::String(s) => ("No title".to_string(), s),
-            Self::Details { title, body } => (title, body),
-        }
-    }
+    /// The message to send.
+    body: String,
 }
 
 /// An audio command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCommand {
-    /// The title of the message.
-    #[serde(rename = "title")]
-    pub legacy_title: Option<String>,
-
     /// The message to send.
     pub message: Option<Message>,
 
@@ -162,16 +121,6 @@ pub struct AudioCommand {
 }
 
 impl AudioCommand {
-    /// What is the title?
-    #[must_use]
-    pub fn title(&self) -> Option<&str> {
-        if let Some(Message::Details { title, .. }) = &self.message {
-            Some(title)
-        } else {
-            self.legacy_title.as_deref()
-        }
-    }
-
     /// Decide if we should play this message
     #[cfg(feature = "chrono")]
     #[must_use]
@@ -187,6 +136,41 @@ impl AudioCommand {
             (MessagePriority::Low, _, _) => false,
             (MessagePriority::DaytimeOnly, true, true) => true,
             (MessagePriority::DaytimeOnly, _, _) => false,
+        }
+    }
+}
+
+impl Display for AudioCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = self.message.as_ref();
+        let music = &self.music;
+        let play_list = music.as_ref().and_then(|music| music.play_list.as_ref());
+        let music_stop = music.as_ref().and_then(|music| music.stop);
+        let volume = &self.volume;
+        let music_volume = volume.as_ref().and_then(|volume| volume.music);
+        let message_volume = volume.as_ref().and_then(|volume| volume.message);
+        let mut results = vec![];
+        if let Some(volume) = message_volume {
+            results.push(format!("set message volume {volume}"));
+        }
+        if let Some(message) = message {
+            results.push(format!("say {}", message.body));
+        }
+        if let Some(music_stop) = music_stop {
+            if music_stop {
+                results.push("stop music".to_string());
+            }
+        }
+        if let Some(volume) = music_volume {
+            results.push(format!("set music volume {volume}"));
+        }
+        if let Some(play_list) = play_list {
+            results.push(format!("play {play_list}"));
+        }
+        if results.is_empty() {
+            write!(f, "unknown audio command")
+        } else {
+            write!(f, "{results}", results = results.join(", "))
         }
     }
 }

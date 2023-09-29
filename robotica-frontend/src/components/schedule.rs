@@ -135,7 +135,6 @@ fn sequence_to_html(
     let local = sequence.required_time.with_timezone(&Local);
     let time = local.format("%H:%M:%S").to_string();
 
-
     let classes = classes!("sequence", importance_class, mark_class);
     html! {
         <div class={classes} id={sequence.id.clone()}>
@@ -223,10 +222,18 @@ fn json_to_html(json: &Value) -> Html {
 
 fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) -> Html {
     use robotica_common::robotica::tasks::Payload;
+
     let payload = match &task.payload {
         Payload::String(string) => html!({ string.clone() }),
         Payload::Json(json) => json_to_html(json),
+        Payload::Command(command) => html!({
+            match serde_json::to_value(command) {
+                Ok(value) => json_to_html(&value),
+                Err(err) => html! { <span class="error">{err}</span> },
+            }
+        }),
     };
+
     let mark = match sequence.mark.clone() {
         Some(mark) => format!("{mark:?}"),
         None => "None".to_string(),

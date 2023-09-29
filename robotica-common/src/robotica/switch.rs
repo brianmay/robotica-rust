@@ -1,5 +1,8 @@
 //! Messages for Robotica switches
-use std::str::Utf8Error;
+use std::{
+    fmt::{Display, Formatter},
+    str::Utf8Error,
+};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -22,6 +25,13 @@ pub enum DeviceAction {
 pub struct DeviceCommand {
     /// The action to perform.
     pub action: DeviceAction,
+}
+
+impl Display for DeviceCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let action = &self.action;
+        write!(f, "Device {action:?}")
+    }
 }
 
 /// The status from a switch

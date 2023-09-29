@@ -14,7 +14,6 @@ use robotica_backend::{
         persistent_state::PersistentStateDatabase,
     },
     spawn,
-    tasks::get_task_messages,
 };
 use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
@@ -176,7 +175,7 @@ fn send_state(mqtt: &MqttTx, state: &State, topic_substr: &str) {
 }
 
 fn send_task(mqtt: &MqttTx, task: &Task) {
-    for message in get_task_messages(task) {
+    for message in task.get_mqtt_messages() {
         debug!("Sending task {message:?}");
         mqtt.try_send(message.clone());
     }

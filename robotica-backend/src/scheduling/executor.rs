@@ -18,7 +18,6 @@ use robotica_common::scheduler::{Importance, Mark};
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
-use crate::tasks::get_task_messages;
 use crate::{scheduling::calendar, spawn};
 
 use super::sequencer::Sequence;
@@ -361,7 +360,7 @@ pub fn executor(
                             // Send message.
                             info!("Processing step {sequence:?}");
                             for task in &sequence.tasks {
-                                for message in get_task_messages(task) {
+                                for message in task.get_mqtt_messages() {
                                     debug!("{now:?}: Sending task {message:?}");
                                     state.mqtt.try_send(message.clone());
                                 }
