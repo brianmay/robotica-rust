@@ -336,7 +336,12 @@ fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
     actions
 }
 
-async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig, mqtt: &MqttTx) {
+async fn process_command(
+    state: &mut State,
+    command: AudioCommand,
+    config: &LoadedConfig,
+    mqtt: &MqttTx,
+) {
     let play_list = command.music.clone().and_then(|m| m.play_list);
 
     let actions = get_actions_for_command(&command);
