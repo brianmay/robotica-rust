@@ -340,8 +340,6 @@ async fn process_command(
     tx_screen_command: &mpsc::Sender<ScreenCommand>,
     mqtt: &MqttTx,
 ) {
-    let play_list = command.music.clone().and_then(|m| m.play_list);
-
     let actions = get_actions_for_command(&command);
 
     if actions.is_empty() {
@@ -352,6 +350,10 @@ async fn process_command(
                 state.play_list = None;
             });
     } else {
+        if let Some(music) = &command.music {
+            state.play_list = music.play_list.clone();
+        };
+
         let play_action = actions
             .iter()
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
@@ -374,7 +376,6 @@ async fn process_command(
                 set_volume(state.volume.music, &config.programs).await?;
             }
 
-            state.play_list = play_list;
             Ok(())
         };
 
