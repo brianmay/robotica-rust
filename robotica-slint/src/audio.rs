@@ -247,7 +247,6 @@ async fn handle_command(
 
 enum Action<'a> {
     Sound(&'a String),
-    PreSay(&'a String),
     Say(&'a String),
     Play(&'a String),
     Tasks(&'a Vec<SubTask>),
@@ -267,9 +266,6 @@ impl<'a> Action<'a> {
             Self::Sound(sound) => {
                 set_volume(state.volume.message, &config.programs).await?;
                 play_sound(sound, &config.programs).await?;
-            }
-            Self::PreSay(msg) => {
-                pre_say(msg, &config.programs).await?;
             }
             Self::Say(msg) => {
                 set_volume(state.volume.message, &config.programs).await?;
@@ -305,7 +301,6 @@ fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
     let mut actions = Vec::new();
 
     if let Some(msg) = &command.message {
-        actions.push(Action::PreSay(&msg.body));
         actions.push(Action::SendMessageToScreen(msg));
     }
 
@@ -362,6 +357,10 @@ async fn process_command(
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
 
         let do_actions = || async {
+            if let Some(msg) = &command.message {
+                pre_say(&msg.body, &config.programs).await?;
+            }
+
             let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
