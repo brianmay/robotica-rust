@@ -285,12 +285,11 @@ impl<'a> Action<'a> {
                 }
             }
             Self::SendMessageToScreen(msg) => {
-                    tx_screen_command
-                        .try_send(ScreenCommand::Message(msg.clone()))
-                        .unwrap_or_else(|err| {
-                            error!("Failed to send message to screen: {err}");
-                        });
-
+                tx_screen_command
+                    .try_send(ScreenCommand::Message(msg.clone()))
+                    .unwrap_or_else(|err| {
+                        error!("Failed to send message to screen: {err}");
+                    });
             }
         }
         Ok(())
@@ -366,7 +365,9 @@ async fn process_command(
             let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
-                action.execute(state, config, tx_screen_command, mqtt).await?;
+                action
+                    .execute(state, config, tx_screen_command, mqtt)
+                    .await?;
             }
 
             if paused && !play_action {
