@@ -250,20 +250,7 @@ async fn handle_command(
     };
 
     if should_play {
-        let pre_tasks = command.pre_tasks.clone().unwrap_or_default();
-        let post_tasks = command.post_tasks.clone().unwrap_or_default();
-
-        for task in pre_tasks {
-            let task = task.to_task(&config.targets);
-            send_task(mqtt, &task);
-        }
-
-        process_command(state, command, config).await;
-
-        for task in post_tasks {
-            let task = task.to_task(&config.targets);
-            send_task(mqtt, &task);
-        }
+        process_command(state, command, config, mqtt).await;
     }
 }
 
@@ -272,11 +259,17 @@ enum Action<'a> {
     PreSay(&'a String),
     Say(&'a String),
     Play(&'a String),
+    Tasks(&'a Vec<SubTask>),
     Stop,
 }
 
 impl<'a> Action<'a> {
-    async fn execute(self, state: &State, config: &LoadedConfig) -> Result<(), String> {
+    async fn execute(
+        self,
+        state: &State,
+        config: &LoadedConfig,
+        mqtt: &MqttTx,
+    ) -> Result<(), String> {
         match self {
             Self::Sound(sound) => {
                 set_volume(state.volume.message, &config.programs).await?;
@@ -296,6 +289,12 @@ impl<'a> Action<'a> {
             Self::Stop => {
                 stop_music(&config.programs).await?;
             }
+            Self::Tasks(tasks) => {
+                for task in tasks {
+                    let task = task.clone().to_task(&config.targets);
+                    send_task(mqtt, &task);
+                }
+            }
         }
         Ok(())
     }
@@ -306,6 +305,10 @@ fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
 
     if let Some(msg) = &command.message {
         actions.push(Action::PreSay(&msg.body));
+    }
+
+    if let Some(tasks) = &command.pre_tasks {
+        actions.push(Action::Tasks(tasks));
     }
 
     if let Some(sound) = &command.sound {
@@ -326,10 +329,14 @@ fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
         }
     }
 
+    if let Some(tasks) = &command.post_tasks {
+        actions.push(Action::Tasks(tasks));
+    }
+
     actions
 }
 
-async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig) {
+async fn process_command(state: &mut State, command: AudioCommand, config: &LoadedConfig, mqtt: &MqttTx) {
     let play_list = command.music.clone().and_then(|m| m.play_list);
 
     let actions = get_actions_for_command(&command);
@@ -350,7 +357,7 @@ async fn process_command(state: &mut State, command: AudioCommand, config: &Load
             let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
-                action.execute(state, config).await?;
+                action.execute(state, config, mqtt).await?;
             }
 
             if paused && !play_action {
