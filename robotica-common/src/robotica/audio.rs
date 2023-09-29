@@ -154,7 +154,7 @@ impl Display for AudioCommand {
             results.push(format!("set message volume {volume}"));
         }
         if let Some(message) = message {
-            results.push(format!("say {}", message.body));
+            results.push(format!("say \"{}\"", message.body));
         }
         if let Some(music_stop) = music_stop {
             if music_stop {

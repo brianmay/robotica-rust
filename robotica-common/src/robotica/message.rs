@@ -82,13 +82,12 @@ impl Message {
 
 impl Display for Message {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let title = &self.title;
         let body = &self.body;
-        let audience = &self.audience;
-        let priority = self.priority;
-        write!(
-            f,
-            "Message: {title} - {body} for {audience} priority {priority}"
-        )
+        let flash_lights = if self.flash_lights {
+            " and flash lights"
+        } else {
+            ""
+        };
+        write!(f, "say \"{body}\"{flash_lights}")
     }
 }
