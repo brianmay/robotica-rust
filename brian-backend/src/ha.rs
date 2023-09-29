@@ -75,6 +75,7 @@ mod tests {
             "body": "Body",
             "priority": "Low",
             "audience": "Everyone",
+            "flash_lights": false,
         });
         assert_eq!(json, serde_json::to_value(message).unwrap());
     }
