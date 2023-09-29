@@ -40,6 +40,7 @@ struct TagsData {
 
 struct ScheduleData {
     time: string,
+    title: string,
     important: bool,
     tasks: [string],
 }
@@ -170,12 +171,11 @@ component InlineTags inherits Rectangle {
         width: 200px;
         height: 40px;
         border-radius: 5px;
-        x: 10px + mod(i,3) * 210px;
-        y: 10px + floor(i/3) * 50px;
+        x: 0px + mod(i,3) * 210px;
+        y: 0px + floor(i/3) * 50px;
     }
-    width: 10px + 3 * 210px;
-    height: 10px + ceil(tags.length/3) * 50px;
-    background: blue;
+    width: 0px + 3 * 210px - 10px;
+    height: 0px + ceil(tags.length/3) * 50px - 10px;
 }
 
 component Tags inherits VerticalLayout {
@@ -230,7 +230,7 @@ component Schedule inherits ScrollView {
     callback screen_reset;
 
     viewport-width: 200px;
-    viewport-height: (90px + 10px) * schedule.length + 10px;
+    // viewport-height: (90px + 10px) * schedule.length + 10px;
 
     VerticalLayout {
         x: 0;
@@ -240,7 +240,11 @@ component Schedule inherits ScrollView {
         width: parent.width - 20px;
 
         for entry[i] in schedule : Rectangle {
-            height: 90px;
+            property <bool> open;
+            property <[string]> tasks;
+            open: false;
+            tasks: open ? entry.tasks : [];
+            height: open ? 30px + 20px * entry.tasks.length : 30px;
             background: schedule[i].important ? green : grey;
 
             Text {
@@ -248,16 +252,23 @@ component Schedule inherits ScrollView {
                 y: 10px;
                 width: parent.width - 20px;
                 font-size: 10px;
-                text: entry.time;
+                text: entry.time + " " + entry.title;
                 color: white;
             }
-            for task[i] in entry.tasks : Text{
+            for task[i] in tasks : Text{
                 x: 20px;
                 y: 30px + 20px * i;
                 width: parent.width - 40px;
                 font-size: 10px;
                 text: task;
                 color: white;
+            }
+
+            TouchArea {
+                clicked => {
+                    screen_reset();
+                    parent.open = !parent.open;
+                }
             }
         }
     }
@@ -509,18 +520,6 @@ export component AppWindow inherits Window {
                 schedule: root.schedule;
                 screen_reset => {
                     root.screen_reset();
-                }
-            }
-        }
-        Tab {
-            title: "Settings";
-
-            VerticalLayout {
-                Text {
-                    text: "Settings";
-                    color: white;
-                    horizontal-alignment: center;
-                    font-size: 20px;
                 }
             }
         }

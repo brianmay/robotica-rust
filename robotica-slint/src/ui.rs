@@ -382,6 +382,7 @@ fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
 
                             slint::ScheduleData {
                                 time: datetime_to_string(&s.required_time).into(),
+                                title: s.title.clone().into(),
                                 important: matches!(s.importance, Importance::Important),
                                 tasks: c,
                             }
