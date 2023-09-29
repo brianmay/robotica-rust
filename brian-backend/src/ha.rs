@@ -68,6 +68,7 @@ mod tests {
             body: "Body".to_string(),
             priority: MessagePriority::Low,
             audience: MessageAudience::Everyone,
+            flash_lights: false,
         };
         let json = json!({
             "title": "Title",

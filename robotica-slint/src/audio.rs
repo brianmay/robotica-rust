@@ -18,10 +18,11 @@ use robotica_backend::{
 use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
     robotica::{
-        audio::{AudioCommand, State},
+        audio::{AudioCommand, State, Message},
         commands::Command,
         switch::DevicePower,
-        tasks::Task,
+        tasks::{Task, Payload},
+        tasks::SubTask, lights::LightCommand
     },
 };
 use serde::Deserialize;
@@ -122,6 +123,36 @@ pub fn run(
             select! {
                 Ok(Json(command)) = command_s.recv() => {
                     if let Command::Audio(command) = command {
+                        state.error = None;
+                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command, messages_enabled).await;
+                        send_state(&mqtt, &state, topic_substr);
+                        psr.save(&state).unwrap_or_else(|e| {
+                            error!("Failed to save state: {}", e);
+                        });
+                    } else if let Command::Message(command) = command {
+                        let pre_tasks = if command.flash_lights {
+                            vec![SubTask{
+                                title: "Flash lights".to_string(),
+                                target: "light".to_string(),
+                                payload: Payload::Command(Command::Light(LightCommand::Flash)),
+                                qos: QoS::ExactlyOnce,
+                                retain: false,
+                            }]
+                        } else {
+                            vec![]
+                        };
+                        let command = AudioCommand {
+                            priority: command.priority,
+                            sound: None,
+                            pre_tasks: Some(pre_tasks),
+                            post_tasks: None,
+                            message: Some(Message {
+                                title: command.title,
+                                body: command.body,
+                            }),
+                            music: None,
+                            volume: None,
+                        };
                         state.error = None;
                         handle_command(&tx_screen_command, &mut state, &config, &mqtt, command, messages_enabled).await;
                         send_state(&mqtt, &state, topic_substr);

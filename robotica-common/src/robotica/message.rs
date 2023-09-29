@@ -56,6 +56,10 @@ pub struct Message {
     /// The audience of the message
     #[serde(default)]
     pub audience: MessageAudience,
+
+    /// Should we flash the lights?
+    #[serde(default)]
+    pub flash_lights: bool,
 }
 
 impl Message {
@@ -71,6 +75,7 @@ impl Message {
             body: body.into(),
             priority,
             audience,
+            flash_lights: false,
         }
     }
 }
