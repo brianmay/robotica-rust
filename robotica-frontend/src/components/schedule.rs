@@ -166,7 +166,7 @@ fn task_to_html(
     html! {
         html! {
             <>
-                <div class="task" onclick={move |_| on_click.emit(id.clone())}>{&task.title}</div>
+                <div class="task" onclick={move |_| on_click.emit(id.clone())}><span>{&task.title}</span></div>
                 {
                     if Some(id_clone) == *expanded_id {
                         popover_content(sequence, task, on_close)

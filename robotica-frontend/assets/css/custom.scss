@@ -49,6 +49,21 @@ footer {
     }
 }
 
+.sequence {
+    .title {
+        font-weight: bold;
+    }
+    .task {
+        padding-left: 10px;
+        display: list-item;
+        list-style: inside circle;
+
+        span {
+            margin-left: -10px;
+        }
+    }
+}
+
 .sequence.not_important {
     background-color: white;
 
