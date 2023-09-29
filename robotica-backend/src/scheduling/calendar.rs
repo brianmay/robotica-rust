@@ -11,27 +11,44 @@ enum Dt {
     Date(NaiveDate),
 }
 
+/// The start and end date/times of a calendar entry.
 #[derive(Debug)]
-pub(crate) enum StartEnd {
+pub enum StartEnd {
+    /// This event is a daily event.
     Date(NaiveDate, NaiveDate),
+
+    /// This event is not a daily event.
     DateTime(DateTime<Utc>, DateTime<Utc>),
 }
 
+/// A parsed calendar entry.
 #[allow(dead_code)]
 #[derive(Debug)]
-pub(crate) struct CalendarEntry {
-    pub(crate) summary: String,
-    pub(crate) description: Option<String>,
-    pub(crate) location: Option<String>,
-    pub(crate) uid: String,
-    pub(crate) status: Option<String>,
-    pub(crate) transp: String,
-    pub(crate) sequence: u8,
-    pub(crate) start_end: StartEnd,
-    pub(crate) stamp: DateTime<Utc>,
-    pub(crate) created: DateTime<Utc>,
-    pub(crate) last_modified: DateTime<Utc>,
-    pub(crate) recurrence_id: Option<DateTime<Utc>>,
+pub struct CalendarEntry {
+    /// The title of the event.
+    pub summary: String,
+    /// The description of the event.
+    pub description: Option<String>,
+    /// The location of the event.
+    pub location: Option<String>,
+    /// The unique id of the event.
+    pub uid: String,
+    /// The status of the event.
+    pub status: Option<String>,
+    /// The transparency of the event.
+    pub transp: String,
+    /// The sequence of the event.
+    pub sequence: u8,
+    /// The start and end date/times of the event.
+    pub start_end: StartEnd,
+    /// The stamp of the event.
+    pub stamp: DateTime<Utc>,
+    /// The creation time of the event.
+    pub created: DateTime<Utc>,
+    /// The last modified time of the event.
+    pub last_modified: DateTime<Utc>,
+    /// The recurrence id of the event.
+    pub recurrence_id: Option<DateTime<Utc>>,
 }
 
 // impl CalendarEntry {

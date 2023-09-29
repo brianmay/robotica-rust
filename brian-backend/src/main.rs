@@ -23,9 +23,14 @@ use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::pipes::stateless;
+use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_backend::scheduling::executor::executor;
+use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
+use robotica_common::mqtt::QoS;
 use robotica_common::robotica::message::Message;
+use robotica_common::robotica::tasks::{Payload, Task};
+use robotica_common::scheduler::Importance;
 use tracing::{debug, info};
 
 use self::tesla::monitor_charging;
@@ -73,6 +78,47 @@ pub struct State {
     persistent_state_database: PersistentStateDatabase,
 }
 
+fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
+    let (start, stop) = match event.start_end {
+        StartEnd::Date(_, _) => return None,
+        StartEnd::DateTime(start, stop) => (start, stop),
+    };
+
+    let duration = stop - start;
+
+    let payload = serde_json::json!( {
+        "type": "message",
+        "title": "Calendar Event",
+        "body": event.summary,
+        "priority": "Low",
+    });
+
+    let task = Task {
+        title: format!("Tell everyone {}", event.summary),
+        payload: Payload::Json(payload),
+        qos: QoS::ExactlyOnce,
+        retain: false,
+        topics: ["ha/event/message/everyone".to_string()].to_vec(),
+    };
+
+    Some(Sequence {
+        title: event.summary.clone(),
+        id: event.uid,
+        importance: Importance::Important,
+        sequence_name: event.summary,
+        required_time: start,
+        latest_time: stop,
+        required_duration: duration,
+        tasks: vec![task],
+        mark: None,
+        if_cond: None,
+        classifications: None,
+        options: None,
+        zero_time: true,
+        repeat_number: 1,
+    })
+}
+
 async fn setup_pipes(state: &mut State) {
     let config = config::load_config_from_default_file().unwrap_or_else(|e| {
         panic!("Error loading config: {e}");
@@ -117,6 +163,7 @@ async fn setup_pipes(state: &mut State) {
         &mut state.subscriptions,
         state.mqtt.clone(),
         config.executor,
+        Box::new(calendar_to_sequence),
     )
     .unwrap_or_else(|err| {
         panic!("Failed to start executor: {err}");

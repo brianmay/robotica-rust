@@ -5,7 +5,6 @@ use std::fmt::Debug;
 
 use chrono::{Local, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS};
-use robotica_common::robotica::tasks::{Payload, Task};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
@@ -20,8 +19,11 @@ use crate::scheduling::sequencer::check_schedule;
 use crate::services::mqtt::{MqttTx, Subscriptions};
 use crate::{scheduling::calendar, spawn};
 
+use super::calendar::CalendarEntry;
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
+
+type CalendarToSequence = dyn Fn(CalendarEntry) -> Option<Sequence> + Send + Sync + 'static;
 
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
@@ -36,6 +38,7 @@ struct Config<T: TimeZone> {
     sequencer: sequencer::ConfigMap,
     hostname: String,
     extra_config: ExtraConfig,
+    calendar_to_sequence: Box<CalendarToSequence>,
     timezone: T,
 }
 impl<T: TimeZone> Config<T> {
@@ -49,47 +52,9 @@ impl<T: TimeZone> Config<T> {
         let mut sequences = Vec::new();
 
         for event in calendar {
-            let (start, stop) = match event.start_end {
-                calendar::StartEnd::Date(_, _) => continue,
-                calendar::StartEnd::DateTime(start, stop) => (start, stop),
-            };
-
-            let duration = stop - start;
-
-            // FIXME: This should not be hardcoded here.
-            let payload = serde_json::json!( {
-                "type": "message",
-                "title": "Calendar Event",
-                "body": event.summary.clone(),
-                "priority": "Low",
-            });
-
-            let task = Task {
-                title: format!("Tell everyone {}", event.summary.clone()),
-                payload: Payload::Json(payload),
-                qos: QoS::ExactlyOnce,
-                retain: false,
-                topics: ["ha/event/message/everyone".to_string()].to_vec(),
-            };
-
-            let sequence = Sequence {
-                title: event.summary.clone(),
-                id: event.uid,
-                importance: Importance::Important,
-                sequence_name: event.summary,
-                required_time: start,
-                latest_time: stop,
-                required_duration: duration,
-                tasks: vec![task],
-                mark: None,
-                if_cond: None,
-                classifications: None,
-                options: None,
-                zero_time: true,
-                repeat_number: 1,
-            };
-
-            sequences.push(sequence);
+            if let Some(sequence) = (*self.calendar_to_sequence)(event) {
+                sequences.push(sequence);
+            }
         }
 
         sequences
@@ -329,8 +294,9 @@ pub fn executor(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     extra_config: ExtraConfig,
+    calendar_to_sequence: Box<CalendarToSequence>,
 ) -> Result<(), ExecutorError> {
-    let mut state = get_initial_state(mqtt, extra_config)?;
+    let mut state = get_initial_state(mqtt, extra_config, calendar_to_sequence)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
     spawn(async move {
@@ -392,6 +358,7 @@ pub fn executor(
 fn get_initial_state(
     mqtt: MqttTx,
     extra_config: ExtraConfig,
+    calendar_to_sequence: Box<CalendarToSequence>,
 ) -> Result<State<Local>, ExecutorError> {
     let timezone = Local;
     let now = Utc::now();
@@ -411,6 +378,7 @@ fn get_initial_state(
                 hostname,
                 extra_config,
                 timezone,
+                calendar_to_sequence: Box::new(calendar_to_sequence),
             }
         };
 
