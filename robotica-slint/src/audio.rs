@@ -18,11 +18,12 @@ use robotica_backend::{
 use robotica_common::{
     mqtt::{Json, MqttMessage, QoS},
     robotica::{
-        audio::{AudioCommand, State, Message},
+        audio::{AudioCommand, Message, State},
         commands::Command,
+        lights::LightCommand,
         switch::DevicePower,
-        tasks::{Task, Payload},
-        tasks::SubTask, lights::LightCommand
+        tasks::SubTask,
+        tasks::{Payload, Task},
     },
 };
 use serde::Deserialize;
