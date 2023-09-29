@@ -8,21 +8,25 @@ use robotica_common::mqtt::MqttSerializer;
 use robotica_common::mqtt::QoS;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
-use robotica_common::robotica::message::MessageAudience;
 use tracing::error;
 use tracing::info;
 
+use crate::audience;
+
 pub fn message_topic(msg: &Message) -> String {
-    match msg.audience {
-        MessageAudience::Everyone => "ha/event/message/everyone".into(),
-        MessageAudience::Brian { private } => {
-            if private {
-                "ha/event/message/brian/private".into()
-            } else {
-                "ha/event/message/brian".into()
-            }
-        }
-        MessageAudience::Twins => "ha/event/message/twins".into(),
+    let audience = msg.audience.as_str();
+
+    if audience == audience::everyone() {
+        "ha/event/message/everyone".into()
+    } else if audience == audience::brian(true) {
+        "ha/event/message/brian/private".into()
+    } else if audience == audience::brian(false) {
+        "ha/event/message/brian".into()
+    } else if audience == audience::twins() {
+        "ha/event/message/twins".into()
+    } else {
+        error!("Unknown audience: {}", msg.audience);
+        "ha/event/message/unknown".into()
     }
 }
 
@@ -67,7 +71,7 @@ mod tests {
             title: "Title".to_string(),
             body: "Body".to_string(),
             priority: MessagePriority::Low,
-            audience: MessageAudience::Everyone,
+            audience: audience::everyone().to_string(),
             flash_lights: false,
         };
         let json = json!({

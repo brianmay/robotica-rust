@@ -1,4 +1,5 @@
 use crate::amber::{PriceCategory, PriceSummary};
+use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
@@ -6,7 +7,7 @@ use robotica_backend::services::persistent_state;
 use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
-use robotica_common::robotica::message::{Message, MessageAudience};
+use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -23,16 +24,11 @@ use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 use super::State;
 
 fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
-    Message::new("Tesla", message.into(), priority, MessageAudience::Everyone)
+    Message::new("Tesla", message.into(), priority, audience::everyone())
 }
 
 fn new_private_message(message: impl Into<String>, priority: MessagePriority) -> Message {
-    Message::new(
-        "Tesla",
-        message.into(),
-        priority,
-        MessageAudience::Brian { private: true },
-    )
+    Message::new("Tesla", message.into(), priority, audience::brian(true))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

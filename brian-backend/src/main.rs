@@ -7,6 +7,7 @@
 #![deny(clippy::expect_used)]
 
 mod amber;
+pub(crate) mod audience;
 mod config;
 mod delays;
 mod environment_monitor;
