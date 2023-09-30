@@ -11,28 +11,9 @@ use robotica_common::robotica::message::Message;
 use tracing::error;
 use tracing::info;
 
-use crate::audience;
-
-pub fn message_topic(msg: &Message) -> String {
-    let audience = msg.audience.as_str();
-
-    if audience == audience::everyone() {
-        "ha/event/message/everyone".into()
-    } else if audience == audience::brian(true) {
-        "ha/event/message/brian/private".into()
-    } else if audience == audience::brian(false) {
-        "ha/event/message/brian".into()
-    } else if audience == audience::twins() {
-        "ha/event/message/twins".into()
-    } else {
-        error!("Unknown audience: {}", msg.audience);
-        "ha/event/message/unknown".into()
-    }
-}
-
 #[allow(dead_code)]
 fn string_to_message(msg: Message) -> Option<MqttMessage> {
-    let topic = message_topic(&msg);
+    let topic = "ha/event/message".to_string();
     let command = Command::Message(msg);
     Json(command)
         .serialize(topic, false, QoS::ExactlyOnce)
@@ -60,6 +41,8 @@ pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<Message> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
+
+    use crate::audience;
 
     use super::*;
     use robotica_common::robotica::audio::MessagePriority;

@@ -12,6 +12,7 @@ pub const fn brian(private: bool) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub const fn twins() -> &'static str {
     "twins"
 }
