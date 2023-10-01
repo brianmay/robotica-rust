@@ -98,7 +98,7 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         payload: Payload::Json(payload),
         qos: QoS::ExactlyOnce,
         retain: false,
-        topics: ["ha/event/message/everyone".to_string()].to_vec(),
+        topics: ["ha/event/message".to_string()].to_vec(),
     };
 
     Some(Sequence {
