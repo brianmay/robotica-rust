@@ -521,7 +521,7 @@ pub fn executor(
                     let sequence = front.and_then(|event| state.sequences.get(event.sequence_index));
                     info!("next event is {:?}", front);
                     info!("next sequence is {:?}", sequence);
-                    info!("next timer is {:?}", state.timer);
+                    info!("next timer is {:?}", state.timer - Instant::now());
                     }
                 },
                 Ok(Json(mark)) = mark_s.recv() => {
