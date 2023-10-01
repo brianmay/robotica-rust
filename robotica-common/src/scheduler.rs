@@ -16,10 +16,12 @@ use crate::{
 /// The status of the Sequence.
 #[derive(Deserialize, Serialize, Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Status {
-    /// The tasks are completed.
-    Done,
-    /// The tasks are not completed.
-    NotDone,
+    /// The task has not started.
+    Pending,
+    /// The task is in progress.
+    InProgress,
+    /// The tasks is completed.
+    Completed,
     /// The tasks are to be cancelled.
     Cancelled,
 }
@@ -28,15 +30,16 @@ impl Status {
     /// Returns true if the status is done.
     #[must_use]
     pub const fn is_done(&self) -> bool {
-        matches!(self, Status::Done)
+        matches!(self, Status::Completed | Status::Cancelled)
     }
 }
 
 impl Display for Status {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Status::Done => write!(f, "Done"),
-            Status::NotDone => write!(f, "Not Done"),
+            Status::Pending => write!(f, "Pending"),
+            Status::InProgress => write!(f, "In Progress"),
+            Status::Completed => write!(f, "Completed"),
             Status::Cancelled => write!(f, "Cancelled"),
         }
     }
