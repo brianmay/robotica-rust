@@ -369,10 +369,9 @@ impl<T: TimeZone> State<T> {
     fn set_events(&mut self) {
         let mut events = Vec::with_capacity(self.sequences.len() * 2);
         for (index, sequence) in self.sequences.iter().enumerate() {
-            if let Some(mark) = self.all_marks.get(sequence) {
-                if mark.status == MarkStatus::Cancelled {
-                    continue;
-                }
+            let status = self.get_status_for_sequence(sequence);
+            if matches!(status, Status::Completed | Status::Cancelled) {
+                continue;
             }
 
             let start = Event {
