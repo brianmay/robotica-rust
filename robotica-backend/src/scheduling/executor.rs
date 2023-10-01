@@ -1,5 +1,5 @@
 //! Run tasks based on schedule.
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env::{self, VarError};
 use std::fmt::Debug;
 
@@ -177,7 +177,7 @@ impl AllStatus {
             .get(&sequence.schedule_date)
             .and_then(|m| m.get(&id))
             .copied()
-            .unwrap_or(Status::NotDone)
+            .unwrap_or(Status::Pending)
     }
 
     // fn is_done(&self, sequence: &Sequence) -> bool {
@@ -200,10 +200,24 @@ impl AllStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum EventType {
+    Start,
+    Stop,
+}
+
+#[derive(Debug, Clone)]
+struct Event {
+    datetime: DateTime<Utc>,
+    sequence_index: usize,
+    event_type: EventType,
+}
+
 struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
     sequences: Vec<Sequence>,
+    events: VecDeque<Event>,
     all_marks: AllMarks,
     config: Config<T>,
     mqtt: MqttTx,
@@ -212,12 +226,7 @@ struct State<T: TimeZone> {
 }
 
 impl<T: TimeZone> State<T> {
-    fn finalize(
-        &mut self,
-        now: &DateTime<Utc>,
-        publish_sequences: bool,
-        next_index: Option<usize>,
-    ) {
+    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if today != self.date {
@@ -234,7 +243,7 @@ impl<T: TimeZone> State<T> {
             self.publish_all_sequences();
         }
 
-        self.timer = self.get_next_timer(now, next_index);
+        self.timer = self.get_next_timer(now);
         self.date = today;
     }
 
@@ -282,7 +291,7 @@ impl<T: TimeZone> State<T> {
             .iter()
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
-            .filter(|sequence| !sequence.is_done())
+            .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
         let topic = format!("schedule/{}/pending", self.config.hostname);
         self.publish_sequences(&pending, topic);
@@ -297,12 +306,12 @@ impl<T: TimeZone> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn get_next_timer(&self, now: &DateTime<Utc>, next_index: Option<usize>) -> Instant {
-        let next = next_index.and_then(|index| self.sequences.get(index));
+    fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
+        let next = self.events.front();
         next.map_or_else(
             || Instant::now() + tokio::time::Duration::from_secs(120),
             |next| {
-                let next = next.required_time;
+                let next = next.datetime;
                 let mut next = next - *now;
                 // We poll at least every two minutes just in case system time changes.
                 if next > chrono::Duration::minutes(1) {
@@ -332,6 +341,7 @@ impl<T: TimeZone> State<T> {
         if let (Some(start), Some(end)) = (start, end) {
             self.all_status.expire(start, end);
         }
+        self.set_events();
     }
 
     fn get_status_for_sequence(&self, sequence: &Sequence) -> Status {
@@ -340,11 +350,12 @@ impl<T: TimeZone> State<T> {
 
         #[allow(clippy::match_same_arms)]
         match (status, mark) {
-            (Status::Done, _) => Status::Done,
+            (Status::Completed, _) => Status::Completed,
+            (Status::InProgress, _) => Status::InProgress,
             (Status::Cancelled, _) => Status::Cancelled,
-            (Status::NotDone, Some(MarkStatus::Done)) => Status::Done,
-            (Status::NotDone, Some(MarkStatus::Cancelled)) => Status::Cancelled,
-            (Status::NotDone, None) => Status::NotDone,
+            (Status::Pending, Some(MarkStatus::Done)) => Status::Completed,
+            (Status::Pending, Some(MarkStatus::Cancelled)) => Status::Cancelled,
+            (Status::Pending, None) => Status::Pending,
         }
     }
 
@@ -353,6 +364,85 @@ impl<T: TimeZone> State<T> {
         sequence.mark = self.all_marks.get(&sequence);
         sequence.status = Some(self.get_status_for_sequence(&sequence));
         sequence
+    }
+
+    fn set_events(&mut self) {
+        let mut events = Vec::with_capacity(self.sequences.len() * 2);
+        for (index, sequence) in self.sequences.iter().enumerate() {
+            if let Some(mark) = self.all_marks.get(sequence) {
+                if mark.status == MarkStatus::Cancelled {
+                    continue;
+                }
+            }
+
+            let start = Event {
+                datetime: sequence.required_time,
+                sequence_index: index,
+                event_type: EventType::Start,
+            };
+            let stop = Event {
+                datetime: sequence.latest_time,
+                sequence_index: index,
+                event_type: EventType::Stop,
+            };
+            events.push(start);
+            events.push(stop);
+        }
+        events.sort_by_key(|event| (event.datetime, event.event_type));
+
+        self.events = VecDeque::from(events);
+    }
+
+    #[must_use]
+    #[allow(clippy::cognitive_complexity)]
+    fn process_event(&mut self, event: &Event, now: DateTime<Utc>) -> bool {
+        match event.event_type {
+            EventType::Start => {
+                let sequence = &self.sequences[event.sequence_index];
+                let status = self.get_status_for_sequence(sequence);
+                if status != Status::Pending {
+                    info!(
+                        "Skipping starting {sequence:?} because status is {status:?}",
+                        sequence = sequence.id,
+                        status = status
+                    );
+                    false
+                } else if now > sequence.latest_time {
+                    info!(
+                        "Skipping starting {sequence:?} because it is too late",
+                        sequence = sequence.id
+                    );
+                    self.all_status.insert(sequence, Status::InProgress);
+                    true
+                } else {
+                    info!("Starting {sequence:?}");
+                    for task in &sequence.tasks {
+                        for message in task.get_mqtt_messages() {
+                            debug!("{now:?}: Sending task {message:?}");
+                            self.mqtt.try_send(message.clone());
+                        }
+                    }
+                    self.all_status.insert(sequence, Status::InProgress);
+                    true
+                }
+            }
+            EventType::Stop => {
+                let sequence = &self.sequences[event.sequence_index];
+                let status = self.get_status_for_sequence(sequence);
+                if status == Status::InProgress {
+                    info!("Stopping {sequence:?}", sequence = sequence.id);
+                    self.all_status.insert(sequence, Status::Completed);
+                    true
+                } else {
+                    info!(
+                        "Skipping stopping {sequence:?} because status is {status:?}",
+                        sequence = sequence.id,
+                        status = status
+                    );
+                    false
+                }
+            }
+        }
     }
 }
 
@@ -402,40 +492,38 @@ pub fn executor(
                 _ = tokio::time::sleep_until(state.timer) => {
                     debug!("Timer expired");
                     let mut publish_sequences = false;
-                    let mut next_index = None;
 
-                    for (index, sequence) in state.sequences.iter().enumerate() {
+                    loop {
                         let now = utc_now();
-                        let mut status = state.get_status_for_sequence(sequence);
 
-                        if status.is_done() {
-                            // Already done, skip.
-                        } else if now < sequence.required_time {
-                            // Too early, wait for next timer.
-                            debug!("Too early for {sequence:?}");
-                            next_index = Some(index);
-                            break;
-                        } else if now < sequence.latest_time {
-                            // Send message.
-                            info!("Processing step {sequence:?}");
-                            for task in &sequence.tasks {
-                                for message in task.get_mqtt_messages() {
-                                    debug!("{now:?}: Sending task {message:?}");
-                                    state.mqtt.try_send(message.clone());
+                        if let Some(next_event) = state.events.front() {
+                            if now > next_event.datetime {
+                                // Note: this should never fail. But we need to do this
+                                // to take ownership of the event.
+                                if let Some(next_event) = state.events.pop_front() {
+                                    if state.process_event(&next_event, now) {
+                                        publish_sequences = true;
+                                    }
                                 }
+                            } else {
+                                break;
                             }
-                            status = Status::Done;
                         } else {
-                            // Too late, drop event.
-                            debug!("Too late for {sequence:?}");
-                            status = Status::Done;
+                            break;
                         }
-                        state.all_status.insert(sequence, status);
-                        publish_sequences = true;
                     }
 
+
                     let now = utc_now();
-                    state.finalize(&now, publish_sequences, next_index);
+                    state.finalize(&now, publish_sequences);
+
+                    {
+                    let front = state.events.front();
+                    let sequence = front.and_then(|event| state.sequences.get(event.sequence_index));
+                    info!("next event is {:?}", front);
+                    info!("next sequence is {:?}", sequence);
+                    info!("next timer is {:?}", state.timer);
+                    }
                 },
                 Ok(Json(mark)) = mark_s.recv() => {
                     state.all_marks.insert(mark);
@@ -480,6 +568,7 @@ fn get_initial_state(
             date,
             timer,
             sequences: Vec::new(),
+            events: VecDeque::new(),
             config,
             mqtt,
             all_status: AllStatus::new(),
