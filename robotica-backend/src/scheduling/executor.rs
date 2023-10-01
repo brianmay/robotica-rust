@@ -327,24 +327,24 @@ impl<T: TimeZone> State<T> {
             .sequences
             .first()
             .map(|sequence| sequence.schedule_date);
-        let end = self.sequences.last().map(|sequence| sequence.schedule_date);
 
+        let end = self.sequences.last().map(|sequence| sequence.schedule_date);
         if let (Some(start), Some(end)) = (start, end) {
             self.all_status.expire(start, end);
         }
     }
 
     fn get_status_for_sequence(&self, sequence: &Sequence) -> Status {
-        match self.all_marks.get(sequence) {
-            Some(Mark {
-                status: MarkStatus::Done,
-                ..
-            }) => Status::Done,
-            Some(Mark {
-                status: MarkStatus::Cancelled,
-                ..
-            }) => Status::Cancelled,
-            None => self.all_status.get(sequence),
+        let status = self.all_status.get(sequence);
+        let mark = self.all_marks.get(sequence).map(|m| m.status);
+
+        #[allow(clippy::match_same_arms)]
+        match (status, mark) {
+            (Status::Done, _) => Status::Done,
+            (Status::Cancelled, _) => Status::Cancelled,
+            (Status::NotDone, Some(MarkStatus::Done)) => Status::Done,
+            (Status::NotDone, Some(MarkStatus::Cancelled)) => Status::Cancelled,
+            (Status::NotDone, None) => Status::NotDone,
         }
     }
 
