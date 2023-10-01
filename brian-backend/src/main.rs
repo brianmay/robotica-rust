@@ -104,6 +104,7 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
     Some(Sequence {
         title: event.summary.clone(),
         id: event.uid,
+        schedule_date: start.date_naive(),
         importance: Importance::Important,
         sequence_name: event.summary,
         required_time: start,
@@ -116,6 +117,7 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         options: None,
         zero_time: true,
         repeat_number: 1,
+        status: None,
     })
 }
 

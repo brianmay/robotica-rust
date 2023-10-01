@@ -4,7 +4,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -12,6 +12,35 @@ use crate::{
     datetime::{DateTime, Duration},
     robotica::tasks::Task,
 };
+
+/// The status of the Sequence.
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Status {
+    /// The tasks are completed.
+    Done,
+    /// The tasks are not completed.
+    NotDone,
+    /// The tasks are to be cancelled.
+    Cancelled,
+}
+
+impl Status {
+    /// Returns true if the status is done.
+    #[must_use]
+    pub const fn is_done(&self) -> bool {
+        matches!(self, Status::Done)
+    }
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Done => write!(f, "Done"),
+            Status::NotDone => write!(f, "Not Done"),
+            Status::Cancelled => write!(f, "Cancelled"),
+        }
+    }
+}
 
 /// The status of the Mark.
 #[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
@@ -23,6 +52,15 @@ pub enum MarkStatus {
     /// The tasks are already done.
     #[serde(rename = "done")]
     Done,
+}
+
+impl Display for MarkStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarkStatus::Cancelled => write!(f, "Cancelled"),
+            MarkStatus::Done => write!(f, "Done"),
+        }
+    }
 }
 
 /// A mark on a step.
@@ -39,6 +77,16 @@ pub struct Mark {
 
     /// The end time of the Mark.
     pub stop_time: DateTime<Utc>,
+}
+
+impl Display for Mark {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Mark {} {} valid {} to {}",
+            self.id, self.status, self.start_time, self.stop_time
+        )
+    }
 }
 
 /// An error that can occur when parsing a mark.
@@ -85,6 +133,9 @@ pub struct Sequence {
     /// The id of the sequence.
     pub id: String,
 
+    /// The source schedule date of the sequence.
+    pub schedule_date: NaiveDate,
+
     /// The importance of the sequence.
     pub importance: Importance,
 
@@ -124,8 +175,19 @@ pub struct Sequence {
     /// The tasks to execute.
     pub tasks: Vec<Task>,
 
+    /// The status for this task - for use by executor.
+    pub status: Option<Status>,
+
     /// The mark for this task - for use by executor.
     pub mark: Option<Mark>,
+}
+
+impl Sequence {
+    /// Returns true if the sequence is done.
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        self.status.map_or(false, |status| status.is_done())
+    }
 }
 
 // impl Ord for Sequence {

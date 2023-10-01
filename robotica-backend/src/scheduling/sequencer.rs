@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
@@ -13,7 +13,7 @@ use robotica_common::{
     datetime::{DateTime, Duration},
     mqtt::QoS,
     robotica::tasks::{Payload, Task},
-    scheduler::{Importance, Mark},
+    scheduler::{Importance, Mark, Status},
 };
 
 use crate::{get_env_os, EnvironmentOsError};
@@ -116,6 +116,9 @@ pub struct Sequence {
     /// The id of the sequence.
     pub id: String,
 
+    /// The source schedule date of the sequence.
+    pub schedule_date: NaiveDate,
+
     /// The importance of the sequence.
     pub importance: Importance,
 
@@ -155,6 +158,9 @@ pub struct Sequence {
     /// The tasks to execute.
     pub tasks: Vec<Task>,
 
+    /// The status for this task - for use by executor.
+    pub status: Option<Status>,
+
     /// The mark for this task - for use by executor.
     pub mark: Option<Mark>,
 }
@@ -164,6 +170,12 @@ impl Sequence {
     #[must_use]
     pub fn cmp_required_time(&self, other: &Self) -> std::cmp::Ordering {
         self.required_time.cmp(&other.required_time)
+    }
+
+    /// Returns true if the sequence is done.
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        self.status.map_or(false, |status| status.is_done())
     }
 }
 
@@ -302,6 +314,7 @@ fn config_to_sequence(
     config: Config,
     start_time: &DateTime<Utc>,
     id: String,
+    schedule_date: NaiveDate,
     repeat_number: usize,
 ) -> Sequence {
     let tasks = config
@@ -324,6 +337,7 @@ fn config_to_sequence(
     Sequence {
         title: config.title,
         id,
+        schedule_date,
         importance: config.importance,
         sequence_name: sequence_name.to_string(),
         if_cond: config.if_cond,
@@ -336,6 +350,7 @@ fn config_to_sequence(
         repeat_number,
         tasks,
         mark: None,
+        status: None,
     }
 }
 
@@ -347,6 +362,7 @@ fn config_to_sequence(
 #[allow(clippy::implicit_hasher)]
 pub fn get_sequence_with_config(
     config: &ConfigMap,
+    schedule_date: NaiveDate,
     sequence_name: &str,
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
@@ -385,6 +401,7 @@ pub fn get_sequence_with_config(
             expanded.config.clone(),
             &start_time,
             id,
+            schedule_date,
             expanded.repeat_number,
         );
         sequences.push(sequence);
@@ -457,6 +474,7 @@ fn expand_config((n, config): (usize, &Config)) -> Vec<ExpandedConfig> {
 #[allow(clippy::implicit_hasher)]
 pub fn schedule_list_to_sequence(
     config_map: &ConfigMap,
+    schedule_date: NaiveDate,
     schedule_list: &Vec<scheduler::Schedule>,
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
@@ -466,6 +484,7 @@ pub fn schedule_list_to_sequence(
     for schedule in schedule_list {
         let mut sequence = get_sequence_with_config(
             config_map,
+            schedule_date,
             &schedule.sequence_name,
             today,
             tomorrow,
@@ -562,6 +581,7 @@ mod tests {
         let config_map = ConfigMap::from([("test".to_string(), config)]);
         let sequence = get_sequence_with_config(
             &config_map,
+            NaiveDate::from_ymd_opt(2020, 12, 25).unwrap(),
             "test",
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
@@ -1006,6 +1026,7 @@ mod tests {
         let config_map = ConfigMap::from([("test".to_string(), config)]);
         let sequence = get_sequence_with_config(
             &config_map,
+            NaiveDate::from_ymd_opt(2020, 12, 25).unwrap(),
             "test",
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
@@ -1064,6 +1085,7 @@ mod tests {
         let config_map = ConfigMap::from([("test".to_string(), config)]);
         let sequence = get_sequence_with_config(
             &config_map,
+            NaiveDate::from_ymd_opt(2020, 12, 25).unwrap(),
             "test",
             &HashSet::from(["christmas".to_string()]),
             &HashSet::new(),
@@ -1202,9 +1224,14 @@ mod tests {
             ("test".to_string(), config_test),
             ("christmas".to_string(), config_christmas),
         ]);
-        let sequence =
-            schedule_list_to_sequence(&config_map, &schedule, &HashSet::new(), &HashSet::new())
-                .unwrap();
+        let sequence = schedule_list_to_sequence(
+            &config_map,
+            NaiveDate::from_ymd_opt(2020, 12, 25).unwrap(),
+            &schedule,
+            &HashSet::new(),
+            &HashSet::new(),
+        )
+        .unwrap();
 
         assert_eq!(sequence.len(), 4);
         assert_eq!(

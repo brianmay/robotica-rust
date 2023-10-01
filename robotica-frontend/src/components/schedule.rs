@@ -159,7 +159,7 @@ fn task_to_html(
     on_click: &Callback<String>,
     on_close: &Callback<()>,
 ) -> Html {
-    let date = sequence.required_time.date_naive();
+    let date = sequence.schedule_date;
     let seq_id = &sequence.id;
     let repeat_number = sequence.repeat_number;
     let id = format!("{date}-{seq_id}-{i}-{repeat_number}");
@@ -220,6 +220,8 @@ fn json_to_html(json: &Value) -> Html {
     }
 }
 
+// FIXME too many lines
+#[allow(clippy::too_many_lines)]
 fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) -> Html {
     use robotica_common::robotica::tasks::Payload;
 
@@ -250,12 +252,28 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h1 class="modal-title fs-5" id="exampleModalLabel">{"Details"}</h1>
+                            <h1 class="modal-title fs-5" id="exampleModalLabel">{&sequence.id}</h1>
                             <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
                         </div>
                         <div class="modal-body">
                         <table class="table">
                         <tbody>
+                            { if let Some(status) = &sequence.status {
+                                html! {
+                                    <tr>
+                                        <th scope="row">{"Status"}</th>
+                                        <td>{status.to_string()}</td>
+                                    </tr>
+                                }
+                            } else { html! {} } }
+                            { if let Some(mark) = &sequence.mark {
+                                html! {
+                                    <tr>
+                                        <th scope="row">{"Marks"}</th>
+                                        <td>{mark.to_string()}</td>
+                                    </tr>
+                                }
+                            } else { html! {} } }
                             <tr>
                                 <th scope="row">{"Required Time"}</th>
                                 <td>{datetime_to_string(&sequence.required_time)}</td>
@@ -267,6 +285,10 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             <tr>
                                 <th scope="row">{"Latest Time"}</th>
                                 <td>{datetime_to_string(&sequence.latest_time)}</td>
+                            </tr>
+                            <tr>
+                                <th scope="row">{"Schedule Date"}</th>
+                                <td>{sequence.schedule_date.to_string()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Repeat Number"}</th>

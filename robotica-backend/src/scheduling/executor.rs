@@ -1,18 +1,17 @@
 //! Run tasks based on schedule.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env::{self, VarError};
 use std::fmt::Debug;
 
-use chrono::{Local, TimeZone, Utc};
+use chrono::{Local, NaiveDate, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS};
-use serde::Serialize;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
-use robotica_common::scheduler::{Importance, Mark};
+use robotica_common::scheduler::{Importance, Mark, MarkStatus, Status, Tags};
 
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
@@ -77,12 +76,17 @@ impl<T: TimeZone> Config<T> {
             Vec::new()
         });
 
-        let s =
-            sequencer::schedule_list_to_sequence(&self.sequencer, &schedule, &c_date, &c_tomorrow)
-                .unwrap_or_else(|e| {
-                    error!("Error getting sequences for {date}: {e}");
-                    Vec::new()
-                });
+        let s = sequencer::schedule_list_to_sequence(
+            &self.sequencer,
+            date,
+            &schedule,
+            &c_date,
+            &c_tomorrow,
+        )
+        .unwrap_or_else(|e| {
+            error!("Error getting sequences for {date}: {e}");
+            Vec::new()
+        });
 
         let calendar = self.load_calendar(date, date + Duration::days(1));
         let mut sequences = Vec::with_capacity(s.len() + calendar.len());
@@ -115,38 +119,95 @@ impl<T: TimeZone> Config<T> {
     }
 }
 
-fn set_all_marks(sequences: &mut [Sequence], marks: &HashMap<String, Mark>) {
-    for sequence in &mut *sequences {
-        let mark = if let Some(mark) = marks.get(&sequence.id) {
+// fn set_all_marks(sequences: &mut [Sequence], marks: &HashMap<String, Mark>) {
+//     for sequence in &mut *sequences {
+//         let mark = get_mark_for_sequence(marks, sequence);
+//         sequence.mark = mark;
+//     }
+// }
+
+// #[derive(Debug, Serialize)]
+// struct Tags {
+//     yesterday: HashSet<String>,
+//     today: HashSet<String>,
+//     tomorrow: HashSet<String>,
+// }
+
+struct AllMarks(HashMap<String, Mark>);
+
+impl AllMarks {
+    fn new() -> Self {
+        AllMarks(HashMap::new())
+    }
+
+    fn get(&self, sequence: &Sequence) -> Option<Mark> {
+        self.0.get(&sequence.id).and_then(|mark| {
             if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
             {
                 Some(mark.clone())
             } else {
                 None
             }
-        } else {
-            None
-        };
+        })
+    }
 
-        sequence.mark = mark;
+    // fn is_done(&self, sequence: &Sequence) -> bool {
+    //     self.get(sequence).is_some()
+    // }
+
+    fn insert(&mut self, mark: Mark) {
+        self.0.insert(mark.id.clone(), mark);
+    }
+
+    fn expire(&mut self, now: &DateTime<Utc>) {
+        self.0.retain(|_, mark| mark.stop_time > *now);
     }
 }
 
-#[derive(Debug, Serialize)]
-struct Tags {
-    yesterday: HashSet<String>,
-    today: HashSet<String>,
-    tomorrow: HashSet<String>,
+struct AllStatus(HashMap<Date, HashMap<(String, usize), Status>>);
+
+impl AllStatus {
+    fn new() -> Self {
+        AllStatus(HashMap::new())
+    }
+
+    fn get(&self, sequence: &Sequence) -> Status {
+        let id = (sequence.id.clone(), sequence.repeat_number);
+        self.0
+            .get(&sequence.schedule_date)
+            .and_then(|m| m.get(&id))
+            .copied()
+            .unwrap_or(Status::NotDone)
+    }
+
+    // fn is_done(&self, sequence: &Sequence) -> bool {
+    //     match self.get(sequence) {
+    //         Some(Status::Done) => true,
+    //         Some(Status::NotDone) => false,
+    //         Some(Status::Cancelled) => false,
+    //         None => false,
+    //     }
+    // }
+
+    fn insert(&mut self, sequence: &Sequence, status: Status) {
+        let id = (sequence.id.clone(), sequence.repeat_number);
+        let date = sequence.schedule_date;
+        self.0.entry(date).or_default().insert(id, status);
+    }
+
+    fn expire(&mut self, start: NaiveDate, end: NaiveDate) {
+        self.0.retain(|date, _| *date >= start && *date <= end);
+    }
 }
 
 struct State<T: TimeZone> {
     date: Date,
     timer: Instant,
     sequences: Vec<Sequence>,
-    marks: HashMap<String, Mark>,
+    all_marks: AllMarks,
     config: Config<T>,
     mqtt: MqttTx,
-    done: HashSet<(Date, String)>,
+    all_status: AllStatus,
     calendar_refresh_time: DateTime<Utc>,
 }
 
@@ -162,15 +223,15 @@ impl<T: TimeZone> State<T> {
         if today != self.date {
             self.set_tags();
             self.set_sequences_all();
-            self.done = HashSet::new();
             self.calendar_refresh_time = *now;
-            self.publish_pending_sequences();
+            self.publish_all_sequences();
+            self.all_marks.expire(now);
         } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
             self.calendar_refresh_time = *now;
             self.set_sequences_all();
-            self.publish_pending_sequences();
+            self.publish_all_sequences();
         } else if publish_sequences {
-            self.publish_pending_sequences();
+            self.publish_all_sequences();
         }
 
         self.timer = self.get_next_timer(now, next_index);
@@ -188,25 +249,40 @@ impl<T: TimeZone> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn publish_all_sequences(&self, sequences: &[Sequence]) {
-        let topic = format!("schedule/{}/all", self.config.hostname);
-        self.publish_sequences(sequences, topic);
+    fn publish_all_sequences(&self) {
+        self.publish_sequences_all(&self.sequences);
+        self.publish_sequences_important(&self.sequences);
+        self.publish_sequences_pending(&self.sequences);
+    }
 
+    fn publish_sequences_all(&self, sequences: &[Sequence]) {
+        let sequences: Vec<Sequence> = sequences
+            .iter()
+            .cloned()
+            .map(|sequence| self.fill_sequence(sequence))
+            .collect();
+
+        let topic = format!("schedule/{}/all", self.config.hostname);
+        self.publish_sequences(&sequences, topic);
+    }
+
+    fn publish_sequences_important(&self, sequences: &[Sequence]) {
         let important: Vec<Sequence> = sequences
             .iter()
             .filter(|sequence| matches!(sequence.importance, Importance::Important))
             .cloned()
+            .map(|sequence| self.fill_sequence(sequence))
             .collect();
         let topic = format!("schedule/{}/important", self.config.hostname);
         self.publish_sequences(&important, topic);
     }
 
-    fn publish_pending_sequences(&self) {
-        let pending: Vec<Sequence> = self
-            .sequences
+    fn publish_sequences_pending(&self, sequences: &[Sequence]) {
+        let pending: Vec<Sequence> = sequences
             .iter()
-            .filter(|sequence| !is_done(sequence, &self.done))
             .cloned()
+            .map(|sequence| self.fill_sequence(sequence))
+            .filter(|sequence| !sequence.is_done())
             .collect();
         let topic = format!("schedule/{}/pending", self.config.hostname);
         self.publish_sequences(&pending, topic);
@@ -247,18 +323,37 @@ impl<T: TimeZone> State<T> {
     fn set_sequences_all(&mut self) {
         let today = self.date;
         self.sequences = self.config.get_sequences_all(today);
-        self.publish_all_sequences(&self.sequences);
-        set_all_marks(&mut self.sequences, &self.marks);
+        let start = self
+            .sequences
+            .first()
+            .map(|sequence| sequence.schedule_date);
+        let end = self.sequences.last().map(|sequence| sequence.schedule_date);
+
+        if let (Some(start), Some(end)) = (start, end) {
+            self.all_status.expire(start, end);
+        }
     }
-}
 
-fn expire_marks(marks: &mut HashMap<String, Mark>, now: &DateTime<Utc>) {
-    marks.retain(|_, mark| mark.stop_time > *now);
-}
+    fn get_status_for_sequence(&self, sequence: &Sequence) -> Status {
+        match self.all_marks.get(sequence) {
+            Some(Mark {
+                status: MarkStatus::Done,
+                ..
+            }) => Status::Done,
+            Some(Mark {
+                status: MarkStatus::Cancelled,
+                ..
+            }) => Status::Cancelled,
+            None => self.all_status.get(sequence),
+        }
+    }
 
-fn is_done(sequence: &Sequence, done: &HashSet<(Date, String)>) -> bool {
-    let sequence_date = sequence.required_time.date_naive();
-    done.contains(&(sequence_date, sequence.id.clone()))
+    fn fill_sequence(&self, sequence: Sequence) -> Sequence {
+        let mut sequence = sequence;
+        sequence.mark = self.all_marks.get(&sequence);
+        sequence.status = Some(self.get_status_for_sequence(&sequence));
+        sequence
+    }
 }
 
 /// An error occurred in the executor.
@@ -311,17 +406,15 @@ pub fn executor(
 
                     for (index, sequence) in state.sequences.iter().enumerate() {
                         let now = utc_now();
-                        let sequence_date = sequence.required_time.date_naive();
+                        let mut status = state.get_status_for_sequence(sequence);
 
-                        if state.done.contains(&(sequence_date, sequence.id.clone())) {
+                        if status.is_done() {
                             // Already done, skip.
                         } else if now < sequence.required_time {
                             // Too early, wait for next timer.
                             debug!("Too early for {sequence:?}");
                             next_index = Some(index);
                             break;
-                        } else if sequence.mark.is_some() {
-                            debug!("Ignoring step with mark {:?}", sequence.mark);
                         } else if now < sequence.latest_time {
                             // Send message.
                             info!("Processing step {sequence:?}");
@@ -331,22 +424,21 @@ pub fn executor(
                                     state.mqtt.try_send(message.clone());
                                 }
                             }
+                            status = Status::Done;
                         } else {
                             // Too late, drop event.
                             debug!("Too late for {sequence:?}");
+                            status = Status::Done;
                         }
-                        state.done.insert((sequence_date, sequence.id.clone()));
+                        state.all_status.insert(sequence, status);
                         publish_sequences = true;
                     }
 
                     let now = utc_now();
                     state.finalize(&now, publish_sequences, next_index);
-                    expire_marks(&mut state.marks, &now);
                 },
                 Ok(Json(mark)) = mark_s.recv() => {
-                    state.marks.insert(mark.id.clone(), mark);
-                    debug!("Marks: {:?}", state.marks);
-                    set_all_marks(&mut state.sequences, &state.marks);
+                    state.all_marks.insert(mark);
                 },
             }
         }
@@ -383,16 +475,15 @@ fn get_initial_state(
         };
 
         let timer = Instant::now();
-        let marks = HashMap::new();
 
         State {
             date,
             timer,
             sequences: Vec::new(),
-            marks,
             config,
             mqtt,
-            done: HashSet::new(),
+            all_status: AllStatus::new(),
+            all_marks: AllMarks::new(),
             calendar_refresh_time: now,
         }
     };
