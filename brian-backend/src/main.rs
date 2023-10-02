@@ -19,6 +19,7 @@ mod rooms;
 mod tesla;
 
 use anyhow::Result;
+use chrono::Duration;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
@@ -86,8 +87,6 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         StartEnd::DateTime(start, stop) => (start, stop),
     };
 
-    let duration = end_time - start_time;
-
     let payload = Message::new(
         "Calendar Event",
         &event.summary,
@@ -107,14 +106,12 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
     Some(Sequence {
         title: event.summary.clone(),
         id: event.uid,
-        schedule_date: start_time.date_naive(),
         importance: Importance::Important,
         sequence_name: event.summary,
         required_time: start_time,
         start_time,
         end_time,
         latest_time: end_time,
-        required_duration: duration,
         tasks: vec![task],
         mark: None,
         if_cond: None,
@@ -123,6 +120,12 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         zero_time: true,
         repeat_number: 1,
         status: None,
+
+        // These fields are set by executor.
+        // It doesn't matter if we get then wrong here.
+        // Insert dummy values for now.
+        schedule_date: chrono::Utc::now().date_naive(),
+        required_duration: Duration::zero(),
     })
 }
 

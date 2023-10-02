@@ -51,7 +51,12 @@ impl<T: TimeZone> Config<T> {
         let mut sequences = Vec::new();
 
         for event in calendar {
-            if let Some(sequence) = (*self.calendar_to_sequence)(event) {
+            if let Some(mut sequence) = (*self.calendar_to_sequence)(event) {
+                sequence.schedule_date = sequence
+                    .start_time
+                    .with_timezone(&self.timezone)
+                    .date_naive();
+                sequence.required_duration = sequence.end_time - sequence.start_time;
                 sequences.push(sequence);
             }
         }
