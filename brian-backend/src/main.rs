@@ -28,6 +28,8 @@ use robotica_backend::scheduling::executor::executor;
 use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
 use robotica_common::mqtt::QoS;
+use robotica_common::robotica::audio::MessagePriority;
+use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
@@ -86,16 +88,16 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
 
     let duration = stop - start;
 
-    let payload = serde_json::json!( {
-        "type": "message",
-        "title": "Calendar Event",
-        "body": event.summary,
-        "priority": "Low",
-    });
+    let payload = Message::new(
+        "Calendar Event",
+        &event.summary,
+        MessagePriority::Low,
+        audience::everyone(),
+    );
 
     let task = Task {
         title: format!("Tell everyone {}", event.summary),
-        payload: Payload::Json(payload),
+        payload: Payload::Command(Command::Message(payload)),
         qos: QoS::ExactlyOnce,
         retain: false,
         topics: ["ha/event/message".to_string()].to_vec(),
