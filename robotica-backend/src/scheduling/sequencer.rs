@@ -166,12 +166,6 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    /// Compare the required time of two sequences.
-    #[must_use]
-    pub fn cmp_required_time(&self, other: &Self) -> std::cmp::Ordering {
-        self.required_time.cmp(&other.required_time)
-    }
-
     /// Returns true if the sequence is done.
     #[must_use]
     pub fn is_done(&self) -> bool {
@@ -495,7 +489,7 @@ pub fn schedule_list_to_sequence(
     }
 
     // Sort the sequences by the required time.
-    sequences.sort_by(Sequence::cmp_required_time);
+    sequences.sort_by_key(|s| s.required_time);
 
     Ok(sequences)
 }

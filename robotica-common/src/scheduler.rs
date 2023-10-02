@@ -193,25 +193,6 @@ impl Sequence {
     }
 }
 
-// impl Ord for Sequence {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         self.required_time.cmp(&other.required_time)
-//     }
-// }
-
-// impl PartialOrd for Sequence {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         self.required_time.partial_cmp(&other.required_time)
-//     }
-// }
-// impl Eq for Sequence {}
-
-// impl PartialEq for Sequence {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.required_time == other.required_time
-//     }
-// }
-
 /// The tags for yesterday, today, and tomorrow.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Tags {

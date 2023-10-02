@@ -114,7 +114,7 @@ impl<T: TimeZone> Config<T> {
             })
             .collect();
 
-        sequences.sort_by(Sequence::cmp_required_time);
+        sequences.sort_by_key(|sequence| sequence.required_time);
         sequences
     }
 }
@@ -387,7 +387,7 @@ impl<T: TimeZone> State<T> {
             events.push(start);
             events.push(stop);
         }
-        events.sort_by_key(|event| (event.datetime, event.event_type));
+        events.sort_by_key(|event| (event.datetime, event.sequence_index, event.event_type));
 
         self.events = VecDeque::from(events);
     }
