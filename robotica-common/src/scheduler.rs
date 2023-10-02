@@ -79,7 +79,7 @@ pub struct Mark {
     pub start_time: DateTime<Utc>,
 
     /// The end time of the Mark.
-    pub stop_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
 }
 
 impl Display for Mark {
@@ -87,7 +87,7 @@ impl Display for Mark {
         write!(
             f,
             "Mark {} {} valid {} to {}",
-            self.id, self.status, self.start_time, self.stop_time
+            self.id, self.status, self.start_time, self.end_time
         )
     }
 }

@@ -142,8 +142,7 @@ impl AllMarks {
 
     fn get(&self, sequence: &Sequence) -> Option<Mark> {
         self.0.get(&sequence.id).and_then(|mark| {
-            // FIXME: check this logic
-            if sequence.end_time >= mark.start_time && sequence.end_time < mark.stop_time
+            if mark.start_time <= sequence.start_time && sequence.end_time < mark.end_time
             {
                 Some(mark.clone())
             } else {
@@ -157,7 +156,7 @@ impl AllMarks {
     }
 
     fn expire(&mut self, now: &DateTime<Utc>) {
-        self.0.retain(|_, mark| mark.stop_time > *now);
+        self.0.retain(|_, mark| mark.end_time > *now);
     }
 }
 
