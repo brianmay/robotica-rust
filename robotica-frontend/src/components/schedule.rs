@@ -120,6 +120,12 @@ fn sequence_to_html(
         robotica_common::scheduler::Importance::NotImportant => "not_important",
         robotica_common::scheduler::Importance::Important => "important",
     };
+    let status_class = match sequence.status {
+        Some(robotica_common::scheduler::Status::Pending) | None => "pending",
+        Some(robotica_common::scheduler::Status::InProgress) => "in_progress",
+        Some(robotica_common::scheduler::Status::Completed) => "completed",
+        Some(robotica_common::scheduler::Status::Cancelled) => "cancelled",
+    };
     let mark_class = match sequence.mark {
         Some(Mark {
             status: MarkStatus::Cancelled,
@@ -132,13 +138,17 @@ fn sequence_to_html(
         None => None,
     };
 
-    let local = sequence.required_time.with_timezone(&Local);
-    let time = local.format("%H:%M:%S").to_string();
+    let start_local = sequence.required_time.with_timezone(&Local);
+    let start_str = start_local.format("%H:%M:%S").to_string();
 
-    let classes = classes!("sequence", importance_class, mark_class);
+    let end_time = start_local + sequence.required_duration;
+    let end_local = end_time.with_timezone(&Local);
+    let end_str = end_local.format("%H:%M:%S").to_string();
+
+    let classes = classes!("sequence", importance_class, status_class, mark_class);
     html! {
         <div class={classes} id={sequence.id.clone()}>
-            <div>{time}</div>
+            <div>{start_str}{" - "}{end_str}</div>
             <div>
                 <div class="title">{&sequence.title}</div>
                 {

@@ -49,7 +49,7 @@ use robotica_backend::{
 };
 use robotica_common::{
     config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon},
-    scheduler::Importance,
+    scheduler::{Importance, Status},
 };
 use robotica_common::{
     controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
@@ -371,11 +371,18 @@ fn sequences_to_slint<'a>(
 
             let local = s.required_time.with_timezone(&Local);
             let time = local.format("%H:%M:%S").to_string();
+            let status = match s.status {
+                Some(Status::Pending) | None => 0,
+                Some(Status::InProgress) => 1,
+                Some(Status::Completed) => 2,
+                Some(Status::Cancelled) => 3,
+            };
 
             slint::SequenceData {
                 time: time.into(),
                 title: s.title.clone().into(),
                 important: matches!(s.importance, Importance::Important),
+                status: status,
                 tasks: c,
             }
         })

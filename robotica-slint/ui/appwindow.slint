@@ -42,6 +42,7 @@ struct SequenceData {
     time: string,
     title: string,
     important: bool,
+    status: int,
     tasks: [string],
 }
 
@@ -264,6 +265,8 @@ component Schedule inherits ScrollView {
                 tasks: open ? entry.tasks :  [];
                 height: open ? 30px + 20px * entry.tasks.length : 30px;
                 background: entry.important ? green : grey;
+                border-width: 2px;
+                border-color: entry.status == 0 ? white : entry.status == 1 ? green : entry.status == 3 ? black : red;
 
                 Text {
                     x: 10px;

@@ -39,7 +39,7 @@ footer {
 
     .sequence {
         @extend .row;
-        @extend .border-top;
+        margin-top: 2px;
 
         &>:nth-child(1) {
             @extend .col-sm-2;
@@ -67,6 +67,7 @@ footer {
             margin-left: -10px;
         }
     }
+    border: 2px;
 }
 
 .sequence.not_important {
@@ -89,6 +90,23 @@ footer {
 }
 }
 
+.sequence.pending {
+    border: solid black;
+}
+
+.sequence.in_progress {
+    border: solid green;
+}
+
+.sequence.completed {
+    border: solid white;
+    color: lightgray;
+}
+
+.sequence.cancelled {
+    border: solid black;
+    color: lightgray;
+}
 
 .tags {
     @extend .d-flex;

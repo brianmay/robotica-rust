@@ -217,7 +217,7 @@ pub fn run_client(
     mqtt_options.set_keep_alive(Duration::from_secs(30));
     mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
     mqtt_options.set_credentials(username, password);
-    mqtt_options.set_max_packet_size(100 * 1024, 100 * 10 * 1024);
+    mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
     let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
