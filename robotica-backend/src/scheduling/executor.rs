@@ -376,7 +376,7 @@ impl<T: TimeZone> State<T> {
                 event_type: EventType::Start,
             };
             let stop = Event {
-                datetime: sequence.start_time + sequence.required_duration,
+                datetime: sequence.end_time,
                 sequence_index: index,
                 event_type: EventType::Stop,
             };

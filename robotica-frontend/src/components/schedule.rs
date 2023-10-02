@@ -141,8 +141,7 @@ fn sequence_to_html(
     let start_local = sequence.start_time.with_timezone(&Local);
     let start_str = start_local.format("%H:%M:%S").to_string();
 
-    let end_time = start_local + sequence.required_duration;
-    let end_local = end_time.with_timezone(&Local);
+    let end_local = sequence.end_time.with_timezone(&Local);
     let end_str = end_local.format("%H:%M:%S").to_string();
 
     let classes = classes!("sequence", importance_class, status_class, mark_class);
