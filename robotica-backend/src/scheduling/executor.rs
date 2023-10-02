@@ -119,7 +119,7 @@ impl<T: TimeZone> Config<T> {
             })
             .collect();
 
-        sequences.sort_by_key(|sequence| sequence.end_time);
+        sequences.sort_by_key(|s| (s.start_time, s.end_time));
         sequences
     }
 }
