@@ -124,20 +124,6 @@ impl<T: TimeZone> Config<T> {
     }
 }
 
-// fn set_all_marks(sequences: &mut [Sequence], marks: &HashMap<String, Mark>) {
-//     for sequence in &mut *sequences {
-//         let mark = get_mark_for_sequence(marks, sequence);
-//         sequence.mark = mark;
-//     }
-// }
-
-// #[derive(Debug, Serialize)]
-// struct Tags {
-//     yesterday: HashSet<String>,
-//     today: HashSet<String>,
-//     tomorrow: HashSet<String>,
-// }
-
 struct AllMarks(HashMap<String, Mark>);
 
 impl AllMarks {
@@ -179,15 +165,6 @@ impl AllStatus {
             .copied()
             .unwrap_or(Status::Pending)
     }
-
-    // fn is_done(&self, sequence: &Sequence) -> bool {
-    //     match self.get(sequence) {
-    //         Some(Status::Done) => true,
-    //         Some(Status::NotDone) => false,
-    //         Some(Status::Cancelled) => false,
-    //         None => false,
-    //     }
-    // }
 
     fn insert(&mut self, sequence: &Sequence, status: Status) {
         let id = (sequence.id.clone(), sequence.repeat_number);
