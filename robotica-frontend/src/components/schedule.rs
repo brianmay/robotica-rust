@@ -90,7 +90,7 @@ pub fn schedule(props: &Props) -> Html {
 }
 
 fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
-    sequence.required_time.with_timezone(&Local).date_naive()
+    sequence.start_time.with_timezone(&Local).date_naive()
 }
 
 fn sequence_list_to_html<'a>(
@@ -138,7 +138,7 @@ fn sequence_to_html(
         None => None,
     };
 
-    let start_local = sequence.required_time.with_timezone(&Local);
+    let start_local = sequence.start_time.with_timezone(&Local);
     let start_str = start_local.format("%H:%M:%S").to_string();
 
     let end_time = start_local + sequence.required_duration;
@@ -286,7 +286,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             } else { html! {} } }
                             <tr>
                                 <th scope="row">{"Required Time"}</th>
-                                <td>{datetime_to_string(&sequence.required_time)}</td>
+                                <td>{datetime_to_string(&sequence.start_time)}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Required Duration"}</th>

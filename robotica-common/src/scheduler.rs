@@ -163,7 +163,15 @@ pub struct Sequence {
     // zero_time: bool,
 
     /// The start time of this step.
+    #[deprecated(note = "Use start_time instead")]
     pub required_time: DateTime<Utc>,
+
+
+    /// The start time of this step.
+    pub start_time: DateTime<Utc>,
+
+    /// The end time of this step.
+    pub end_time: DateTime<Utc>,
 
     /// The required duration of this step.
     #[serde(with = "crate::datetime::with_duration")]

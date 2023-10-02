@@ -357,7 +357,7 @@ fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
 }
 
 fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
-    sequence.required_time.with_timezone(&Local).date_naive()
+    sequence.start_time.with_timezone(&Local).date_naive()
 }
 
 fn sequences_to_slint<'a>(
@@ -369,7 +369,7 @@ fn sequences_to_slint<'a>(
             let b: VecModel<SharedString> = VecModel::from(tasks);
             let c: ModelRc<SharedString> = ModelRc::new(b);
 
-            let local = s.required_time.with_timezone(&Local);
+            let local = s.start_time.with_timezone(&Local);
             let time = local.format("%H:%M:%S").to_string();
             let status = match s.status {
                 Some(Status::Pending) | None => 0,

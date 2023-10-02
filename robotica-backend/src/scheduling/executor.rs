@@ -114,7 +114,7 @@ impl<T: TimeZone> Config<T> {
             })
             .collect();
 
-        sequences.sort_by_key(|sequence| sequence.required_time);
+        sequences.sort_by_key(|sequence| sequence.end_time);
         sequences
     }
 }
@@ -142,7 +142,8 @@ impl AllMarks {
 
     fn get(&self, sequence: &Sequence) -> Option<Mark> {
         self.0.get(&sequence.id).and_then(|mark| {
-            if sequence.required_time >= mark.start_time && sequence.required_time < mark.stop_time
+            // FIXME: check this logic
+            if sequence.end_time >= mark.start_time && sequence.end_time < mark.stop_time
             {
                 Some(mark.clone())
             } else {
@@ -150,10 +151,6 @@ impl AllMarks {
             }
         })
     }
-
-    // fn is_done(&self, sequence: &Sequence) -> bool {
-    //     self.get(sequence).is_some()
-    // }
 
     fn insert(&mut self, mark: Mark) {
         self.0.insert(mark.id.clone(), mark);
@@ -375,12 +372,12 @@ impl<T: TimeZone> State<T> {
             }
 
             let start = Event {
-                datetime: sequence.required_time,
+                datetime: sequence.start_time,
                 sequence_index: index,
                 event_type: EventType::Start,
             };
             let stop = Event {
-                datetime: sequence.required_time + sequence.required_duration,
+                datetime: sequence.start_time + sequence.required_duration,
                 sequence_index: index,
                 event_type: EventType::Stop,
             };

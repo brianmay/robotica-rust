@@ -143,7 +143,14 @@ pub struct Sequence {
     pub zero_time: bool,
 
     /// The start time of this step.
+    #[deprecated(note = "Use start_time instead")]
     pub required_time: DateTime<Utc>,
+
+    /// The start time of this step.
+    pub start_time: DateTime<Utc>,
+
+    /// The end time of this step.
+    pub end_time: DateTime<Utc>,
 
     /// The required duration of this step.
     #[serde(with = "robotica_common::datetime::with_duration")]
@@ -328,6 +335,7 @@ fn config_to_sequence(
     let default_latest_time = Duration::minutes(1);
     let latest_time = *start_time + config.latest_time.unwrap_or(default_latest_time);
 
+    #[allow(deprecated)]
     Sequence {
         title: config.title,
         id,
@@ -339,6 +347,8 @@ fn config_to_sequence(
         options: config.options,
         zero_time: config.zero_time.unwrap_or(false),
         required_time: *start_time,
+        start_time: *start_time,
+        end_time: *start_time + config.required_time,
         required_duration: config.required_time,
         latest_time,
         repeat_number,
@@ -488,8 +498,8 @@ pub fn schedule_list_to_sequence(
         sequences.append(&mut sequence);
     }
 
-    // Sort the sequences by the required time.
-    sequences.sort_by_key(|s| s.required_time);
+    // Sort the sequences by the start, end time.
+    sequences.sort_by_key(|s| (s.start_time, s.end_time));
 
     Ok(sequences)
 }
@@ -586,7 +596,7 @@ mod tests {
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
-            sequence[0].required_time,
+            sequence[0].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
@@ -598,7 +608,7 @@ mod tests {
         assert_eq!(sequence[0].tasks[0].title, "task 1");
 
         assert_eq!(
-            sequence[1].required_time,
+            sequence[1].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
@@ -1031,7 +1041,7 @@ mod tests {
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
-            sequence[0].required_time,
+            sequence[0].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
@@ -1042,7 +1052,7 @@ mod tests {
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
-            sequence[1].required_time,
+            sequence[1].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
@@ -1090,7 +1100,7 @@ mod tests {
 
         assert_eq!(sequence.len(), 2);
         assert_eq!(
-            sequence[0].required_time,
+            sequence[0].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
@@ -1101,7 +1111,7 @@ mod tests {
         assert_eq!(sequence[0].tasks.len(), 1);
 
         assert_eq!(
-            sequence[1].required_time,
+            sequence[1].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap()
         );
         assert_eq!(
@@ -1229,7 +1239,7 @@ mod tests {
 
         assert_eq!(sequence.len(), 4);
         assert_eq!(
-            sequence[0].required_time,
+            sequence[0].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 0, 0).unwrap()
         );
         assert_eq!(
@@ -1241,7 +1251,7 @@ mod tests {
         assert_eq!(sequence[0].tasks[0].title, "task 1");
 
         assert_eq!(
-            sequence[1].required_time,
+            sequence[1].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap()
         );
         assert_eq!(
@@ -1253,7 +1263,7 @@ mod tests {
         assert_eq!(sequence[1].tasks[0].title, "task 3");
 
         assert_eq!(
-            sequence[2].required_time,
+            sequence[2].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 30, 0).unwrap()
         );
         assert_eq!(
@@ -1265,7 +1275,7 @@ mod tests {
         assert_eq!(sequence[2].tasks[0].title, "task 2");
 
         assert_eq!(
-            sequence[3].required_time,
+            sequence[3].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 40, 0).unwrap()
         );
         assert_eq!(

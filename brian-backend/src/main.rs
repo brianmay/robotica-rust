@@ -81,12 +81,12 @@ pub struct State {
 }
 
 fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
-    let (start, stop) = match event.start_end {
+    let (start_time, end_time) = match event.start_end {
         StartEnd::Date(_, _) => return None,
         StartEnd::DateTime(start, stop) => (start, stop),
     };
 
-    let duration = stop - start;
+    let duration = end_time - start_time;
 
     let payload = Message::new(
         "Calendar Event",
@@ -103,14 +103,17 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         topics: ["ha/event/message".to_string()].to_vec(),
     };
 
+    #[allow(deprecated)]
     Some(Sequence {
         title: event.summary.clone(),
         id: event.uid,
-        schedule_date: start.date_naive(),
+        schedule_date: start_time.date_naive(),
         importance: Importance::Important,
         sequence_name: event.summary,
-        required_time: start,
-        latest_time: stop,
+        required_time: start_time,
+        start_time,
+        end_time,
+        latest_time: end_time,
         required_duration: duration,
         tasks: vec![task],
         mark: None,
