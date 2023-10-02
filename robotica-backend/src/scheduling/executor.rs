@@ -259,9 +259,9 @@ impl<T: TimeZone> State<T> {
     }
 
     fn publish_all_sequences(&self) {
-        self.publish_sequences_all(&self.sequences);
-        self.publish_sequences_important(&self.sequences);
         self.publish_sequences_pending(&self.sequences);
+        self.publish_sequences_important(&self.sequences);
+        self.publish_sequences_all(&self.sequences);
     }
 
     fn publish_sequences_all(&self, sequences: &[Sequence]) {
