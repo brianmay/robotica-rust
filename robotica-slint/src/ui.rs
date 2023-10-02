@@ -382,7 +382,7 @@ fn sequences_to_slint<'a>(
                 time: time.into(),
                 title: s.title.clone().into(),
                 important: matches!(s.importance, Importance::Important),
-                status: status,
+                status,
                 tasks: c,
             }
         })
