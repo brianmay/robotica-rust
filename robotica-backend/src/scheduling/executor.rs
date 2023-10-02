@@ -142,8 +142,7 @@ impl AllMarks {
 
     fn get(&self, sequence: &Sequence) -> Option<Mark> {
         self.0.get(&sequence.id).and_then(|mark| {
-            if mark.start_time <= sequence.start_time && sequence.end_time < mark.end_time
-            {
+            if mark.start_time <= sequence.start_time && sequence.end_time < mark.end_time {
                 Some(mark.clone())
             } else {
                 None

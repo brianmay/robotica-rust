@@ -166,7 +166,6 @@ pub struct Sequence {
     #[deprecated(note = "Use start_time instead")]
     pub required_time: DateTime<Utc>,
 
-
     /// The start time of this step.
     pub start_time: DateTime<Utc>,
 
