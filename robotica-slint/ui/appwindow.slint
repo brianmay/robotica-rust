@@ -265,8 +265,12 @@ component Schedule inherits ScrollView {
                 tasks: open ? entry.tasks :  [];
                 height: open ? 30px + 20px * entry.tasks.length : 30px;
                 background: entry.important ? green : grey;
-                border-width: 2px;
-                border-color: entry.status == 0 ? white : entry.status == 1 ? green : entry.status == 3 ? black : red;
+                // 0 = pending (no border)
+                // 1 = in progress (blue border)
+                // 2 = completed (no border)
+                // 3 = cancelled (red border)
+                border-width: entry.status == 0 ? 0px : entry.status == 1 ? 2px : entry.status == 3 ? 0px : 0px;
+                border-color: entry.status == 0 ? white : entry.status == 1 ? blue : entry.status == 3 ? black : red;
 
                 Text {
                     x: 10px;
