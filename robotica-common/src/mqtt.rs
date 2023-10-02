@@ -73,10 +73,18 @@ pub struct MqttMessage {
     pub qos: QoS,
 }
 
+fn truncate(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        None => s,
+        Some((idx, _)) => &s[..idx],
+    }
+}
+
 impl std::fmt::Debug for MqttMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let payload = String::from_utf8(self.payload.clone())
             .map_or_else(|_| format!("{:?}", self.payload), |payload| payload);
+        let payload = truncate(&payload, 40);
 
         f.debug_struct("MqttMessage")
             .field("topic", &self.topic)
