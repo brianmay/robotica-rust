@@ -84,12 +84,6 @@ footer {
     background-color: lightgreen;
 }
 
-                // 0 = pending (pending)
-                // 1 = in progress (blue)
-                // 2 = completed (black)
-                // 3 = cancelled (red)
-                // background: entry.status == 0 ? pending_color : entry.status == 1 ? blue : entry.status == 2 ? black : red;
-
 .sequence.in_progress {
     background-color: lightblue;
     border: dashed;
