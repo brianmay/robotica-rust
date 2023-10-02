@@ -66,46 +66,42 @@ footer {
         span {
             margin-left: -10px;
         }
+
+        &:hover {
+            background-color: darkgrey;
+            color: white;
+        }
     }
-    border: 2px;
+
+    border: 2px solid black;
 }
 
-.sequence.not_important {
+.sequence.pending.not_important {
     background-color: white;
-
-    .task {
-        &:hover {
-            background-color: lightgray;
-        }
-    }
 }
 
-.sequence.important {
+.sequence.pending.important {
     background-color: lightgreen;
-
-    .task {
-        &:hover {
-            background-color: green;
-        }
-}
 }
 
-.sequence.pending {
-    border: solid black;
-}
+                // 0 = pending (pending)
+                // 1 = in progress (blue)
+                // 2 = completed (black)
+                // 3 = cancelled (red)
+                // background: entry.status == 0 ? pending_color : entry.status == 1 ? blue : entry.status == 2 ? black : red;
 
 .sequence.in_progress {
-    border: dashed black;
+    background-color: lightblue;
+    border: dashed;
 }
 
 .sequence.completed {
-    border: solid white;
-    color: lightgray;
+    background-color: white;
+    border: none;
 }
 
 .sequence.cancelled {
-    border: solid black;
-    color: lightgray;
+    background-color: lightcoral;
 }
 
 .tags {
