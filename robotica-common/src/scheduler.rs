@@ -172,7 +172,7 @@ pub struct Sequence {
     #[serde(with = "crate::datetime::with_duration")]
     pub duration: Duration,
 
-    /// The latest time this step can be completed.
+    /// The latest time this step can be started.
     pub latest_time: DateTime<Utc>,
 
     /// The number of the repeat.
