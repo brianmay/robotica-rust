@@ -124,7 +124,7 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         // It doesn't matter if we get then wrong here.
         // Insert dummy values for now.
         schedule_date: chrono::Utc::now().date_naive(),
-        required_duration: Duration::zero(),
+        duration: Duration::zero(),
     })
 }
 

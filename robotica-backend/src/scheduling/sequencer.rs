@@ -150,7 +150,7 @@ pub struct Sequence {
 
     /// The required duration of this step.
     #[serde(with = "robotica_common::datetime::with_duration")]
-    pub required_duration: Duration,
+    pub duration: Duration,
 
     /// The latest time this step can be completed.
     pub latest_time: DateTime<Utc>,
@@ -344,7 +344,7 @@ fn config_to_sequence(
         zero_time: config.zero_time.unwrap_or(false),
         start_time: *start_time,
         end_time: *start_time + config.required_time,
-        required_duration: config.required_time,
+        duration: config.required_time,
         latest_time,
         repeat_number,
         tasks,

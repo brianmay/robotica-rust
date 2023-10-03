@@ -56,7 +56,7 @@ impl<T: TimeZone> Config<T> {
                     .start_time
                     .with_timezone(&self.timezone)
                     .date_naive();
-                sequence.required_duration = sequence.end_time - sequence.start_time;
+                sequence.duration = sequence.end_time - sequence.start_time;
                 sequences.push(sequence);
             }
         }

@@ -289,7 +289,7 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                             </tr>
                             <tr>
                                 <th scope="row">{"Required Duration"}</th>
-                                <td>{sequence.required_duration.to_string()}</td>
+                                <td>{sequence.duration.to_string()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Latest Time"}</th>

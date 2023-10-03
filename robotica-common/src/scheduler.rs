@@ -170,7 +170,7 @@ pub struct Sequence {
 
     /// The required duration of this step.
     #[serde(with = "crate::datetime::with_duration")]
-    pub required_duration: Duration,
+    pub duration: Duration,
 
     /// The latest time this step can be completed.
     pub latest_time: DateTime<Utc>,
