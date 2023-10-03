@@ -3,8 +3,10 @@ use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
-use robotica_backend::services::persistent_state;
-use robotica_backend::services::tesla::api::{ChargingStateEnum, CommandSequence, Token};
+use robotica_backend::services::persistent_state::{self, PersistentStateRow};
+use robotica_backend::services::tesla::api::{
+    ChargingStateEnum, CommandSequence, Token, TokenError,
+};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
@@ -453,6 +455,16 @@ impl TeslaState {
     }
 }
 
+pub async fn check_token(
+    token: &mut Token,
+    tesla_secret: &PersistentStateRow<Token>,
+) -> Result<(), TokenError> {
+    info!("Refreshing state, token expiration: {:?}", token.expires_at);
+    token.check(tesla_secret).await?;
+    info!("Token expiration: {:?}", token.expires_at);
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut State,
@@ -537,6 +549,14 @@ pub fn monitor_charging(
     let mut token = Token::get(&tesla_secret)?;
 
     spawn(async move {
+        match check_token(&mut token, &tesla_secret).await {
+            Ok(()) => {}
+            Err(err) => {
+                error!("Failed to get token: {}", err);
+                return;
+            }
+        }
+
         let car_id = match get_car_id(&mut token, car_number).await {
             Ok(Some(car_id)) => car_id,
             Ok(None) => {
@@ -575,11 +595,13 @@ pub fn monitor_charging(
 
             select! {
                 _ = timer.tick() => {
-                    info!("Refreshing state, token expiration: {:?}", token.expires_at);
-                    token.check(&tesla_secret).await.unwrap_or_else(|e| {
-                        error!("Error refreshing token: {}", e);
-                    });
-                    info!("Token expiration: {:?}", token.expires_at);
+                    match check_token(&mut token, &tesla_secret).await {
+                        Ok(()) => {}
+                        Err(err) => {
+                            error!("Failed to get token: {}", err);
+                            // Don't abort here, retry on next timer.
+                        }
+                    }
                 }
                 Ok(new_price_category) = price_category_s.recv() => {
                     info!("New price summary: {:?}", new_price_category);
