@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use reqwest::Error;
 use robotica_common::mqtt::MqttMessage;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -114,12 +115,10 @@ pub struct Token {
     token_type: Option<String>,
 
     /// Time can be renewed.
-    #[serde(skip)]
-    pub renew_at: Option<Instant>,
+    pub renew_at: Option<DateTime<Utc>>,
 
     /// Time when the token expires.
-    #[serde(skip)]
-    pub expires_at: Option<Instant>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -388,8 +387,16 @@ impl Token {
             let renew_in = expires_in
                 .checked_sub(Duration::from_secs(60 * 60))
                 .unwrap_or_default();
-            token.renew_at = Some(Instant::now() + renew_in);
-            token.expires_at = Some(Instant::now() + expires_in);
+
+            let expires_in = chrono::Duration::from_std(expires_in)
+                .unwrap_or_else(|_| chrono::Duration::seconds(60));
+
+            let renew_in = chrono::Duration::from_std(renew_in)
+                .unwrap_or_else(|_| chrono::Duration::seconds(60));
+
+            let now = chrono::Utc::now();
+            token.renew_at = Some(now + renew_in);
+            token.expires_at = Some(now + expires_in);
         }
 
         Ok(token)
@@ -405,7 +412,7 @@ impl Token {
     /// Returns `TokenError::Environment` if the environment variable `TESLA_SECRET_FILE` is not set.
     pub async fn check(&mut self, ps: &PersistentStateRow<Token>) -> Result<(), TokenError> {
         if let Some(renew_at) = self.expires_at {
-            if renew_at > Instant::now() {
+            if renew_at > chrono::Utc::now() {
                 return Ok(());
             }
         }
