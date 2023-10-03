@@ -143,10 +143,6 @@ pub struct Sequence {
     pub zero_time: bool,
 
     /// The start time of this step.
-    #[deprecated(note = "Use start_time instead")]
-    pub required_time: DateTime<Utc>,
-
-    /// The start time of this step.
     pub start_time: DateTime<Utc>,
 
     /// The end time of this step.
@@ -346,7 +342,6 @@ fn config_to_sequence(
         classifications: config.classifications,
         options: config.options,
         zero_time: config.zero_time.unwrap_or(false),
-        required_time: *start_time,
         start_time: *start_time,
         end_time: *start_time + config.required_time,
         required_duration: config.required_time,

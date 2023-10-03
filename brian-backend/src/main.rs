@@ -108,7 +108,6 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         id: event.uid,
         importance: Importance::Important,
         sequence_name: event.summary,
-        required_time: start_time,
         start_time,
         end_time,
         latest_time: end_time,
