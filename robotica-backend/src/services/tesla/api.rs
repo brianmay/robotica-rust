@@ -115,10 +115,10 @@ pub struct Token {
     token_type: Option<String>,
 
     /// Time can be renewed.
-    pub renew_at: DateTime<Utc>,
+    pub renew_at: Option<DateTime<Utc>>,
 
     /// Time when the token expires.
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -395,8 +395,8 @@ impl Token {
                 .unwrap_or_else(|_| chrono::Duration::seconds(60));
 
             let now = chrono::Utc::now();
-            token.renew_at = now + renew_in;
-            token.expires_at = now + expires_in;
+            token.renew_at = Some(now + renew_in);
+            token.expires_at = Some(now + expires_in);
         }
 
         Ok(token)
@@ -411,8 +411,10 @@ impl Token {
     /// Returns `TokenError::Io` if the token could not be written to disk.
     /// Returns `TokenError::Environment` if the environment variable `TESLA_SECRET_FILE` is not set.
     pub async fn check(&mut self, ps: &PersistentStateRow<Token>) -> Result<(), TokenError> {
-        if self.renew_at > chrono::Utc::now() {
-            return Ok(());
+        if let Some(renew_at) = self.expires_at {
+            if renew_at > chrono::Utc::now() {
+                return Ok(());
+            }
         }
 
         let token = self.renew().await?;
