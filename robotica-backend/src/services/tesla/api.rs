@@ -104,21 +104,29 @@ struct TokenRenew {
     scope: String,
 }
 
+/// Raw Tesla token from API
+#[derive(Deserialize)]
+pub struct RawToken {
+    access_token: String,
+    refresh_token: String,
+    id_token: String,
+    token_type: String,
+    expires_in: u64,
+}
+
 /// Token to access the Tesla API
 #[derive(Serialize, Deserialize)]
 pub struct Token {
     access_token: String,
     refresh_token: String,
     id_token: String,
+    token_type: String,
 
-    expires_in: Option<u64>,
-    token_type: Option<String>,
-
-    /// Time can be renewed.
-    pub renew_at: Option<DateTime<Utc>>,
+    /// Time we should renew the token.
+    pub renew_at: DateTime<Utc>,
 
     /// Time when the token expires.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -380,10 +388,10 @@ impl Token {
             scope: "openid email offline_access".into(),
         };
 
-        let mut token: Token = post(url, &body).await?;
+        let token: RawToken = post(url, &body).await?;
 
-        if let Some(expires_in) = token.expires_in {
-            let expires_in = Duration::from_secs(expires_in);
+        let token = {
+            let expires_in = Duration::from_secs(token.expires_in);
             let renew_in = expires_in
                 .checked_sub(Duration::from_secs(60 * 60))
                 .unwrap_or_default();
@@ -395,9 +403,18 @@ impl Token {
                 .unwrap_or_else(|_| chrono::Duration::seconds(60));
 
             let now = chrono::Utc::now();
-            token.renew_at = Some(now + renew_in);
-            token.expires_at = Some(now + expires_in);
-        }
+            let renew_at = now + renew_in;
+            let expires_at = now + expires_in;
+
+            Token {
+                access_token: token.access_token,
+                refresh_token: token.refresh_token,
+                id_token: token.id_token,
+                token_type: token.token_type,
+                renew_at,
+                expires_at,
+            }
+        };
 
         Ok(token)
     }
@@ -411,10 +428,8 @@ impl Token {
     /// Returns `TokenError::Io` if the token could not be written to disk.
     /// Returns `TokenError::Environment` if the environment variable `TESLA_SECRET_FILE` is not set.
     pub async fn check(&mut self, ps: &PersistentStateRow<Token>) -> Result<(), TokenError> {
-        if let Some(renew_at) = self.expires_at {
-            if renew_at > chrono::Utc::now() {
-                return Ok(());
-            }
+        if self.renew_at > chrono::Utc::now() {
+            return Ok(());
         }
 
         let token = self.renew().await?;
