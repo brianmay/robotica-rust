@@ -477,7 +477,7 @@ pub fn executor(
                         let now = utc_now();
 
                         if let Some(next_event) = state.events.front() {
-                            if now > next_event.datetime {
+                            if now >= next_event.datetime {
                                 // Note: this should never fail. But we need to do this
                                 // to take ownership of the event.
                                 if let Some(next_event) = state.events.pop_front() {
