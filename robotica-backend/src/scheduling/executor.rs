@@ -501,7 +501,7 @@ pub fn executor(
                     let front = state.events.front();
                     let sequence = front.and_then(|event| state.sequences.get(event.sequence_index));
                     info!("next event is {:?}", front);
-                    info!("next sequence is {:?}", sequence);
+                    info!("next sequence is {:?}", sequence.map(|s| &s.id));
                     info!("next timer is {:?}", state.timer - Instant::now());
                     }
                 },
