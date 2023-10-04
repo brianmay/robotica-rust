@@ -347,22 +347,26 @@ impl<T: TimeZone> State<T> {
         let mut events = Vec::with_capacity(self.sequences.len() * 2);
         for (index, sequence) in self.sequences.iter().enumerate() {
             let status = self.get_status_for_sequence(sequence);
-            if matches!(status, Status::Completed | Status::Cancelled) {
-                continue;
+            // If the sequence is pending, add a start event.
+            if matches!(status, Status::Pending) {
+                let start = Event {
+                    datetime: sequence.start_time,
+                    sequence_index: index,
+                    event_type: EventType::Start,
+                };
+                events.push(start);
             }
-
-            let start = Event {
-                datetime: sequence.start_time,
-                sequence_index: index,
-                event_type: EventType::Start,
-            };
-            let stop = Event {
-                datetime: sequence.end_time,
-                sequence_index: index,
-                event_type: EventType::Stop,
-            };
-            events.push(start);
-            events.push(stop);
+            // If the sequence is pending or in progress, add a stop event.
+            // Note that sequence may be pending now, but should be in progress in time for event
+            // (see previous block for adding the start event).
+            if matches!(status, Status::Pending | Status::InProgress) {
+                let stop = Event {
+                    datetime: sequence.end_time,
+                    sequence_index: index,
+                    event_type: EventType::Stop,
+                };
+                events.push(stop);
+            }
         }
         events.sort_by_key(|event| (event.datetime, event.sequence_index, event.event_type));
 
