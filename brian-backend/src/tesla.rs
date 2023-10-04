@@ -3,6 +3,7 @@ use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
     ChargingStateEnum, CommandSequence, Token, TokenError,
@@ -13,6 +14,7 @@ use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::ops::Add;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
@@ -446,6 +448,8 @@ struct TeslaState {
     battery_level: Option<u8>,
     charging_state: Option<ChargingStateEnum>,
     is_at_home: Option<bool>,
+    last_success: DateTime<Utc>,
+    notified_errors: bool,
 }
 
 impl TeslaState {
@@ -552,8 +556,7 @@ pub fn monitor_charging(
         match check_token(&mut token, &tesla_secret).await {
             Ok(()) => {}
             Err(err) => {
-                error!("Failed to get token: {}", err);
-                return;
+                error!("Failed to check token: {}", err);
             }
         }
 
@@ -574,6 +577,8 @@ pub fn monitor_charging(
             battery_level: None,
             charging_state: None,
             is_at_home: None,
+            last_success: Utc::now(),
+            notified_errors: false,
         };
 
         let mut interval = PollInterval::Long;
@@ -598,8 +603,7 @@ pub fn monitor_charging(
                     match check_token(&mut token, &tesla_secret).await {
                         Ok(()) => {}
                         Err(err) => {
-                            error!("Failed to get token: {}", err);
-                            // Don't abort here, retry on next timer.
+                            error!("Failed to check token: {}", err);
                         }
                     }
                 }
@@ -690,8 +694,15 @@ pub fn monitor_charging(
                     )
                     .await;
                     match result {
-                        Ok(()) => PollInterval::Long,
-                        Err(CheckChargeError::ScheduleRetry) => PollInterval::Short,
+                        Ok(()) => {
+                            tesla_state.last_success = Utc::now();
+                            tesla_state.notified_errors = false;
+                            PollInterval::Long
+                        }
+                        Err(CheckChargeError::ScheduleRetry) => {
+                            notify_errors(&mut tesla_state, &message_sink);
+                            PollInterval::Short
+                        }
                     }
                 } else {
                     info!("No price summary available, skipping charge check");
@@ -716,6 +727,19 @@ pub fn monitor_charging(
     });
 
     Ok(())
+}
+
+fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<Message>) {
+    if !tesla_state.notified_errors
+        && tesla_state.last_success.add(chrono::Duration::minutes(30)) < Utc::now()
+    {
+        let msg = new_message(
+            "Can't talk to Tesla for more then 30 minutes",
+            MessagePriority::Urgent,
+        );
+        message_sink.try_send(msg);
+        tesla_state.notified_errors = true;
+    }
 }
 
 fn update_auto_charge(
