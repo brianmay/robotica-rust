@@ -21,7 +21,6 @@ use axum_sessions::extractors::WritableSession;
 use axum_sessions::{SameSite, SessionLayer};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use hyper::header::CONTENT_TYPE;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use robotica_common::config::Rooms;
@@ -257,23 +256,24 @@ async fn fallback_handler(
             let status = response.status();
             match status {
                 // If this is an asset file, then don't redirect to index.html
-                StatusCode::NOT_FOUND if !asset_file => {
-                    let index_path = PathBuf::from(static_path).join("index.html");
-                    let index_content = match fs::read_to_string(index_path).await {
-                        Err(err) => {
-                            error!("failed to read index file: {}", err);
-                            return (StatusCode::INTERNAL_SERVER_ERROR, "index file not found")
-                                .into_response();
-                        }
-                        Ok(index_content) => index_content,
-                    };
-
-                    (StatusCode::OK, [(CONTENT_TYPE, "text/html")], index_content).into_response()
-                }
+                StatusCode::NOT_FOUND if !asset_file => serve_index_html(static_path).await,
                 _ => response.map(boxed),
             }
         }
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("error: {err}")).into_response(),
+    }
+}
+
+async fn serve_index_html(static_path: &str) -> Response {
+    let index_path = PathBuf::from(static_path).join("index.html");
+    {
+        let this = fs::read_to_string(index_path)
+            .await
+            .map(|index_content| (StatusCode::OK, Html(index_content)).into_response());
+        this.map_or_else(
+            |_| (StatusCode::INTERNAL_SERVER_ERROR, "index.html not found").into_response(),
+            |t| t,
+        )
     }
 }
 
