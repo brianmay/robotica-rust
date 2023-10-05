@@ -221,27 +221,6 @@ async fn setup_pipes(state: &mut State) {
     fake_switch(state, "Akira/Messages");
 
     setup_lights(state).await;
-
-    // let message_sink_temp = state.message_sink.clone();
-    // let rx = state
-    //     .subscriptions
-    //     .subscribe_into::<Power>("state/Brian/Light/power");
-    // spawn(async move {
-    //     let mut s = rx.subscribe().await;
-    //     loop {
-    //         let msg = s.recv().await;
-    //         if let Ok((Some(prev), current)) = msg {
-    //             let announce = format!("Light power changed from {} to {}", prev, current);
-
-    //             if let Err(err) = message_sink_temp.send(announce).await {
-    //                 error!("Error sending message: {}", err);
-    //             }
-    //         }
-    //         if let Some(msg) = rx.get().await {
-    //             debug!("get: {:?}", msg);
-    //         }
-    //     }
-    // });
 }
 
 fn fake_switch(state: &mut State, topic_substr: &str) {
