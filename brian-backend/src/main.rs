@@ -19,7 +19,7 @@ mod rooms;
 mod tesla;
 
 use anyhow::Result;
-use chrono::Duration;
+use chrono::{Days, Duration, Local, TimeZone};
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
@@ -34,7 +34,7 @@ use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
@@ -81,11 +81,11 @@ pub struct State {
     persistent_state_database: PersistentStateDatabase,
 }
 
-fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
-    let (start_time, end_time) = match event.start_end {
-        StartEnd::Date(_, _) => return None,
-        StartEnd::DateTime(start, stop) => (start, stop),
-    };
+fn calendar_to_sequence(event: CalendarEntry, timezone: &impl TimeZone) -> Option<Sequence> {
+    let (start_time, end_time) = calendar_start_top_times(&event, timezone).or_else(|| {
+        error!("Error getting start/stop times from calendar event {event:?}");
+        None
+    })?;
 
     let payload = Message::new(
         "Calendar Event",
@@ -94,12 +94,15 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         audience::everyone(),
     );
 
-    let task = Task {
-        title: format!("Tell everyone {}", event.summary),
-        payload: Payload::Command(Command::Message(payload)),
-        qos: QoS::ExactlyOnce,
-        retain: false,
-        topics: ["ha/event/message".to_string()].to_vec(),
+    let tasks = match event.start_end {
+        StartEnd::Date(_, _) => vec![],
+        StartEnd::DateTime(_, _) => vec![Task {
+            title: format!("Tell everyone {}", event.summary),
+            payload: Payload::Command(Command::Message(payload)),
+            qos: QoS::ExactlyOnce,
+            retain: false,
+            topics: ["ha/event/message".to_string()].to_vec(),
+        }],
     };
 
     #[allow(deprecated)]
@@ -111,7 +114,7 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         start_time,
         end_time,
         latest_time: end_time,
-        tasks: vec![task],
+        tasks,
         mark: None,
         if_cond: None,
         classifications: None,
@@ -126,6 +129,29 @@ fn calendar_to_sequence(event: CalendarEntry) -> Option<Sequence> {
         schedule_date: chrono::Utc::now().date_naive(),
         duration: Duration::zero(),
     })
+}
+
+fn calendar_start_top_times(
+    event: &CalendarEntry,
+    timezone: &impl TimeZone,
+) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
+    let (start_time, end_time) = match event.start_end {
+        StartEnd::Date(start, stop) => {
+            let start = start.and_hms_opt(0, 0, 0)?;
+            let stop = stop.checked_add_days(Days::new(1))?.and_hms_opt(0, 0, 0)?;
+            let start = timezone
+                .from_local_datetime(&start)
+                .single()?
+                .with_timezone(&chrono::Utc);
+            let stop = timezone
+                .from_local_datetime(&stop)
+                .single()?
+                .with_timezone(&chrono::Utc);
+            (start, stop)
+        }
+        StartEnd::DateTime(start, stop) => (start, stop),
+    };
+    Some((start_time, end_time))
 }
 
 async fn setup_pipes(state: &mut State) {
@@ -173,6 +199,7 @@ async fn setup_pipes(state: &mut State) {
         state.mqtt.clone(),
         config.executor,
         Box::new(calendar_to_sequence),
+        Local,
     )
     .unwrap_or_else(|err| {
         panic!("Failed to start executor: {err}");

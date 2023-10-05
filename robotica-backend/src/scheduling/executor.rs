@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env::{self, VarError};
 use std::fmt::Debug;
 
-use chrono::{Local, NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS};
 use thiserror::Error;
 use tokio::select;
@@ -22,7 +22,7 @@ use super::calendar::CalendarEntry;
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
 
-type CalendarToSequence = dyn Fn(CalendarEntry) -> Option<Sequence> + Send + Sync + 'static;
+type CalendarToSequence<T> = dyn Fn(CalendarEntry, &T) -> Option<Sequence> + Send + Sync + 'static;
 
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
@@ -37,7 +37,7 @@ struct Config<T: TimeZone> {
     sequencer: sequencer::ConfigMap,
     hostname: String,
     extra_config: ExtraConfig,
-    calendar_to_sequence: Box<CalendarToSequence>,
+    calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 }
 impl<T: TimeZone> Config<T> {
@@ -51,7 +51,7 @@ impl<T: TimeZone> Config<T> {
         let mut sequences = Vec::new();
 
         for event in calendar {
-            if let Some(mut sequence) = (*self.calendar_to_sequence)(event) {
+            if let Some(mut sequence) = (*self.calendar_to_sequence)(event, &self.timezone) {
                 sequence.schedule_date = sequence
                     .start_time
                     .with_timezone(&self.timezone)
@@ -455,13 +455,14 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor(
+pub fn executor<T: TimeZone + Send + Sync + 'static>(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     extra_config: ExtraConfig,
-    calendar_to_sequence: Box<CalendarToSequence>,
+    calendar_to_sequence: Box<CalendarToSequence<T>>,
+    timezone: T,
 ) -> Result<(), ExecutorError> {
-    let mut state = get_initial_state(mqtt, extra_config, calendar_to_sequence)?;
+    let mut state = get_initial_state(mqtt, extra_config, calendar_to_sequence, timezone)?;
     let mark_rx = subscriptions.subscribe_into_stateless::<Json<Mark>>("mark");
 
     spawn(async move {
@@ -515,14 +516,14 @@ pub fn executor(
     Ok(())
 }
 
-fn get_initial_state(
+fn get_initial_state<T: TimeZone + 'static>(
     mqtt: MqttTx,
     extra_config: ExtraConfig,
-    calendar_to_sequence: Box<CalendarToSequence>,
-) -> Result<State<Local>, ExecutorError> {
-    let timezone = Local;
+    calendar_to_sequence: Box<CalendarToSequence<T>>,
+    timezone: T,
+) -> Result<State<T>, ExecutorError> {
     let now = Utc::now();
-    let date = now.with_timezone::<Local>(&timezone).date_naive();
+    let date = now.with_timezone::<T>(&timezone).date_naive();
     let hostname = env::var("HOSTNAME")?;
 
     let state = {
