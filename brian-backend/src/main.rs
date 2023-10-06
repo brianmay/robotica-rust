@@ -138,7 +138,7 @@ fn calendar_start_top_times(
     let (start_time, end_time) = match event.start_end {
         StartEnd::Date(start, stop) => {
             let start = start.and_hms_opt(0, 0, 0)?;
-            let stop = stop.checked_add_days(Days::new(1))?.and_hms_opt(0, 0, 0)?;
+            let stop = stop.and_hms_opt(0, 0, 0)?;
             let start = timezone
                 .from_local_datetime(&start)
                 .single()?
