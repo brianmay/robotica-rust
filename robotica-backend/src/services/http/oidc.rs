@@ -1,6 +1,6 @@
 use openid::{error::ClientError, DiscoveredClient, Options, Token, Userinfo};
 use thiserror::Error;
-use tracing::info;
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -74,14 +74,14 @@ impl Client {
         if let Some(id_token) = token.id_token.as_mut() {
             self.oidc_client.decode_token(id_token)?;
             self.oidc_client.validate_token(id_token, None, None)?;
-            info!("token: {:?}", id_token);
+            debug!("token: {:?}", id_token);
         } else {
             return Err(Error::NoToken);
         }
 
         let user_info = self.oidc_client.request_userinfo(&token).await?;
 
-        info!("user info: {:?}", user_info);
+        debug!("user info: {:?}", user_info);
 
         Ok((token, user_info))
     }
