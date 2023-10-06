@@ -22,7 +22,7 @@ use super::calendar::CalendarEntry;
 use super::sequencer::Sequence;
 use super::{classifier, scheduler, sequencer};
 
-type CalendarToSequence<T> = dyn Fn(CalendarEntry, &T) -> Option<Sequence> + Send + Sync + 'static;
+type CalendarToSequence<T> = dyn Fn(CalendarEntry, T) -> Option<Sequence> + Send + Sync + 'static;
 
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
@@ -40,7 +40,7 @@ struct Config<T: TimeZone> {
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 }
-impl<T: TimeZone> Config<T> {
+impl<T: TimeZone + Copy> Config<T> {
     fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
         let calendar =
             calendar::load(&self.extra_config.calendar_url, start, stop).unwrap_or_else(|e| {
@@ -51,7 +51,7 @@ impl<T: TimeZone> Config<T> {
         let mut sequences = Vec::new();
 
         for event in calendar {
-            if let Some(mut sequence) = (*self.calendar_to_sequence)(event, &self.timezone) {
+            if let Some(mut sequence) = (*self.calendar_to_sequence)(event, self.timezone) {
                 sequence.schedule_date = sequence
                     .start_time
                     .with_timezone(&self.timezone)
@@ -202,7 +202,7 @@ struct State<T: TimeZone> {
     calendar_refresh_time: DateTime<Utc>,
 }
 
-impl<T: TimeZone> State<T> {
+impl<T: TimeZone + Copy> State<T> {
     fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
@@ -455,7 +455,7 @@ pub enum ExecutorError {
 /// # Errors
 ///
 /// This function will return an error if the `config` is invalid.
-pub fn executor<T: TimeZone + Send + Sync + 'static>(
+pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     extra_config: ExtraConfig,
@@ -516,7 +516,7 @@ pub fn executor<T: TimeZone + Send + Sync + 'static>(
     Ok(())
 }
 
-fn get_initial_state<T: TimeZone + 'static>(
+fn get_initial_state<T: TimeZone + Copy + 'static>(
     mqtt: MqttTx,
     extra_config: ExtraConfig,
     calendar_to_sequence: Box<CalendarToSequence<T>>,

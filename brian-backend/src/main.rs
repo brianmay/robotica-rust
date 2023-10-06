@@ -81,7 +81,7 @@ pub struct State {
     persistent_state_database: PersistentStateDatabase,
 }
 
-fn calendar_to_sequence(event: CalendarEntry, timezone: &impl TimeZone) -> Option<Sequence> {
+fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequence> {
     let (start_time, end_time) = calendar_start_top_times(&event, timezone).or_else(|| {
         error!("Error getting start/stop times from calendar event {event:?}");
         None
@@ -133,7 +133,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: &impl TimeZone) -> Optio
 
 fn calendar_start_top_times(
     event: &CalendarEntry,
-    timezone: &impl TimeZone,
+    timezone: Local,
 ) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
     let (start_time, end_time) = match event.start_end {
         StartEnd::Date(start, stop) => {
