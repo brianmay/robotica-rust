@@ -19,7 +19,7 @@ mod rooms;
 mod tesla;
 
 use anyhow::Result;
-use chrono::{Days, Duration, Local, TimeZone};
+use chrono::{Duration, Local, TimeZone};
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
