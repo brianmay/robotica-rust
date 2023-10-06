@@ -139,10 +139,17 @@ fn sequence_to_html(
     };
 
     let start_local = sequence.start_time.with_timezone(&Local);
-    let start_str = start_local.format("%H:%M:%S").to_string();
-
     let end_local = sequence.end_time.with_timezone(&Local);
+    let days = (end_local.date_naive() - start_local.date_naive()).num_days();
+
+    let start_str = start_local.format("%H:%M:%S").to_string();
     let end_str = end_local.format("%H:%M:%S").to_string();
+
+    let end_str = if days > 0 {
+        format!("{end_str}+{days}")
+    } else {
+        end_str
+    };
 
     let classes = classes!("sequence", importance_class, status_class, mark_class);
     html! {
