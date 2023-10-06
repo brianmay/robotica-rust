@@ -57,6 +57,10 @@ footer {
 .sequence {
     .title {
         font-weight: bold;
+        :hover {
+            background-color: darkgrey;
+            color: white;
+        }
     }
     .task {
         padding-left: 10px;

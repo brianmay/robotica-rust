@@ -22,6 +22,14 @@ pub struct Props {
     pub topic: String,
 }
 
+#[derive(Default, Eq, PartialEq)]
+enum OpenedId {
+    Sequence(String),
+    Task(String),
+    #[default]
+    None,
+}
+
 /// Component that shows the schedule
 #[function_component(Schedule)]
 pub fn schedule(props: &Props) -> Html {
@@ -41,16 +49,16 @@ pub fn schedule(props: &Props) -> Html {
         })
     };
 
-    let expanded_id = use_state(|| None);
+    let opened_id = use_state(OpenedId::default);
 
-    let expanded_id_clone: UseStateHandle<Option<String>> = expanded_id.clone();
-    let on_click = Callback::from(move |id: String| {
-        expanded_id_clone.set(Some(id));
+    let opened_id_clone: UseStateHandle<OpenedId> = opened_id.clone();
+    let on_click = Callback::from(move |id: OpenedId| {
+        opened_id_clone.set(id);
     });
 
-    let expanded_id_clone: UseStateHandle<Option<String>> = expanded_id.clone();
+    let opened_id_clone: UseStateHandle<OpenedId> = opened_id.clone();
     let on_close = Callback::from(move |_| {
-        expanded_id_clone.set(None);
+        opened_id_clone.set(OpenedId::None);
     });
 
     use_mut_ref(move || {
@@ -62,13 +70,14 @@ pub fn schedule(props: &Props) -> Html {
         });
     });
 
-    let modal_open_class = match *expanded_id {
-        Some(_) => "modal-open",
-        None => "",
+    let modal_open_class = if matches!(*opened_id, OpenedId::None) {
+        ""
+    } else {
+        "modal-open"
     };
     let classes = classes!("sequence_list", modal_open_class);
 
-    let expanded_id = &*expanded_id;
+    let expanded_id = &*opened_id;
     html! {
         <div class={classes}>
         {
@@ -95,15 +104,15 @@ fn get_local_date_for_sequence(sequence: &Sequence) -> chrono::NaiveDate {
 
 fn sequence_list_to_html<'a>(
     sequence_list: impl Iterator<Item = &'a Sequence>,
-    expanded_id: &Option<String>,
-    on_click: &Callback<String>,
+    opened_id: &OpenedId,
+    on_click: &Callback<OpenedId>,
     on_close: &Callback<()>,
 ) -> Html {
     html! {
         <div class="sequence_list">
         {
             sequence_list.map(|sequence| {
-                sequence_to_html(sequence, expanded_id, on_click, on_close)
+                sequence_to_html(sequence, opened_id, on_click, on_close)
             }).collect::<Html>()
         }
         </div>
@@ -112,8 +121,8 @@ fn sequence_list_to_html<'a>(
 
 fn sequence_to_html(
     sequence: &Sequence,
-    expanded_id: &Option<String>,
-    on_click: &Callback<String>,
+    opened_id: &OpenedId,
+    on_click: &Callback<OpenedId>,
     on_close: &Callback<()>,
 ) -> Html {
     let importance_class = match sequence.importance {
@@ -151,15 +160,28 @@ fn sequence_to_html(
         end_str
     };
 
+    let date = sequence.schedule_date;
+    let seq_id = &sequence.id;
+    let repeat_number = sequence.repeat_number;
+    let id = format!("{date}-{seq_id}-{repeat_number}");
+    let id_clone = id.clone();
+
+    let on_click_clone = on_click.clone();
+
     let classes = classes!("sequence", importance_class, status_class, mark_class);
     html! {
         <div class={classes} id={sequence.id.clone()}>
             <div>{start_str}{" - "}{end_str}</div>
             <div>
-                <div class="title">{&sequence.title}</div>
+                <div class="title" onclick={move |_| on_click_clone.emit(OpenedId::Sequence(id_clone.clone()))}><span>{&sequence.title}</span></div>
+                {
+                    if OpenedId::Sequence(id.clone()) == *opened_id {
+                        popover_sequence_content(sequence, on_close)
+                    } else { html! {} }
+                }
                 {
                     sequence.tasks.iter().enumerate().map(|(i, task)| {
-                        task_to_html(sequence, task, i, expanded_id, on_click, on_close)
+                        task_to_html(sequence, task, i, opened_id, on_click, on_close)
                     }).collect::<Html>()
                 }
             </div>
@@ -171,24 +193,24 @@ fn task_to_html(
     sequence: &Sequence,
     task: &Task,
     i: usize,
-    expanded_id: &Option<String>,
-    on_click: &Callback<String>,
+    opened_id: &OpenedId,
+    on_click: &Callback<OpenedId>,
     on_close: &Callback<()>,
 ) -> Html {
     let date = sequence.schedule_date;
     let seq_id = &sequence.id;
     let repeat_number = sequence.repeat_number;
-    let id = format!("{date}-{seq_id}-{i}-{repeat_number}");
+    let id = format!("{date}-{seq_id}-{repeat_number}-{i}");
     let id_clone = id.clone();
     let on_click = on_click.clone();
 
     html! {
         html! {
             <>
-                <div class="task" onclick={move |_| on_click.emit(id.clone())}><span>{&task.title}</span></div>
+                <div class="task" onclick={move |_| on_click.emit(OpenedId::Task(id_clone.clone()))}><span>{&task.title}</span></div>
                 {
-                    if Some(id_clone) == *expanded_id {
-                        popover_content(sequence, task, on_close)
+                    if OpenedId::Task(id) == *opened_id {
+                        popover_task_content(task, on_close)
                     } else { html! {} }
                 }
             </>
@@ -236,22 +258,7 @@ fn json_to_html(json: &Value) -> Html {
     }
 }
 
-// FIXME too many lines
-#[allow(clippy::too_many_lines)]
-fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) -> Html {
-    use robotica_common::robotica::tasks::Payload;
-
-    let payload = match &task.payload {
-        Payload::String(string) => html!({ string.clone() }),
-        Payload::Json(json) => json_to_html(json),
-        Payload::Command(command) => html!({
-            match serde_json::to_value(command) {
-                Ok(value) => json_to_html(&value),
-                Err(err) => html! { <span class="error">{err.to_string()}</span> },
-            }
-        }),
-    };
-
+fn popover_sequence_content(sequence: &Sequence, on_close: &Callback<()>) -> Html {
     let mark = match sequence.mark.clone() {
         Some(mark) => format!("{mark:?}"),
         None => "None".to_string(),
@@ -318,6 +325,51 @@ fn popover_content(sequence: &Sequence, task: &Task, on_close: &Callback<()>) ->
                                 <th scope="row">{"Mark"}</th>
                                 <td>{mark}</td>
                             </tr>
+                        </tbody>
+                    </table>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick={on_close}>{"Close"}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-backdrop fade show"></div>
+        </>
+    }
+}
+
+fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
+    use robotica_common::robotica::tasks::Payload;
+
+    let payload = match &task.payload {
+        Payload::String(string) => html!({ string.clone() }),
+        Payload::Json(json) => json_to_html(json),
+        Payload::Command(command) => html!({
+            match serde_json::to_value(command) {
+                Ok(value) => json_to_html(&value),
+                Err(err) => html! { <span class="error">{err.to_string()}</span> },
+            }
+        }),
+    };
+
+    let on_close = on_close.clone();
+    let on_close = move |_| {
+        on_close.emit(());
+    };
+
+    html! {
+        <>
+            <div class="modal fade show" tabindex="-1" style="display:block" onclick={on_close.clone()}>
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h1 class="modal-title fs-5" id="exampleModalLabel">{"Task Details"}</h1>
+                            <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
+                        </div>
+                        <div class="modal-body">
+                        <table class="table">
+                        <tbody>
                             <tr>
                                 <th scope="row">{"Topics"}</th>
                                 <td>{task.topics.clone()}</td>
