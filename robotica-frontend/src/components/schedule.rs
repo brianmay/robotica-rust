@@ -275,12 +275,16 @@ fn popover_sequence_content(sequence: &Sequence, on_close: &Callback<()>) -> Htm
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h1 class="modal-title fs-5">{&sequence.id}</h1>
+                            <h1 class="modal-title fs-5">{"Sequence: "}{&sequence.title}</h1>
                             <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
                         </div>
                         <div class="modal-body">
                         <table class="table">
                         <tbody>
+                            <tr>
+                                <th scope="row">{"Id"}</th>
+                                <td>{&sequence.id}</td>
+                            </tr>
                             { if let Some(status) = &sequence.status {
                                 html! {
                                     <tr>
@@ -364,7 +368,7 @@ fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h1 class="modal-title fs-5">{"Task Details"}</h1>
+                            <h1 class="modal-title fs-5">{"Task: "}{&task.title}</h1>
                             <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
                         </div>
                         <div class="modal-body">
@@ -373,10 +377,6 @@ fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
                             <tr>
                                 <th scope="row">{"Topics"}</th>
                                 <td>{task.topics.clone()}</td>
-                            </tr>
-                            <tr>
-                                <th scope="row">{"Title"}</th>
-                                <td>{task.title.clone()}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Summary"}</th>
