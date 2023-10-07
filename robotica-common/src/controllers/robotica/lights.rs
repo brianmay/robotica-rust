@@ -85,7 +85,7 @@ impl ControllerTrait for Controller {
                 Err(e) => error!("Invalid power value: {e}"),
             },
 
-            Err(_) => error!("Invalid message label {}", label),
+            Err(()) => error!("Invalid message label {}", label),
         }
     }
 

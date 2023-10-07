@@ -323,7 +323,7 @@ fn process_subscribe(
 
         let filter = topic_to_filter(&topic);
         match client.try_subscribe_many([filter]) {
-            Ok(_) => {
+            Ok(()) => {
                 debug!("Subscribed to topic: {:?}.", topic);
                 subscriptions.0.insert(topic.to_string(), subscription);
                 watch_tx_closed(tx, channel_tx, topic);

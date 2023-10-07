@@ -204,7 +204,7 @@ impl DeviceState {
 async fn send_set_colors(
     color: &Colors,
     socket: UdpSocket,
-    device: &mut Device,
+    device: &Device,
     seq: &mut u8,
     config: &DeviceConfig,
 ) -> Result<(), LifxError> {
@@ -426,7 +426,7 @@ async fn wait_for_response(
     loop {
         let timeout = Instant::now() + timeout;
         select! {
-            _ = sleep_until(timeout) => {
+            () = sleep_until(timeout) => {
                 return Err(LifxError::Timeout);
             }
             Ok((len, _)) = socket.recv_from(&mut buf) => {
@@ -468,7 +468,7 @@ pub fn device_entity(
                 Ok(d) = discover_s.recv() => {
                     state.set_online(d);
                     match state.set_power_color(&power_color, &config).await {
-                        Ok(_) => {
+                        Ok(()) => {
                             state.renew_online();
                             debug!("{id} discovered and initializing: {power_color:?}");
                             tx_state.try_send(State::Online(power_color.clone()));
@@ -483,7 +483,7 @@ pub fn device_entity(
                 Ok(pc) = rx_s.recv() => {
                     power_color = pc;
                     match state.set_power_color(&power_color, &config).await {
-                        Ok(_) => {
+                        Ok(()) => {
                             state.renew_online();
                             debug!("{id} set power color: {power_color:?}");
                             tx_state.try_send(State::Online(power_color.clone()));
@@ -495,9 +495,9 @@ pub fn device_entity(
                         }
                     }
                 }
-                Some(_) = maybe_sleep_until(&state) => {
+                Some(()) = maybe_sleep_until(&state) => {
                     match state.set_power_color(&power_color, &config).await {
-                        Ok(_) => {
+                        Ok(()) => {
                             state.renew_online();
                             debug!("{id} timeout check: {power_color:?}");
                             tx_state.try_send(State::Online(power_color.clone()));

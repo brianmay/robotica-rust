@@ -273,7 +273,7 @@ fn mqtt_entity(
                 Ok(pc) = pc_s.recv() => {
                     tx.try_send(pc);
                 }
-                _ = tx.closed() => {
+                () = tx.closed() => {
                     break;
                 }
             }
@@ -304,7 +304,7 @@ pub fn run_auto_light(
 }
 
 fn run_state_sender(
-    state: &mut crate::State,
+    state: &crate::State,
     topic_substr: impl Into<String>,
     rx_state: stateful::Receiver<State>,
 ) {
@@ -324,7 +324,6 @@ fn run_state_sender(
 
     {
         let mqtt = state.mqtt.clone();
-        let topic_substr = topic_substr;
         let rx = rx_state.map(|(_, status)| match status {
             lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
             lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
@@ -446,7 +445,6 @@ where
         let topic_substr: String = topic_substr;
         spawn(async move {
             let mut state = {
-                let scene = scene;
                 let entity = entities.get_scene_entity(scene);
                 let entity_s = entity.subscribe().await;
 

@@ -133,7 +133,7 @@ where
                         }
                     }
 
-                    _ = tx.closed() => {
+                    () = tx.closed() => {
                         debug!("{name}: source closed");
                         break;
                     }
@@ -170,7 +170,7 @@ where
                         tx.try_send(f(data));
                     }
 
-                    _ = tx.closed() => {
+                    () = tx.closed() => {
                         debug!("{name}: dest closed");
                         break;
                     }
@@ -210,7 +210,7 @@ where
                         }
                     }
 
-                    _ = tx.closed() => {
+                    () = tx.closed() => {
                         debug!("{name}: dest closed");
                         break;
                     }

@@ -82,7 +82,7 @@ impl ControllerTrait for Controller {
                 Err(e) => error!("Invalid state: {e}"),
             },
 
-            Err(_) => error!("Invalid message label {}", label),
+            Err(()) => error!("Invalid message label {}", label),
         }
     }
 

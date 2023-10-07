@@ -467,7 +467,7 @@ pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
 
         loop {
             select! {
-                _ = tokio::time::sleep_until(state.timer) => {
+                () = tokio::time::sleep_until(state.timer) => {
                     debug!("Timer expired");
                     let mut publish_sequences = false;
 

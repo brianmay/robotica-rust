@@ -560,7 +560,7 @@ pub fn monitor_charging(
             }
         }
 
-        let car_id = match get_car_id(&mut token, car_number).await {
+        let car_id = match get_car_id(&token, car_number).await {
             Ok(Some(car_id)) => car_id,
             Ok(None) => {
                 error!("No car ID found for car number {}", car_number);
@@ -807,7 +807,7 @@ fn publish_force_change(
     mqtt.try_send(msg);
 }
 
-async fn get_car_id(token: &mut Token, car_n: usize) -> Result<Option<u64>> {
+async fn get_car_id(token: &Token, car_n: usize) -> Result<Option<u64>> {
     let vehicles = token.get_vehicles().await?;
     let vehicle = vehicles.get(car_n - 1);
     debug!("Got vehicle: {:?}", vehicle);

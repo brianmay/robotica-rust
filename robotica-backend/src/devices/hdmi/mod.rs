@@ -182,6 +182,8 @@ where
     Ok(status)
 }
 
+// False warning Rust 7.3 2023-10-08
+#[allow(clippy::needless_pass_by_ref_mut)]
 async fn send_command(
     stream: &mut TcpStream,
     out_bytes: &[u8; 13],

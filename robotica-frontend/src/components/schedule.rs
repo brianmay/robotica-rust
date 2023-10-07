@@ -57,7 +57,7 @@ pub fn schedule(props: &Props) -> Html {
     });
 
     let opened_id_clone: UseStateHandle<OpenedId> = opened_id.clone();
-    let on_close = Callback::from(move |_| {
+    let on_close = Callback::from(move |()| {
         opened_id_clone.set(OpenedId::None);
     });
 

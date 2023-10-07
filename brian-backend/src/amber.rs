@@ -112,7 +112,7 @@ pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
 
         loop {
             tokio::select! {
-                _ = sleep_until(price_instant) => {
+                () = sleep_until(price_instant) => {
                     let now = utc_now();
                     let today = now.with_timezone(&nem_timezone).date_naive();
                     let yesterday = today - Duration::days(1);

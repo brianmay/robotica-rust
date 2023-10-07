@@ -42,7 +42,6 @@ where
     };
 
     spawn(async move {
-        let name = name;
         let mut send_rx = send_rx;
         let mut receive_rx = receive_rx;
 

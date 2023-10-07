@@ -500,21 +500,21 @@ fn monitor_display(
                 }
 
                 // Interaction timer has expired to turn display off.
-                Some(_) = interaction_timer_wait(&state) => {
+                Some(()) = interaction_timer_wait(&state) => {
                     state.interaction = None;
                     let handle_weak = handle_weak.clone();
                     state.sync(handle_weak, &config).await;
                 }
 
                 // Timer has expired to turn off message.
-                Some(_) = message_timer_wait(&state) => {
+                Some(()) = message_timer_wait(&state) => {
                     state.message = None;
                     let handle_weak = handle_weak.clone();
                     state.sync(handle_weak, &config).await;
                 }
 
                 // Timer has expired to indicate backlight should be on.
-                Some(_) = backlight_wait(&state) => {
+                Some(()) = backlight_wait(&state) => {
                     state.screen_on = true;
                     let handle_weak = handle_weak.clone();
                     state.sync(handle_weak, &config).await;
