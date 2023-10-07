@@ -43,54 +43,105 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
 
-        common = {
-          src = ./.;
-          cargoExtraArgs = "-p robotica-slint";
-          nativeBuildInputs = with pkgs; [ pkgconfig ];
-          buildInputs = with pkgs; [
-            openssl
-            protobuf
-            fontconfig
-            freetype
-            xorg.libxcb
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXi
-            mesa
-            wayland
-            libxkbcommon
-          ];
+        brian-backend = let
+          common = {
+            src = ./.;
+            cargoExtraArgs = "-p brian-backend";
+            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            buildInputs = with pkgs; [ openssl python3 protobuf ];
+          };
+
+          # Build *just* the cargo dependencies, so we can reuse
+          # all of that work (e.g. via cachix) when running in CI
+          cargoArtifacts = craneLib.buildDepsOnly common;
+
+          # Run clippy (and deny all warnings) on the crate source.
+          clippy = craneLib.cargoClippy ({
+            inherit cargoArtifacts;
+            cargoClippyExtraArgs = "-- --deny warnings";
+          } // common);
+
+          # Next, we want to run the tests and collect code-coverage, _but only if
+          # the clippy checks pass_ so we do not waste any extra cycles.
+          coverage =
+            craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
+
+          # Build the actual crate itself, _but only if the previous tests pass_.
+          pkg = craneLib.buildPackage ({
+            cargoArtifacts = clippy;
+            doCheck = true;
+          } // common);
+
+          wrapper = pkgs.writeShellScriptBin "brian-backend" ''
+            exec ${pkg}/bin/brian-backend "$@"
+          '';
+        in {
+          clippy = clippy;
+          coverage = coverage;
+          pkg = pkg;
         };
 
-        # Build *just* the cargo dependencies, so we can reuse
-        # all of that work (e.g. via cachix) when running in CI
-        cargoArtifacts = craneLib.buildDepsOnly common;
+        robotica-slint = let
+          common = {
+            src = ./.;
+            cargoExtraArgs = "-p robotica-slint";
+            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            buildInputs = with pkgs; [
+              openssl
+              protobuf
+              fontconfig
+              freetype
+              xorg.libxcb
+              xorg.libX11
+              xorg.libXcursor
+              xorg.libXrandr
+              xorg.libXi
+              mesa
+              wayland
+              libxkbcommon
+            ];
+          };
 
-        # Run clippy (and deny all warnings) on the crate source.
-        clippy = craneLib.cargoClippy ({
-          inherit cargoArtifacts;
-          cargoClippyExtraArgs = "-- --deny warnings";
-        } // common);
+          # Build *just* the cargo dependencies, so we can reuse
+          # all of that work (e.g. via cachix) when running in CI
+          cargoArtifacts = craneLib.buildDepsOnly common;
 
-        # Next, we want to run the tests and collect code-coverage, _but only if
-        # the clippy checks pass_ so we do not waste any extra cycles.
-        coverage =
-          craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
+          # Run clippy (and deny all warnings) on the crate source.
+          clippy = craneLib.cargoClippy ({
+            inherit cargoArtifacts;
+            cargoClippyExtraArgs = "-- --deny warnings";
+          } // common);
 
-        # Build the actual crate itself, _but only if the previous tests pass_.
-        pkg = craneLib.buildPackage ({
-          cargoArtifacts = clippy;
-          doCheck = true;
-        } // common);
+          # Next, we want to run the tests and collect code-coverage, _but only if
+          # the clippy checks pass_ so we do not waste any extra cycles.
+          coverage =
+            craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
 
-        wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
-          export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
-          exec ${pkg}/bin/robotica-slint "$@"
-        '';
+          # Build the actual crate itself, _but only if the previous tests pass_.
+          pkg = craneLib.buildPackage ({
+            cargoArtifacts = clippy;
+            doCheck = true;
+          } // common);
+
+          wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
+            export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
+            exec ${pkg}/bin/robotica-slint "$@"
+          '';
+        in {
+          clippy = clippy;
+          coverage = coverage;
+          pkg = wrapper;
+        };
 
       in {
-        checks = { inherit clippy coverage pkg; };
+        checks = {
+          brian-backend-clippy = brian-backend.clippy;
+          brian-backend-coverage = brian-backend.coverage;
+          brian-backend = brian-backend.pkg;
+          robotica-slint-clippy = robotica-slint.clippy;
+          robotica-slint-coverage = robotica-slint.coverage;
+          robotica-slint = robotica-slint.pkg;
+        };
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -124,7 +175,10 @@
             export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
           '';
         };
-        packages = { robotica-slint = wrapper; };
+        packages = {
+          brian-backend = brian-backend.pkg;
+          robotica-slint = robotica-slint.pkg;
+        };
 
       });
 }
