@@ -696,6 +696,7 @@ pub fn monitor_charging(
                     match result {
                         Ok(()) => {
                             tesla_state.last_success = Utc::now();
+                            notify_success(&tesla_state, &message_sink);
                             tesla_state.notified_errors = false;
                             PollInterval::Long
                         }
@@ -729,12 +730,22 @@ pub fn monitor_charging(
     Ok(())
 }
 
+fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Message>) {
+    if tesla_state.notified_errors {
+        let msg = new_message(
+            "I am on talking terms with the Tesla again",
+            MessagePriority::Urgent,
+        );
+        message_sink.try_send(msg);
+    }
+}
+
 fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<Message>) {
     if !tesla_state.notified_errors
         && tesla_state.last_success.add(chrono::Duration::minutes(30)) < Utc::now()
     {
         let msg = new_message(
-            "Can't talk to Tesla for more then 30 minutes",
+            "The Tesla and I have not been talking to each other for 30 minutes",
             MessagePriority::Urgent,
         );
         message_sink.try_send(msg);
