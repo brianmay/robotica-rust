@@ -81,23 +81,11 @@ impl<T: TimeZone + Copy> Config<T> {
             Vec::new()
         });
 
-        let s = sequencer::schedule_list_to_sequence(
-            &self.sequencer,
-            date,
-            &schedule,
-            &c_date,
-            &c_tomorrow,
-        )
-        .unwrap_or_else(|e| {
-            error!("Error getting sequences for {date}: {e}");
-            Vec::new()
-        });
-
-        let calendar = self.load_calendar(date, date + Duration::days(1));
-        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
-        sequences.extend(s);
-        sequences.extend(calendar);
-        sequences
+        sequencer::schedule_list_to_sequence(&self.sequencer, date, &schedule, &c_date, &c_tomorrow)
+            .unwrap_or_else(|e| {
+                error!("Error getting sequences for {date}: {e}");
+                Vec::new()
+            })
     }
 
     fn get_tags(&self, today: Date) -> Tags {
@@ -111,14 +99,25 @@ impl<T: TimeZone + Copy> Config<T> {
         }
     }
     fn get_sequences_all(&self, date: Date) -> Vec<Sequence> {
+        let first_offset = -1;
+        // Stop date is exclusive, so we have to add an extra day.
+        let last_offset = 4 + 1;
+
         // Get Yesterday, Today, and next 3 days.
-        let mut sequences: Vec<_> = (-1..=4)
+        let s: Vec<_> = (first_offset..last_offset)
             .flat_map(|day| {
                 let date = date + Duration::days(day);
                 self.get_sequences_for_date(date)
             })
             .collect();
 
+        let calendar = self.load_calendar(
+            date + Duration::days(first_offset),
+            date + Duration::days(last_offset),
+        );
+        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
+        sequences.extend(s);
+        sequences.extend(calendar);
         sequences.sort_by_key(|s| (s.start_time, s.end_time));
         sequences
     }

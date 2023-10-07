@@ -127,4 +127,28 @@ mod tests {
         assert!(c.len() == 7);
         println!("{c:?}");
     }
+
+    #[test]
+    fn test_calendar_stop_same_date() {
+        let c = load(
+            "http://tinyurl.com/y24m3r8f",
+            NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
+            NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
+        )
+        .unwrap();
+        assert!(c.is_empty());
+        println!("{c:?}");
+    }
+
+    #[test]
+    fn test_calendar_stop_next_day() {
+        let c = load(
+            "http://tinyurl.com/y24m3r8f",
+            NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
+            NaiveDate::from_ymd_opt(2019, 3, 19).unwrap(),
+        )
+        .unwrap();
+        assert!(c.len() == 1);
+        println!("{c:?}");
+    }
 }
