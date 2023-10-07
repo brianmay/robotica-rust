@@ -104,18 +104,16 @@ impl<T: TimeZone + Copy> Config<T> {
         let last_offset = 4 + 1;
 
         // Get Yesterday, Today, and next 3 days.
-        let s: Vec<_> = (first_offset..last_offset)
-            .flat_map(|day| {
-                let date = date + Duration::days(day);
-                self.get_sequences_for_date(date)
-            })
-            .collect();
+        let s = (first_offset..last_offset).flat_map(|day| {
+            let date = date + Duration::days(day);
+            self.get_sequences_for_date(date)
+        });
 
         let calendar = self.load_calendar(
             date + Duration::days(first_offset),
             date + Duration::days(last_offset),
         );
-        let mut sequences = Vec::with_capacity(s.len() + calendar.len());
+        let mut sequences = Vec::new();
         sequences.extend(s);
         sequences.extend(calendar);
         sequences.sort_by_key(|s| (s.start_time, s.end_time));
