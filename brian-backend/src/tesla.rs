@@ -6,7 +6,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
-    ChargingStateEnum, CommandSequence, Token, TokenError,
+    ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError,
 };
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
@@ -450,6 +450,7 @@ struct TeslaState {
     is_at_home: Option<bool>,
     last_success: DateTime<Utc>,
     notified_errors: bool,
+    send_left_home_commands: bool,
 }
 
 impl TeslaState {
@@ -467,6 +468,11 @@ pub async fn check_token(
     token.check(tesla_secret).await?;
     info!("Token expiration: {:?}", token.expires_at);
     Ok(())
+}
+
+enum TeslaResult {
+    Skipped,
+    Tried(Result<(), SequenceError>),
 }
 
 #[allow(clippy::too_many_lines)]
@@ -579,6 +585,7 @@ pub fn monitor_charging(
             is_at_home: None,
             last_success: Utc::now(),
             notified_errors: false,
+            send_left_home_commands: false,
         };
 
         let mut interval = PollInterval::Long;
@@ -664,8 +671,15 @@ pub fn monitor_charging(
             }
 
             let is_at_home = tesla_state.is_at_home;
+            if was_at_home == Some(true) && is_at_home == Some(false) {
+                info!("Tesla has left home - sending left home commands");
+                tesla_state.send_left_home_commands = true;
+            } else if is_at_home == Some(true) && tesla_state.send_left_home_commands {
+                info!("Tesla is at home - cancelling left home commands");
+                tesla_state.send_left_home_commands = false;
+            }
 
-            let new_interval = if was_at_home == Some(true) && is_at_home == Some(false) {
+            let result = if tesla_state.send_left_home_commands {
                 // Construct sequence of commands to send to Tesla.
                 let mut sequence = CommandSequence::new();
 
@@ -675,14 +689,8 @@ pub fn monitor_charging(
 
                 // Send the commands.
                 info!("Sending left home commands: {sequence:?}");
-                sequence
-                    .execute(&token, car_id)
-                    .await
-                    .unwrap_or_else(|err| {
-                        info!("Error executing command sequence: {}", err);
-                    });
-
-                PollInterval::Long
+                let result = sequence.execute(&token, car_id).await;
+                TeslaResult::Tried(result)
             } else if is_at_home == Some(true) && ps.auto_charge {
                 if let Some(price_category) = price_category {
                     let result = check_charge(
@@ -693,25 +701,37 @@ pub fn monitor_charging(
                         ps.force_charge,
                     )
                     .await;
-                    match result {
-                        Ok(()) => {
-                            tesla_state.last_success = Utc::now();
-                            notify_success(&tesla_state, &message_sink);
-                            tesla_state.notified_errors = false;
-                            PollInterval::Long
-                        }
-                        Err(CheckChargeError::ScheduleRetry) => {
-                            notify_errors(&mut tesla_state, &message_sink);
-                            PollInterval::Short
-                        }
-                    }
+                    TeslaResult::Tried(result)
                 } else {
                     info!("No price summary available, skipping charge check");
-                    PollInterval::Long
+                    TeslaResult::Skipped
                 }
             } else {
                 info!("Skipping charge check");
-                PollInterval::Long
+                TeslaResult::Skipped
+            };
+
+            let new_interval = match result {
+                TeslaResult::Skipped => {
+                    // If we skipped, then lets just pretend we succeeded.
+                    tesla_state.last_success = Utc::now();
+                    tesla_state.notified_errors = false;
+                    tesla_state.send_left_home_commands = false;
+                    PollInterval::Long
+                }
+                TeslaResult::Tried(Ok(())) => {
+                    info!("Success executing command sequence");
+                    notify_success(&tesla_state, &message_sink);
+                    tesla_state.last_success = Utc::now();
+                    tesla_state.notified_errors = false;
+                    tesla_state.send_left_home_commands = false;
+                    PollInterval::Long
+                }
+                TeslaResult::Tried(Err(err)) => {
+                    info!("Error executing command sequence: {}", err);
+                    notify_errors(&mut tesla_state, &message_sink);
+                    PollInterval::Short
+                }
             };
 
             if interval != new_interval {
@@ -750,6 +770,8 @@ fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<
         );
         message_sink.try_send(msg);
         tesla_state.notified_errors = true;
+        // If we have been trying to send left home commands for 30 minutes, then give up.
+        tesla_state.send_left_home_commands = false;
     }
 }
 
@@ -838,12 +860,6 @@ impl RequestedCharge {
     }
 }
 
-#[derive(Error, Debug)]
-enum CheckChargeError {
-    #[error("Error getting charge state")]
-    ScheduleRetry,
-}
-
 #[allow(clippy::too_many_lines)]
 async fn check_charge(
     car_id: u64,
@@ -851,9 +867,8 @@ async fn check_charge(
     tesla_state: &TeslaState,
     price_category: PriceCategory,
     force_charge: bool,
-) -> Result<(), CheckChargeError> {
+) -> Result<(), SequenceError> {
     info!("Checking charge");
-    let mut rc_err = None;
 
     let (should_charge, charge_limit) = should_charge(price_category, force_charge, tesla_state);
 
@@ -925,13 +940,10 @@ async fn check_charge(
 
     // Send the commands.
     info!("Sending commands: {sequence:?}");
-    sequence.execute(token, car_id).await.unwrap_or_else(|err| {
+    let result = sequence.execute(token, car_id).await.map_err(|err| {
         info!("Error executing command sequence: {}", err);
-        rc_err = Some(CheckChargeError::ScheduleRetry);
+        err
     });
-
-    // Generate result.
-    let result = rc_err.map_or(Ok(()), Err);
 
     info!("All done. {result:?}");
     result
