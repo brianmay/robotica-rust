@@ -30,6 +30,7 @@ mod slint {
     #![allow(clippy::items_after_statements)]
     #![allow(clippy::cast_possible_wrap)]
     #![allow(clippy::float_cmp)]
+    #![allow(clippy::needless_pass_by_ref_mut)]
 
     slint::include_modules!();
 }
