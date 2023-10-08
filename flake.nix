@@ -49,6 +49,7 @@
             cargoExtraArgs = "-p brian-backend";
             nativeBuildInputs = with pkgs; [ pkgconfig ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
+            installCargoArtifactsMode = "use-zstd";
           };
 
           # Build *just* the cargo dependencies, so we can reuse
@@ -68,7 +69,7 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = clippy;
+            cargoArtifacts = cargoArtifacts;
             doCheck = true;
           } // common);
 
@@ -100,6 +101,7 @@
               wayland
               libxkbcommon
             ];
+            installCargoArtifactsMode = "use-zstd";
           };
 
           # Build *just* the cargo dependencies, so we can reuse
@@ -119,7 +121,7 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = clippy;
+            cargoArtifacts = cargoArtifacts;
             doCheck = true;
           } // common);
 
