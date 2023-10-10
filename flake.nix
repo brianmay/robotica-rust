@@ -50,7 +50,7 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
 
-        nodePackages = import ./default.nix {
+        nodePackages = import robotica-frontend/default.nix {
           inherit pkgs system;
           nodejs = pkgs.nodejs_20;
         };

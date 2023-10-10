@@ -3609,7 +3609,7 @@ let
     name = "rust-webpack-template";
     packageName = "rust-webpack-template";
     version = "0.1.0";
-    src = ./robotica-frontend;
+    src = ./.;
     dependencies = [
       sources."@babel/code-frame-7.22.5"
       sources."@babel/helper-validator-identifier-7.22.5"
