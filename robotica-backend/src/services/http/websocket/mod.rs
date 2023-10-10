@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{
@@ -29,9 +29,10 @@ use super::{get_user, HttpConfig, User};
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(config): State<HttpConfig>,
+    State(config): State<Arc<HttpConfig>>,
     session: ReadableSession,
 ) -> Response {
+    let config = (*config).clone();
     #[allow(clippy::option_if_let_else)]
     if let Some(user) = get_user(&session) {
         debug!("Accessing websocket");

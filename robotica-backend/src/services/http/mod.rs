@@ -45,6 +45,7 @@ struct HttpConfig {
     #[allow(dead_code)]
     mqtt: MqttTx,
     root_url: reqwest::Url,
+    static_path: String,
 }
 
 impl HttpConfig {
@@ -59,12 +60,12 @@ impl HttpConfig {
 
 #[derive(Clone)]
 struct HttpState {
-    http_config: HttpConfig,
+    http_config: Arc<HttpConfig>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
 }
 
-impl FromRef<HttpState> for HttpConfig {
+impl FromRef<HttpState> for Arc<HttpConfig> {
     fn from_ref(state: &HttpState) -> Self {
         state.http_config.clone()
     }
@@ -121,6 +122,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
     let http_config = HttpConfig {
         mqtt,
         root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
+        static_path: get_env("STATIC_PATH")?,
     };
 
     let store = CookieStore::new();
@@ -141,6 +143,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
     let client = Client::new(config.clone()).await?;
     let client = Arc::new(ArcSwap::new(Arc::new(client)));
 
+    let http_config = Arc::new(http_config);
     let rooms = Arc::new(rooms);
 
     {
@@ -175,7 +178,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
 }
 
 async fn server(
-    http_config: HttpConfig,
+    http_config: Arc<HttpConfig>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
     session_layer: SessionLayer<CookieStore>,
@@ -233,6 +236,7 @@ const ASSET_SUFFIXES: [&str; 8] = [
 async fn fallback_handler(
     session: ReadableSession,
     State(oidc_client): State<Arc<Client>>,
+    State(http_config): State<Arc<HttpConfig>>,
     req: Request<Body>,
 ) -> Response {
     if req.method() != Method::GET {
@@ -250,7 +254,7 @@ async fn fallback_handler(
         return Redirect::to(&auth_url).into_response();
     }
 
-    let static_path = "./robotica-frontend/dist";
+    let static_path = &http_config.static_path;
     match ServeDir::new(static_path).oneshot(req).await {
         Ok(response) => {
             let status = response.status();
@@ -337,7 +341,7 @@ async fn root(session: ReadableSession) -> Response {
 }
 
 async fn oidc_callback(
-    State(http_config): State<HttpConfig>,
+    State(http_config): State<Arc<HttpConfig>>,
     State(oidc_client): State<Arc<Client>>,
     Query(params): Query<HashMap<String, String>>,
     mut session: WritableSession,
