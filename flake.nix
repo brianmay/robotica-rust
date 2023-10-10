@@ -74,25 +74,19 @@
           cargoArtifacts = craneLib.buildDepsOnly common;
 
           # Run clippy (and deny all warnings) on the crate source.
-          # clippy = craneLib.cargoClippy ({
-          #   inherit cargoArtifacts;
-          #   cargoClippyExtraArgs = "-- --deny warnings";
-          # } // common);
-
-          # Next, we want to run the tests and collect code-coverage, _but only if
-          # the clippy checks pass_ so we do not waste any extra cycles.
-          # coverage =
-          #   craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
+          clippy = craneLib.cargoClippy ({
+            inherit cargoArtifacts;
+            cargoClippyExtraArgs = "-- --deny warnings";
+          } // common);
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = cargoArtifacts;
+            inherit cargoArtifacts;
             doCheck = false;
           } // common);
 
         in {
-          # clippy = clippy;
-          # coverage = coverage;
+          clippy = clippy;
           pkg = pkg;
         };
 
@@ -146,7 +140,7 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = cargoArtifacts;
+            inherit cargoArtifacts;
             doCheck = true;
             # CARGO_LOG = "cargo::core::compiler::fingerprint=info";
           } // common);
@@ -203,7 +197,7 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = cargoArtifacts;
+            inherit cargoArtifacts;
             doCheck = true;
           } // common);
 
@@ -219,12 +213,14 @@
 
       in {
         checks = {
-          brian-backend-clippy = brian-backend.clippy;
-          brian-backend-coverage = brian-backend.coverage;
-          brian-backend = brian-backend.pkg;
           robotica-slint-clippy = robotica-slint.clippy;
           robotica-slint-coverage = robotica-slint.coverage;
           robotica-slint = robotica-slint.pkg;
+          robotica-frontend-clippy = robotica-frontend.clippy;
+          robotica-frontend = robotica-frontend.pkg;
+          brian-backend-clippy = brian-backend.clippy;
+          brian-backend-coverage = brian-backend.coverage;
+          brian-backend = brian-backend.pkg;
         };
 
         devShells.default = pkgs.mkShell {
