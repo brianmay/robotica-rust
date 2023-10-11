@@ -36,12 +36,12 @@ pub enum Error {
 }
 
 impl Client {
-    pub async fn new(config: Config) -> Result<Client, Error> {
+    pub async fn new(config: &Config) -> Result<Client, Error> {
         let cloned_config = config.clone();
 
-        let client_id = config.client_id;
-        let client_secret = config.client_secret;
-        let redirect = Some(config.redirect_uri);
+        let client_id = config.client_id.clone();
+        let client_secret = config.client_secret.clone();
+        let redirect = Some(config.redirect_uri.clone());
         let issuer = reqwest::Url::parse(&config.issuer)?;
 
         let client = DiscoveredClient::discover(client_id, client_secret, redirect, issuer).await?;
@@ -55,7 +55,7 @@ impl Client {
     }
 
     pub async fn renew(&self) -> Result<Client, Error> {
-        Self::new(self.config.clone()).await
+        Self::new(&self.config).await
     }
 
     pub fn get_auth_url(&self, origin_url: &str) -> String {

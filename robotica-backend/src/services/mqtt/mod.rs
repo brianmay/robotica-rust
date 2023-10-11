@@ -19,7 +19,7 @@ use tracing::{debug, error};
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use crate::pipes::{generic, stateful, stateless};
-use crate::{get_env, is_debug_mode, spawn, EnvironmentError};
+use crate::{is_debug_mode, spawn};
 
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
     match qos {
@@ -155,10 +155,6 @@ impl MqttTx {
 /// An error loading the Config.
 #[derive(Error, Debug)]
 pub enum MqttClientError {
-    /// Environment variable not set.
-    #[error("Environment variable missing: {0}")]
-    VarError(#[from] EnvironmentError),
-
     /// Environment variable set but invalid.
     #[error("Environment variable {0} invalid {1}")]
     VarInvalid(String, String, ParseIntError),
@@ -178,6 +174,21 @@ pub fn mqtt_channel() -> (MqttTx, MqttRx) {
     (MqttTx(tx.clone()), MqttRx { tx, rx })
 }
 
+/// MQTT configuration.
+pub struct Config {
+    /// MQTT host
+    pub mqtt_host: String,
+
+    /// MQTT port
+    pub mqtt_port: u16,
+
+    /// MQTT username
+    pub mqtt_username: String,
+
+    /// MQTT password
+    pub mqtt_password: String,
+}
+
 /// Connect to the MQTT broker and send/receive messages.
 ///
 /// # Errors
@@ -186,16 +197,8 @@ pub fn mqtt_channel() -> (MqttTx, MqttRx) {
 pub fn run_client(
     mut subscriptions: Subscriptions,
     channel: MqttRx,
+    config: Config,
 ) -> Result<(), MqttClientError> {
-    let mqtt_host = get_env("MQTT_HOST")?;
-    let mqtt_port = get_env("MQTT_PORT")?;
-    let mqtt_port = mqtt_port
-        .parse()
-        .map_err(|e| MqttClientError::VarInvalid("MQTT_PORT".to_string(), mqtt_port, e))?;
-    let username = get_env("MQTT_USERNAME")?;
-    let password = get_env("MQTT_PASSWORD")?;
-    // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
-
     let hostname = gethostname::gethostname();
     let hostname = hostname.to_str().unwrap_or("unknown");
     let client_id = format!("robotica-rust-{hostname}");
@@ -213,10 +216,10 @@ pub fn run_client(
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let mut mqtt_options = MqttOptions::new(client_id, mqtt_host, mqtt_port);
+    let mut mqtt_options = MqttOptions::new(client_id, config.mqtt_host, config.mqtt_port);
     mqtt_options.set_keep_alive(Duration::from_secs(30));
     mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
-    mqtt_options.set_credentials(username, password);
+    mqtt_options.set_credentials(config.mqtt_username, config.mqtt_password);
     mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
@@ -365,7 +368,7 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
             Ok(msg) => {
                 let msg: MqttMessage = msg;
                 let topic = &msg.topic;
-                debug!("Received message: {msg:?}.");
+                // debug!("Received message: {msg:?}.");
                 if let Some(subscription) = subscriptions.get(topic) {
                     subscription.tx.try_send(msg);
                 }

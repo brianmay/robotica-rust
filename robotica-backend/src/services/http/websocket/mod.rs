@@ -24,12 +24,12 @@ use crate::{
     services::mqtt::topics::topic_matches_any,
 };
 
-use super::{get_user, HttpConfig, User};
+use super::{get_user, Config, User};
 
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(config): State<Arc<HttpConfig>>,
+    State(config): State<Arc<Config>>,
     session: ReadableSession,
 ) -> Response {
     let config = (*config).clone();
@@ -62,7 +62,7 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
 
 // FIXME: function is too long
 #[allow(clippy::too_many_lines)]
-async fn websocket(mut stream: WebSocket, config: HttpConfig, user: User) {
+async fn websocket(mut stream: WebSocket, config: Config, user: User) {
     // Send Connect message.
     let message = WsStatus::Connected {
         user: user.clone(),
@@ -213,7 +213,7 @@ const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
 const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#", "zwave/#"];
 
 #[must_use]
-fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {
+fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &Config) -> bool {
     let topics = ALLOWED_SUBSCRIBE_TOPICS
         .iter()
         .map(std::string::ToString::to_string);
@@ -227,7 +227,7 @@ fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &HttpConfig
 }
 
 #[must_use]
-fn check_topic_send_allowed(topic: &str, _user: &User, _config: &HttpConfig) -> bool {
+fn check_topic_send_allowed(topic: &str, _user: &User, _config: &Config) -> bool {
     let topics = ALLOWED_SEND_TOPICS
         .iter()
         .map(std::string::ToString::to_string);

@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{get_env_os, scheduling::conditions, EnvironmentOsError};
+use crate::scheduling::conditions;
 use chrono::Datelike;
 use field_ref::field_ref_of;
 use serde::{Deserialize, Deserializer};
@@ -76,10 +76,6 @@ pub struct Config {
 /// An error loading the Config
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    /// Environment variable not set
-    #[error("{0}")]
-    EnvironmentError(#[from] EnvironmentOsError),
-
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
     FileError(PathBuf, std::io::Error),
@@ -102,17 +98,6 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
         .map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
 
     Ok(config)
-}
-
-/// Load the classification config from the environment variable `CLASSIFICATIONS_FILE`.
-///
-/// # Errors
-///
-/// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file cannot be read.
-pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
-    let env_name = "CLASSIFICATIONS_FILE";
-    let filename = get_env_os(env_name)?;
-    load_config(Path::new(&filename))
 }
 
 /// Classify a date.
@@ -191,10 +176,10 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
 ///
 /// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
 /// cannot be read or parsed.
-pub fn classify_date(date: &Date) -> Result<HashSet<String>, ConfigError> {
-    let config = load_config_from_default_file()?;
-    Ok(classify_date_with_config(date, &config))
-}
+// pub fn classify_date(date: &Date) -> Result<HashSet<String>, ConfigError> {
+//     let config = load_config_from_default_file()?;
+//     Ok(classify_date_with_config(date, &config))
+// }
 
 #[cfg(test)]
 mod tests {

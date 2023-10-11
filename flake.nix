@@ -23,6 +23,21 @@
     , nixpkgs-unstable, node2nix }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
+        # pkgs_arm = nixpkgs.legacyPackages."aarch64-linux";
+
+        # pkgs = import nixpkgs {
+        #   inherit system;
+        #   crossSystem = "aarch64-linux";
+        #   overlays = [
+        #     (import rust-overlay)
+        #     (self: super: {
+        #       inherit (pkgs_arm)
+        #         openssl protobuf fontconfig freetype xorg mesa wayland
+        #         libxkbcommon;
+        #     })
+        #   ];
+        # };
+
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];

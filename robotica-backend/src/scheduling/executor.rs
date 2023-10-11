@@ -2,6 +2,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::env::{self, VarError};
 use std::fmt::Debug;
+use std::path::PathBuf;
 
 use chrono::{NaiveDate, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS};
@@ -29,6 +30,15 @@ type CalendarToSequence<T> = dyn Fn(CalendarEntry, T) -> Option<Sequence> + Send
 pub struct ExtraConfig {
     /// The URL of the calendar to use for extra events.
     pub calendar_url: String,
+
+    /// The filename for the classifier config.
+    pub classifications_file: PathBuf,
+
+    /// The filename for the scheduler config.
+    pub schedule_file: PathBuf,
+
+    /// The filename for the sequencer config.
+    pub sequences_file: PathBuf,
 }
 
 struct Config<T: TimeZone> {
@@ -525,9 +535,9 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
 
     let state = {
         let config = {
-            let classifier = classifier::load_config_from_default_file()?;
-            let scheduler = scheduler::load_config_from_default_file()?;
-            let sequencer = sequencer::load_config_from_default_file()?;
+            let classifier = classifier::load_config(&extra_config.classifications_file)?;
+            let scheduler = scheduler::load_config(&extra_config.schedule_file)?;
+            let sequencer = sequencer::load_config(&extra_config.sequences_file)?;
             check_schedule(&scheduler, &sequencer)?;
             Config {
                 classifier,
