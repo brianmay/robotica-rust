@@ -103,13 +103,11 @@
 
             ln -s ${nodePackages.nodeDependencies}/lib/node_modules ./node_modules
             export PATH="${nodePackages.nodeDependencies}/bin:$PATH"
-            ls -l pkg
             webpack
           '';
 
           installPhase = ''
             mkdir $out
-            # cp -rv pkg $out/
             cp -rv dist/* $out/
           '';
         };
