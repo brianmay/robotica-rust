@@ -16,6 +16,7 @@
   inputs.node2nix = {
     url = "github:svanderburg/node2nix";
     # inputs.nixpkgs.follows = "nixpkgs";
+    flake = false;
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
@@ -27,6 +28,7 @@
           overlays = [ (import rust-overlay) ];
         };
         pkgs_unstable = nixpkgs-unstable.legacyPackages.${system};
+        nodejs = pkgs.nodejs_20;
 
         poetry = poetry2nix.legacyPackages.${system};
         poetry_env = poetry.mkPoetryEnv {
@@ -50,10 +52,8 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
 
-        nodePackages = import robotica-frontend/default.nix {
-          inherit pkgs system;
-          nodejs = pkgs.nodejs_20;
-        };
+        nodePackages =
+          import robotica-frontend/default.nix { inherit pkgs system nodejs; };
 
         robotica-frontend = let
           common = {
@@ -211,6 +211,15 @@
           pkg = wrapper;
         };
 
+        pkg_node2nix = (import "${node2nix}/default.nix" {
+          inherit system pkgs nodejs;
+        }).package;
+
+        pkg_node2nix_wrapper = pkgs.writeShellScriptBin "update_node" ''
+          cd robotica-frontend
+          exec ${pkg_node2nix}/bin/node2nix --development -l
+        '';
+
       in {
         checks = {
           robotica-slint-clippy = robotica-slint.clippy;
@@ -232,14 +241,15 @@
             openssl
             protobuf
             fontconfig
-            nodejs_20
+            nodejs
             wasm-pack
             pkgs_unstable.wasm-bindgen-cli
             slint-lsp
             rustPlatform
             # https://github.com/NixOS/nixpkgs/issues/156890
             binaryen
-            node2nix.packages.${system}.node2nix
+            pkg_node2nix
+            pkg_node2nix_wrapper
             nodePackages.nodeDependencies
           ];
           shellHook = ''
