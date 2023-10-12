@@ -142,7 +142,7 @@ struct StandardSceneEntities {
 }
 
 impl StandardSceneEntities {
-    fn default(state: &mut crate::State, shared: SharedEntities, topic_substr: &str) -> Self {
+    fn default(state: &crate::State, shared: SharedEntities, topic_substr: &str) -> Self {
         Self {
             on: shared.on,
             auto: mqtt_entity(state, topic_substr, "auto"),
@@ -253,7 +253,7 @@ fn rainbow_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
 }
 
 fn mqtt_entity(
-    state: &mut crate::State,
+    state: &crate::State,
     topic_substr: &str,
     name: impl Into<String>,
 ) -> stateful::Receiver<PowerColor> {
@@ -283,7 +283,7 @@ fn mqtt_entity(
 }
 
 pub fn run_auto_light(
-    state: &mut crate::State,
+    state: &crate::State,
     discover: stateless::Receiver<Device>,
     shared: SharedEntities,
     topic_substr: &str,
@@ -339,7 +339,7 @@ fn run_state_sender(
 }
 
 pub fn run_passage_light(
-    state: &mut crate::State,
+    state: &crate::State,
     discover: stateless::Receiver<Device>,
     shared: SharedEntities,
     topic_substr: &str,
@@ -417,7 +417,7 @@ where
 }
 
 fn switch_entity<Entities>(
-    state: &mut crate::State,
+    state: &crate::State,
     entities: Entities,
     topic_substr: impl Into<String>,
     flash_color: PowerColor,

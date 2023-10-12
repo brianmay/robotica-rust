@@ -13,6 +13,7 @@ mod delays;
 mod environment_monitor;
 mod ha;
 mod hdmi;
+mod influxdb;
 mod lights;
 mod robotica;
 mod rooms;
@@ -25,7 +26,7 @@ use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::pipes::stateless;
 use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
-use robotica_backend::scheduling::executor::{self, executor};
+use robotica_backend::scheduling::executor::executor;
 use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
 use robotica_common::mqtt::QoS;
@@ -37,9 +38,9 @@ use robotica_common::scheduler::Importance;
 use tracing::{debug, error, info};
 
 use self::tesla::monitor_charging;
-use robotica_backend::services::mqtt::MqttTx;
+use robotica_backend::services::http;
 use robotica_backend::services::mqtt::{mqtt_channel, run_client, Subscriptions};
-use robotica_backend::services::{http, mqtt};
+use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -51,34 +52,26 @@ async fn main() -> Result<()> {
         panic!("Error loading environment: {e}");
     });
 
-    let config = config::Config::load(&env.config_file).unwrap_or_else(|e| {
+    let config = env.config().unwrap_or_else(|e| {
         panic!("Error loading config: {e}");
     });
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
     let message_sink = ha::create_message_sink(mqtt.clone());
-    let persistent_state_database = PersistentStateDatabase::new(&config.state_path)
+    let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
         .unwrap_or_else(|e| {
             panic!("Error getting persistent state loader: {e}");
         });
 
-    let mut state = State {
+    let state = State {
         subscriptions,
         mqtt,
         message_sink,
         persistent_state_database,
     };
 
-    setup_pipes(&mut state, &env, &config).await;
-
-    let mqtt_config = mqtt::Config {
-        mqtt_host: env.mqtt_host.clone(),
-        mqtt_port: env.mqtt_port,
-        mqtt_username: env.mqtt_username.clone(),
-        mqtt_password: env.mqtt_password.clone(),
-    };
-    run_client(state.subscriptions, mqtt_rx, mqtt_config)?;
+    setup_pipes(state, mqtt_rx, config).await;
 
     loop {
         debug!("I haven't crashed yet!");
@@ -177,14 +170,8 @@ fn calendar_start_top_times(
     Some((start_time, end_time))
 }
 
-async fn setup_pipes(state: &mut State, env: &config::Environment, config: &config::Config) {
-    let amber_config = amber::Config {
-        token: env.amber_token.clone(),
-        site_id: env.amber_site_id.clone(),
-        influxdb_database: env.influxdb_database.clone(),
-        influxdb_url: env.influxdb_url.clone(),
-    };
-    let price_summary_rx = amber::run(state, amber_config).unwrap_or_else(|e| {
+async fn setup_pipes(mut state: State, mqtt_rx: MqttRx, config: config::Config) {
+    let price_summary_rx = amber::run(&state, config.amber, &config.influxdb).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
 
@@ -202,46 +189,25 @@ async fn setup_pipes(state: &mut State, env: &config::Environment, config: &conf
             }
         });
 
-    monitor_charging(state, 1, price_summary_rx).unwrap_or_else(|e| {
+    monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");
     });
 
     let rooms = rooms::get();
-    let http_config = http::Config {
-        mqtt: state.mqtt.clone(),
-        static_path: config.static_path.clone(),
-        session_secret: env.session_secret.clone(),
-        oidc_discovery_url: env.oidc_discovery_url.clone(),
-        oidc_client_id: env.oidc_client_id.clone(),
-        oidc_client_secret: env.oidc_client_secret.clone(),
-        oidc_scopes: env.oidc_scopes.clone(),
-        http_listener: config.http_listener.clone(),
-        root_url: config.root_url.clone(),
-    };
-    http::run(rooms, http_config)
+    http::run(state.mqtt.clone(), rooms, config.http)
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
-    hdmi::run(state, "Dining", "TV", "hdmi.pri:8000");
-    tesla::monitor_tesla_location(state, 1);
-    tesla::monitor_tesla_doors(state, 1);
+    hdmi::run(&state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_location(&state, 1);
+    tesla::monitor_tesla_doors(&state, 1);
 
-    let environment_config = environment_monitor::Config {
-        influxdb_database: env.influxdb_database.clone(),
-        influxdb_url: env.influxdb_url.clone(),
-    };
-    environment_monitor::run(state, &environment_config);
+    environment_monitor::run(&state, &config.influxdb);
 
-    let executor_config = executor::ExtraConfig {
-        calendar_url: env.calendar_url.clone(),
-        classifications_file: config.classifications_file.clone(),
-        schedule_file: config.schedule_file.clone(),
-        sequences_file: config.sequences_file.clone(),
-    };
     executor(
         &mut state.subscriptions,
         state.mqtt.clone(),
-        executor_config,
+        config.executor,
         Box::new(calendar_to_sequence),
         Local,
     )
@@ -249,29 +215,33 @@ async fn setup_pipes(state: &mut State, env: &config::Environment, config: &conf
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch(state, "Dining/Messages");
-    fake_switch(state, "Dining/Request_Bathroom");
+    fake_switch(&state, "Dining/Messages");
+    fake_switch(&state, "Dining/Request_Bathroom");
 
-    fake_switch(state, "Brian/Night");
-    fake_switch(state, "Brian/Messages");
-    fake_switch(state, "Brian/Request_Bathroom");
+    fake_switch(&state, "Brian/Night");
+    fake_switch(&state, "Brian/Messages");
+    fake_switch(&state, "Brian/Request_Bathroom");
 
-    fake_switch(state, "Jan/Messages");
+    fake_switch(&state, "Jan/Messages");
 
-    fake_switch(state, "Twins/Messages");
+    fake_switch(&state, "Twins/Messages");
 
-    fake_switch(state, "Extension/Messages");
+    fake_switch(&state, "Extension/Messages");
 
-    fake_switch(state, "Akira/Messages");
+    fake_switch(&state, "Akira/Messages");
 
-    setup_lights(state).await;
+    setup_lights(&state).await;
+
+    run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
+        panic!("Error running mqtt client: {e}");
+    });
 }
 
-fn fake_switch(state: &mut State, topic_substr: &str) {
+fn fake_switch(state: &State, topic_substr: &str) {
     fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), topic_substr);
 }
 
-async fn setup_lights(state: &mut State) {
+async fn setup_lights(state: &State) {
     let lifx_config = DiscoverConfig {
         broadcast: "192.168.16.255:56700".to_string(),
         poll_time: std::time::Duration::from_secs(10),

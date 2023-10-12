@@ -671,8 +671,9 @@ mod tests {
     #[ignore = "requires secrets"]
     #[tokio::test]
     async fn test_get_token() {
-        let path = PathBuf::from("state");
-        let psd = PersistentStateDatabase::new(&path).unwrap();
+        let state_path = PathBuf::from("state");
+        let config = persistent_state::Config { state_path };
+        let psd = PersistentStateDatabase::new(&config).unwrap();
         let psr = psd.for_name("tesla_token");
 
         let token = Token::get(&psr).unwrap();

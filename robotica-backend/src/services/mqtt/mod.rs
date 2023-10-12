@@ -6,6 +6,7 @@ use rumqttc::v5::mqttbytes::v5::Packet;
 use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str;
@@ -174,6 +175,7 @@ pub fn mqtt_channel() -> (MqttTx, MqttRx) {
     (MqttTx(tx.clone()), MqttRx { tx, rx })
 }
 
+#[derive(Deserialize)]
 /// MQTT configuration.
 pub struct Config {
     /// MQTT host

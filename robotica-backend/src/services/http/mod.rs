@@ -25,6 +25,7 @@ use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use robotica_common::config::Rooms;
 use serde::de::Error;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::fs;
 use tower::{ServiceBuilder, ServiceExt};
@@ -41,11 +42,8 @@ use crate::spawn;
 use self::oidc::Client;
 
 /// The configuration for the HTTP service.
-#[derive(Clone)]
+#[derive(Deserialize)]
 pub struct Config {
-    /// The MQTT client.
-    pub mqtt: MqttTx,
-
     /// The root URL for the HTTP service.
     pub root_url: reqwest::Url,
 
@@ -83,9 +81,16 @@ impl Config {
 
 #[derive(Clone)]
 struct HttpState {
+    mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
+}
+
+impl FromRef<HttpState> for MqttTx {
+    fn from_ref(state: &HttpState) -> Self {
+        state.mqtt.clone()
+    }
 }
 
 impl FromRef<HttpState> for Arc<Config> {
@@ -137,7 +142,7 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(rooms: Rooms, config: Config) -> Result<(), HttpError> {
+pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpError> {
     let store = CookieStore::new();
     let secret = STANDARD.decode(config.session_secret.clone())?;
     let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
@@ -180,7 +185,7 @@ pub async fn run(rooms: Rooms, config: Config) -> Result<(), HttpError> {
     }
 
     spawn(async {
-        server(config, client, rooms, session_layer)
+        server(mqtt, config, client, rooms, session_layer)
             .await
             .unwrap_or_else(|err| {
                 error!("http server failed: {}", err);
@@ -191,12 +196,14 @@ pub async fn run(rooms: Rooms, config: Config) -> Result<(), HttpError> {
 }
 
 async fn server(
+    mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
     let state = HttpState {
+        mqtt,
         config,
         oidc_client,
         rooms,

@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
-use influxdb::{Client, InfluxDbWriteable};
-
+use influxdb::InfluxDbWriteable;
 use robotica_backend::pipes::{Subscriber, Subscription};
 use robotica_backend::{is_debug_mode, spawn};
 use robotica_common::anavi_thermometer::{self as anavi};
@@ -10,12 +9,8 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use tracing::{debug, error};
 
+use crate::influxdb::Config;
 use crate::State;
-
-pub struct Config {
-    pub influxdb_url: String,
-    pub influxdb_database: String,
-}
 
 #[derive(Debug, InfluxDbWriteable)]
 struct InfluxReadingF64 {
@@ -80,7 +75,7 @@ struct FishTankReading {
     time: DateTime<Utc>,
 }
 
-pub fn monitor_reading<T, Influx>(state: &mut State, topic: &str, config: &Config)
+pub fn monitor_reading<T, Influx>(state: &State, topic: &str, config: &Config)
 where
     T: Clone + Send + 'static + Into<Influx> + DeserializeOwned,
     Influx: InfluxDbWriteable + Send,
@@ -91,11 +86,10 @@ where
         .subscriptions
         .subscribe_into_stateless::<Json<T>>(topic);
     let topic = topic.to_string();
-    let influxdb_url = config.influxdb_url.clone();
-    let influxdb_database = config.influxdb_database.clone();
+    let config = config.clone();
 
     spawn(async move {
-        let client = Client::new(&influxdb_url, &influxdb_database);
+        let client = config.get_client();
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
@@ -111,16 +105,15 @@ where
     });
 }
 
-pub fn monitor_fishtank(state: &mut State, topic: &str, config: &Config) {
+pub fn monitor_fishtank(state: &State, topic: &str, config: &Config) {
     let rx = state
         .subscriptions
         .subscribe_into_stateless::<Json<FishTankData>>(topic);
     let topic = topic.to_string();
-    let influxdb_url = config.influxdb_url.clone();
-    let influxdb_database = config.influxdb_database.clone();
+    let config = config.clone();
 
     spawn(async move {
-        let client = Client::new(&influxdb_url, &influxdb_database);
+        let client = config.get_client();
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
@@ -141,7 +134,7 @@ pub fn monitor_fishtank(state: &mut State, topic: &str, config: &Config) {
     });
 }
 
-fn monitor_zwave_switch(state: &mut State, topic_substr: &str, config: &Config) {
+fn monitor_zwave_switch(state: &State, topic_substr: &str, config: &Config) {
     // kwh
     monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
         state,
@@ -171,7 +164,7 @@ fn monitor_zwave_switch(state: &mut State, topic_substr: &str, config: &Config) 
     );
 }
 
-pub fn run(state: &mut State, config: &Config) {
+pub fn run(state: &State, config: &Config) {
     monitor_reading::<anavi::Temperature, InfluxReadingF64>(
         state,
         "workgroup/3765653003a76f301ad767b4676d7065/air/temperature",

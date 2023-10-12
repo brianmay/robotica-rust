@@ -14,6 +14,7 @@ use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, duration_from_hms, utc_now, Date, DateTime, Duration, Time,
 };
 
+use crate::influxdb as influx;
 use crate::State;
 
 /// Error when starting the Amber service
@@ -24,11 +25,10 @@ pub enum Error {
     Internal(String),
 }
 
+#[derive(Deserialize)]
 pub struct Config {
     pub token: String,
     pub site_id: String,
-    pub influxdb_url: String,
-    pub influxdb_database: String,
 }
 
 #[derive(InfluxDbWriteable)]
@@ -68,7 +68,11 @@ const fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State, config: Config) -> Result<stateful::Receiver<PriceSummary>, Error> {
+pub fn run(
+    state: &State,
+    config: Config,
+    influxdb_config: &influx::Config,
+) -> Result<stateful::Receiver<PriceSummary>, Error> {
     let (tx, rx) = stateful::create_pipe("amber_summary");
 
     let psr = state
@@ -77,6 +81,8 @@ pub fn run(state: &State, config: Config) -> Result<stateful::Receiver<PriceSumm
 
     let nem_timezone = FixedOffset::east_opt(hours(10).into())
         .ok_or_else(|| Error::Internal("Failed to create NEM timezone".to_string()))?;
+
+    let influxdb_config = influxdb_config.clone();
 
     spawn(async move {
         // if is_debug_mode() {
@@ -115,7 +121,7 @@ pub fn run(state: &State, config: Config) -> Result<stateful::Receiver<PriceSumm
                             let update_time = summary.next_update;
 
                             // Write the prices to influxdb and send
-                            prices_to_influxdb(&config, &prices, &summary).await;
+                            prices_to_influxdb(&influxdb_config, &prices, &summary).await;
                             tx.try_send(summary);
 
                             // Add margin to allow time for Amber to update.
@@ -149,7 +155,7 @@ pub fn run(state: &State, config: Config) -> Result<stateful::Receiver<PriceSumm
                     let today = now.with_timezone(&nem_timezone).date_naive();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
-                    process_usage(&config, yesterday, tomorrow).await;
+                    process_usage(&config, &influxdb_config, yesterday, tomorrow).await;
                 }
             }
         }
@@ -408,8 +414,12 @@ fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCateg
     c
 }
 
-async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: &PriceSummary) {
-    let client = influxdb::Client::new(&config.influxdb_url, &config.influxdb_database);
+async fn prices_to_influxdb(
+    influxdb_config: &influx::Config,
+    prices: &[PriceResponse],
+    summary: &PriceSummary,
+) {
+    let client = influxdb_config.get_client();
 
     if is_debug_mode() {
         debug!("Skipping writing prices to influxdb in debug mode");
@@ -443,11 +453,16 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
     }
 }
 
-async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
+async fn process_usage(
+    config: &Config,
+    influxdb_config: &influx::Config,
+    start_date: Date,
+    end_date: Date,
+) {
     let usage = get_usage(config, start_date, end_date).await;
     match usage {
         Ok(usage) => {
-            let client = influxdb::Client::new(&config.influxdb_url, &config.influxdb_database);
+            let client = influxdb_config.get_client();
 
             if is_debug_mode() {
                 debug!("Skipping writing usage to influxdb in debug mode");

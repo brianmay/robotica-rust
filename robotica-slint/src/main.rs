@@ -11,12 +11,12 @@ mod duration;
 mod partial_command;
 mod ui;
 
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use envconfig::Envconfig;
 use robotica_backend::services::{
     mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
-    persistent_state::PersistentStateDatabase,
+    persistent_state::{self, PersistentStateDatabase},
 };
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -58,13 +58,13 @@ impl Environment {
 struct Config {
     ui: ui::Config,
     audio: audio::Config,
-    state_path: PathBuf,
+    persistent_state: persistent_state::Config,
 }
 
 struct LoadedConfig {
     ui: Arc<ui::LoadedConfig>,
     audio: Arc<audio::LoadedConfig>,
-    state_path: PathBuf,
+    persistent_state: persistent_state::Config,
 }
 
 impl TryFrom<Config> for LoadedConfig {
@@ -73,11 +73,11 @@ impl TryFrom<Config> for LoadedConfig {
     fn try_from(config: Config) -> Result<Self, Self::Error> {
         let ui = Arc::new(ui::LoadedConfig::try_from(config.ui)?);
         let audio = Arc::new(audio::LoadedConfig::try_from(config.audio)?);
-        let state_path = config.state_path;
+        let persistent_state = config.persistent_state;
         Ok(Self {
             ui,
             audio,
-            state_path,
+            persistent_state,
         })
     }
 }
@@ -113,7 +113,7 @@ pub struct RunningState {
 fn start_services(env: &Environment, config: &LoadedConfig) -> Result<(), anyhow::Error> {
     let (mqtt, mqtt_rx) = mqtt_channel();
     let mut subscriptions: Subscriptions = Subscriptions::new();
-    let persistent_state_database = PersistentStateDatabase::new(&config.state_path)
+    let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
         .unwrap_or_else(|e| {
             panic!("Error getting persistent state loader: {e}");
         });

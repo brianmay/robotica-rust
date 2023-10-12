@@ -1,5 +1,4 @@
 //! Source for life360 based data
-use anyhow::anyhow;
 use anyhow::Result;
 use serde::Deserialize;
 use serde::Serialize;
@@ -257,9 +256,7 @@ async fn login(username: &str, password: &str) -> Result<Login> {
     let response = response.error_for_status()?;
     let payload = response.text().await?;
 
-    let d = &mut serde_json::Deserializer::from_str(&payload);
-    let login: Login = serde_path_to_error::deserialize(d).map_err(|e| anyhow!("login: {e}"))?;
-
+    let login = serde_json::from_str(&payload)?;
     Ok(login)
 }
 
@@ -279,10 +276,7 @@ async fn get_circles(login: &Login) -> Result<List> {
     let response = response.error_for_status()?;
     let payload = response.text().await?;
 
-    let d = &mut serde_json::Deserializer::from_str(&payload);
-    let list: List =
-        serde_path_to_error::deserialize(d).map_err(|e| anyhow!("get_circles: {e}"))?;
-
+    let list: List = serde_json::from_str(&payload)?;
     Ok(list)
 }
 
@@ -302,9 +296,6 @@ async fn get_circle_details(login: &Login, circle: &ListItem) -> Result<Circle> 
     let response = response.error_for_status()?;
     let payload = response.text().await?;
 
-    let d = &mut serde_json::Deserializer::from_str(&payload);
-    let circle: Circle =
-        serde_path_to_error::deserialize(d).map_err(|e| anyhow!("get_circle_details: {e}"))?;
-
+    let circle: Circle = serde_json::from_str(&payload)?;
     Ok(circle)
 }

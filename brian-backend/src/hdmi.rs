@@ -20,7 +20,7 @@ pub enum CommandErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-pub fn run(state: &mut State, location: &str, device: &str, addr: &str) {
+pub fn run(state: &State, location: &str, device: &str, addr: &str) {
     let id = Id::new(location, device);
     let topic = id.get_command_topic(&[]);
 

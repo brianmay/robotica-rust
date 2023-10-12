@@ -1,8 +1,15 @@
 //! Save persistent state to disk
 use std::{io::Write, marker::PhantomData, path::PathBuf};
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
+
+/// Configuration for `PersistentState`.
+#[derive(Deserialize)]
+pub struct Config {
+    /// Path to the directory where state should be saved.
+    pub state_path: PathBuf,
+}
 
 /// Errors that can occur when using a `PersistentState`.
 #[derive(Error, Debug)]
@@ -29,7 +36,8 @@ impl PersistentStateDatabase {
     /// # Errors
     ///
     /// This function will return an error if the directory does not exist and cannot be created.
-    pub fn new(path: &PathBuf) -> Result<PersistentStateDatabase, Error> {
+    pub fn new(config: &Config) -> Result<PersistentStateDatabase, Error> {
+        let path = &config.state_path;
         if !path.is_dir() {
             std::fs::create_dir_all(path)
                 .map_err(|e| Error::IoError(path.to_string_lossy().to_string(), e))?;

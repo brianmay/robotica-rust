@@ -21,7 +21,7 @@ use robotica_common::{
 
 use crate::{
     pipes::{stateful, Subscriber, Subscription},
-    services::mqtt::topics::topic_matches_any,
+    services::mqtt::{topics::topic_matches_any, MqttTx},
 };
 
 use super::{get_user, Config, User};
@@ -30,13 +30,13 @@ use super::{get_user, Config, User};
 pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(config): State<Arc<Config>>,
+    State(mqtt): State<MqttTx>,
     session: ReadableSession,
 ) -> Response {
-    let config = (*config).clone();
     #[allow(clippy::option_if_let_else)]
     if let Some(user) = get_user(&session) {
         debug!("Accessing websocket");
-        ws.on_upgrade(|socket| websocket(socket, config, user))
+        ws.on_upgrade(|socket| websocket(socket, config, user, mqtt))
             .into_response()
     } else {
         error!("Permission denied to websocket");
@@ -62,7 +62,7 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
 
 // FIXME: function is too long
 #[allow(clippy::too_many_lines)]
-async fn websocket(mut stream: WebSocket, config: Config, user: User) {
+async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt: MqttTx) {
     // Send Connect message.
     let message = WsStatus::Connected {
         user: user.clone(),
@@ -89,7 +89,7 @@ async fn websocket(mut stream: WebSocket, config: Config, user: User) {
         for topic in &add_subscriptions {
             let already_subscribed = subscriptions.contains_key(topic);
             if !already_subscribed {
-                match config.mqtt.subscribe_into_stateful(topic).await {
+                match mqtt.subscribe_into_stateful(topic).await {
                     Ok(entity) => {
                         info!("Subscribed to topic: {}", topic);
                         let subscription = entity.subscribe().await;
@@ -183,7 +183,7 @@ async fn websocket(mut stream: WebSocket, config: Config, user: User) {
                     Ok(WsCommand::Send(msg)) => {
                         if check_topic_send_allowed(&msg.topic, &user, &config) {
                             tracing::info!("websocket: Sending message to mqtt {}: {:?}", msg.topic, msg.payload);
-                            config.mqtt.try_send(msg);
+                            mqtt.try_send(msg);
                         }
                     }
                     Ok(WsCommand::KeepAlive) => {

@@ -148,7 +148,7 @@ impl Location {
     }
 }
 
-pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
+pub fn monitor_tesla_location(state: &State, car_number: usize) {
     let location = state
         .subscriptions
         .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"));
@@ -218,7 +218,7 @@ fn arrived_location_message(location: &Location) -> Option<String> {
     }
 }
 
-pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
+pub fn monitor_tesla_doors(state: &State, car_number: usize) {
     let frunk_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
@@ -477,7 +477,7 @@ enum TeslaResult {
 
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
-    state: &mut State,
+    state: &State,
     car_number: usize,
     price_summary_rx: stateful::Receiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {
