@@ -15,7 +15,7 @@ use robotica_common::datetime::{
 };
 
 use crate::influxdb as influx;
-use crate::State;
+use crate::InitState;
 
 /// Error when starting the Amber service
 #[derive(Error, Debug)]
@@ -69,7 +69,7 @@ const fn hours(num: u16) -> u16 {
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
 pub fn run(
-    state: &State,
+    state: &InitState,
     config: Config,
     influxdb_config: &influx::Config,
 ) -> Result<stateful::Receiver<PriceSummary>, Error> {

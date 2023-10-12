@@ -83,8 +83,8 @@ impl Environment {
             config
         };
 
-        let config: Config = serde_yaml::from_value(config)
-            .map_err(|e| Error::Yaml(self.config_file.to_path_buf(), e))?;
+        let config: Config =
+            serde_yaml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         Ok(config)
     }

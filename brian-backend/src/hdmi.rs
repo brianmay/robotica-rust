@@ -7,7 +7,7 @@ use robotica_backend::{devices::hdmi::Command, pipes::stateless, spawn};
 use robotica_common::mqtt::{Json, MqttMessage, QoS};
 use robotica_common::robotica::commands;
 
-use crate::{robotica::Id, State};
+use crate::{robotica::Id, InitState};
 
 #[derive(Error, Debug)]
 pub enum CommandErr {
@@ -20,7 +20,7 @@ pub enum CommandErr {
     Utf8Error(#[from] std::str::Utf8Error),
 }
 
-pub fn run(state: &State, location: &str, device: &str, addr: &str) {
+pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
     let id = Id::new(location, device);
     let topic = id.get_command_topic(&[]);
 

@@ -10,7 +10,7 @@ use serde::Deserialize;
 use tracing::{debug, error};
 
 use crate::influxdb::Config;
-use crate::State;
+use crate::InitState;
 
 #[derive(Debug, InfluxDbWriteable)]
 struct InfluxReadingF64 {
@@ -75,7 +75,7 @@ struct FishTankReading {
     time: DateTime<Utc>,
 }
 
-pub fn monitor_reading<T, Influx>(state: &State, topic: &str, config: &Config)
+pub fn monitor_reading<T, Influx>(state: &mut InitState, topic: &str, config: &Config)
 where
     T: Clone + Send + 'static + Into<Influx> + DeserializeOwned,
     Influx: InfluxDbWriteable + Send,
@@ -105,7 +105,7 @@ where
     });
 }
 
-pub fn monitor_fishtank(state: &State, topic: &str, config: &Config) {
+pub fn monitor_fishtank(state: &mut InitState, topic: &str, config: &Config) {
     let rx = state
         .subscriptions
         .subscribe_into_stateless::<Json<FishTankData>>(topic);
@@ -134,7 +134,7 @@ pub fn monitor_fishtank(state: &State, topic: &str, config: &Config) {
     });
 }
 
-fn monitor_zwave_switch(state: &State, topic_substr: &str, config: &Config) {
+fn monitor_zwave_switch(state: &mut InitState, topic_substr: &str, config: &Config) {
     // kwh
     monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
         state,
@@ -164,7 +164,7 @@ fn monitor_zwave_switch(state: &State, topic_substr: &str, config: &Config) {
     );
 }
 
-pub fn run(state: &State, config: &Config) {
+pub fn run(state: &mut InitState, config: &Config) {
     monitor_reading::<anavi::Temperature, InfluxReadingF64>(
         state,
         "workgroup/3765653003a76f301ad767b4676d7065/air/temperature",

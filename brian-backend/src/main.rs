@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
             panic!("Error getting persistent state loader: {e}");
         });
 
-    let state = State {
+    let state = InitState {
         subscriptions,
         mqtt,
         message_sink,
@@ -81,8 +81,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Global state for the application.
-pub struct State {
+/// Global state for initialization.
+pub struct InitState {
     /// Subscriptions to MQTT topics.
     pub subscriptions: Subscriptions,
 
@@ -170,7 +170,7 @@ fn calendar_start_top_times(
     Some((start_time, end_time))
 }
 
-async fn setup_pipes(mut state: State, mqtt_rx: MqttRx, config: config::Config) {
+async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Config) {
     let price_summary_rx = amber::run(&state, config.amber, &config.influxdb).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
@@ -198,11 +198,11 @@ async fn setup_pipes(mut state: State, mqtt_rx: MqttRx, config: config::Config) 
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
-    hdmi::run(&state, "Dining", "TV", "hdmi.pri:8000");
-    tesla::monitor_tesla_location(&state, 1);
-    tesla::monitor_tesla_doors(&state, 1);
+    hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_location(&mut state, 1);
+    tesla::monitor_tesla_doors(&mut state, 1);
 
-    environment_monitor::run(&state, &config.influxdb);
+    environment_monitor::run(&mut state, &config.influxdb);
 
     executor(
         &mut state.subscriptions,
@@ -215,33 +215,33 @@ async fn setup_pipes(mut state: State, mqtt_rx: MqttRx, config: config::Config) 
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch(&state, "Dining/Messages");
-    fake_switch(&state, "Dining/Request_Bathroom");
+    fake_switch(&mut state, "Dining/Messages");
+    fake_switch(&mut state, "Dining/Request_Bathroom");
 
-    fake_switch(&state, "Brian/Night");
-    fake_switch(&state, "Brian/Messages");
-    fake_switch(&state, "Brian/Request_Bathroom");
+    fake_switch(&mut state, "Brian/Night");
+    fake_switch(&mut state, "Brian/Messages");
+    fake_switch(&mut state, "Brian/Request_Bathroom");
 
-    fake_switch(&state, "Jan/Messages");
+    fake_switch(&mut state, "Jan/Messages");
 
-    fake_switch(&state, "Twins/Messages");
+    fake_switch(&mut state, "Twins/Messages");
 
-    fake_switch(&state, "Extension/Messages");
+    fake_switch(&mut state, "Extension/Messages");
 
-    fake_switch(&state, "Akira/Messages");
+    fake_switch(&mut state, "Akira/Messages");
 
-    setup_lights(&state).await;
+    setup_lights(&mut state).await;
 
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
     });
 }
 
-fn fake_switch(state: &State, topic_substr: &str) {
+fn fake_switch(state: &mut InitState, topic_substr: &str) {
     fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), topic_substr);
 }
 
-async fn setup_lights(state: &State) {
+async fn setup_lights(state: &mut InitState) {
     let lifx_config = DiscoverConfig {
         broadcast: "192.168.16.255:56700".to_string(),
         poll_time: std::time::Duration::from_secs(10),
