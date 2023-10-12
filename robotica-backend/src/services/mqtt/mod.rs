@@ -179,16 +179,16 @@ pub fn mqtt_channel() -> (MqttTx, MqttRx) {
 /// MQTT configuration.
 pub struct Config {
     /// MQTT host
-    pub mqtt_host: String,
+    pub host: String,
 
     /// MQTT port
-    pub mqtt_port: u16,
+    pub port: u16,
 
     /// MQTT username
-    pub mqtt_username: String,
+    pub username: String,
 
     /// MQTT password
-    pub mqtt_password: String,
+    pub password: String,
 }
 
 /// Connect to the MQTT broker and send/receive messages.
@@ -218,10 +218,10 @@ pub fn run_client(
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let mut mqtt_options = MqttOptions::new(client_id, config.mqtt_host, config.mqtt_port);
+    let mut mqtt_options = MqttOptions::new(client_id, config.host, config.port);
     mqtt_options.set_keep_alive(Duration::from_secs(30));
     mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
-    mqtt_options.set_credentials(config.mqtt_username, config.mqtt_password);
+    mqtt_options.set_credentials(config.username, config.password);
     mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 

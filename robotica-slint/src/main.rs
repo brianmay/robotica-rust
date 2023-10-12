@@ -129,10 +129,10 @@ fn start_services(env: &Environment, config: &LoadedConfig) -> Result<(), anyhow
     );
 
     let mqtt_config = mqtt::Config {
-        mqtt_host: env.mqtt_host.clone(),
-        mqtt_port: env.mqtt_port,
-        mqtt_username: env.mqtt_username.clone(),
-        mqtt_password: env.mqtt_password.clone(),
+        host: env.mqtt_host.clone(),
+        port: env.mqtt_port,
+        username: env.mqtt_username.clone(),
+        password: env.mqtt_password.clone(),
     };
     run_client(subscriptions, mqtt_rx, mqtt_config)?;
 

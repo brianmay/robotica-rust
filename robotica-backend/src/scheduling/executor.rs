@@ -1,6 +1,5 @@
 //! Run tasks based on schedule.
 use std::collections::{HashMap, VecDeque};
-use std::env::{self, VarError};
 use std::fmt::Debug;
 use std::path::PathBuf;
 
@@ -28,6 +27,9 @@ type CalendarToSequence<T> = dyn Fn(CalendarEntry, T) -> Option<Sequence> + Send
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
 pub struct ExtraConfig {
+    /// The hostname of the robotica instance.
+    pub hostname: String,
+
     /// The URL of the calendar to use for extra events.
     pub calendar_url: String,
 
@@ -45,7 +47,6 @@ struct Config<T: TimeZone> {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
-    hostname: String,
     extra_config: ExtraConfig,
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
@@ -233,7 +234,7 @@ impl<T: TimeZone + Copy> State<T> {
 
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
-        let topic = format!("robotica/{}/tags", self.config.hostname);
+        let topic = format!("robotica/{}/tags", self.config.extra_config.hostname);
         let msg = Json(tags);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize tags: {:?}", tags);
@@ -255,7 +256,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
 
-        let topic = format!("schedule/{}/all", self.config.hostname);
+        let topic = format!("schedule/{}/all", self.config.extra_config.hostname);
         self.publish_sequences(&sequences, topic);
     }
 
@@ -266,7 +267,7 @@ impl<T: TimeZone + Copy> State<T> {
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
-        let topic = format!("schedule/{}/important", self.config.hostname);
+        let topic = format!("schedule/{}/important", self.config.extra_config.hostname);
         self.publish_sequences(&important, topic);
     }
 
@@ -277,7 +278,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
-        let topic = format!("schedule/{}/pending", self.config.hostname);
+        let topic = format!("schedule/{}/pending", self.config.extra_config.hostname);
         self.publish_sequences(&pending, topic);
     }
 
@@ -451,10 +452,6 @@ pub enum ExecutorError {
     /// A Scheduler config error occurred.
     #[error("Sequencer Config Check Error: {0}")]
     SequencerConfigCheckError(#[from] sequencer::ConfigCheckError),
-
-    /// The hostname could not be determined.
-    #[error("Could not determine hostname: {0}")]
-    HostnameError(#[from] VarError),
 }
 
 /// Create a timer that sends outgoing messages at regularly spaced intervals.
@@ -531,7 +528,6 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
 ) -> Result<State<T>, ExecutorError> {
     let now = Utc::now();
     let date = now.with_timezone::<T>(&timezone).date_naive();
-    let hostname = env::var("HOSTNAME")?;
 
     let state = {
         let config = {
@@ -543,7 +539,6 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
                 classifier,
                 scheduler,
                 sequencer,
-                hostname,
                 extra_config,
                 timezone,
                 calendar_to_sequence: Box::new(calendar_to_sequence),
