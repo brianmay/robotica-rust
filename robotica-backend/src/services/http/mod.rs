@@ -3,9 +3,9 @@ mod oidc;
 mod urls;
 mod websocket;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashMap, env};
 
 use arc_swap::ArcSwap;
 use axum::body::{boxed, Body};
@@ -24,6 +24,7 @@ use base64::Engine;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use robotica_common::config::Rooms;
+use robotica_common::version;
 use serde::de::Error;
 use serde::Deserialize;
 use thiserror::Error;
@@ -325,8 +326,7 @@ fn nav_bar() -> Markup {
 
 #[allow(clippy::unused_async)]
 async fn root(session: ReadableSession) -> Response {
-    let build_date = env::var("BUILD_DATE").unwrap_or_else(|_| "unknown".to_string());
-    let vcs_ref = env::var("VCS_REF").unwrap_or_else(|_| "unknown".to_string());
+    let version = version::Version::get();
 
     let user = get_user(&session);
 
@@ -350,8 +350,8 @@ async fn root(session: ReadableSession) -> Response {
                 }
                 footer {
                     div {
-                        div { (format!("Build Date: {build_date}")) }
-                        div { (format!("Version: {vcs_ref}")) }
+                        div { (format!("Build Date: {}", version.build_date)) }
+                        div { (format!("Version: {}", version.vcs_ref)) }
                     }
                     div {
                         "Robotica"
