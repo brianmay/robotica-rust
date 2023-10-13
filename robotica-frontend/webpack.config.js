@@ -1,5 +1,6 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const dist = path.resolve(__dirname, "dist");
 
@@ -14,7 +15,7 @@ module.exports = {
   },
   output: {
     path: dist,
-    filename: "[name].js"
+    filename: "[name].[contenthash].js"
   },
   devServer: {
     static: dist,
@@ -25,33 +26,36 @@ module.exports = {
         path.resolve(__dirname, "assets/static")
       ]
     }),
+    new HtmlWebpackPlugin({
+      title: 'Robotica',
+      meta: {
+        viewport: 'width=device-width, initial-scale=1, shrink-to-fit=no'
+      }
+    }),
   ],
   module: {
-    rules: [
-      {
-        test: /\.(scss)$/,
-        use: [
-          {
-            loader: 'style-loader'
-          },
-          {
-            loader: 'css-loader'
-          },
-          {
-            loader: 'postcss-loader',
-            options: {
-              postcssOptions: {
-                plugins: () => [
-                  require('autoprefixer')
-                ]
-              }
+    rules: [{
+      test: /\.(scss)$/,
+      use: [{
+          loader: 'style-loader'
+        },
+        {
+          loader: 'css-loader'
+        },
+        {
+          loader: 'postcss-loader',
+          options: {
+            postcssOptions: {
+              plugins: () => [
+                require('autoprefixer')
+              ]
             }
-          },
-          {
-            loader: 'sass-loader'
           }
-        ]
-      }
-    ]
+        },
+        {
+          loader: 'sass-loader'
+        }
+      ]
+    }]
   }
 }
