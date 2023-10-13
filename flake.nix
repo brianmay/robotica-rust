@@ -159,6 +159,7 @@
           } // common);
 
           wrapper = pkgs.writeShellScriptBin "brian-backend" ''
+            export PATH="${poetry_env}/bin:$PATH"
             exec ${pkg}/bin/brian-backend "$@"
           '';
         in {
