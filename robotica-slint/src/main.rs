@@ -18,9 +18,11 @@ use robotica_backend::services::{
     mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
     persistent_state::{self, PersistentStateDatabase},
 };
+use robotica_common::version;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
+use tracing::info;
 use ui::ScreenCommand;
 
 /// Environment variables for the application.
@@ -86,6 +88,12 @@ impl TryFrom<Config> for LoadedConfig {
 async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
+
+    info!(
+        "Starting robotica-slint, version = {:?}, build time = {:?}",
+        version::VCS_REF,
+        version::BUILD_DATE
+    );
 
     let env = Environment::load()?;
 

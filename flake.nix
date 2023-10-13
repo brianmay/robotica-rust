@@ -70,6 +70,13 @@
         nodePackages =
           import robotica-frontend/default.nix { inherit pkgs system nodejs; };
 
+        build_env = {
+          BUILD_DATE = builtins.readFile
+            "${pkgs.runCommand "timestamp" { env.when = self.lastModified; }
+            "echo -n $(date -d @$when --iso-8601=seconds) > $out"}";
+          VCS_REF = "${self.rev or "dirty"}";
+        };
+
         robotica-frontend = let
           common = {
             src = ./.;
@@ -98,7 +105,7 @@
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = false;
-          } // common);
+          } // common // build_env);
 
         in {
           clippy = clippy;
@@ -156,7 +163,7 @@
             inherit cargoArtifacts;
             doCheck = true;
             # CARGO_LOG = "cargo::core::compiler::fingerprint=info";
-          } // common);
+          } // common // build_env);
 
           wrapper = pkgs.writeShellScriptBin "brian-backend" ''
             export PATH="${poetry_env}/bin:$PATH"
@@ -208,7 +215,7 @@
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
-          } // common);
+          } // common // build_env);
 
           wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
             export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"

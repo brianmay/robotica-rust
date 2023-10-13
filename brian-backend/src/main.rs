@@ -35,6 +35,7 @@ use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
+use robotica_common::version;
 use tracing::{debug, error, info};
 
 use self::tesla::monitor_charging;
@@ -47,6 +48,12 @@ use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
+
+    info!(
+        "Starting brian-backend, version = {:?}, build time = {:?}",
+        version::VCS_REF,
+        version::BUILD_DATE
+    );
 
     let env = config::Environment::load().unwrap_or_else(|e| {
         panic!("Error loading environment: {e}");

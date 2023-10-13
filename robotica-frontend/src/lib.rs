@@ -25,6 +25,7 @@ use gloo_net::http::Request;
 use itertools::Itertools;
 use robotica_common::config::RoomConfig;
 use robotica_common::config::Rooms;
+use tracing::info;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -147,6 +148,13 @@ impl Component for App {
 pub fn run() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
+
+    info!(
+        "Starting robotica-frontend, version = {:?}, build time = {:?}",
+        version::VCS_REF,
+        version::BUILD_DATE
+    );
+
     yew::Renderer::<App>::new().render();
     Ok(())
 }
