@@ -167,11 +167,6 @@
           pkg = wrapper;
         };
 
-        brian-backend-bindgen = pkgs.writeShellScriptBin "brian-backend" ''
-          export STATIC_PATH="${robotica-frontend-bindgen}"
-          exec ${brian-backend.pkg}/bin/brian-backend "$@"
-        '';
-
         robotica-slint = let
           common = {
             src = ./.;
@@ -282,7 +277,7 @@
         };
         packages = {
           robotica-frontend = robotica-frontend-bindgen;
-          brian-backend = brian-backend-bindgen;
+          brian-backend = brian-backend.pkg;
           robotica-slint = robotica-slint.pkg;
         };
 
