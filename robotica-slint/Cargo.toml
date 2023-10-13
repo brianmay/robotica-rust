@@ -27,6 +27,7 @@ futures = "0.3.27"
 clap = { version = "4.1.11", features = ["derive"] }
 chrono = "0.4.19"
 itertools = "0.11.0"
+envconfig = "0.10.0"
 
 [dependencies.openssl]
 optional = true

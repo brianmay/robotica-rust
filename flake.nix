@@ -2,6 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+  inputs.nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
   inputs.crane = {
@@ -12,14 +13,37 @@
     url = "github:nix-community/poetry2nix";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.node2nix = {
+    url = "github:svanderburg/node2nix";
+    # inputs.nixpkgs.follows = "nixpkgs";
+    flake = false;
+  };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
+    , nixpkgs-unstable, node2nix }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
+        # pkgs_arm = nixpkgs.legacyPackages."aarch64-linux";
+
+        # pkgs = import nixpkgs {
+        #   inherit system;
+        #   crossSystem = "aarch64-linux";
+        #   overlays = [
+        #     (import rust-overlay)
+        #     (self: super: {
+        #       inherit (pkgs_arm)
+        #         openssl protobuf fontconfig freetype xorg mesa wayland
+        #         libxkbcommon;
+        #     })
+        #   ];
+        # };
+
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
+        pkgs_unstable = nixpkgs-unstable.legacyPackages.${system};
+        nodejs = pkgs.nodejs_20;
 
         poetry = poetry2nix.legacyPackages.${system};
         poetry_env = poetry.mkPoetryEnv {
@@ -42,6 +66,66 @@
         };
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
+
+        nodePackages =
+          import robotica-frontend/default.nix { inherit pkgs system nodejs; };
+
+        robotica-frontend = let
+          common = {
+            src = ./.;
+            cargoExtraArgs = "-p robotica-frontend";
+            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            buildInputs = with pkgs;
+              [ # openssl python3
+                protobuf
+              ];
+            # installCargoArtifactsMode = "use-zstd";
+            CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
+            doCheck = false;
+          };
+
+          # Build *just* the cargo dependencies, so we can reuse
+          # all of that work (e.g. via cachix) when running in CI
+          cargoArtifacts = craneLib.buildDepsOnly common;
+
+          # Run clippy (and deny all warnings) on the crate source.
+          clippy = craneLib.cargoClippy ({
+            inherit cargoArtifacts;
+            cargoClippyExtraArgs = "-- --deny warnings";
+          } // common);
+
+          # Build the actual crate itself, _but only if the previous tests pass_.
+          pkg = craneLib.buildPackage ({
+            inherit cargoArtifacts;
+            doCheck = false;
+          } // common);
+
+        in {
+          clippy = clippy;
+          pkg = pkg;
+        };
+
+        robotica-frontend-bindgen = pkgs.stdenv.mkDerivation {
+          name = "robotica-frontend-bindgen";
+          src = ./robotica-frontend;
+
+          buildPhase = ''
+            ${pkgs_unstable.wasm-bindgen-cli}/bin/wasm-bindgen \
+              --target bundler \
+              --out-dir pkg \
+              --omit-default-module-path \
+              ${robotica-frontend.pkg}/lib/robotica_frontend.wasm
+
+            ln -s ${nodePackages.nodeDependencies}/lib/node_modules ./node_modules
+            export PATH="${nodePackages.nodeDependencies}/bin:$PATH"
+            webpack
+          '';
+
+          installPhase = ''
+            mkdir $out
+            cp -rv dist/* $out/
+          '';
+        };
 
         brian-backend = let
           common = {
@@ -69,17 +153,19 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = cargoArtifacts;
+            inherit cargoArtifacts;
             doCheck = true;
+            # CARGO_LOG = "cargo::core::compiler::fingerprint=info";
           } // common);
 
           wrapper = pkgs.writeShellScriptBin "brian-backend" ''
+            export PATH="${poetry_env}/bin:$PATH"
             exec ${pkg}/bin/brian-backend "$@"
           '';
         in {
           clippy = clippy;
           coverage = coverage;
-          pkg = pkg;
+          pkg = wrapper;
         };
 
         robotica-slint = let
@@ -101,7 +187,6 @@
               wayland
               libxkbcommon
             ];
-            installCargoArtifactsMode = "use-zstd";
           };
 
           # Build *just* the cargo dependencies, so we can reuse
@@ -121,7 +206,7 @@
 
           # Build the actual crate itself, _but only if the previous tests pass_.
           pkg = craneLib.buildPackage ({
-            cargoArtifacts = cargoArtifacts;
+            inherit cargoArtifacts;
             doCheck = true;
           } // common);
 
@@ -135,14 +220,25 @@
           pkg = wrapper;
         };
 
+        pkg_node2nix = (import "${node2nix}/default.nix" {
+          inherit system pkgs nodejs;
+        }).package;
+
+        pkg_node2nix_wrapper = pkgs.writeShellScriptBin "update_node" ''
+          cd robotica-frontend
+          exec ${pkg_node2nix}/bin/node2nix --development -l
+        '';
+
       in {
         checks = {
-          brian-backend-clippy = brian-backend.clippy;
-          brian-backend-coverage = brian-backend.coverage;
-          brian-backend = brian-backend.pkg;
           robotica-slint-clippy = robotica-slint.clippy;
           robotica-slint-coverage = robotica-slint.coverage;
           robotica-slint = robotica-slint.pkg;
+          robotica-frontend-clippy = robotica-frontend.clippy;
+          robotica-frontend = robotica-frontend.pkg;
+          brian-backend-clippy = brian-backend.clippy;
+          brian-backend-coverage = brian-backend.coverage;
+          brian-backend = brian-backend.pkg;
         };
 
         devShells.default = pkgs.mkShell {
@@ -156,11 +252,14 @@
             fontconfig
             nodejs
             wasm-pack
-            wasm-bindgen-cli
+            pkgs_unstable.wasm-bindgen-cli
             slint-lsp
             rustPlatform
             # https://github.com/NixOS/nixpkgs/issues/156890
             binaryen
+            pkg_node2nix
+            pkg_node2nix_wrapper
+            nodePackages.nodeDependencies
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
@@ -178,6 +277,7 @@
           '';
         };
         packages = {
+          robotica-frontend = robotica-frontend-bindgen;
           brian-backend = brian-backend.pkg;
           robotica-slint = robotica-slint.pkg;
         };

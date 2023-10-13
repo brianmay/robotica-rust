@@ -53,13 +53,3 @@ jobs:
         run: cargo test -p robotica-frontend
       - name: Test backend lib (Brian)
         run: cargo test -p brian-backend
-
-  push:
-    name: Push
-    uses: brianmay/workflows/.github/workflows/docker.yaml@main
-    secrets:
-      DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
-    needs:
-      - test
-    with:
-      deploy_iot: true

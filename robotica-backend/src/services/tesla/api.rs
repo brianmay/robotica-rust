@@ -662,6 +662,8 @@ impl Default for CommandSequence {
 mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::similar_names)]
+    use std::path::PathBuf;
+
     use crate::services::persistent_state::PersistentStateDatabase;
 
     use super::*;
@@ -669,7 +671,9 @@ mod tests {
     #[ignore = "requires secrets"]
     #[tokio::test]
     async fn test_get_token() {
-        let psd = PersistentStateDatabase::new().unwrap();
+        let state_path = PathBuf::from("state");
+        let config = persistent_state::Config { state_path };
+        let psd = PersistentStateDatabase::new(&config).unwrap();
         let psr = psd.for_name("tesla_token");
 
         let token = Token::get(&psr).unwrap();

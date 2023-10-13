@@ -8,32 +8,27 @@ use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use tracing::{debug, error, info};
 
 use robotica_backend::{
-    get_env, is_debug_mode, pipes::stateful, services::persistent_state::PersistentStateRow, spawn,
-    EnvironmentError,
+    is_debug_mode, pipes::stateful, services::persistent_state::PersistentStateRow, spawn,
 };
 use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, duration_from_hms, utc_now, Date, DateTime, Duration, Time,
 };
 
-use crate::State;
+use crate::influxdb as influx;
+use crate::InitState;
 
 /// Error when starting the Amber service
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Environment variable not found
-    #[error("Environment variable error: {0}")]
-    Environment(#[from] EnvironmentError),
-
     /// Internal error
     #[error("Internal error: {0}")]
     Internal(String),
 }
 
-struct Config {
-    token: String,
-    site_id: String,
-    influx_url: String,
-    influx_database: String,
+#[derive(Deserialize)]
+pub struct Config {
+    pub token: String,
+    pub site_id: String,
 }
 
 #[derive(InfluxDbWriteable)]
@@ -73,18 +68,11 @@ const fn hours(num: u16) -> u16 {
 ///
 /// Returns an `AmberError` if the required environment variables are not set.
 ///
-pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
-    let token = get_env("AMBER_TOKEN")?;
-    let site_id = get_env("AMBER_SITE_ID")?;
-    let influx_url = get_env("INFLUXDB_URL")?;
-    let influx_database = get_env("INFLUXDB_DATABASE")?;
-    let config = Config {
-        token,
-        site_id,
-        influx_url,
-        influx_database,
-    };
-
+pub fn run(
+    state: &InitState,
+    config: Config,
+    influxdb_config: &influx::Config,
+) -> Result<stateful::Receiver<PriceSummary>, Error> {
     let (tx, rx) = stateful::create_pipe("amber_summary");
 
     let psr = state
@@ -93,6 +81,8 @@ pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
 
     let nem_timezone = FixedOffset::east_opt(hours(10).into())
         .ok_or_else(|| Error::Internal("Failed to create NEM timezone".to_string()))?;
+
+    let influxdb_config = influxdb_config.clone();
 
     spawn(async move {
         // if is_debug_mode() {
@@ -131,7 +121,7 @@ pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
                             let update_time = summary.next_update;
 
                             // Write the prices to influxdb and send
-                            prices_to_influxdb(&config, &prices, &summary).await;
+                            prices_to_influxdb(&influxdb_config, &prices, &summary).await;
                             tx.try_send(summary);
 
                             // Add margin to allow time for Amber to update.
@@ -165,7 +155,7 @@ pub fn run(state: &State) -> Result<stateful::Receiver<PriceSummary>, Error> {
                     let today = now.with_timezone(&nem_timezone).date_naive();
                     let yesterday = today - Duration::days(1);
                     let tomorrow = today + Duration::days(1);
-                    process_usage(&config, yesterday, tomorrow).await;
+                    process_usage(&config, &influxdb_config, yesterday, tomorrow).await;
                 }
             }
         }
@@ -424,8 +414,12 @@ fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCateg
     c
 }
 
-async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: &PriceSummary) {
-    let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+async fn prices_to_influxdb(
+    influxdb_config: &influx::Config,
+    prices: &[PriceResponse],
+    summary: &PriceSummary,
+) {
+    let client = influxdb_config.get_client();
 
     if is_debug_mode() {
         debug!("Skipping writing prices to influxdb in debug mode");
@@ -459,11 +453,16 @@ async fn prices_to_influxdb(config: &Config, prices: &[PriceResponse], summary: 
     }
 }
 
-async fn process_usage(config: &Config, start_date: Date, end_date: Date) {
+async fn process_usage(
+    config: &Config,
+    influxdb_config: &influx::Config,
+    start_date: Date,
+    end_date: Date,
+) {
     let usage = get_usage(config, start_date, end_date).await;
     match usage {
         Ok(usage) => {
-            let client = influxdb::Client::new(&config.influx_url, &config.influx_database);
+            let client = influxdb_config.get_client();
 
             if is_debug_mode() {
                 debug!("Skipping writing usage to influxdb in debug mode");

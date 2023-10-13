@@ -1,6 +1,5 @@
 //! Create a schedule based on tags from classifier.
 //!
-use crate::{get_env_os, EnvironmentOsError};
 
 use super::{
     ast::{Boolean, Fields},
@@ -95,10 +94,6 @@ impl<'de> Deserialize<'de> for Boolean<Context> {
 /// An error loading the Config
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    /// Environment variable not set
-    #[error("{0}")]
-    EnvironmentError(#[from] EnvironmentOsError),
-
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
     FileError(PathBuf, std::io::Error),
@@ -121,17 +116,6 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
         .map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
 
     Ok(config)
-}
-
-/// Load the classification config from the environment variable `SCHEDULE_FILE`.
-///
-/// # Errors
-///
-/// Returns an error if the environment variable `SCHEDULE_FILE` is not set or if the file cannot be read.
-pub fn load_config_from_default_file() -> Result<Vec<Config>, ConfigError> {
-    let env_name = "SCHEDULE_FILE";
-    let filename = get_env_os(env_name)?;
-    load_config(Path::new(&filename))
 }
 
 fn is_condition_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<String>) -> bool {
@@ -223,17 +207,17 @@ pub enum GetScheduleError {
 /// # Errors
 ///
 /// Returns an error if config file cannot be loaded or error processing schedule.
-#[allow(clippy::implicit_hasher)]
-pub fn get_schedule<T: TimeZone>(
-    date: Date,
-    today: &HashSet<String>,
-    tomorrow: &HashSet<String>,
-    timezone: &T,
-) -> Result<Vec<Schedule>, GetScheduleError> {
-    let config_list = load_config_from_default_file()?;
-    let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
-    Ok(schedule)
-}
+// #[allow(clippy::implicit_hasher)]
+// pub fn get_schedule<T: TimeZone>(
+//     date: Date,
+//     today: &HashSet<String>,
+//     tomorrow: &HashSet<String>,
+//     timezone: &T,
+// ) -> Result<Vec<Schedule>, GetScheduleError> {
+//     let config_list = load_config_from_default_file()?;
+//     let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
+//     Ok(schedule)
+// }
 
 /// Create test schedule for testing.
 ///

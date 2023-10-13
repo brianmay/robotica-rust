@@ -25,6 +25,7 @@ use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use robotica_common::config::Rooms;
 use serde::de::Error;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::fs;
 use tower::{ServiceBuilder, ServiceExt};
@@ -36,18 +37,39 @@ use robotica_common::user::User;
 
 use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
-use crate::{get_env, spawn, EnvironmentError};
+use crate::spawn;
 
 use self::oidc::Client;
 
-#[derive(Clone)]
-struct HttpConfig {
-    #[allow(dead_code)]
-    mqtt: MqttTx,
-    root_url: reqwest::Url,
+/// The configuration for the HTTP service.
+#[derive(Deserialize)]
+pub struct Config {
+    /// The root URL for the HTTP service.
+    pub root_url: reqwest::Url,
+
+    /// The path to the static files.
+    pub static_path: PathBuf,
+
+    /// The secret used to sign the session cookie.
+    pub session_secret: String,
+
+    /// The OIDC discovery URL.
+    pub oidc_discovery_url: String,
+
+    /// The OIDC client ID.
+    pub oidc_client_id: String,
+
+    /// The OIDC client secret.
+    pub oidc_client_secret: String,
+
+    /// The OIDC scopes.
+    pub oidc_scopes: String,
+
+    /// The HTTP listener address.
+    pub http_listener: String,
 }
 
-impl HttpConfig {
+impl Config {
     // fn generate_url(&self, path: &str) -> Result<String, url::ParseError> {
     //     urls::generate_url(&self.root_url, path)
     // }
@@ -59,14 +81,21 @@ impl HttpConfig {
 
 #[derive(Clone)]
 struct HttpState {
-    http_config: HttpConfig,
+    mqtt: MqttTx,
+    config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
 }
 
-impl FromRef<HttpState> for HttpConfig {
+impl FromRef<HttpState> for MqttTx {
     fn from_ref(state: &HttpState) -> Self {
-        state.http_config.clone()
+        state.mqtt.clone()
+    }
+}
+
+impl FromRef<HttpState> for Arc<Config> {
+    fn from_ref(state: &HttpState) -> Self {
+        state.config.clone()
     }
 }
 
@@ -86,10 +115,6 @@ impl FromRef<HttpState> for Arc<Rooms> {
 /// An error running the HTTP service.
 #[derive(Error, Debug)]
 pub enum HttpError {
-    /// There was a problem with an environment variable.
-    #[error("Environment error: {0}")]
-    Environment(#[from] EnvironmentError),
-
     /// There was an error configuring OIDC support.
     #[error("OIDC error: {0}")]
     Oidc(#[from] oidc::Error),
@@ -117,30 +142,26 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
-    let http_config = HttpConfig {
-        mqtt,
-        root_url: reqwest::Url::parse(&get_env("ROOT_URL")?)?,
-    };
-
+pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpError> {
     let store = CookieStore::new();
-    let secret = STANDARD.decode(get_env("SESSION_SECRET")?)?;
+    let secret = STANDARD.decode(config.session_secret.clone())?;
     let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
 
-    let redirect = http_config
+    let redirect = config
         .generate_url_or_default("/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz");
 
-    let config = oidc::Config {
-        issuer: get_env("OIDC_DISCOVERY_URL")?,
-        client_id: get_env("OIDC_CLIENT_ID")?,
-        client_secret: get_env("OIDC_CLIENT_SECRET")?,
+    let oidc_config = oidc::Config {
+        issuer: config.oidc_discovery_url.clone(),
+        client_id: config.oidc_client_id.clone(),
+        client_secret: config.oidc_client_secret.clone(),
         redirect_uri: redirect,
-        scopes: get_env("OIDC_SCOPES")?,
+        scopes: config.oidc_scopes.clone(),
     };
 
-    let client = Client::new(config.clone()).await?;
+    let client = Client::new(&oidc_config).await?;
     let client = Arc::new(ArcSwap::new(Arc::new(client)));
 
+    let config = Arc::new(config);
     let rooms = Arc::new(rooms);
 
     {
@@ -150,7 +171,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
                 tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
 
                 tracing::info!("refreshing oidc client");
-                let new_client = Client::new(config.clone()).await;
+                let new_client = Client::new(&oidc_config).await;
                 match new_client {
                     Ok(new_client) => {
                         client.store(Arc::new(new_client));
@@ -164,7 +185,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
     }
 
     spawn(async {
-        server(http_config, client, rooms, session_layer)
+        server(mqtt, config, client, rooms, session_layer)
             .await
             .unwrap_or_else(|err| {
                 error!("http server failed: {}", err);
@@ -175,16 +196,20 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms) -> Result<(), HttpError> {
 }
 
 async fn server(
-    http_config: HttpConfig,
+    mqtt: MqttTx,
+    config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
     let state = HttpState {
-        http_config,
+        mqtt,
+        config,
         oidc_client,
         rooms,
     };
+
+    let http_listener = state.config.http_listener.clone();
 
     let app = Router::new()
         .route("/", get(root))
@@ -196,7 +221,7 @@ async fn server(
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    let http_listener = get_env("HTTP_LISTENER").unwrap_or_else(|_| "[::]:4000".to_string());
+    // let c = (*config).http_listener;
     let addr = http_listener.parse()?;
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
@@ -233,6 +258,7 @@ const ASSET_SUFFIXES: [&str; 8] = [
 async fn fallback_handler(
     session: ReadableSession,
     State(oidc_client): State<Arc<Client>>,
+    State(http_config): State<Arc<Config>>,
     req: Request<Body>,
 ) -> Response {
     if req.method() != Method::GET {
@@ -250,7 +276,7 @@ async fn fallback_handler(
         return Redirect::to(&auth_url).into_response();
     }
 
-    let static_path = "./robotica-frontend/dist";
+    let static_path = &http_config.static_path;
     match ServeDir::new(static_path).oneshot(req).await {
         Ok(response) => {
             let status = response.status();
@@ -264,7 +290,7 @@ async fn fallback_handler(
     }
 }
 
-async fn serve_index_html(static_path: &str) -> Response {
+async fn serve_index_html(static_path: &PathBuf) -> Response {
     let index_path = PathBuf::from(static_path).join("index.html");
     {
         let this = fs::read_to_string(index_path)
@@ -337,7 +363,7 @@ async fn root(session: ReadableSession) -> Response {
 }
 
 async fn oidc_callback(
-    State(http_config): State<HttpConfig>,
+    State(http_config): State<Arc<Config>>,
     State(oidc_client): State<Arc<Client>>,
     Query(params): Query<HashMap<String, String>>,
     mut session: WritableSession,

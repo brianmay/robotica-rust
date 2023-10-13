@@ -13,6 +13,7 @@ mod delays;
 mod environment_monitor;
 mod ha;
 mod hdmi;
+mod influxdb;
 mod lights;
 mod robotica;
 mod rooms;
@@ -38,8 +39,8 @@ use tracing::{debug, error, info};
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
-use robotica_backend::services::mqtt::MqttTx;
 use robotica_backend::services::mqtt::{mqtt_channel, run_client, Subscriptions};
+use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -47,22 +48,30 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
 
+    let env = config::Environment::load().unwrap_or_else(|e| {
+        panic!("Error loading environment: {e}");
+    });
+
+    let config = env.config().unwrap_or_else(|e| {
+        panic!("Error loading config: {e}");
+    });
+
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
     let message_sink = ha::create_message_sink(mqtt.clone());
-    let persistent_state_database = PersistentStateDatabase::new().unwrap_or_else(|e| {
-        panic!("Error getting persistent state loader: {e}");
-    });
+    let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
+        .unwrap_or_else(|e| {
+            panic!("Error getting persistent state loader: {e}");
+        });
 
-    let mut state = State {
+    let state = InitState {
         subscriptions,
         mqtt,
         message_sink,
         persistent_state_database,
     };
 
-    setup_pipes(&mut state).await;
-    run_client(state.subscriptions, mqtt_rx)?;
+    setup_pipes(state, mqtt_rx, config).await;
 
     loop {
         debug!("I haven't crashed yet!");
@@ -72,13 +81,20 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Global state for the application.
-pub struct State {
-    subscriptions: Subscriptions,
+/// Global state for initialization.
+pub struct InitState {
+    /// Subscriptions to MQTT topics.
+    pub subscriptions: Subscriptions,
+
+    /// MQTT client.
     #[allow(dead_code)]
-    mqtt: MqttTx,
-    message_sink: stateless::Sender<Message>,
-    persistent_state_database: PersistentStateDatabase,
+    pub mqtt: MqttTx,
+
+    /// Message sink for sending verbal messages.
+    pub message_sink: stateless::Sender<Message>,
+
+    /// Persistent state database.
+    pub persistent_state_database: PersistentStateDatabase,
 }
 
 fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequence> {
@@ -154,12 +170,8 @@ fn calendar_start_top_times(
     Some((start_time, end_time))
 }
 
-async fn setup_pipes(state: &mut State) {
-    let config = config::load_config_from_default_file().unwrap_or_else(|e| {
-        panic!("Error loading config: {e}");
-    });
-
-    let price_summary_rx = amber::run(state).unwrap_or_else(|e| {
+async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Config) {
+    let price_summary_rx = amber::run(&state, config.amber, &config.influxdb).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
 
@@ -177,22 +189,20 @@ async fn setup_pipes(state: &mut State) {
             }
         });
 
-    monitor_charging(state, 1, price_summary_rx).unwrap_or_else(|e| {
+    monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");
     });
 
     let rooms = rooms::get();
-    http::run(state.mqtt.clone(), rooms)
+    http::run(state.mqtt.clone(), rooms, config.http)
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
-    hdmi::run(state, "Dining", "TV", "hdmi.pri:8000");
-    tesla::monitor_tesla_location(state, 1);
-    tesla::monitor_tesla_doors(state, 1);
+    hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
+    tesla::monitor_tesla_location(&mut state, 1);
+    tesla::monitor_tesla_doors(&mut state, 1);
 
-    environment_monitor::run(state).unwrap_or_else(|err| {
-        panic!("Environment monitor failed: {err}");
-    });
+    environment_monitor::run(&mut state, &config.influxdb);
 
     executor(
         &mut state.subscriptions,
@@ -205,29 +215,33 @@ async fn setup_pipes(state: &mut State) {
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch(state, "Dining/Messages");
-    fake_switch(state, "Dining/Request_Bathroom");
+    fake_switch(&mut state, "Dining/Messages");
+    fake_switch(&mut state, "Dining/Request_Bathroom");
 
-    fake_switch(state, "Brian/Night");
-    fake_switch(state, "Brian/Messages");
-    fake_switch(state, "Brian/Request_Bathroom");
+    fake_switch(&mut state, "Brian/Night");
+    fake_switch(&mut state, "Brian/Messages");
+    fake_switch(&mut state, "Brian/Request_Bathroom");
 
-    fake_switch(state, "Jan/Messages");
+    fake_switch(&mut state, "Jan/Messages");
 
-    fake_switch(state, "Twins/Messages");
+    fake_switch(&mut state, "Twins/Messages");
 
-    fake_switch(state, "Extension/Messages");
+    fake_switch(&mut state, "Extension/Messages");
 
-    fake_switch(state, "Akira/Messages");
+    fake_switch(&mut state, "Akira/Messages");
 
-    setup_lights(state).await;
+    setup_lights(&mut state).await;
+
+    run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
+        panic!("Error running mqtt client: {e}");
+    });
 }
 
-fn fake_switch(state: &mut State, topic_substr: &str) {
+fn fake_switch(state: &mut InitState, topic_substr: &str) {
     fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), topic_substr);
 }
 
-async fn setup_lights(state: &mut State) {
+async fn setup_lights(state: &mut InitState) {
     let lifx_config = DiscoverConfig {
         broadcast: "192.168.16.255:56700".to_string(),
         poll_time: std::time::Duration::from_secs(10),

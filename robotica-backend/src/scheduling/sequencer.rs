@@ -16,8 +16,6 @@ use robotica_common::{
     scheduler::{Importance, Mark, Status},
 };
 
-use crate::{get_env_os, EnvironmentOsError};
-
 use super::{
     ast::{Boolean, Fields},
     conditions,
@@ -221,10 +219,6 @@ impl<'de> Deserialize<'de> for Boolean<Context> {
 /// An error loading the Config
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    /// Environment variable not set
-    #[error("{0}")]
-    EnvironmentError(#[from] EnvironmentOsError),
-
     /// Error reading the file
     #[error("Error reading file {0}: {1}")]
     FileError(PathBuf, std::io::Error),
@@ -262,11 +256,11 @@ pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
 /// # Errors
 ///
 /// Returns an error if the environment variable `SEQUENCES_FILE` is not set or if the file cannot be read.
-pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
-    let env_name = "SEQUENCES_FILE";
-    let filename = get_env_os(env_name)?;
-    load_config(Path::new(&filename))
-}
+// pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
+//     let env_name = "SEQUENCES_FILE";
+//     let filename = get_env_os(env_name)?;
+//     load_config(Path::new(&filename))
+// }
 
 /// Check the config for errors.
 ///

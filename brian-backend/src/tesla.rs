@@ -25,7 +25,7 @@ use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
 use robotica_backend::spawn;
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
 
-use super::State;
+use super::InitState;
 
 fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
     Message::new("Tesla", message.into(), priority, audience::everyone())
@@ -148,7 +148,7 @@ impl Location {
     }
 }
 
-pub fn monitor_tesla_location(state: &mut State, car_number: usize) {
+pub fn monitor_tesla_location(state: &mut InitState, car_number: usize) {
     let location = state
         .subscriptions
         .subscribe_into_stateful::<String>(&format!("state/Tesla/{car_number}/Location"));
@@ -218,7 +218,7 @@ fn arrived_location_message(location: &Location) -> Option<String> {
     }
 }
 
-pub fn monitor_tesla_doors(state: &mut State, car_number: usize) {
+pub fn monitor_tesla_doors(state: &mut InitState, car_number: usize) {
     let frunk_rx = state
         .subscriptions
         .subscribe_into_stateful::<TeslaDoorState>(&format!(
@@ -477,7 +477,7 @@ enum TeslaResult {
 
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
-    state: &mut State,
+    state: &mut InitState,
     car_number: usize,
     price_summary_rx: stateful::Receiver<PriceSummary>,
 ) -> Result<(), MonitorChargingError> {

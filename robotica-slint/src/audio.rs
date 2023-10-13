@@ -7,7 +7,6 @@ use std::{
 };
 
 use robotica_backend::{
-    get_env_os,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{
         mqtt::{MqttTx, Subscriptions},
@@ -51,6 +50,7 @@ pub struct Config {
     topic_substr: String,
     targets: HashMap<String, String>,
     messages_enabled_topic: String,
+    sound_path: PathBuf,
 }
 
 #[derive()]
@@ -68,6 +68,7 @@ pub struct LoadedConfig {
     topic_substr: String,
     targets: HashMap<String, String>,
     messages_enabled_topic: String,
+    sound_path: PathBuf,
 }
 
 impl TryFrom<Config> for LoadedConfig {
@@ -86,12 +87,9 @@ impl TryFrom<Config> for LoadedConfig {
             topic_substr: config.topic_substr,
             targets: config.targets,
             messages_enabled_topic: config.messages_enabled_topic,
+            sound_path: config.sound_path,
         })
     }
-}
-
-pub fn get_sound_path() -> PathBuf {
-    get_env_os("SOUND_DIR").map_or_else(|_| PathBuf::from("sounds"), PathBuf::from)
 }
 
 pub fn run(
@@ -265,7 +263,7 @@ impl<'a> Action<'a> {
         match self {
             Self::Sound(sound) => {
                 set_volume(state.volume.message, &config.programs).await?;
-                play_sound(sound, &config.programs).await?;
+                play_sound(sound, &config.programs, &config.sound_path).await?;
             }
             Self::Say(msg) => {
                 set_volume(state.volume.message, &config.programs).await?;
@@ -421,12 +419,16 @@ async fn music_resume(programs: &LoadedProgramsConfig) -> Result<(), String> {
     Ok(())
 }
 
-async fn play_sound(sound: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
+async fn play_sound(
+    sound: &str,
+    programs: &LoadedProgramsConfig,
+    sound_path: &Path,
+) -> Result<(), String> {
     let path = Path::new(sound)
         .file_name()
         .ok_or_else(|| format!("Failed to get file name from sound path: {sound}"))?;
 
-    let path = get_sound_path().join(path).as_os_str().to_owned();
+    let path = sound_path.join(path).as_os_str().to_owned();
     let cl = programs.play_sound.to_line_with_arg(path);
 
     if let Err(err) = cl.run().await {
