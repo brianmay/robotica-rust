@@ -126,6 +126,21 @@
         "type": "github"
       }
     },
+    "flockenzeit": {
+      "locked": {
+        "lastModified": 1671185345,
+        "narHash": "sha256-+5IWi+iJAYcRxvLN15hKO2hVwNokfN3U+lvWf/zFtCg=",
+        "owner": "balsoft",
+        "repo": "flockenzeit",
+        "rev": "90abba65671690d95b5d28ce6dd8de7959aa1339",
+        "type": "github"
+      },
+      "original": {
+        "owner": "balsoft",
+        "repo": "flockenzeit",
+        "type": "github"
+      }
+    },
     "nix-github-actions": {
       "inputs": {
         "nixpkgs": [
@@ -256,6 +271,7 @@
       "inputs": {
         "crane": "crane",
         "flake-utils": "flake-utils_2",
+        "flockenzeit": "flockenzeit",
         "nixpkgs": "nixpkgs",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "node2nix": "node2nix",

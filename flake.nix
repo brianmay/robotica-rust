@@ -18,9 +18,10 @@
     # inputs.nixpkgs.follows = "nixpkgs";
     flake = false;
   };
+  inputs.flockenzeit.url = "github:balsoft/flockenzeit";
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
-    , nixpkgs-unstable, node2nix }:
+    , nixpkgs-unstable, node2nix, flockenzeit }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         # pkgs_arm = nixpkgs.legacyPackages."aarch64-linux";
@@ -71,9 +72,9 @@
           import robotica-frontend/default.nix { inherit pkgs system nodejs; };
 
         build_env = {
-          BUILD_DATE = builtins.readFile
-            "${pkgs.runCommand "timestamp" { env.when = self.lastModified; }
-            "echo -n $(date -d @$when --iso-8601=seconds) > $out"}";
+          BUILD_DATE =
+            with flockenzeit.lib.splitSecondsSinceEpoch { } self.lastModified;
+            "${F}T${T}${Z}";
           VCS_REF = "${self.rev or "dirty"}";
         };
 
