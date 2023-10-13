@@ -18,7 +18,7 @@ impl<T> Data<T> {
     #[cfg(feature = "chrono")]
     pub fn get_datetime(&self) -> Option<DateTime<Utc>> {
         let naive = NaiveDateTime::from_timestamp_millis(self.time)?;
-        Some(DateTime::from_utc(naive, Utc))
+        Some(DateTime::from_naive_utc_and_offset(naive, Utc))
     }
 }
 
