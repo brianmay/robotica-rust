@@ -609,8 +609,8 @@ impl KeepAliveTimer {
 
     fn cancel(&mut self) {
         if let Some(timeout) = self.0.take() {
-            // Probably don't need to cancel, since we are dropping it anyway, but
-            // it's good to be explicit.
+            // We have to cancel the timer, or it will keep running
+            // even after dropped.
             timeout.cancel();
         }
     }
@@ -633,6 +633,12 @@ impl KeepAliveTimer {
 
     fn disconnected(&mut self, in_tx: &Sender<Command>) {
         self.set(in_tx, RECONNECT_DELAY_MILLIS);
+    }
+}
+
+impl Drop for KeepAliveTimer {
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
