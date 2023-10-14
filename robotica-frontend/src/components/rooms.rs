@@ -93,10 +93,10 @@ fn rows_to_html(rows: &[ButtonRowConfig]) -> Html {
             {
             rows.iter().map(|row| {
                 html!(
-                    <div>
-                        <h2 key={row.id.clone()}>{row.title.clone()}</h2>
+                    <div key={row.id.clone()}>
+                        <h2>{row.title.clone()}</h2>
                         <div class="buttons">
-                            {row.buttons.iter().map(button_to_html).collect::<Html>()}
+                            {row.buttons.iter().map(|b| button_to_html(row, b)).collect::<Html>()}
                         </div>
                     </div>
                 )
