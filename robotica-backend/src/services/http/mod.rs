@@ -90,25 +90,39 @@ enum ManifestLoadError {
 }
 
 #[derive(Deserialize)]
-struct Manifest(HashMap<String, String>);
+struct Manifest(HashMap<String, String>, PathBuf);
 
 impl Manifest {
     async fn load(static_path: &Path) -> Result<Self, ManifestLoadError> {
         let manifest_path = static_path.join("manifest.json");
         let manifest_str = fs::read_to_string(manifest_path).await?;
-        let manifest: Self = serde_json::from_str(&manifest_str)?;
-        Ok(manifest)
+        let manifest: HashMap<String, String> = serde_json::from_str(&manifest_str)?;
+        Ok(Self(manifest, static_path.to_owned()))
     }
 
     async fn load_or_default(static_path: &Path) -> Self {
         Self::load(static_path).await.unwrap_or_else(|err| {
             tracing::error!("failed to load manifest: {}", err);
-            Self(HashMap::new())
+            Self(HashMap::new(), static_path.to_owned())
         })
     }
 
-    fn get<'a>(&'a self, key: &'a str) -> &'a str {
-        self.0.get(key).map_or(key, |s| s.as_str())
+    fn get_internal<'a>(&'a self, key: &'a str) -> &'a str {
+        self.0.get(key).map_or_else(
+            || {
+                error!("Cannot find {key} in manifest.json");
+                key
+            },
+            |s| s.as_str(),
+        )
+    }
+
+    fn get_path(&self, key: &str) -> PathBuf {
+        self.1.join(self.get_internal(key))
+    }
+
+    fn get_url(&self, key: &str) -> String {
+        format!("/{}", self.get_internal(key))
     }
 }
 
@@ -329,7 +343,7 @@ async fn fallback_handler(
 }
 
 async fn serve_index_html(manifest: &Manifest) -> Response {
-    let index_path = manifest.get("/index.html");
+    let index_path = manifest.get_path("index.html");
     {
         let this = fs::read_to_string(index_path)
             .await
@@ -366,7 +380,7 @@ async fn root(session: ReadableSession, State(manifest): State<Arc<Manifest>>) -
     let version = version::Version::get();
 
     let user = get_user(&session);
-    let backend_js = manifest.get("/backend.js");
+    let backend_js = manifest.get_url("backend.js");
 
     Html(
         html!(
