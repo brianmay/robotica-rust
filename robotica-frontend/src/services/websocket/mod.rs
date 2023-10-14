@@ -215,7 +215,7 @@ struct State {
     url: String,
     subscriptions: Subscriptions,
     backend: BackendState,
-    timeout: Option<Timeout>,
+    keep_alive_timer: KeepAliveTimer,
     in_tx: Sender<Command>,
     last_mqtt: HashMap<String, MqttMessage>,
     last_event: Option<WsEvent>,
@@ -258,7 +258,7 @@ impl WebsocketService {
             url,
             subscriptions: Subscriptions::new(),
             backend: BackendState::Disconnected,
-            timeout: None,
+            keep_alive_timer: None,
             in_tx: in_tx.clone(),
             last_mqtt: HashMap::new(),
             last_event: None,
@@ -407,7 +407,7 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
                     };
                     let message = command.encode().unwrap();
                     state.backend.send(Message::Bytes(message.into())).await;
-                    set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+                    state.keep_alive_timer.set(&state.in_tx);
                 }
             }
 
@@ -437,7 +437,7 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
                 let command = WsCommand::Unsubscribe { topic };
                 let message = command.encode().unwrap();
                 state.backend.send(Message::Bytes(message.into())).await;
-                set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+                state.keep_alive_timer.set(&state.in_tx);
             }
 
             debug!("ws: unsubscribed from {}", id);
@@ -448,19 +448,19 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
             let command = WsCommand::Send(msg);
             let message = command.encode().unwrap();
             state.backend.send(Message::Bytes(message.into())).await;
-            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+            state.keep_alive_timer.set(&state.in_tx);
             ProcessCommandResult::Continue
         }
         Some(Command::KeepAlive) => {
             debug!("ws: Got KeepAlive command.");
-            state.timeout = None;
+            state.keep_alive_timer.cancel();
 
             if is_connected {
                 debug!("ws: Sending keep alive.");
                 let command = WsCommand::KeepAlive;
                 let message = command.encode().unwrap();
                 state.backend.send(Message::Bytes(message.into())).await;
-                set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+                state.keep_alive_timer.set(&state.in_tx);
             } else {
                 reconnect_and_set_keep_alive(state).await;
             }
@@ -468,7 +468,7 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
         }
         None => {
             debug!("ws: Got Close command.");
-            state.timeout = None;
+            state.keep_alive_timer.cancel();
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected("Closed".to_string()));
             ProcessCommandResult::Stop
@@ -484,20 +484,20 @@ fn process_message(msg: Option<Result<Message, WebSocketError>>, state: &mut Sta
                 debug!("ws: Received message: {:?}", msg);
                 state.dispatch_mqtt(&msg);
             }
-            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+            state.keep_alive_timer.set(&state.in_tx);
         }
         Some(Err(err)) => {
             error!("ws: Failed to receive message: {:?}, reconnecting.", err);
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(err.to_string()));
-            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
+            state.keep_alive_timer.set(&state.in_tx);
         }
         None => {
             error!("ws: closed, reconnecting.");
             let msg = "Connection closed";
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(msg.to_string()));
-            set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
+            state.keep_alive_timer.set(&state.in_tx);
         }
     }
 }
@@ -507,7 +507,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
     match ws {
         Ok(backend) => {
             info!("ws: Connected.");
-            set_timeout(&mut state.timeout, &state.in_tx, KEEP_ALIVE_DURATION_MILLIS);
+            state.keep_alive_timer.set(&state.in_tx);
             state.dispatch_event(&WsEvent::Connected {
                 user: backend.user.clone(),
                 version: backend.version.clone(),
@@ -516,14 +516,13 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
         }
         Err(ConnectError::RetryableError(err)) => {
             error!("ws: Failed to reconnect: {:?}, retrying.", err);
-            // set_timeout(&mut state.timeout, &state.in_tx, RECONNECT_DELAY_MILLIS);
-            state.timeout = None;
+            state.keep_alive_timer.cancel();
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(err.to_string()));
         }
         Err(ConnectError::FatalError(err)) => {
             error!("ws: Failed to reconnect: {}, not retrying", err);
-            state.timeout = None;
+            state.keep_alive_timer.cancel();
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(err.to_string()));
         }
@@ -603,16 +602,33 @@ async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, 
     Ok(backend)
 }
 
-fn set_timeout(timeout: &mut Option<Timeout>, in_tx: &Sender<Command>, millis: u32) {
-    debug!("Scheduling next keep alive");
-    if let Some(timeout) = timeout.take() {
-        timeout.cancel();
+struct KeepAliveTimer(Option<Timeout>);
+
+impl KeepAliveTimer {
+    fn new() -> Self {
+        Self(None)
     }
-    let mut in_tx_clone = in_tx.clone();
-    *timeout = Some(Timeout::new(millis, move || {
-        in_tx_clone.try_send(Command::KeepAlive).unwrap();
-    }));
-    debug!("Scheduling next keep alive.... done");
+
+    fn cancel(&mut self) {
+        if let Some(timeout) = self.0.take() {
+            // Probably don't need to cancel, since we are dropping it anyway, but
+            // it's good to be explicit.
+            timeout.cancel();
+        }
+    }
+
+    fn set(&mut self, in_tx: &Sender<Command>) {
+        let millis = KEEP_ALIVE_DURATION_MILLIS;
+        debug!("Scheduling next keep alive");
+        if let Some(timeout) = self.0.take() {
+            timeout.cancel();
+        }
+        let mut in_tx_clone = in_tx.clone();
+        self.0 = Some(Timeout::new(millis, move || {
+            in_tx_clone.try_send(Command::KeepAlive).unwrap();
+        }));
+        debug!("Scheduling next keep alive.... done");
+    }
 }
 
 fn get_websocket_url() -> String {
