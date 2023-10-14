@@ -289,7 +289,7 @@ fn get_user(session: &ReadableSession) -> Option<User> {
 }
 
 const ASSET_SUFFIXES: [&str; 8] = [
-    ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2",
+    ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2", "*.json",
 ];
 
 async fn fallback_handler(
