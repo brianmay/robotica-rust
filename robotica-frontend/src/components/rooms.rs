@@ -124,16 +124,17 @@ pub struct Props {
 pub fn room(props: &Props) -> Html {
     let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
 
-    if let Some(rooms) = rooms {
-        if let Some(room) = rooms.iter().find(|room| room.id == props.id) {
-            html!(
-                <RequireConnection>
-                { room_to_html(room) }
-                </RequireConnection>
-            )
-        } else {
-            html!(<h1>{"404 Please ask a Penguin for help"}</h1>)
-        }
+    let rooms = match rooms {
+        Some(rooms) => rooms,
+        None => Arc::new(Vec::new()),
+    };
+
+    if let Some(room) = rooms.iter().find(|room| room.id == props.id) {
+        html!(
+            <RequireConnection>
+            { room_to_html(room) }
+            </RequireConnection>
+        )
     } else {
         html!(<h1>{"404 Please ask a Penguin for help"}</h1>)
     }
