@@ -39,8 +39,7 @@ module.exports = {
       chunks: ['index'],
     }),
     new WebpackManifestPlugin({
-      basePath: '/',
-      publicPath: ""
+      publicPath: '/'
     })
   ],
   module: {
