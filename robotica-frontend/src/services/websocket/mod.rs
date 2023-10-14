@@ -85,14 +85,14 @@ pub enum WsEvent {
         /// The version of the backend
         version: Version,
     },
-    /// Disconnected from the websocket server, will retry
+    /// Disconnected from the websocket server
     Disconnected(String),
 }
 
 /// The websocket service
 #[derive(Clone)]
 pub struct WebsocketService {
-    /// Channel to send commands to the websocket service.
+    /// Channel to send commands to the websocket service
     tx: Sender<Command>,
 }
 
@@ -115,7 +115,7 @@ const RECONNECT_DELAY_MILLIS: u32 = 5_000;
 enum BackendState {
     /// Backend is connected
     Connected(Backend),
-    /// Disconnected from the websocket server, will retry
+    /// Disconnected from the websocket server
     Disconnected,
 }
 
