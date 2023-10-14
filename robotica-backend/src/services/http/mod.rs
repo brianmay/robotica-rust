@@ -288,7 +288,7 @@ fn get_user(session: &ReadableSession) -> Option<User> {
     session.get::<User>("user")
 }
 
-const ASSET_SUFFIXES: [&str; 8] = [
+const ASSET_SUFFIXES: [&str; 9] = [
     ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2", "*.json",
 ];
 
