@@ -81,7 +81,7 @@ fn button_to_html(button: &ButtonConfig) -> Html {
     let title = button.title.clone();
 
     html!(
-        <span key={button.id.clone()}>
+        <span key={&*button.id}>
             { controller_to_html(title, icon, &button.controller) }
         </span>
     )
@@ -93,8 +93,8 @@ fn rows_to_html(rows: &[ButtonRowConfig]) -> Html {
             {
             rows.iter().map(|row| {
                 html!(
-                    <div key={row.id.clone()}>
-                        <h2>{row.title.clone()}</h2>
+                    <div key={&*row.id}>
+                        <h2>{&*row.title}</h2>
                         <div class="buttons">
                             {row.buttons.iter().map(button_to_html).collect::<Html>()}
                         </div>
@@ -109,7 +109,7 @@ fn rows_to_html(rows: &[ButtonRowConfig]) -> Html {
 fn room_to_html(room: &RoomConfig) -> Html {
     html!(
         <div>
-            <h1>{room.title.clone()}</h1>
+            <h1>{&*room.title}</h1>
             { rows_to_html(&room.rows) }
         </div>
     )
