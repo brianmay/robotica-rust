@@ -3343,6 +3343,15 @@ let
         sha512 = "GJgLTZ7vYb/JtPSSZ10hsOYIvEYsjbNU+zPdIHcUaWVNUEPivzxku31865sSSud0Da0W4lEeOPlmw93zLQchuQ==";
       };
     };
+    "source-list-map-2.0.1" = {
+      name = "source-list-map";
+      packageName = "source-list-map";
+      version = "2.0.1";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/source-list-map/-/source-list-map-2.0.1.tgz";
+        sha512 = "qnQ7gVMxGNxsiL4lEuJwe/To8UnK7fAnmbGEEH8RpLouuKbeEm0lhbQVFIrNSuB+G7tVrAlVsZgETT5nljf+Iw==";
+      };
+    };
     "source-map-0.6.1" = {
       name = "source-map";
       packageName = "source-map";
@@ -3748,6 +3757,15 @@ let
         sha512 = "5hbAst3h3C3L8w6W4P96L5vaV0PxSmJhxZvWKYIdgxOQm8pNZ5dEOmmSLBVpP85ReeyRt6AS1QJNyo/oFFPeVA==";
       };
     };
+    "webpack-manifest-plugin-5.0.0" = {
+      name = "webpack-manifest-plugin";
+      packageName = "webpack-manifest-plugin";
+      version = "5.0.0";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/webpack-manifest-plugin/-/webpack-manifest-plugin-5.0.0.tgz";
+        sha512 = "8RQfMAdc5Uw3QbCQ/CBV/AXqOR8mt03B6GJmRbhWopE8GzRfEpn+k0ZuWywxW+5QZsffhmFDY1J6ohqJo+eMuw==";
+      };
+    };
     "webpack-merge-5.8.0" = {
       name = "webpack-merge";
       packageName = "webpack-merge";
@@ -3755,6 +3773,15 @@ let
       src = fetchurl {
         url = "https://registry.npmjs.org/webpack-merge/-/webpack-merge-5.8.0.tgz";
         sha512 = "/SaI7xY0831XwP6kzuwhKWVKDP9t1QY1h65lAFLbZqMPIuYcD9QAW4u9STIbU9kaJbPBB/geU/gLr1wDjOhQ+Q==";
+      };
+    };
+    "webpack-sources-2.3.1" = {
+      name = "webpack-sources";
+      packageName = "webpack-sources";
+      version = "2.3.1";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/webpack-sources/-/webpack-sources-2.3.1.tgz";
+        sha512 = "y9EI9AO42JjEcrTJFOYmVywVZdKVUfOvDUPsJea5GIr1JOEGFVqwlY2K098fFoIjOkDzHn2AjRvM8dsBZu+gCA==";
       };
     };
     "webpack-sources-3.2.3" = {
@@ -4274,6 +4301,7 @@ let
       sources."signal-exit-3.0.7"
       sources."slash-4.0.0"
       sources."sockjs-0.3.24"
+      sources."source-list-map-2.0.1"
       sources."source-map-0.6.1"
       sources."source-map-js-1.0.2"
       sources."source-map-support-0.5.21"
@@ -4367,6 +4395,11 @@ let
         dependencies = [
           sources."ipaddr.js-2.0.1"
           sources."rimraf-3.0.2"
+        ];
+      })
+      (sources."webpack-manifest-plugin-5.0.0" // {
+        dependencies = [
+          sources."webpack-sources-2.3.1"
         ];
       })
       sources."webpack-merge-5.8.0"

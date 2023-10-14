@@ -1,6 +1,10 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const {
+  WebpackManifestPlugin
+} = require('webpack-manifest-plugin');
+
 
 const dist = path.resolve(__dirname, "dist");
 
@@ -34,6 +38,10 @@ module.exports = {
       publicPath: '/',
       chunks: ['index'],
     }),
+    new WebpackManifestPlugin({
+      basePath: '/',
+      publicPath: ""
+    })
   ],
   module: {
     rules: [{

@@ -4,7 +4,7 @@ mod urls;
 mod websocket;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -80,12 +80,45 @@ impl Config {
     }
 }
 
+#[derive(Debug, Error)]
+enum ManifestLoadError {
+    #[error("failed to load manifest.json")]
+    LoadError(#[from] std::io::Error),
+
+    #[error("failed to parse manifest.json")]
+    ParseError(#[from] serde_json::Error),
+}
+
+#[derive(Deserialize)]
+struct Manifest(HashMap<String, String>);
+
+impl Manifest {
+    async fn load(static_path: &Path) -> Result<Self, ManifestLoadError> {
+        let manifest_path = static_path.join("manifest.json");
+        let manifest_str = fs::read_to_string(manifest_path).await?;
+        let manifest: Self = serde_json::from_str(&manifest_str)?;
+        Ok(manifest)
+    }
+
+    async fn load_or_default(static_path: &Path) -> Self {
+        Self::load(static_path).await.unwrap_or_else(|err| {
+            tracing::error!("failed to load manifest: {}", err);
+            Self(HashMap::new())
+        })
+    }
+
+    fn get<'a>(&'a self, key: &'a str) -> &'a str {
+        self.0.get(key).map_or(key, |s| s.as_str())
+    }
+}
+
 #[derive(Clone)]
 struct HttpState {
     mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
+    manifest: Arc<Manifest>,
 }
 
 impl FromRef<HttpState> for MqttTx {
@@ -110,6 +143,12 @@ impl FromRef<HttpState> for Arc<Client> {
 impl FromRef<HttpState> for Arc<Rooms> {
     fn from_ref(state: &HttpState) -> Self {
         state.rooms.clone()
+    }
+}
+
+impl FromRef<HttpState> for Arc<Manifest> {
+    fn from_ref(state: &HttpState) -> Self {
+        state.manifest.clone()
     }
 }
 
@@ -160,13 +199,14 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpE
     };
 
     let client = Client::new(&oidc_config).await?;
-    let client = Arc::new(ArcSwap::new(Arc::new(client)));
+    let oidc_client = Arc::new(ArcSwap::new(Arc::new(client)));
 
     let config = Arc::new(config);
     let rooms = Arc::new(rooms);
+    let manifest = Arc::new(Manifest::load_or_default(&config.static_path).await);
 
     {
-        let client = client.clone();
+        let client = oidc_client.clone();
         spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
@@ -185,31 +225,27 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpE
         });
     }
 
+    let state = HttpState {
+        mqtt,
+        config,
+        oidc_client,
+        rooms,
+        manifest,
+    };
+
     spawn(async {
-        server(mqtt, config, client, rooms, session_layer)
-            .await
-            .unwrap_or_else(|err| {
-                error!("http server failed: {}", err);
-            });
+        server(state, session_layer).await.unwrap_or_else(|err| {
+            error!("http server failed: {}", err);
+        });
     });
 
     Ok(())
 }
 
 async fn server(
-    mqtt: MqttTx,
-    config: Arc<Config>,
-    oidc_client: Arc<ArcSwap<Client>>,
-    rooms: Arc<Rooms>,
+    state: HttpState,
     session_layer: SessionLayer<CookieStore>,
 ) -> Result<(), HttpError> {
-    let state = HttpState {
-        mqtt,
-        config,
-        oidc_client,
-        rooms,
-    };
-
     let http_listener = state.config.http_listener.clone();
 
     let app = Router::new()
@@ -260,6 +296,7 @@ async fn fallback_handler(
     session: ReadableSession,
     State(oidc_client): State<Arc<Client>>,
     State(http_config): State<Arc<Config>>,
+    State(manifest): State<Arc<Manifest>>,
     req: Request<Body>,
 ) -> Response {
     if req.method() != Method::GET {
@@ -283,7 +320,7 @@ async fn fallback_handler(
             let status = response.status();
             match status {
                 // If this is an asset file, then don't redirect to index.html
-                StatusCode::NOT_FOUND if !asset_file => serve_index_html(static_path).await,
+                StatusCode::NOT_FOUND if !asset_file => serve_index_html(&manifest).await,
                 _ => response.map(boxed),
             }
         }
@@ -291,8 +328,8 @@ async fn fallback_handler(
     }
 }
 
-async fn serve_index_html(static_path: &PathBuf) -> Response {
-    let index_path = PathBuf::from(static_path).join("index.html");
+async fn serve_index_html(manifest: &Manifest) -> Response {
+    let index_path = manifest.get("/index.html");
     {
         let this = fs::read_to_string(index_path)
             .await
@@ -325,10 +362,11 @@ fn nav_bar() -> Markup {
 }
 
 #[allow(clippy::unused_async)]
-async fn root(session: ReadableSession) -> Response {
+async fn root(session: ReadableSession, State(manifest): State<Arc<Manifest>>) -> Response {
     let version = version::Version::get();
 
     let user = get_user(&session);
+    let backend_js = manifest.get("/backend.js");
 
     Html(
         html!(
@@ -337,7 +375,7 @@ async fn root(session: ReadableSession) -> Response {
             head {
                 title { "Robotica" }
                 meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" {}
-                script src="backend.js" {}
+                script src=(backend_js) {}
             }
             body {
                 ( nav_bar() )
