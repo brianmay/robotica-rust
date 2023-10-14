@@ -781,11 +781,13 @@ fn update_auto_charge(
     tesla_state: &TeslaState,
     mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
+    let notified_errors = tesla_state.notified_errors;
     let is_charging = tesla_state.is_charging();
-    let status = match (auto_charge, is_charging) {
-        (true, false) => DevicePower::AutoOff,
-        (true, true) => DevicePower::On,
-        (false, _) => DevicePower::Off,
+    let status = match (notified_errors, auto_charge, is_charging) {
+        (true, _, _) => DevicePower::DeviceError,
+        (false, true, false) => DevicePower::AutoOff,
+        (false, true, true) => DevicePower::On,
+        (false, false, _) => DevicePower::Off,
     };
 
     publish_auto_charge(car_number, status, mqtt);
@@ -808,11 +810,13 @@ fn update_force_charge(
     force_charge: bool,
     mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
+    let notified_errors = tesla_state.notified_errors;
     let is_charging = tesla_state.is_charging();
-    let status = match (force_charge, is_charging) {
-        (true, false) => DevicePower::AutoOff,
-        (true, true) => DevicePower::On,
-        (false, _) => DevicePower::Off,
+    let status = match (notified_errors, force_charge, is_charging) {
+        (true, _, _) => DevicePower::DeviceError,
+        (false, true, false) => DevicePower::AutoOff,
+        (false, true, true) => DevicePower::On,
+        (false, false, _) => DevicePower::Off,
     };
 
     publish_force_change(car_number, status, mqtt);
@@ -877,7 +881,7 @@ async fn check_charge(
     let can_start_charge =
         charging_state.map_or(true, |state| state != ChargingStateEnum::Complete);
 
-    info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}");
+    info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}, notified_errors: {}", tesla_state.notified_errors);
     info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
@@ -892,7 +896,9 @@ async fn check_charge(
     sequence.add_wake_up();
 
     // Set the charge limit if required.
-    if set_charge_limit {
+    // Or if we are in error state
+    // - we need to keep checking to find out when the car is awake.
+    if set_charge_limit || tesla_state.notified_errors {
         info!("Setting charge limit to {}", charge_limit);
         sequence.add_set_chart_limit(charge_limit);
     }
