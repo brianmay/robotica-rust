@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::{protobuf::ProtobufIntoFrom, protos};
 
 /// The `QoS` level for a MQTT message.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum QoS {
     /// At most once
     AtMostOnce = 0,
@@ -58,7 +58,7 @@ impl<'de> Deserialize<'de> for QoS {
 }
 
 /// A MQTT message.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct MqttMessage {
     /// MQTT topic to send the message to.
     pub topic: String,

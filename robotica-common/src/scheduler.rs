@@ -105,7 +105,7 @@ pub enum MarkError {
 }
 
 /// The importance of a Sequence
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, Hash)]
 pub enum Importance {
     /// The sequence is not important.
     #[default]

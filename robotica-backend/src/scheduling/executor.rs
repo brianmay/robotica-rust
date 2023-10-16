@@ -1,6 +1,8 @@
 //! Run tasks based on schedule.
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use chrono::{NaiveDate, TimeZone, Utc};
@@ -208,6 +210,9 @@ struct State<T: TimeZone> {
     mqtt: MqttTx,
     all_status: AllStatus,
     calendar_refresh_time: DateTime<Utc>,
+    publish_all_hash: Option<ObjectHash>,
+    publish_important_hash: Option<ObjectHash>,
+    publish_pending_hash: Option<ObjectHash>,
 }
 
 impl<T: TimeZone + Copy> State<T> {
@@ -243,13 +248,14 @@ impl<T: TimeZone + Copy> State<T> {
         self.mqtt.try_send(message);
     }
 
-    fn publish_all_sequences(&self) {
-        self.publish_sequences_pending(&self.sequences);
-        self.publish_sequences_important(&self.sequences);
-        self.publish_sequences_all(&self.sequences);
+    fn publish_all_sequences(&mut self) {
+        self.publish_pending_hash = self.publish_sequences_pending(&self.sequences);
+        self.publish_important_hash = self.publish_sequences_important(&self.sequences);
+        self.publish_all_hash = self.publish_sequences_all(&self.sequences);
     }
 
-    fn publish_sequences_all(&self, sequences: &[Sequence]) {
+    #[must_use]
+    fn publish_sequences_all(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let sequences: Vec<Sequence> = sequences
             .iter()
             .cloned()
@@ -257,10 +263,11 @@ impl<T: TimeZone + Copy> State<T> {
             .collect();
 
         let topic = format!("schedule/{}/all", self.config.extra_config.hostname);
-        self.publish_sequences(&sequences, topic);
+        self.publish_sequences(&sequences, topic, &self.publish_all_hash)
     }
 
-    fn publish_sequences_important(&self, sequences: &[Sequence]) {
+    #[must_use]
+    fn publish_sequences_important(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let important: Vec<Sequence> = sequences
             .iter()
             .filter(|sequence| matches!(sequence.importance, Importance::Important))
@@ -268,10 +275,11 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
         let topic = format!("schedule/{}/important", self.config.extra_config.hostname);
-        self.publish_sequences(&important, topic);
+        self.publish_sequences(&important, topic, &self.publish_important_hash)
     }
 
-    fn publish_sequences_pending(&self, sequences: &[Sequence]) {
+    #[must_use]
+    fn publish_sequences_pending(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let pending: Vec<Sequence> = sequences
             .iter()
             .cloned()
@@ -279,16 +287,28 @@ impl<T: TimeZone + Copy> State<T> {
             .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
         let topic = format!("schedule/{}/pending", self.config.extra_config.hostname);
-        self.publish_sequences(&pending, topic);
+        self.publish_sequences(&pending, topic, &self.publish_pending_hash)
     }
 
-    fn publish_sequences(&self, sequences: &[Sequence], topic: String) {
+    #[must_use]
+    fn publish_sequences(
+        &self,
+        sequences: &[Sequence],
+        topic: String,
+        old_hash: &Option<ObjectHash>,
+    ) -> Option<ObjectHash> {
         let msg = Json(sequences);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize sequences: {:?}", sequences);
-            return;
+            return None;
         };
-        self.mqtt.try_send(message);
+
+        let new_hash = ObjectHash::calculate(&message);
+        let changed = old_hash.map_or(true, |old_hash| new_hash != old_hash);
+        if changed {
+            self.mqtt.try_send(message);
+        }
+        Some(new_hash)
     }
 
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
@@ -557,6 +577,9 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
             all_status: AllStatus::new(),
             all_marks: AllMarks::new(),
             calendar_refresh_time: now,
+            publish_all_hash: None,
+            publish_important_hash: None,
+            publish_pending_hash: None,
         }
     };
     let state = {
@@ -575,4 +598,15 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
         state.timer
     );
     Ok(state)
+}
+
+#[derive(PartialEq, Eq, Copy, Clone)]
+struct ObjectHash(u64);
+
+impl ObjectHash {
+    fn calculate<T: Hash + Sized>(t: &T) -> Self {
+        let mut s = DefaultHasher::new();
+        t.hash(&mut s);
+        Self(s.finish())
+    }
 }
