@@ -12,6 +12,7 @@ jobs:
     - uses: cachix/install-nix-action@v22
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix flake check
     - run: nix build '.#brian-backend'
     - run: nix build '.#robotica-backend'
