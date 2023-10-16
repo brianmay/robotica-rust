@@ -33,18 +33,19 @@ async-trait = "0.1.51"
 pyo3 = { version = "0.20.0", features = ["auto-initialize", "chrono"], optional = true }
 
 # http server
-axum-core = "0.3.0"
-axum = { version = "0.6.12", features = ["ws"] }
+axum-core = "0.3.4"
+axum = { version = "0.6.20", features = ["ws"] }
 openid = "0.12.0"
 maud = { version = "0.25.0", features = ["axum"] }
-axum-sessions = "0.6.1"
 base64 = "0.21.0"
 url = "2.2.2"
 futures = "0.3.27"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["fs", "trace"] }
+tower-sessions = { version = "0.3.3", features = ["moka-store"] }
 arc-swap = "1.4.0"
 hyper = "0.14.25"
+time = "0.3.30"
 
 [build-dependencies]
 lalrpop = "0.20.0"

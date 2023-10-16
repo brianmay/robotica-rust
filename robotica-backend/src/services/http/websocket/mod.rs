@@ -7,9 +7,9 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
-use axum_sessions::extractors::ReadableSession;
 use futures::{stream::FuturesUnordered, StreamExt};
 use tokio::select;
+use tower_sessions::Session;
 use tracing::{debug, error, info};
 
 use robotica_common::{
@@ -31,7 +31,7 @@ pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(config): State<Arc<Config>>,
     State(mqtt): State<MqttTx>,
-    session: ReadableSession,
+    session: Session,
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
     if let Some(user) = get_user(&session) {

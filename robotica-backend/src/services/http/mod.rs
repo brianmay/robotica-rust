@@ -9,18 +9,14 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use axum::body::{boxed, Body};
+use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, State};
 use axum::http::uri::PathAndQuery;
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::BoxError;
 use axum::Json;
 use axum::{extract::Query, routing::get, Router};
-use axum_sessions::async_session::CookieStore;
-use axum_sessions::extractors::ReadableSession;
-use axum_sessions::extractors::WritableSession;
-use axum_sessions::{SameSite, SessionLayer};
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
 use robotica_common::config::Rooms;
@@ -28,10 +24,13 @@ use robotica_common::version;
 use serde::de::Error;
 use serde::Deserialize;
 use thiserror::Error;
+use time::Duration;
 use tokio::fs;
 use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
+use tower_sessions::cookie::SameSite;
+use tower_sessions::{MokaStore, Session, SessionManagerLayer};
 use tracing::error;
 
 use robotica_common::user::User;
@@ -197,9 +196,18 @@ pub enum HttpError {
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
 pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpError> {
-    let store = CookieStore::new();
-    let secret = STANDARD.decode(config.session_secret.clone())?;
-    let session_layer = SessionLayer::new(store, &secret).with_same_site_policy(SameSite::Lax);
+    let session_store = MokaStore::new(Some(2_000));
+    // let session_store = MemoryStore::default();
+    let session_service = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|_: BoxError| async {
+            StatusCode::BAD_REQUEST
+        }))
+        .layer(
+            SessionManagerLayer::new(session_store)
+                .with_secure(true)
+                .with_max_age(Duration::days(7))
+                .with_same_site(SameSite::Lax),
+        );
 
     let redirect = config
         .generate_url_or_default("/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz");
@@ -247,19 +255,6 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpE
         manifest,
     };
 
-    spawn(async {
-        server(state, session_layer).await.unwrap_or_else(|err| {
-            error!("http server failed: {}", err);
-        });
-    });
-
-    Ok(())
-}
-
-async fn server(
-    state: HttpState,
-    session_layer: SessionLayer<CookieStore>,
-) -> Result<(), HttpError> {
     let http_listener = state.config.http_listener.clone();
 
     let app = Router::new()
@@ -269,23 +264,29 @@ async fn server(
         .route("/rooms", get(rooms_handler))
         .fallback(fallback_handler)
         .with_state(state)
-        .layer(session_layer)
+        .layer(session_service)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    // let c = (*config).http_listener;
+    #[allow(clippy::unwrap_used)]
+    spawn(async move {
+        server(http_listener, app).await.unwrap_or_else(|err| {
+            tracing::error!("failed to start http server: {}", err);
+        });
+    });
+
+    Ok(())
+}
+
+async fn server(http_listener: String, app: Router) -> Result<(), HttpError> {
     let addr = http_listener.parse()?;
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await?;
-
     Ok(())
 }
 
-fn set_user(
-    session: &mut WritableSession,
-    user_info: &openid::Userinfo,
-) -> Result<(), serde_json::Error> {
+fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), serde_json::Error> {
     let closure = || {
         let sub = user_info.sub.clone()?;
         let name = user_info.name.clone()?;
@@ -295,11 +296,16 @@ fn set_user(
     };
 
     let user = closure().ok_or_else(|| serde_json::Error::custom("Missing user info"))?;
-    session.insert("user", &user)
+    session
+        .insert("user", user)
+        .map_err(|err| serde_json::Error::custom(format!("Failed to insert user: {err}")))?;
+
+    Ok(())
 }
 
-fn get_user(session: &ReadableSession) -> Option<User> {
-    session.get::<User>("user")
+fn get_user(session: &Session) -> Option<User> {
+    let user = session.get::<User>("user");
+    user.unwrap_or_default()
 }
 
 const ASSET_SUFFIXES: [&str; 9] = [
@@ -307,7 +313,7 @@ const ASSET_SUFFIXES: [&str; 9] = [
 ];
 
 async fn fallback_handler(
-    session: ReadableSession,
+    session: Session,
     State(oidc_client): State<Arc<Client>>,
     State(http_config): State<Arc<Config>>,
     State(manifest): State<Arc<Manifest>>,
@@ -376,7 +382,7 @@ fn nav_bar() -> Markup {
 }
 
 #[allow(clippy::unused_async)]
-async fn root(session: ReadableSession, State(manifest): State<Arc<Manifest>>) -> Response {
+async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Response {
     let version = version::Version::get();
 
     let user = get_user(&session);
@@ -418,7 +424,7 @@ async fn oidc_callback(
     State(http_config): State<Arc<Config>>,
     State(oidc_client): State<Arc<Client>>,
     Query(params): Query<HashMap<String, String>>,
-    mut session: WritableSession,
+    session: Session,
 ) -> Response {
     let code = params.get("code").cloned().unwrap_or_default();
 
@@ -431,7 +437,7 @@ async fn oidc_callback(
 
     match result {
         Ok((_token, user_info)) => {
-            set_user(&mut session, &user_info).unwrap_or_else(|err| {
+            set_user(&session, &user_info).unwrap_or_else(|err| {
                 tracing::error!("failed to set user in session: {err}");
             });
 
@@ -439,7 +445,7 @@ async fn oidc_callback(
             Redirect::to(&url).into_response()
         }
         Err(e) => {
-            session.destroy();
+            session.delete();
             Html(
                 html!(
                         html {
@@ -459,7 +465,7 @@ async fn oidc_callback(
 }
 
 #[allow(clippy::unused_async)]
-async fn rooms_handler(State(rooms): State<Arc<Rooms>>, session: ReadableSession) -> Json<Rooms> {
+async fn rooms_handler(State(rooms): State<Arc<Rooms>>, session: Session) -> Json<Rooms> {
     let rooms = if get_user(&session).is_some() {
         rooms
     } else {
