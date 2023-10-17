@@ -15,5 +15,5 @@ jobs:
     - uses: DeterminateSystems/magic-nix-cache-action@v2
     - run: nix flake check
     - run: nix build '.#brian-backend'
-    - run: nix build '.#robotica-backend'
+    - run: nix build '.#robotica-frontend'
     - run: nix build '.#robotica-slint'
