@@ -1,12 +1,3 @@
-[package]
-name = "robotica-rust"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-
 [patch.crates-io]
 # workaround to break the circular dependency for ahash(https://github.com/tkaitchuck/aHash/issues/95)
 getrandom = { git = 'https://github.com/vladimir-dd/getrandom.git'}
@@ -19,3 +10,4 @@ members = [
     "robotica-slint",
     "brian-backend",
 ]
+resolver = "2"

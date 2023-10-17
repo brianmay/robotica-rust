@@ -4279,10 +4279,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "robotica-rust"
-version = "0.1.0"
-
-[[package]]
 name = "robotica-slint"
 version = "0.1.0"
 dependencies = [

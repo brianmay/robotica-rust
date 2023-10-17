@@ -81,13 +81,14 @@
         robotica-frontend = let
           common = {
             src = ./.;
+            pname = "robotica-frontend";
+            version = "0.0.0";
             cargoExtraArgs = "-p robotica-frontend";
             nativeBuildInputs = with pkgs; [ pkgconfig ];
             buildInputs = with pkgs;
               [ # openssl python3
                 protobuf
               ];
-            # installCargoArtifactsMode = "use-zstd";
             CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
             doCheck = false;
           };
@@ -138,6 +139,8 @@
         brian-backend = let
           common = {
             src = ./.;
+            pname = "brian-backend";
+            version = "0.0.0";
             cargoExtraArgs = "-p brian-backend";
             nativeBuildInputs = with pkgs; [ pkgconfig ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
@@ -179,6 +182,8 @@
         robotica-slint = let
           common = {
             src = ./.;
+            pname = "robotica-slint";
+            version = "0.0.0";
             cargoExtraArgs = "-p robotica-slint";
             nativeBuildInputs = with pkgs; [ pkgconfig ];
             buildInputs = with pkgs; [
