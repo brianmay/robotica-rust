@@ -287,8 +287,8 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
         switches: vec![],
         hdmi_matrix: vec![HdmiConfig {
             title: "TV".to_string(),
-            topic_substr: "Living/TV".to_string(),
-            output_id: 1,
+            topic_substr: "Dining/TV".to_string(),
+            output_id: 2,
             inputs: hdmi_inputs.to_vec(),
         }],
     }
