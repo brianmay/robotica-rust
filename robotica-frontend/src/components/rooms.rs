@@ -76,27 +76,29 @@ fn controller_to_html(title: String, icon: Icon, controller_config: &ControllerC
     }
 }
 
-fn button_to_html(button: &ButtonConfig) -> Html {
+fn button_to_html(row_id: &str, button: &ButtonConfig) -> Html {
     let icon = button.icon;
     let title = button.title.clone();
+    let id = format!("{}-{}", row_id, button.id);
 
     html!(
-        <span key={&*button.id}>
+        <span key={id}>
             { controller_to_html(title, icon, &button.controller) }
         </span>
     )
 }
 
-fn rows_to_html(rows: &[ButtonRowConfig]) -> Html {
+fn rows_to_html(room: &RoomConfig) -> Html {
     html!(
         <div>
             {
-            rows.iter().map(|row| {
+            room.rows.iter().map(|row| {
+                let id = format!("{}-{}", room.id, row.id);
                 html!(
-                    <div key={&*row.id}>
+                    <div key={&*id}>
                         <h2>{&*row.title}</h2>
                         <div class="buttons">
-                            {row.buttons.iter().map(button_to_html).collect::<Html>()}
+                            {row.buttons.iter().map(|button| button_to_html(&id, button)).collect::<Html>()}
                         </div>
                     </div>
                 )
@@ -110,7 +112,7 @@ fn room_to_html(room: &RoomConfig) -> Html {
     html!(
         <div>
             <h1>{&*room.title}</h1>
-            { rows_to_html(&room.rows) }
+            { rows_to_html(room) }
         </div>
     )
 }
