@@ -119,6 +119,7 @@ pub fn run(
             state.error = Some(err);
             state.play_list = None;
         });
+        send_state(&mqtt, &state, topic_substr);
 
         #[allow(clippy::match_same_arms)]
         loop {
