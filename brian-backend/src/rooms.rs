@@ -178,7 +178,19 @@ fn jan_config(passage_light: &LightConfig) -> UiConfig {
             }],
             ..Default::default()
         }],
-        switches: vec![],
+        switches: vec![ButtonRowConfig {
+            id: "switches".to_string(),
+            title: "Switches".to_string(),
+            buttons: vec![ButtonConfig {
+                id: "msg".to_string(),
+                title: "MSG".to_string(),
+                icon: Icon::Trumpet,
+                controller: ControllerConfig::Switch(switch::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Jan/Messages".to_string(),
+                }),
+            }],
+        }],
         hdmi_matrix: vec![],
     }
 }
@@ -209,7 +221,19 @@ fn twins_config() -> UiConfig {
             }],
             ..Default::default()
         }],
-        switches: vec![],
+        switches: vec![ButtonRowConfig {
+            id: "switches".to_string(),
+            title: "Switches".to_string(),
+            buttons: vec![ButtonConfig {
+                id: "msg".to_string(),
+                title: "MSG".to_string(),
+                icon: Icon::Trumpet,
+                controller: ControllerConfig::Switch(switch::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Twins/Messages".to_string(),
+                }),
+            }],
+        }],
         hdmi_matrix: vec![],
     }
 }
@@ -284,7 +308,19 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
             topic_substr: "Extension/Robotica".to_string(),
             ..Default::default()
         }],
-        switches: vec![],
+        switches: vec![ButtonRowConfig {
+            id: "switches".to_string(),
+            title: "Switches".to_string(),
+            buttons: vec![ButtonConfig {
+                id: "msg".to_string(),
+                title: "MSG".to_string(),
+                icon: Icon::Trumpet,
+                controller: ControllerConfig::Switch(switch::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Extension/Messages".to_string(),
+                }),
+            }],
+        }],
         hdmi_matrix: vec![HdmiConfig {
             title: "TV".to_string(),
             topic_substr: "Dining/TV".to_string(),
@@ -303,10 +339,22 @@ fn akira_config() -> UiConfig {
         }],
         music: vec![MusicConfig {
             title: "Music".to_string(),
-            topic_substr: "Extension/Robotica".to_string(),
+            topic_substr: "Akira/Robotica".to_string(),
             ..Default::default()
         }],
-        switches: vec![],
+        switches: vec![ButtonRowConfig {
+            id: "switches".to_string(),
+            title: "Switches".to_string(),
+            buttons: vec![ButtonConfig {
+                id: "msg".to_string(),
+                title: "MSG".to_string(),
+                icon: Icon::Trumpet,
+                controller: ControllerConfig::Switch(switch::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Akira/Messages".to_string(),
+                }),
+            }],
+        }],
         hdmi_matrix: vec![],
     }
 }
