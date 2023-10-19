@@ -79,10 +79,9 @@ fn controller_to_html(title: String, icon: Icon, controller_config: &ControllerC
 fn button_to_html(button: &ButtonConfig) -> Html {
     let icon = button.icon;
     let title = button.title.clone();
-    let id = &button.id;
 
     html!(
-        <span key={id}>
+        <span key={&*button.id}>
             { controller_to_html(title, icon, &button.controller) }
         </span>
     )
