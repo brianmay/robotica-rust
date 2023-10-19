@@ -182,7 +182,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
                     }
                     Ok(WsCommand::Send(msg)) => {
                         if check_topic_send_allowed(&msg.topic, &user, &config) {
-                            tracing::info!("websocket: Sending message to mqtt {}: {:?}", msg.topic, msg.payload);
+                            tracing::info!("websocket: Sending message to mqtt: {:?}", msg);
                             mqtt.try_send(msg);
                         }
                     }
