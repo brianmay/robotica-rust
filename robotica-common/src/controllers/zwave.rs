@@ -93,8 +93,10 @@ impl ControllerTrait for Controller {
     }
 
     fn get_display_state(&self) -> DisplayState {
+        #[allow(clippy::match_same_arms)]
         let state = match (self.status, self.power) {
             (Some(Status::Dead), _) => DisplayState::Error,
+            (Some(Status::Unknown), _) => DisplayState::Unknown,
             (Some(Status::Alive), None) => DisplayState::Unknown,
             (Some(Status::Alive), Some(false)) => DisplayState::Off,
             (Some(Status::Alive), Some(true)) => DisplayState::On,

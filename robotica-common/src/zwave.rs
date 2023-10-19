@@ -30,6 +30,9 @@ pub enum Status {
 
     /// The device is alive
     Alive,
+
+    /// The device is unknown
+    Unknown,
 }
 
 /// A status message from a Z-Wave device
