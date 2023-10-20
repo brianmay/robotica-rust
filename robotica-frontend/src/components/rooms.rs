@@ -5,9 +5,7 @@ use yew::prelude::*;
 use crate::components::button::{
     Button, HdmiProps, LightProps, Music2Props, SwitchProps, TasmotaProps, ZwaveProps,
 };
-use robotica_common::config::{
-    ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms,
-};
+use robotica_common::config::{ButtonConfig, ControllerConfig, Icon, RoomConfig, Rooms};
 use robotica_common::controllers::Action;
 
 use super::require_connection::RequireConnection;
