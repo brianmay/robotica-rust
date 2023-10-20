@@ -37,6 +37,7 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct ProgramsConfig {
+    init: Vec<String>,
     set_volume: Vec<String>,
     pre_say: Vec<String>,
     say: Vec<String>,
@@ -55,6 +56,7 @@ pub struct Config {
 
 #[derive()]
 pub struct LoadedProgramsConfig {
+    init: PartialLine,
     set_volume: PartialLine,
     pre_say: PartialLine,
     say: PartialLine,
@@ -76,6 +78,7 @@ impl TryFrom<Config> for LoadedConfig {
 
     fn try_from(config: Config) -> Result<Self, Self::Error> {
         let programs = LoadedProgramsConfig {
+            init: PartialLine::new(config.programs.init)?,
             set_volume: PartialLine::new(config.programs.set_volume)?,
             pre_say: PartialLine::new(config.programs.pre_say)?,
             say: PartialLine::new(config.programs.say)?,
@@ -483,7 +486,7 @@ async fn stop_music(programs: &LoadedProgramsConfig) -> Result<(), String> {
 }
 
 async fn init(programs: &LoadedProgramsConfig) -> Result<(), String> {
-    let cl = programs.mpc.to_line_with_args(["repeat", "on"]);
+    let cl = programs.init.to_line();
     if let Err(err) = cl.run().await {
         error!("Failed to init music: {err}");
         return Err(format!("Failed to init music: {err}"));
