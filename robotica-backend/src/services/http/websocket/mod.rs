@@ -91,7 +91,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
             if !already_subscribed {
                 match mqtt.subscribe_into_stateful(topic).await {
                     Ok(entity) => {
-                        info!("Subscribed to topic: {}", topic);
+                        debug!("Subscribed to topic: {}", topic);
                         let subscription = entity.subscribe().await;
                         subscriptions.insert(topic.clone(), subscription);
                     }
@@ -105,7 +105,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
 
         for topic in &remove_subscriptions {
             if let Some(_subscription) = subscriptions.remove(topic) {
-                info!("Unsubscribed from topic: {}", topic);
+                debug!("Unsubscribed from topic: {}", topic);
             }
         }
         remove_subscriptions.clear();
