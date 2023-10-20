@@ -27,7 +27,7 @@ use robotica_common::{
 };
 use serde::Deserialize;
 use tokio::{select, sync::mpsc};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::{
     command::{self, ErrorKind},
@@ -244,6 +244,8 @@ async fn handle_command(
 
     if should_play {
         process_command(state, command, config, tx_screen_command, mqtt).await;
+    } else {
+        info!("Not processing command due to lack of urgency: {command:?}");
     }
 }
 
