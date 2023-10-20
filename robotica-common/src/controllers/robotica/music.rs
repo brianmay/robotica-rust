@@ -124,7 +124,7 @@ impl ControllerTrait for Controller {
 
         // FIXME: This is yuck.
         let audio_command = AudioCommand {
-            priority: MessagePriority::Low,
+            priority: MessagePriority::Urgent,
             sound: None,
             pre_tasks: None,
             post_tasks: None,
