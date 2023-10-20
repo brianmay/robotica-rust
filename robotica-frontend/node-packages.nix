@@ -3136,13 +3136,13 @@ let
         sha512 = "YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==";
       };
     };
-    "sass-1.69.3" = {
+    "sass-1.69.4" = {
       name = "sass";
       packageName = "sass";
-      version = "1.69.3";
+      version = "1.69.4";
       src = fetchurl {
-        url = "https://registry.npmjs.org/sass/-/sass-1.69.3.tgz";
-        sha512 = "X99+a2iGdXkdWn1akFPs0ZmelUzyAQfvqYc2P/MPTrJRuIRoTffGzT9W9nFqG00S+c8hXzVmgxhUuHFdrwxkhQ==";
+        url = "https://registry.npmjs.org/sass/-/sass-1.69.4.tgz";
+        sha512 = "+qEreVhqAy8o++aQfCJwp0sklr2xyEzkm9Pp/Igu9wNPoe7EZEQ8X/MBvvXggI2ql607cxKg/RKOwDj6pp2XDA==";
       };
     };
     "sass-loader-13.3.2" = {
@@ -3721,13 +3721,13 @@ let
         sha512 = "O84QOnr0icsbFGLS0O3bI5FswxzRr8/gHwWkDlQFskhSPryQXvrTMxjxGP4+iWYoauLoBvfDpkrOauZ+0iZpDA==";
       };
     };
-    "webpack-5.88.2" = {
+    "webpack-5.89.0" = {
       name = "webpack";
       packageName = "webpack";
-      version = "5.88.2";
+      version = "5.89.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/webpack/-/webpack-5.88.2.tgz";
-        sha512 = "JmcgNZ1iKj+aiR0OvTYtWQqJwq37Pf683dY9bVORwVbUrDhLhdn/PlO2sHsFHPkj7sHNQF3JwaAkp49V+Sq1tQ==";
+        url = "https://registry.npmjs.org/webpack/-/webpack-5.89.0.tgz";
+        sha512 = "qyfIC10pOr70V+jkmud8tMfajraGCZMBWJtrmuBymQKCrLTRejBI8STDp1MCyZu/QTdZSeacCQYpYNQVOzX5kw==";
       };
     };
     "webpack-cli-5.1.4" = {
@@ -4270,7 +4270,7 @@ let
       sources."run-parallel-1.2.0"
       sources."safe-buffer-5.1.2"
       sources."safer-buffer-2.1.2"
-      sources."sass-1.69.3"
+      sources."sass-1.69.4"
       sources."sass-loader-13.3.2"
       sources."schema-utils-4.0.0"
       sources."select-hose-2.0.0"
@@ -4377,7 +4377,7 @@ let
       sources."walk-up-path-3.0.1"
       sources."watchpack-2.4.0"
       sources."wbuf-1.7.3"
-      (sources."webpack-5.88.2" // {
+      (sources."webpack-5.89.0" // {
         dependencies = [
           sources."ajv-6.12.6"
           sources."ajv-keywords-3.5.2"
