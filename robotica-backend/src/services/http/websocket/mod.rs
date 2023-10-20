@@ -10,7 +10,7 @@ use axum::{
 use futures::{stream::FuturesUnordered, StreamExt};
 use tokio::select;
 use tower_sessions::Session;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use robotica_common::{
     mqtt::MqttMessage,
