@@ -179,6 +179,49 @@
           pkg = wrapper;
         };
 
+        freeswitch = let
+          common = {
+            src = ./.;
+            pname = "robotica-freeswitch";
+            version = "0.0.0";
+            cargoExtraArgs = "-p freeswitch";
+            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            buildInputs = with pkgs; [ openssl python3 protobuf ];
+            # installCargoArtifactsMode = "use-zstd";
+          };
+
+          # Build *just* the cargo dependencies, so we can reuse
+          # all of that work (e.g. via cachix) when running in CI
+          cargoArtifacts = craneLib.buildDepsOnly common;
+
+          # Run clippy (and deny all warnings) on the crate source.
+          clippy = craneLib.cargoClippy ({
+            inherit cargoArtifacts;
+            cargoClippyExtraArgs = "-- --deny warnings";
+          } // common);
+
+          # Next, we want to run the tests and collect code-coverage, _but only if
+          # the clippy checks pass_ so we do not waste any extra cycles.
+          coverage =
+            craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
+
+          # Build the actual crate itself, _but only if the previous tests pass_.
+          pkg = craneLib.buildPackage ({
+            inherit cargoArtifacts;
+            doCheck = true;
+            # CARGO_LOG = "cargo::core::compiler::fingerprint=info";
+          } // common // build_env);
+
+          wrapper = pkgs.writeShellScriptBin "freeswitch" ''
+            export PATH="${poetry_env}/bin:$PATH"
+            exec ${pkg}/bin/freeswitch "$@"
+          '';
+        in {
+          clippy = clippy;
+          coverage = coverage;
+          pkg = wrapper;
+        };
+
         robotica-slint = let
           common = {
             src = ./.;
@@ -252,6 +295,9 @@
           brian-backend-clippy = brian-backend.clippy;
           brian-backend-coverage = brian-backend.coverage;
           brian-backend = brian-backend.pkg;
+          freeswitch-clippy = freeswitch.clippy;
+          freeswitch-coverage = freeswitch.coverage;
+          freeswitch = freeswitch.pkg;
         };
 
         devShells.default = pkgs.mkShell {
@@ -293,6 +339,7 @@
           robotica-frontend = robotica-frontend-bindgen;
           brian-backend = brian-backend.pkg;
           robotica-slint = robotica-slint.pkg;
+          freeswitch = freeswitch.pkg;
         };
 
       });

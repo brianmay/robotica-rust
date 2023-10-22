@@ -1488,8 +1488,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "slint",
- "slint-build",
  "thiserror",
  "tokio",
  "tracing",
