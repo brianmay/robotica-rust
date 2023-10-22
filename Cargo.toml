@@ -9,5 +9,6 @@ members = [
     "robotica-common",
     "robotica-slint",
     "brian-backend",
+    "freeswitch",
 ]
 resolver = "2"
