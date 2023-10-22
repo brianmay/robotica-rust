@@ -7,6 +7,7 @@ use robotica_common::{
     robotica::{audio::MessagePriority, message::Message},
 };
 use serde::Deserialize;
+use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
 use crate::{phone_db, RunningState};
@@ -67,28 +68,33 @@ async fn process_call(
                     Err(err) => error!("Error encoding message: {:?}", err),
                 }
 
-                debug!("Sending to extension");
-                conn.execute("bridge", "${group_call(home@${domain_name})}")
-                    .await?;
-                conn.execute("answer", "").await?;
-                conn.execute("sleep", "1000").await?;
-                conn.execute("set", "skip_instructions=true").await?;
-                conn.execute("voicemail", "default $${domain} ${dialed_extension}")
-                    .await?;
-                debug!("Done");
+                default_action(&conn).await?;
             }
             phone_db::Action::VoiceMail => {
                 info!("Sending to voicemail");
                 conn.execute("voicemail", "default $${domain} ${dialed_extension}")
                     .await?;
                 conn.hangup("NORMAL_CLEARING").await?;
-                return Ok(());
             }
         }
     } else {
         println!("Got call from unknown number to unknown number");
+        default_action(&conn).await?;
     }
 
+    debug!("Done");
+    Ok(())
+}
+
+async fn default_action(conn: &EslConnection) -> Result<(), EslError> {
+    debug!("Bridging connection");
+    conn.execute("bridge", "${group_call(home@${domain_name})}")
+        .await?;
+    conn.execute("answer", "").await?;
+    conn.execute("sleep", "1000").await?;
+    conn.execute("set", "skip_instructions=true").await?;
+    conn.execute("voicemail", "default $${domain} ${dialed_extension}")
+        .await?;
     Ok(())
 }
 
@@ -97,7 +103,7 @@ pub async fn run(
     config: Config,
     phone_db: phone_db::Config,
 ) -> Result<(), EslError> {
-    let listener = Esl::outbound(&config.listen_address).await?;
+    let listener = TcpListener::bind(&config.listen_address).await?;
     info!("Listening on {}", config.listen_address);
     let mqtt = running_state.mqtt.clone();
 
@@ -118,13 +124,24 @@ pub async fn run(
             let mqtt = mqtt.clone();
             spawn(async move {
                 debug!("Got connection from {addr}");
-                if let Err(err) = process_call(socket, &config, &phone_db, mqtt).await {
-                    error!("Error processing call: {err}");
+                if let Err(err) = process_connection(socket, config, phone_db, mqtt).await {
+                    error!("Error processing connection: {err}");
                 }
                 debug!("Connection from {addr} closed");
             });
         }
     });
 
+    Ok(())
+}
+
+async fn process_connection(
+    socket: tokio::net::TcpStream,
+    config: Arc<Config>,
+    phone_db: Arc<phone_db::Config>,
+    mqtt: MqttTx,
+) -> Result<(), EslError> {
+    let stream = Esl::outbound(socket).await?;
+    process_call(stream, &config, &phone_db, mqtt).await?;
     Ok(())
 }

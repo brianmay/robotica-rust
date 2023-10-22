@@ -1499,6 +1499,7 @@ dependencies = [
 [[package]]
 name = "freeswitch-esl"
 version = "0.1.0"
+source = "git+https://github.com/KaranGauswami/freeswitch-esl.git#df6dc403c15e55ea93f03ca4f8b3a579019180e4"
 dependencies = [
  "bytes",
  "futures",
