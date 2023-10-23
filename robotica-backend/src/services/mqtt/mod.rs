@@ -478,6 +478,10 @@ fn topic_to_filter(topic: &str) -> Filter {
 }
 
 fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
+    if subscriptions.0.is_empty() {
+        return;
+    }
+
     let topics = subscriptions.0.keys().map(|topic| topic_to_filter(topic));
 
     if let Err(e) = client.try_subscribe_many(topics) {
