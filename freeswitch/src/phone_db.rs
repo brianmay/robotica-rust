@@ -1,4 +1,8 @@
+use std::time::Duration;
+
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tracing::error;
 
 #[derive(Deserialize)]
@@ -14,7 +18,7 @@ struct Request {
     destination_number: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Copy, Clone)]
 pub enum Action {
     #[serde(rename = "allow")]
     Allow,
@@ -28,11 +32,19 @@ pub struct Response {
     pub action: Action,
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("HTTP Error: {0}")]
+    HttpError(#[from] reqwest::Error),
+    #[error("Server Error: {0}")]
+    ServerError(StatusCode),
+}
+
 pub async fn check_number(
     caller_number: &str,
     destination_number: &str,
     config: &Config,
-) -> Response {
+) -> Result<Response, Error> {
     let client = reqwest::Client::new();
     let request = Request {
         phone_number: caller_number.to_string(),
@@ -43,36 +55,13 @@ pub async fn check_number(
         .post(&config.url)
         .json(&request)
         .basic_auth(&config.username, Some(&config.password))
+        .timeout(Duration::from_secs(5))
         .send()
-        .await;
+        .await?;
 
-    match res {
-        Ok(res) => {
-            if res.status().is_success() {
-                match res.json().await {
-                    Ok(response) => response,
-                    Err(err) => {
-                        error!("JSON Error: {}", err);
-                        Response {
-                            name: None,
-                            action: Action::Allow,
-                        }
-                    }
-                }
-            } else {
-                error!("Server Error: {}", res.status());
-                Response {
-                    name: None,
-                    action: Action::Allow,
-                }
-            }
-        }
-        Err(err) => {
-            error!("HTTP Error: {}", err);
-            Response {
-                name: None,
-                action: Action::Allow,
-            }
-        }
+    if res.status().is_success() {
+        Ok(res.json().await?)
+    } else {
+        Err(Error::ServerError(res.status()))
     }
 }

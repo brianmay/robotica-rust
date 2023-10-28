@@ -17,3 +17,4 @@ jobs:
     - run: nix build '.#brian-backend'
     - run: nix build '.#robotica-frontend'
     - run: nix build '.#robotica-slint'
+    - run: nix build '.#freeswitch'

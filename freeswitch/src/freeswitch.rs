@@ -7,7 +7,7 @@ use robotica_common::{
     robotica::{audio::MessagePriority, message::Message},
 };
 use serde::Deserialize;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info};
 
 use crate::{phone_db, RunningState};
@@ -19,70 +19,170 @@ pub struct Config {
     audience: String,
 }
 
-async fn process_call(
+#[derive(Debug)]
+struct Call {
+    caller_number: String,
+    destination_number: String,
+}
+
+impl TryFrom<&EslConnection> for Call {
+    type Error = ();
+
+    fn try_from(conn: &EslConnection) -> Result<Self, ()> {
+        let caller_number = conn.get_info::<String>("Caller-Caller-ID-Number");
+        let destination_number = conn.get_info::<String>("Caller-Destination-Number");
+
+        if let (Some(caller_number), Some(destination_number)) = (caller_number, destination_number)
+        {
+            Ok(Self {
+                caller_number,
+                destination_number,
+            })
+        } else {
+            Err(())
+        }
+    }
+}
+
+#[derive(Debug)]
+enum OurResponse {
+    Allow(Call, phone_db::Response),
+    VoiceMail(Call, phone_db::Response),
+    Error(Call),
+    Unknown,
+}
+
+async fn process_our_response(
     conn: EslConnection,
+    config: &Config,
+    mqtt: MqttTx,
+    our_response: OurResponse,
+) -> Result<(), EslError> {
+    info!("Processing our response {our_response:?}");
+
+    match our_response {
+        OurResponse::Allow(call, response) => {
+            set_caller_name(&response, &conn)
+                .await
+                .unwrap_or_else(|err| {
+                    // If this failed, we probably are stuffed, but continue anyway.
+                    error!("Error setting caller id name: {err}");
+                });
+
+            let name = response.name.as_deref().unwrap_or(&call.caller_number);
+            let message = format!("Call from {name}");
+            send_message(&message, config, &mqtt);
+            default_action(&conn).await?;
+        }
+
+        OurResponse::VoiceMail(_, response) => {
+            set_caller_name(&response, &conn)
+                .await
+                .unwrap_or_else(|err| {
+                    error!("Error setting caller id name: {err}");
+                });
+
+            conn.execute("voicemail", "default $${domain} ${dialed_extension}")
+                .await?;
+            conn.hangup("NORMAL_CLEARING").await?;
+        }
+
+        OurResponse::Error(call) => {
+            let message = format!("Defaulted call from {}", call.caller_number);
+            send_message(&message, config, &mqtt);
+            default_action(&conn).await?;
+        }
+
+        OurResponse::Unknown => {
+            let message = "Call from unknown number";
+            send_message(message, config, &mqtt);
+            default_action(&conn).await?;
+        }
+    }
+
+    debug!("Done");
+    Ok(())
+}
+
+fn send_message(message: &str, config: &Config, mqtt: &MqttTx) {
+    debug!("Sending message: {message}");
+    let msg = Message::new(
+        "Home Phone",
+        message,
+        MessagePriority::Low,
+        &config.audience,
+    );
+    let msg = MqttMessage::from_json(
+        &config.topic,
+        &msg,
+        false,
+        robotica_common::mqtt::QoS::ExactlyOnce,
+    );
+
+    match msg {
+        Ok(msg) => {
+            debug!("Sending message to mqtt {msg:?}");
+            mqtt.try_send(msg);
+        }
+        Err(err) => error!("Error encoding message: {:?}", err),
+    }
+}
+
+async fn get_our_response(conn: &EslConnection, phone_db: &phone_db::Config) -> OurResponse {
+    let maybe_call = Call::try_from(conn);
+    if let Ok(call) = maybe_call {
+        let maybe_response =
+            get_phone_db(&call.caller_number, &call.destination_number, phone_db).await;
+
+        let action = maybe_response.map(|response| (response.action, response));
+        match action {
+            Ok((phone_db::Action::Allow, response)) => OurResponse::Allow(call, response),
+            Ok((phone_db::Action::VoiceMail, response)) => OurResponse::VoiceMail(call, response),
+            Err(err) => {
+                error!("Error getting phone_db response: {err}");
+                OurResponse::Error(call)
+            }
+        }
+    } else {
+        error!("Got call from unknown number to unknown number");
+        OurResponse::Unknown
+    }
+}
+
+async fn process_connection(
+    socket: TcpStream,
     config: &Config,
     phone_db: &phone_db::Config,
     mqtt: MqttTx,
 ) -> Result<(), EslError> {
-    let caller_number = conn.get_info::<String>("Caller-Caller-ID-Number");
-    let destination_number = conn.get_info::<String>("Caller-Destination-Number");
+    debug!("Got connection");
+    let conn = Esl::outbound(socket).await?;
+    let our_response = get_our_response(&conn, phone_db).await;
+    process_our_response(conn, config, mqtt, our_response).await?;
+    debug!("Connection closed");
+    Ok(())
+}
 
-    if let (Some(caller_number), Some(destination_number)) = (caller_number, destination_number) {
-        info!("Got call from {caller_number} to {destination_number}");
+async fn get_phone_db(
+    caller_number: &str,
+    destination_number: &str,
+    phone_db: &phone_db::Config,
+) -> Result<phone_db::Response, phone_db::Error> {
+    info!("Got call from {caller_number} to {destination_number}");
+    let result = phone_db::check_number(caller_number, destination_number, phone_db).await?;
+    debug!("phone_db result: {:?}", result);
+    Ok(result)
+}
 
-        let result = phone_db::check_number(&caller_number, &destination_number, phone_db).await;
-        debug!("phone_db result: {:?}", result);
-
-        if let Some(name) = &result.name {
-            debug!("Setting caller id name to {}", name);
-            conn.execute("set", &format!("effective_caller_id_name={name}"))
-                .await?;
-        }
-
-        match result.action {
-            phone_db::Action::Allow => {
-                info!("Allowing call");
-                let name = result.name.as_deref().unwrap_or(&caller_number);
-                debug!("Got name {name}");
-                let message = format!("Call from {name}");
-                debug!("Sending message: {message}");
-                let msg = Message::new(
-                    "Home Phone",
-                    message,
-                    MessagePriority::Low,
-                    &config.audience,
-                );
-                let msg = MqttMessage::from_json(
-                    &config.topic,
-                    &msg,
-                    false,
-                    robotica_common::mqtt::QoS::ExactlyOnce,
-                );
-
-                match msg {
-                    Ok(msg) => {
-                        debug!("Sending message to mqtt {msg:?}");
-                        mqtt.try_send(msg);
-                    }
-                    Err(err) => error!("Error encoding message: {:?}", err),
-                }
-
-                default_action(&conn).await?;
-            }
-            phone_db::Action::VoiceMail => {
-                info!("Sending to voicemail");
-                conn.execute("voicemail", "default $${domain} ${dialed_extension}")
-                    .await?;
-                conn.hangup("NORMAL_CLEARING").await?;
-            }
-        }
-    } else {
-        println!("Got call from unknown number to unknown number");
-        default_action(&conn).await?;
-    }
-
-    debug!("Done");
+async fn set_caller_name(
+    result: &phone_db::Response,
+    conn: &EslConnection,
+) -> Result<(), EslError> {
+    if let Some(name) = &result.name {
+        debug!("Setting caller id name to {}", name);
+        conn.execute("set", &format!("effective_caller_id_name={name}"))
+            .await?;
+    };
     Ok(())
 }
 
@@ -124,7 +224,7 @@ pub async fn run(
             let mqtt = mqtt.clone();
             spawn(async move {
                 debug!("Got connection from {addr}");
-                if let Err(err) = process_connection(socket, config, phone_db, mqtt).await {
+                if let Err(err) = process_connection(socket, &config, &phone_db, mqtt).await {
                     error!("Error processing connection: {err}");
                 }
                 debug!("Connection from {addr} closed");
@@ -132,16 +232,5 @@ pub async fn run(
         }
     });
 
-    Ok(())
-}
-
-async fn process_connection(
-    socket: tokio::net::TcpStream,
-    config: Arc<Config>,
-    phone_db: Arc<phone_db::Config>,
-    mqtt: MqttTx,
-) -> Result<(), EslError> {
-    let stream = Esl::outbound(socket).await?;
-    process_call(stream, &config, &phone_db, mqtt).await?;
     Ok(())
 }
