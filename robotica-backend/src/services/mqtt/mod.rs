@@ -20,7 +20,7 @@ use tracing::{debug, error};
 use robotica_common::mqtt::{MqttMessage, QoS};
 
 use crate::pipes::{generic, stateful, stateless};
-use crate::{is_debug_mode, spawn};
+use crate::spawn;
 
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
     match qos {
@@ -220,14 +220,21 @@ pub fn run_client(
 
     let mut mqtt_options = MqttOptions::new(client_id, config.host, config.port);
     mqtt_options.set_keep_alive(Duration::from_secs(30));
-    mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
-    mqtt_options.set_credentials(config.username, config.password);
+
+    if config.port == 8883 {
+        mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
+    }
+
+    // mqtt_options.set_credentials(config.username, config.password);
     mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
     let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
 
     // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
+
+    // error!("Number of subscriptions: {}", subscriptions.0.len());
+
     for subscription in subscriptions.iter() {
         watch_tx_closed(
             subscription.tx.clone(),
@@ -260,11 +267,8 @@ pub fn run_client(
                 Some(msg) = rx.recv() => {
                     match msg {
                         MqttCommand::MqttOut(msg) => {
-                            let debug_mode: bool = is_debug_mode();
-
                             debug!(
-                                "Outgoing mqtt {} {} {}.",
-                                if debug_mode { "nop" } else { "live" },
+                                "Outgoing mqtt {} {}.",
                                 msg.retain,
                                 msg.topic
                             );
@@ -274,10 +278,8 @@ pub fn run_client(
                                 subscription.tx.try_send(msg.clone());
                             }
 
-                            if !debug_mode {
-                                if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), msg.retain, msg.payload) {
-                                    error!("Failed to publish message: {:?}.", err);
-                                }
+                            if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), msg.retain, msg.payload) {
+                                error!("Failed to publish message: {:?}.", err);
                             }
                         },
                         MqttCommand::Subscribe(topic, tx) => {

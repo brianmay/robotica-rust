@@ -1,27 +1,31 @@
 {
   description = "IOT automation for people who think like programmers";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
-  inputs.nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
-  inputs.flake-utils.url = "github:numtide/flake-utils";
-  inputs.rust-overlay.url = "github:oxalica/rust-overlay";
-  inputs.crane = {
-    url = "github:ipetkov/crane";
-    inputs.nixpkgs.follows = "nixpkgs";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    poetry2nix = {
+      url = "github:nix-community/poetry2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    node2nix = {
+      url = "github:svanderburg/node2nix";
+      # inputs.nixpkgs.follows = "nixpkgs";
+      flake = false;
+    };
+    flockenzeit.url = "github:balsoft/flockenzeit";
+    # See https://github.com/cachix/devenv/issues/756
+    devenv.url = "github:cachix/devenv/v0.6.3";
   };
-  inputs.poetry2nix = {
-    url = "github:nix-community/poetry2nix";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
-  inputs.node2nix = {
-    url = "github:svanderburg/node2nix";
-    # inputs.nixpkgs.follows = "nixpkgs";
-    flake = false;
-  };
-  inputs.flockenzeit.url = "github:balsoft/flockenzeit";
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
-    , nixpkgs-unstable, node2nix, flockenzeit }:
+  outputs = inputs@{ self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
+    , nixpkgs-unstable, node2nix, flockenzeit, devenv }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         # pkgs_arm = nixpkgs.legacyPackages."aarch64-linux";
@@ -300,40 +304,52 @@
           freeswitch = freeswitch.pkg;
         };
 
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            poetry2nix.packages.${system}.poetry
-            poetry_env
-            rust-analyzer
-            pkgconfig
-            openssl
-            protobuf
-            fontconfig
-            nodejs
-            wasm-pack
-            pkgs_unstable.wasm-bindgen-cli
-            slint-lsp
-            rustPlatform
-            # https://github.com/NixOS/nixpkgs/issues/156890
-            binaryen
-            pkg_node2nix
-            pkg_node2nix_wrapper
-            nodePackages.nodeDependencies
-          ];
-          shellHook = ''
-            export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.freetype}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.xorg.libxcb}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.xorg.libXcursor}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.xorg.libXrandr}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.xorg.libXi}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.mesa}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.dbus}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.libGL}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
-            export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
-          '';
+        devShells.default = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [{
+            packages = with pkgs; [
+              poetry2nix.packages.${system}.poetry
+              poetry_env
+              rust-analyzer
+              pkgconfig
+              openssl
+              protobuf
+              fontconfig
+              freetype
+              nodejs
+              wasm-pack
+              pkgs_unstable.wasm-bindgen-cli
+              slint-lsp
+              rustPlatform
+              # https://github.com/NixOS/nixpkgs/issues/156890
+              binaryen
+              pkg_node2nix
+              pkg_node2nix_wrapper
+              nodePackages.nodeDependencies
+              gcc
+            ];
+            enterShell = ''
+              # kludge for https://github.com/cachix/devenv/issues/862
+              export PKG_CONFIG_PATH_FOR_TARGET="$PKG_CONFIG_PATH"
+              export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.freetype}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.xorg.libxcb}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.xorg.libXcursor}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.xorg.libXrandr}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.xorg.libXi}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.mesa}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.dbus}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.libGL}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
+              export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
+              export ROBOTICA_DEBUG=true
+              export CONFIG_FILE="$PWD/robotica-backend.yaml"
+              export STATIC_PATH="${robotica-frontend-bindgen}"
+            '';
+            processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
+            processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
+          }];
         };
         packages = {
           robotica-frontend = robotica-frontend-bindgen;
@@ -341,6 +357,5 @@
           robotica-slint = robotica-slint.pkg;
           freeswitch = freeswitch.pkg;
         };
-
       });
 }

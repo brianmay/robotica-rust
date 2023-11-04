@@ -13,6 +13,7 @@ use tokio::{
 use tracing::{debug, error, info};
 
 use crate::{
+    is_debug_mode,
     pipes::stateful,
     pipes::{stateless, Subscriber, Subscription},
     spawn,
@@ -171,6 +172,11 @@ impl DeviceState {
         power_color: &PowerColor,
         config: &DeviceConfig,
     ) -> Result<(), LifxError> {
+        if is_debug_mode() {
+            debug!("Not setting power color in debug mode");
+            return Ok(());
+        }
+
         if let DeviceState::Online(device, _, seq) = self {
             let socket = UdpSocket::bind("0.0.0.0:0").await?;
             // let power = get_power(&socket, device, seq).await?;

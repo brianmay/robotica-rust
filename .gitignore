@@ -1,8 +1,9 @@
 /robotica-backend/python/__pycache__/
 /local
 /target
-/.envrc
+/.envrc-old
 /state
 /.direnv
+/.devenv
 /result
 *.yaml

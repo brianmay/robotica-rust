@@ -11,57 +11,14 @@ use thiserror::Error;
 
 #[derive(Envconfig)]
 pub struct Environment {
-    // #[envconfig(from = "AMBER_TOKEN")]
-    // pub amber_token: String,
-
-    // #[envconfig(from = "AMBER_SITE_ID")]
-    // pub amber_site_id: String,
-
-    // #[envconfig(from = "INFLUXDB_URL")]
-    // pub influxdb_url: String,
-
-    // #[envconfig(from = "INFLUXDB_DATABASE")]
-    // pub influxdb_database: String,
-
-    // #[envconfig(from = "MQTT_USERNAME")]
-    // pub mqtt_username: String,
-
-    // #[envconfig(from = "MQTT_PASSWORD")]
-    // pub mqtt_password: String,
-
-    // #[envconfig(from = "MQTT_HOST")]
-    // pub mqtt_host: String,
-
-    // #[envconfig(from = "MQTT_PORT")]
-    // pub mqtt_port: u16,
-
-    // #[envconfig(from = "LIFE360_USERNAME")]
-    // pub life360_username: String,
-
-    // #[envconfig(from = "LIFE360_PASSWORD")]
-    // pub life360_password: String,
-
-    // #[envconfig(from = "OIDC_DISCOVERY_URL")]
-    // pub oidc_discovery_url: String,
-
-    // #[envconfig(from = "OIDC_CLIENT_ID")]
-    // pub oidc_client_id: String,
-
-    // #[envconfig(from = "OIDC_CLIENT_SECRET")]
-    // pub oidc_client_secret: String,
-
-    // #[envconfig(from = "OIDC_SCOPES")]
-    // pub oidc_scopes: String,
-
-    // #[envconfig(from = "CALENDAR_URL")]
-    // pub calendar_url: String,
     #[envconfig(from = "CONFIG_FILE")]
     pub config_file: PathBuf,
 
     #[envconfig(from = "SECRETS_FILE")]
     pub secrets_file: Option<PathBuf>,
-    // #[envconfig(from = "SESSION_SECRET")]
-    // pub session_secret: String,
+
+    #[envconfig(from = "STATIC_PATH")]
+    pub static_path: Option<PathBuf>,
 }
 
 fn load_file(filename: &Path) -> Result<serde_yaml::Value, Error> {
@@ -83,8 +40,12 @@ impl Environment {
             config
         };
 
-        let config: Config =
+        let mut config: Config =
             serde_yaml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
+
+        if let Some(static_path) = &self.static_path {
+            config.http.static_path = static_path.clone();
+        }
 
         Ok(config)
     }

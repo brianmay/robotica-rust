@@ -1,13 +1,13 @@
 use chrono::{DateTime, Utc};
 use influxdb::InfluxDbWriteable;
 use robotica_backend::pipes::{Subscriber, Subscription};
-use robotica_backend::{is_debug_mode, spawn};
+use robotica_backend::spawn;
 use robotica_common::anavi_thermometer::{self as anavi};
 use robotica_common::mqtt::{Json, MqttMessage};
 use robotica_common::zwave;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use tracing::{debug, error};
+use tracing::error;
 
 use crate::influxdb::Config;
 use crate::InitState;
@@ -96,9 +96,7 @@ where
             let reading: Influx = data.into();
             let query = reading.into_query(&topic);
 
-            if is_debug_mode() {
-                // debug!("would send {:?}", query);
-            } else if let Err(e) = client.query(&query).await {
+            if let Err(e) = client.query(&query).await {
                 error!("Failed to write to influxdb: {}", e);
             }
         }
@@ -125,9 +123,7 @@ pub fn monitor_fishtank(state: &mut InitState, topic: &str, config: &Config) {
             }
             .into_query(&topic);
 
-            if is_debug_mode() {
-                debug!("would send {:?}", reading);
-            } else if let Err(e) = client.query(&reading).await {
+            if let Err(e) = client.query(&reading).await {
                 error!("Failed to write to influxdb: {}", e);
             }
         }

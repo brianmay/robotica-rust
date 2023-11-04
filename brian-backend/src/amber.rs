@@ -5,11 +5,9 @@ use influxdb::InfluxDbWriteable;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
-use robotica_backend::{
-    is_debug_mode, pipes::stateful, services::persistent_state::PersistentStateRow, spawn,
-};
+use robotica_backend::{pipes::stateful, services::persistent_state::PersistentStateRow, spawn};
 use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, duration_from_hms, utc_now, Date, DateTime, Duration, Time,
 };
@@ -85,7 +83,7 @@ pub fn run(
     let influxdb_config = influxdb_config.clone();
 
     spawn(async move {
-        // if is_debug_mode() {
+        // if hack enabled {
         //     let start_date = Date::from_ymd(2022, 1, 1);
         //     let stop_date = Date::from_ymd(2022, 3, 1);
         //     // process_prices(&config, start_date, stop_date).await;
@@ -421,11 +419,6 @@ async fn prices_to_influxdb(
 ) {
     let client = influxdb_config.get_client();
 
-    if is_debug_mode() {
-        debug!("Skipping writing prices to influxdb in debug mode");
-        return;
-    }
-
     for data in prices {
         let reading = PriceReading {
             duration: data.duration,
@@ -463,11 +456,6 @@ async fn process_usage(
     match usage {
         Ok(usage) => {
             let client = influxdb_config.get_client();
-
-            if is_debug_mode() {
-                debug!("Skipping writing usage to influxdb in debug mode");
-                return;
-            }
 
             for data in usage {
                 let name = format!("amber/usage/{}", data.channel_identifier);
