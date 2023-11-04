@@ -22,6 +22,9 @@ use robotica_common::mqtt::{MqttMessage, QoS};
 use crate::pipes::{generic, stateful, stateless};
 use crate::spawn;
 
+const NUMBER_OF_STARTUP_MESSAGES: usize = 100;
+const NUMBER_OF_STARTUP_SUBSCRIPTIONS: usize = 100;
+
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
     match qos {
         QoS::AtMostOnce => rumqttc::v5::mqttbytes::QoS::AtMostOnce,
@@ -171,7 +174,7 @@ pub struct MqttRx {
 #[must_use]
 pub fn mqtt_channel() -> (MqttTx, MqttRx) {
     // Outgoing MQTT queue.
-    let (tx, rx) = mpsc::channel(50);
+    let (tx, rx) = mpsc::channel(NUMBER_OF_STARTUP_MESSAGES);
     (MqttTx(tx.clone()), MqttRx { tx, rx })
 }
 
@@ -229,7 +232,7 @@ pub fn run_client(
     mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
-    let (client, mut event_loop) = AsyncClient::new(mqtt_options, 50);
+    let (client, mut event_loop) = AsyncClient::new(mqtt_options, NUMBER_OF_STARTUP_SUBSCRIPTIONS);
 
     // let trust_store = env::var("MQTT_CA_CERT_FILE").unwrap();
 
