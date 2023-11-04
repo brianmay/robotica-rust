@@ -258,6 +258,7 @@ impl<T: TimeZone + Copy> State<T> {
     fn publish_sequences_all(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let sequences: Vec<Sequence> = sequences
             .iter()
+            .filter(|seq| seq.importance > Importance::Low)
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
@@ -270,7 +271,7 @@ impl<T: TimeZone + Copy> State<T> {
     fn publish_sequences_important(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let important: Vec<Sequence> = sequences
             .iter()
-            .filter(|sequence| matches!(sequence.importance, Importance::Important))
+            .filter(|seq| seq.importance > Importance::Important)
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
@@ -282,6 +283,7 @@ impl<T: TimeZone + Copy> State<T> {
     fn publish_sequences_pending(&self, sequences: &[Sequence]) -> Option<ObjectHash> {
         let pending: Vec<Sequence> = sequences
             .iter()
+            .filter(|seq| seq.importance > Importance::Low)
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .filter(|sequence| sequence.status != Some(Status::Completed))

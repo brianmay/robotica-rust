@@ -105,21 +105,35 @@ pub enum MarkError {
 }
 
 /// The importance of a Sequence
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, Hash)]
+#[derive(
+    Copy, Clone, Debug, Default, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub enum Importance {
-    /// The sequence is not important.
+    /// The sequence is low importance
+    ///
+    /// It should never be displayed on schedules
+    Low,
+
+    /// The sequence is not important
+    ///
+    /// It should be displayed on verbose schedules.
     #[default]
+    #[serde(alias = "Medium")]
     NotImportant,
 
     /// The sequence is important.
+    ///
+    /// It should be displayed on all schedules.
+    #[serde(alias = "High")]
     Important,
 }
 
 impl Display for Importance {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Importance::NotImportant => write!(f, "Not Important"),
-            Importance::Important => write!(f, "Important"),
+            Importance::Low => write!(f, "Low"),
+            Importance::NotImportant => write!(f, "Medium"),
+            Importance::Important => write!(f, "High"),
         }
     }
 }

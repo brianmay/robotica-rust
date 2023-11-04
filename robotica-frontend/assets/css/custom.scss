@@ -80,11 +80,11 @@ footer {
     border: 2px solid black;
 }
 
-.sequence.pending.not_important {
+.sequence.pending.importance_medium {
     background-color: white;
 }
 
-.sequence.pending.important {
+.sequence.pending.importance_high {
     background-color: lightgreen;
 }
 
