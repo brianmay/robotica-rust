@@ -178,8 +178,26 @@ pub fn mqtt_channel() -> (MqttTx, MqttRx) {
     (MqttTx(tx.clone()), MqttRx { tx, rx })
 }
 
+/// Credentials for MQTT
+#[derive(Deserialize, Default)]
+#[serde(tag = "type")]
+pub enum Credentials {
+    /// Username and password
+    UsernamePassword {
+        /// Username
+        username: String,
+
+        /// Password
+        password: String,
+    },
+
+    /// No credentials
+    #[default]
+    None,
+}
+
 #[derive(Deserialize)]
-/// MQTT configuration.
+/// MQTT configuration
 pub struct Config {
     /// MQTT host
     pub host: String,
@@ -188,10 +206,8 @@ pub struct Config {
     pub port: u16,
 
     /// MQTT username
-    pub username: String,
-
-    /// MQTT password
-    pub password: String,
+    #[serde(default)]
+    pub credentials: Credentials,
 }
 
 /// Connect to the MQTT broker and send/receive messages.
@@ -228,7 +244,12 @@ pub fn run_client(
         mqtt_options.set_transport(Transport::tls_with_config(client_config.into()));
     }
 
-    // mqtt_options.set_credentials(config.username, config.password);
+    match config.credentials {
+        Credentials::UsernamePassword { username, password } => {
+            mqtt_options.set_credentials(username, password);
+        }
+        Credentials::None => {}
+    }
     mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
     // mqtt_options.set_clean_session(false);
 
@@ -532,5 +553,40 @@ mod tests {
 
         let data: bool = msg.try_into().unwrap();
         assert!(data);
+    }
+
+    #[test]
+    fn test_deserialize_username_password_config() {
+        let config = r#"
+            host: "test"
+            port: 1234
+            credentials:
+                type: "UsernamePassword"
+                username: "test"
+                password: "test"
+        "#;
+
+        let config = serde_yaml::from_str::<Config>(config).unwrap();
+        assert_eq!(config.host, "test");
+        assert_eq!(config.port, 1234);
+        if let Credentials::UsernamePassword { username, password } = config.credentials {
+            assert_eq!(username, "test");
+            assert_eq!(password, "test");
+        } else {
+            panic!("Invalid credentials");
+        }
+    }
+
+    #[test]
+    fn test_deserialize_anonymous_config() {
+        let config = r#"
+            host: "test"
+            port: 1234
+        "#;
+
+        let config = serde_yaml::from_str::<Config>(config).unwrap();
+        assert_eq!(config.host, "test");
+        assert_eq!(config.port, 1234);
+        assert!(matches!(config.credentials, Credentials::None));
     }
 }
