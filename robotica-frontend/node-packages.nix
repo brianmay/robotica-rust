@@ -3136,13 +3136,13 @@ let
         sha512 = "YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==";
       };
     };
-    "sass-1.69.4" = {
+    "sass-1.69.5" = {
       name = "sass";
       packageName = "sass";
-      version = "1.69.4";
+      version = "1.69.5";
       src = fetchurl {
-        url = "https://registry.npmjs.org/sass/-/sass-1.69.4.tgz";
-        sha512 = "+qEreVhqAy8o++aQfCJwp0sklr2xyEzkm9Pp/Igu9wNPoe7EZEQ8X/MBvvXggI2ql607cxKg/RKOwDj6pp2XDA==";
+        url = "https://registry.npmjs.org/sass/-/sass-1.69.5.tgz";
+        sha512 = "qg2+UCJibLr2LCVOt3OlPhr/dqVHWOa9XtZf2OjbLs/T4VPSJ00udtgJxH3neXZm+QqX8B+3cU7RaLqp1iVfcQ==";
       };
     };
     "sass-loader-13.3.2" = {
@@ -4270,7 +4270,7 @@ let
       sources."run-parallel-1.2.0"
       sources."safe-buffer-5.1.2"
       sources."safer-buffer-2.1.2"
-      sources."sass-1.69.4"
+      sources."sass-1.69.5"
       sources."sass-loader-13.3.2"
       sources."schema-utils-4.0.0"
       sources."select-hose-2.0.0"
