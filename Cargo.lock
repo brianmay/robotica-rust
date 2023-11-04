@@ -5489,9 +5489,9 @@ checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tower-sessions"
-version = "0.3.3"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2802d0cfba030a6bf80ecfc06808220715a5924c265a9e378ad90b2c9e6527e5"
+checksum = "e45e0577e58fe796e44d3f531d26af3454caf8a1b0434f85bc835e8821d61986"
 dependencies = [
  "async-trait",
  "axum-core",
