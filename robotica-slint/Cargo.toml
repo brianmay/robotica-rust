@@ -31,7 +31,7 @@ envconfig = "0.10.0"
 
 [dependencies.openssl]
 optional = true
-version = "0.10.48"
+version = "0.10.55"
 
 [build-dependencies]
 slint-build = "1.0.0"
