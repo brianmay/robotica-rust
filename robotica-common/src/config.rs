@@ -92,3 +92,13 @@ pub struct RoomConfig {
 
 /// A number of rooms indexed by id
 pub type Rooms = Vec<RoomConfig>;
+
+/// Configuration for the UI
+#[derive(Deserialize, Serialize, Clone, Eq, PartialEq)]
+pub struct Config {
+    /// The rooms for this UI
+    pub rooms: Rooms,
+
+    /// The name of the server in MQTT topics
+    pub instance: String,
+}

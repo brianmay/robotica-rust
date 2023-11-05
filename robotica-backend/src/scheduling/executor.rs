@@ -29,8 +29,8 @@ type CalendarToSequence<T> = dyn Fn(CalendarEntry, T) -> Option<Sequence> + Send
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
 pub struct ExtraConfig {
-    /// The hostname of the robotica instance.
-    pub hostname: String,
+    /// The topic to use in outgoing messages.
+    pub instance: String,
 
     /// The URL of the calendar to use for extra events.
     pub calendar_url: String,
@@ -239,7 +239,7 @@ impl<T: TimeZone + Copy> State<T> {
 
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
-        let topic = format!("robotica/{}/tags", self.config.extra_config.hostname);
+        let topic = format!("robotica/{}/tags", self.config.extra_config.instance);
         let msg = Json(tags);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize tags: {:?}", tags);
@@ -263,7 +263,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
 
-        let topic = format!("schedule/{}/all", self.config.extra_config.hostname);
+        let topic = format!("schedule/{}/all", self.config.extra_config.instance);
         self.publish_sequences(&sequences, topic, &self.publish_all_hash)
     }
 
@@ -275,7 +275,7 @@ impl<T: TimeZone + Copy> State<T> {
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
-        let topic = format!("schedule/{}/important", self.config.extra_config.hostname);
+        let topic = format!("schedule/{}/important", self.config.extra_config.instance);
         self.publish_sequences(&important, topic, &self.publish_important_hash)
     }
 
@@ -288,7 +288,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
-        let topic = format!("schedule/{}/pending", self.config.extra_config.hostname);
+        let topic = format!("schedule/{}/pending", self.config.extra_config.instance);
         self.publish_sequences(&pending, topic, &self.publish_pending_hash)
     }
 

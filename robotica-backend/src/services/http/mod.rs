@@ -1,4 +1,5 @@
 //! HTTP server
+mod errors;
 mod oidc;
 mod urls;
 mod websocket;
@@ -19,9 +20,8 @@ use axum::Json;
 use axum::{extract::Query, routing::get, Router};
 use maud::{html, Markup, DOCTYPE};
 use reqwest::{Method, StatusCode};
-use robotica_common::config::Rooms;
+use robotica_common::config as ui_config;
 use robotica_common::version;
-use serde::de::Error;
 use serde::Deserialize;
 use thiserror::Error;
 use time::Duration;
@@ -39,6 +39,7 @@ use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
 use crate::spawn;
 
+use self::errors::ResponseError;
 use self::oidc::Client;
 
 /// The configuration for the HTTP service.
@@ -67,6 +68,9 @@ pub struct Config {
 
     /// The HTTP listener address.
     pub http_listener: String,
+
+    /// The server hostname in MQTT topics.
+    pub instance: String,
 }
 
 impl Config {
@@ -130,7 +134,7 @@ struct HttpState {
     mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
-    rooms: Arc<Rooms>,
+    rooms: Arc<ui_config::Rooms>,
     manifest: Arc<Manifest>,
 }
 
@@ -164,7 +168,7 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpError> {
+pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Result<(), HttpError> {
     let session_store = MokaStore::new(Some(2_000));
     // let session_store = MemoryStore::default();
     let session_service = ServiceBuilder::new()
@@ -230,7 +234,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpE
         .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
-        .route("/rooms", get(rooms_handler))
+        .route("/config", get(config_handler))
         .fallback(fallback_handler)
         .with_state(state)
         .layer(session_service)
@@ -255,7 +259,7 @@ async fn server(http_listener: String, app: Router) -> Result<(), HttpError> {
     Ok(())
 }
 
-fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), serde_json::Error> {
+fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), ResponseError> {
     let closure = || {
         let sub = user_info.sub.clone()?;
         let name = user_info.name.clone()?;
@@ -264,10 +268,11 @@ fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), serde
         Some(user)
     };
 
-    let user = closure().ok_or_else(|| serde_json::Error::custom("Missing user info"))?;
+    let user = closure().ok_or_else(|| ResponseError::bad_request("Missing user info"))?;
+
     session
         .insert("user", user)
-        .map_err(|err| serde_json::Error::custom(format!("Failed to insert user: {err}")))?;
+        .map_err(|err| ResponseError::internal_error(format!("Failed to insert user: {err}")))?;
 
     Ok(())
 }
@@ -287,9 +292,9 @@ async fn fallback_handler(
     State(http_config): State<Arc<Config>>,
     State(manifest): State<Arc<Manifest>>,
     req: Request<Body>,
-) -> Response {
+) -> Result<Response, ResponseError> {
     if req.method() != Method::GET {
-        return (StatusCode::METHOD_NOT_ALLOWED, "Method not allowed").into_response();
+        return Err(ResponseError::MethodNotAllowed);
     }
 
     let asset_file = {
@@ -300,7 +305,7 @@ async fn fallback_handler(
     if !asset_file && get_user(&session).is_none() {
         let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
         let auth_url = oidc_client.load().get_auth_url(origin_url);
-        return Redirect::to(&auth_url).into_response();
+        return Ok(Redirect::to(&auth_url).into_response());
     }
 
     let static_path = &http_config.static_path;
@@ -310,23 +315,20 @@ async fn fallback_handler(
             match status {
                 // If this is an asset file, then don't redirect to index.html
                 StatusCode::NOT_FOUND if !asset_file => serve_index_html(&manifest).await,
-                _ => response.map(boxed),
+                _ => Ok(response.map(boxed)),
             }
         }
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("error: {err}")).into_response(),
+        Err(err) => Err(ResponseError::internal_error(format!("error: {err}"))),
     }
 }
 
-async fn serve_index_html(manifest: &Manifest) -> Response {
+async fn serve_index_html(manifest: &Manifest) -> Result<Response, ResponseError> {
     let index_path = manifest.get_path("index.html");
     {
-        let this = fs::read_to_string(index_path)
+        fs::read_to_string(index_path)
             .await
-            .map(|index_content| (StatusCode::OK, Html(index_content)).into_response());
-        this.map_or_else(
-            |_| (StatusCode::INTERNAL_SERVER_ERROR, "index.html not found").into_response(),
-            |t| t,
-        )
+            .map(|index_content| Html(index_content).into_response())
+            .map_err(|_| ResponseError::internal_error("index.html not found"))
     }
 }
 
@@ -394,7 +396,7 @@ async fn oidc_callback(
     State(oidc_client): State<Arc<ArcSwap<Client>>>,
     Query(params): Query<HashMap<String, String>>,
     session: Session,
-) -> Response {
+) -> Result<Response, ResponseError> {
     let code = params.get("code").cloned().unwrap_or_default();
 
     let state = params
@@ -404,11 +406,9 @@ async fn oidc_callback(
 
     let result = oidc_client.load().request_token(&code).await;
 
-    match result {
+    let response = match result {
         Ok((_token, user_info)) => {
-            set_user(&session, &user_info).unwrap_or_else(|err| {
-                tracing::error!("failed to set user in session: {err}");
-            });
+            set_user(&session, &user_info)?;
 
             let url = http_config.generate_url_or_default(&state);
             Redirect::to(&url).into_response()
@@ -430,15 +430,25 @@ async fn oidc_callback(
             )
             .into_response()
         }
-    }
+    };
+
+    Ok(response)
 }
 
 #[allow(clippy::unused_async)]
-async fn rooms_handler(State(rooms): State<Arc<Rooms>>, session: Session) -> Json<Rooms> {
-    let rooms = if get_user(&session).is_some() {
-        rooms
-    } else {
-        Arc::new(Rooms::default())
+async fn config_handler(
+    State(rooms): State<Arc<ui_config::Rooms>>,
+    State(config): State<Arc<Config>>,
+    session: Session,
+) -> Result<Json<ui_config::Config>, ResponseError> {
+    if get_user(&session).is_none() {
+        return Err(ResponseError::AuthenticationFailed);
     };
-    Json((*rooms).clone())
+
+    let result = ui_config::Config {
+        rooms: rooms.as_ref().clone(),
+        instance: config.instance.clone(),
+    };
+
+    Ok(Json(result))
 }

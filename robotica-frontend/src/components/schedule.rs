@@ -15,7 +15,7 @@ use robotica_common::{
 
 use crate::services::websocket::WebsocketService;
 
-/// The yew properties for the websocket client
+/// The yew properties for the schedule component
 #[derive(Properties, Eq, PartialEq)]
 pub struct Props {
     /// The topic to subscribe to
@@ -31,7 +31,7 @@ enum OpenedId {
 }
 
 /// Component that shows the schedule
-#[function_component(Schedule)]
+#[function_component(RoboticaSchedule)]
 pub fn schedule(props: &Props) -> Html {
     let wss: WebsocketService = use_context().unwrap();
     let subscription = use_mut_ref(|| None);

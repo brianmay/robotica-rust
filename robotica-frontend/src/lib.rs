@@ -23,8 +23,8 @@ use std::sync::Arc;
 use crate::services::websocket::WebsocketService;
 use gloo_net::http::Request;
 use itertools::Itertools;
+use robotica_common::config::Config;
 use robotica_common::config::RoomConfig;
-use robotica_common::config::Rooms;
 use tracing::info;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -91,12 +91,12 @@ fn footer() -> Html {
 }
 
 enum AppMsg {
-    Rooms(Arc<Rooms>),
+    Config(Arc<Config>),
 }
 
 struct App {
     wss: WebsocketService,
-    rooms: Option<Arc<Rooms>>,
+    config: Option<Arc<Config>>,
 }
 
 impl Component for App {
@@ -107,24 +107,24 @@ impl Component for App {
         let wss = WebsocketService::new();
         let link = ctx.link().clone();
         spawn_local(async move {
-            let rooms = Arc::new(
-                Request::get("/rooms")
+            let config = Arc::new(
+                Request::get("/config")
                     .send()
                     .await
                     .unwrap()
-                    .json::<Rooms>()
+                    .json::<Config>()
                     .await
                     .unwrap(),
             );
-            link.send_message(AppMsg::Rooms(rooms));
+            link.send_message(AppMsg::Config(config));
         });
-        App { wss, rooms: None }
+        App { wss, config: None }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            AppMsg::Rooms(rooms) => {
-                self.rooms = Some(rooms);
+            AppMsg::Config(rooms) => {
+                self.config = Some(rooms);
                 true
             }
         }
@@ -133,11 +133,11 @@ impl Component for App {
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
             <ContextProvider<WebsocketService> context={self.wss.clone()}>
-                <ContextProvider<Option<Arc<Rooms>>> context={&self.rooms}>
+                <ContextProvider<Option<Arc<Config>>> context={&self.config}>
                     <BrowserRouter>
                         <Switch<Route> render={switch}/>
                     </BrowserRouter>
-                </ContextProvider<Option<Arc<Rooms>>>>
+                </ContextProvider<Option<Arc<Config>>>>
             </ContextProvider<WebsocketService>>
         }
     }
@@ -161,20 +161,19 @@ pub fn run() -> Result<(), JsValue> {
 
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
-    let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
+    let config = use_context::<Option<Arc<Config>>>().unwrap();
 
-    let rooms = match rooms {
-        Some(rooms) => rooms,
-        None => Arc::new(Vec::new()),
+    let rooms = match &config {
+        Some(config) => config
+            .rooms
+            .iter()
+            .map(|room| (room.menu.as_str(), room))
+            .into_group_map(),
+        None => HashMap::new(),
     };
 
-    let menus: HashMap<&str, Vec<&RoomConfig>> = rooms
-        .iter()
-        .map(|room| (room.menu.as_str(), room))
-        .into_group_map();
-
     // turn menus into a vector of tuples sorted by menu name
-    let menus: Vec<(&str, Vec<&RoomConfig>)> = menus.into_iter().sorted_by_key(|x| x.0).collect();
+    let menus: Vec<(&str, Vec<&RoomConfig>)> = rooms.into_iter().sorted_by_key(|x| x.0).collect();
 
     // get the current route
     let route = Rc::new(use_route::<Route>());

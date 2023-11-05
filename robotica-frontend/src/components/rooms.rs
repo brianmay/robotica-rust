@@ -5,7 +5,7 @@ use yew::prelude::*;
 use crate::components::button::{
     Button, HdmiProps, LightProps, Music2Props, SwitchProps, TasmotaProps, ZwaveProps,
 };
-use robotica_common::config::{ButtonConfig, ControllerConfig, Icon, RoomConfig, Rooms};
+use robotica_common::config::{ButtonConfig, Config, ControllerConfig, Icon, RoomConfig};
 use robotica_common::controllers::Action;
 
 use super::require_connection::RequireConnection;
@@ -121,11 +121,20 @@ pub struct Props {
 
 #[function_component(Room)]
 pub fn room(props: &Props) -> Html {
-    let rooms = use_context::<Option<Arc<Rooms>>>().unwrap();
+    let config = use_context::<Option<Arc<Config>>>();
 
-    let rooms = match rooms {
-        Some(rooms) => rooms,
-        None => Arc::new(Vec::new()),
+    let rooms = match &config {
+        Some(Some(config)) => &config.rooms,
+        Some(None) => {
+            return html! {
+                <h1>{"Loading..."}</h1>
+            }
+        }
+        None => {
+            return html! {
+                <h1>{"Config error..."}</h1>
+            }
+        }
     };
 
     if let Some(room) = rooms.iter().find(|room| room.id == props.id) {

@@ -77,6 +77,7 @@ pub struct Config {
     backlight_on_time: u64,
     buttons: Vec<ButtonRowConfig>,
     programs: ProgramsConfig,
+    instance: String,
 }
 
 #[derive()]
@@ -91,6 +92,7 @@ pub struct LoadedConfig {
     backlight_on_time: u64,
     buttons: Vec<ButtonRowConfig>,
     programs: LoadedProgramsConfig,
+    instance: String,
 }
 
 pub struct Button {
@@ -113,6 +115,7 @@ impl TryFrom<Config> for LoadedConfig {
             backlight_on_time: config.backlight_on_time,
             buttons: config.buttons,
             programs,
+            instance: config.instance,
         })
     }
 }
@@ -235,8 +238,8 @@ pub fn run_gui(
     monitor_buttons_state(buttons, &state, &ui);
 
     monitor_screen_reset(&state, &ui);
-    monitor_tags(&state.mqtt, &ui);
-    monitor_schedule(&state.mqtt, &ui);
+    monitor_tags(config.clone(), &state.mqtt, &ui);
+    monitor_schedule(config.clone(), &state.mqtt, &ui);
     monitor_time(&ui);
     monitor_display(config, &ui, rx_screen_command);
 
@@ -334,12 +337,13 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
     }
 }
 
-fn monitor_tags(mqtt: &MqttTx, ui: &slint::AppWindow) {
+fn monitor_tags(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow) {
     let mqtt = mqtt.clone();
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
+        let topic = format!("robotica/{}/tags", config.instance);
         let rx = mqtt
-            .subscribe_into_stateless::<Arc<Json<Tags>>>("robotica/robotica.linuxpenguins.xyz/tags")
+            .subscribe_into_stateless::<Arc<Json<Tags>>>(topic)
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
@@ -390,14 +394,13 @@ fn sequences_to_slint<'a>(
         .collect()
 }
 
-fn monitor_schedule(mqtt: &MqttTx, ui: &slint::AppWindow) {
+fn monitor_schedule(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow) {
     let mqtt = mqtt.clone();
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
+        let topic = format!("schedule/{}/pending", config.instance);
         let rx = mqtt
-            .subscribe_into_stateless::<Arc<Json<Vec<Sequence>>>>(
-                "schedule/robotica.linuxpenguins.xyz/pending",
-            )
+            .subscribe_into_stateless::<Arc<Json<Vec<Sequence>>>>(topic)
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
