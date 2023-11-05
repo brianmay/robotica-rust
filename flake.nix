@@ -107,7 +107,7 @@
             cargoClippyExtraArgs = "-- --deny warnings";
           } // common);
 
-          # Build the actual crate itself, _but only if the previous tests pass_.
+          # Build the actual crate itself.
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = false;
@@ -166,7 +166,7 @@
           coverage =
             craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
 
-          # Build the actual crate itself, _but only if the previous tests pass_.
+          # Build the actual crate itself.
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
@@ -209,7 +209,7 @@
           coverage =
             craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
 
-          # Build the actual crate itself, _but only if the previous tests pass_.
+          # Build the actual crate itself.
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
@@ -264,7 +264,7 @@
           coverage =
             craneLib.cargoTarpaulin ({ cargoArtifacts = clippy; } // common);
 
-          # Build the actual crate itself, _but only if the previous tests pass_.
+          # Build the actual crate itself.
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
