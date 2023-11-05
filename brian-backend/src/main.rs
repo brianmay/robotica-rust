@@ -132,7 +132,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
     Some(Sequence {
         title: event.summary.clone(),
         id: event.uid,
-        importance: Importance::Important,
+        importance: Importance::High,
         sequence_name: event.summary,
         start_time,
         end_time,

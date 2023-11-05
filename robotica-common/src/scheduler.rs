@@ -114,26 +114,24 @@ pub enum Importance {
     /// It should never be displayed on schedules
     Low,
 
-    /// The sequence is not important
+    /// The sequence is medium importance
     ///
     /// It should be displayed on verbose schedules.
     #[default]
-    #[serde(alias = "Medium")]
-    NotImportant,
+    Medium,
 
-    /// The sequence is important.
+    /// The sequence is high importance
     ///
     /// It should be displayed on all schedules.
-    #[serde(alias = "High")]
-    Important,
+    High,
 }
 
 impl Display for Importance {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Importance::Low => write!(f, "Low"),
-            Importance::NotImportant => write!(f, "Medium"),
-            Importance::Important => write!(f, "High"),
+            Importance::Medium => write!(f, "Medium"),
+            Importance::High => write!(f, "High"),
         }
     }
 }

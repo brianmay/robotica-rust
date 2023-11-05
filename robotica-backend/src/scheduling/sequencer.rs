@@ -532,7 +532,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -552,7 +552,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -615,7 +615,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -635,7 +635,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -690,7 +690,7 @@ mod tests {
         let config = vec![Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -719,7 +719,7 @@ mod tests {
         let config = vec![Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -753,7 +753,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -773,7 +773,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -830,7 +830,7 @@ mod tests {
         let config = Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -877,7 +877,7 @@ mod tests {
         let config = Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -924,7 +924,7 @@ mod tests {
         let config = Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -977,7 +977,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: Some(HashSet::from(["christmas".to_string()])),
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
@@ -997,7 +997,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -1057,7 +1057,7 @@ mod tests {
         let config = vec![Config {
             title: "test".to_string(),
             id: None,
-            importance: Importance::NotImportant,
+            importance: Importance::Medium,
             classifications: Some(HashSet::from(["christmas".to_string()])),
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
@@ -1131,7 +1131,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -1151,7 +1151,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -1174,7 +1174,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -1194,7 +1194,7 @@ mod tests {
             Config {
                 title: "test".to_string(),
                 id: None,
-                importance: Importance::NotImportant,
+                importance: Importance::Medium,
                 classifications: None,
                 options: None,
                 if_cond: None,
@@ -1296,7 +1296,7 @@ mod tests {
                 vec![Config {
                     title: "test".to_string(),
                     id: None,
-                    importance: Importance::NotImportant,
+                    importance: Importance::Medium,
                     classifications: None,
                     options: None,
                     if_cond: None,
@@ -1319,7 +1319,7 @@ mod tests {
                 vec![Config {
                     title: "test".to_string(),
                     id: None,
-                    importance: Importance::NotImportant,
+                    importance: Importance::Medium,
                     classifications: None,
                     options: None,
                     if_cond: None,

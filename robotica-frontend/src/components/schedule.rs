@@ -127,8 +127,8 @@ fn sequence_to_html(
 ) -> Html {
     let importance_class = match sequence.importance {
         robotica_common::scheduler::Importance::Low => "importance_low",
-        robotica_common::scheduler::Importance::NotImportant => "importance_medium",
-        robotica_common::scheduler::Importance::Important => "importance_high",
+        robotica_common::scheduler::Importance::Medium => "importance_medium",
+        robotica_common::scheduler::Importance::High => "importance_high",
     };
     let status_class = match sequence.status {
         Some(robotica_common::scheduler::Status::Pending) | None => "pending",
