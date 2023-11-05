@@ -125,44 +125,13 @@ impl Manifest {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, FromRef)]
 struct HttpState {
     mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Client>>,
     rooms: Arc<Rooms>,
     manifest: Arc<Manifest>,
-}
-
-impl FromRef<HttpState> for MqttTx {
-    fn from_ref(state: &HttpState) -> Self {
-        state.mqtt.clone()
-    }
-}
-
-impl FromRef<HttpState> for Arc<Config> {
-    fn from_ref(state: &HttpState) -> Self {
-        state.config.clone()
-    }
-}
-
-impl FromRef<HttpState> for Arc<Client> {
-    fn from_ref(state: &HttpState) -> Self {
-        let x = state.oidc_client.load();
-        x.clone()
-    }
-}
-
-impl FromRef<HttpState> for Arc<Rooms> {
-    fn from_ref(state: &HttpState) -> Self {
-        state.rooms.clone()
-    }
-}
-
-impl FromRef<HttpState> for Arc<Manifest> {
-    fn from_ref(state: &HttpState) -> Self {
-        state.manifest.clone()
-    }
 }
 
 /// An error running the HTTP service.
@@ -314,7 +283,7 @@ const ASSET_SUFFIXES: [&str; 9] = [
 
 async fn fallback_handler(
     session: Session,
-    State(oidc_client): State<Arc<Client>>,
+    State(oidc_client): State<Arc<ArcSwap<Client>>>,
     State(http_config): State<Arc<Config>>,
     State(manifest): State<Arc<Manifest>>,
     req: Request<Body>,
@@ -330,7 +299,7 @@ async fn fallback_handler(
 
     if !asset_file && get_user(&session).is_none() {
         let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
-        let auth_url = oidc_client.get_auth_url(origin_url);
+        let auth_url = oidc_client.load().get_auth_url(origin_url);
         return Redirect::to(&auth_url).into_response();
     }
 
@@ -422,7 +391,7 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
 
 async fn oidc_callback(
     State(http_config): State<Arc<Config>>,
-    State(oidc_client): State<Arc<Client>>,
+    State(oidc_client): State<Arc<ArcSwap<Client>>>,
     Query(params): Query<HashMap<String, String>>,
     session: Session,
 ) -> Response {
@@ -433,7 +402,7 @@ async fn oidc_callback(
         .cloned()
         .unwrap_or_else(|| "/".to_string());
 
-    let result = oidc_client.request_token(&code).await;
+    let result = oidc_client.load().request_token(&code).await;
 
     match result {
         Ok((_token, user_info)) => {
