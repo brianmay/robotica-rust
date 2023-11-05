@@ -345,6 +345,7 @@
               export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
               export ROBOTICA_DEBUG=true
               export CONFIG_FILE="$PWD/robotica-backend.yaml"
+              export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
               export STATIC_PATH="${robotica-frontend-bindgen}"
             '';
             processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
