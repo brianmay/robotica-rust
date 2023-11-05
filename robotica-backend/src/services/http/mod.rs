@@ -30,7 +30,7 @@ use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_sessions::cookie::SameSite;
-use tower_sessions::{MokaStore, Session, SessionManagerLayer};
+use tower_sessions::{Expiry, MokaStore, Session, SessionManagerLayer};
 use tracing::error;
 
 use robotica_common::user::User;
@@ -205,7 +205,7 @@ pub async fn run(mqtt: MqttTx, rooms: Rooms, config: Config) -> Result<(), HttpE
         .layer(
             SessionManagerLayer::new(session_store)
                 .with_secure(true)
-                .with_max_age(Duration::days(7))
+                .with_expiry(Expiry::OnInactivity(Duration::days(7)))
                 .with_same_site(SameSite::Lax),
         );
 
