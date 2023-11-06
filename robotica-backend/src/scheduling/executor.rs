@@ -220,7 +220,7 @@ impl<T: TimeZone + Copy> State<T> {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if today != self.date {
-            self.set_tags();
+            self.set_tags(today);
             self.set_sequences_all();
             self.calendar_refresh_time = *now;
             self.publish_all_sequences();
@@ -330,8 +330,7 @@ impl<T: TimeZone + Copy> State<T> {
         )
     }
 
-    fn set_tags(&mut self) {
-        let today = self.date;
+    fn set_tags(&mut self, today: Date) {
         let tags = self.config.get_tags(today);
         self.publish_tags(&tags);
     }
@@ -586,7 +585,7 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
     };
     let state = {
         let mut state = state;
-        state.set_tags();
+        state.set_tags(date);
         state.set_sequences_all();
         // Don't do this here, will happen after first timer.
         // state.publish_sequences(&state.sequences);
