@@ -173,7 +173,7 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
     // let session_store = MemoryStore::default();
     let session_service = ServiceBuilder::new()
         .layer(HandleErrorLayer::new(|_: BoxError| async {
-            StatusCode::BAD_REQUEST
+            ResponseError::bad_request("Session error")
         }))
         .layer(
             SessionManagerLayer::new(session_store)
