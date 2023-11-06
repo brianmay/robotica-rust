@@ -46,39 +46,21 @@ pub fn tags(props: &Props) -> Html {
     html! {
         if let Some(tags) = &*tags {
             <div>
-                <h2>{ "Yesterday" }</h2>
-                <div class="tags">
-                    {
-                        sorted(tags.yesterday.iter()).map(|tag| {
-                            html! {
-                                <div class="tag">{tag}</div>
+                {
+                    for tags.iter().map(|tag| html! {
+                        <div key={tag.date.to_string()}>
+                            <h2>{ tag.date.format("%A, %e %B, %Y").to_string() }</h2>
+                            <div class="tags">
+                            {
+                                sorted(tag.tags.iter()).map(|tag| {
+                                    html! {
+                                        <div class="tag">{tag}</div>
+                                    }
+                                }).collect::<Html>()
                             }
-                        }).collect::<Html>()
-                    }
-
-                </div>
-
-                <h2>{ "Today" }</h2>
-                <div class="tags">
-                    {
-                        sorted(tags.today.iter()).map(|tag| {
-                            html! {
-                                <div class="tag">{tag}</div>
-                            }
-                        }).collect::<Html>()
-                    }
-                </div>
-
-                <h2>{ "Tomorrow" }</h2>
-                <div class="tags">
-                    {
-                        sorted(tags.tomorrow.iter()).map(|tag| {
-                            html! {
-                                <div class="tag">{tag}</div>
-                            }
-                        }).collect::<Html>()
-                    }
-                </div>
+                            </div>
+                        </div>
+                })}
             </div>
         } else {
                 <p>{ "No tags" }</p>

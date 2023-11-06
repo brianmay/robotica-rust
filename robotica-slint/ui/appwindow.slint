@@ -32,10 +32,9 @@ struct ButtonRowData {
     buttons: [ButtonData],
 }
 
-struct TagsData {
-    yesterday: [string],
-    today: [string],
-    tomorrow: [string],
+struct TagsForDay {
+    date: string,
+    tags: [string],
 }
 
 struct SequenceData {
@@ -185,48 +184,30 @@ component InlineTags inherits Rectangle {
 }
 
 component Tags inherits VerticalLayout {
-    in property <TagsData> tags;
+    in property <[TagsForDay]> tags;
     callback screen_reset;
     alignment: start;
 
-    Text {
-        text: "Yesterday";
-        color: white;
-        font-size: 10px;
-        horizontal-alignment: center;
-    }
+    for tags_for_day[i] in tags : VerticalLayout {
+        padding: 10px;
+        spacing: 10px;
 
-    InlineTags {
-        tags: tags.yesterday;
-        x: parent.width/2 - self.width/2;
-    }
+        Rectangle {
+            Text {
+                text: tags_for_day.date;
+                color: white;
+                font-size: 20px;
+                width: parent.width - 20px;
+                horizontal-alignment: left;
+                // y: 20px;
+            }
+            height: 20px + 20px;
+        }
 
-    Rectangle {  height: 10px; }
-
-    Text {
-        text: "Today";
-        color: white;
-        font-size: 10px;
-        horizontal-alignment: center;
-    }
-
-    InlineTags {
-        tags: tags.today;
-        x: parent.width/2 - self.width/2;
-    }
-
-    Rectangle {  height: 10px; }
-
-    Text {
-        text: "Tomorrow";
-        color: white;
-        font-size: 10px;
-        horizontal-alignment: center;
-    }
-
-    InlineTags {
-        tags: tags.tomorrow;
-        x: parent.width/2 - self.width/2;
+        InlineTags {
+            tags: tags_for_day.tags;
+            // x: 0;
+        }
     }
 }
 
@@ -487,11 +468,7 @@ export component AppWindow inherits Window {
     };
 
     in property <[ButtonRowData]> buttons: [];
-    in property <TagsData> tags: {
-        yesterday: [],
-        today: [],
-        tomorrow: [],
-    };
+    in property <[TagsForDay]> tags: [];
 
     TouchArea {
         clicked => {

@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
-use robotica_common::scheduler::{Importance, Mark, MarkStatus, Status, Tags};
+use robotica_common::scheduler::{Importance, Mark, MarkStatus, Status, Tags, TagsForDay};
 
 use crate::pipes::{Subscriber, Subscription};
 use crate::scheduling::sequencer::check_schedule;
@@ -102,29 +102,35 @@ impl<T: TimeZone + Copy> Config<T> {
     }
 
     fn get_tags(&self, today: Date) -> Tags {
-        let yesterday = today - Duration::days(1);
-        let tomorrow = today + Duration::days(1);
+        let first_offset = -1;
+        // Stop date is exclusive, so we have to add an extra day.
+        let last_offset = 4 + 1;
 
-        Tags {
-            yesterday: classifier::classify_date_with_config(&yesterday, &self.classifier),
-            today: classifier::classify_date_with_config(&today, &self.classifier),
-            tomorrow: classifier::classify_date_with_config(&tomorrow, &self.classifier),
-        }
+        // Get Yesterday, Today, and next 3 days.
+        let tags = (first_offset..last_offset)
+            .map(|day| {
+                let date = today + Duration::days(day);
+                let tags = classifier::classify_date_with_config(&date, &self.classifier);
+                TagsForDay { date, tags }
+            })
+            .collect();
+        Tags(tags)
     }
-    fn get_sequences_all(&self, date: Date) -> Vec<Sequence> {
+
+    fn get_sequences_all(&self, today: Date) -> Vec<Sequence> {
         let first_offset = -1;
         // Stop date is exclusive, so we have to add an extra day.
         let last_offset = 4 + 1;
 
         // Get Yesterday, Today, and next 3 days.
         let s = (first_offset..last_offset).flat_map(|day| {
-            let date = date + Duration::days(day);
+            let date = today + Duration::days(day);
             self.get_sequences_for_date(date)
         });
 
         let calendar = self.load_calendar(
-            date + Duration::days(first_offset),
-            date + Duration::days(last_offset),
+            today + Duration::days(first_offset),
+            today + Duration::days(last_offset),
         );
         let mut sequences = Vec::new();
         sequences.extend(s);

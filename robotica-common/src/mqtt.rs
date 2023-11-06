@@ -3,6 +3,7 @@
 use core::fmt;
 use std::{
     fmt::Formatter,
+    ops::Deref,
     str::{FromStr, Utf8Error},
     string::FromUtf8Error,
     sync::Arc,
@@ -272,6 +273,14 @@ impl<T: std::fmt::Display> std::fmt::Display for Json<T> {
 impl<T: PartialEq> PartialEq for Json<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
+    }
+}
+
+impl<T> Deref for Json<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

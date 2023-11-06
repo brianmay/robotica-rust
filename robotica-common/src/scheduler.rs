@@ -2,6 +2,7 @@
 use std::{
     collections::HashSet,
     fmt::{Display, Formatter},
+    ops::Deref,
 };
 
 use chrono::{NaiveDate, Utc};
@@ -208,15 +209,24 @@ impl Sequence {
     }
 }
 
+/// The complete set of tags for a particular day
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TagsForDay {
+    /// The scheduled day for this entry
+    pub date: NaiveDate,
+
+    /// The tags for this day
+    pub tags: HashSet<String>,
+}
+
 /// The tags for yesterday, today, and tomorrow.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Tags {
-    /// The tags for yesterday.
-    pub yesterday: HashSet<String>,
+pub struct Tags(pub Vec<TagsForDay>);
 
-    /// The tags for today.
-    pub today: HashSet<String>,
+impl Deref for Tags {
+    type Target = Vec<TagsForDay>;
 
-    /// The tags for tomorrow.
-    pub tomorrow: HashSet<String>,
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }

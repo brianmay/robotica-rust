@@ -120,19 +120,23 @@ impl TryFrom<Config> for LoadedConfig {
     }
 }
 
-impl From<Arc<Json<Tags>>> for slint::TagsData {
-    fn from(tags: Arc<Json<Tags>>) -> Self {
-        let yesterday: Vec<SharedString> =
-            tags.0.yesterday.iter().map(SharedString::from).collect();
-        let today: Vec<SharedString> = tags.0.today.iter().map(SharedString::from).collect();
-        let tomorrow: Vec<SharedString> = tags.0.tomorrow.iter().map(SharedString::from).collect();
+// impl From<Arc<Json<Tags>>> for Vec<slint::TagsForDay> {
+fn tags_to_slint(tags: &Json<Tags>) -> ModelRc<slint::TagsForDay> {
+    let tags: Vec<slint::TagsForDay> = tags
+        .iter()
+        .map(|t| {
+            let date = t.date.format("%A, %e %B, %Y").to_string();
+            let tags: Vec<SharedString> = t.tags.iter().map(SharedString::from).collect();
+            let b: VecModel<SharedString> = VecModel::from(tags);
+            let c: ModelRc<SharedString> = ModelRc::new(b);
+            slint::TagsForDay {
+                date: date.into(),
+                tags: c,
+            }
+        })
+        .collect();
 
-        Self {
-            yesterday: ModelRc::new(VecModel::from(yesterday)),
-            today: ModelRc::new(VecModel::from(today)),
-            tomorrow: ModelRc::new(VecModel::from(tomorrow)),
-        }
-    }
+    ModelRc::new(VecModel::from(tags))
 }
 
 async fn select_ok<F, FUTURES, A, B>(futures: FUTURES) -> Result<A, B>
@@ -353,7 +357,7 @@ fn monitor_tags(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow)
 
             handle_weak
                 .upgrade_in_event_loop(move |handle| {
-                    let tags: slint::TagsData = msg.into();
+                    let tags = tags_to_slint(&msg);
                     handle.set_tags(tags);
                 })
                 .unwrap();
