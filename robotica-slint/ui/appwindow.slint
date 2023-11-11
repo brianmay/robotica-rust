@@ -183,30 +183,33 @@ component InlineTags inherits Rectangle {
     height: 0px + ceil(tags.length/3) * 50px - 10px;
 }
 
-component Tags inherits VerticalLayout {
+component Tags inherits ScrollView {
     in property <[TagsForDay]> tags;
     callback screen_reset;
-    alignment: start;
 
-    for tags_for_day[i] in tags : VerticalLayout {
-        padding: 10px;
-        spacing: 10px;
+    VerticalLayout {
+        alignment: start;
 
-        Rectangle {
-            Text {
-                text: tags_for_day.date;
-                color: white;
-                font-size: 20px;
-                width: parent.width - 20px;
-                horizontal-alignment: left;
-                // y: 20px;
+        for tags_for_day[i] in tags : VerticalLayout {
+            padding: 10px;
+            spacing: 10px;
+
+            Rectangle {
+                Text {
+                    text: tags_for_day.date;
+                    color: white;
+                    font-size: 20px;
+                    width: parent.width - 20px;
+                    horizontal-alignment: left;
+                    // y: 20px;
+                }
+                height: 20px + 20px;
             }
-            height: 20px + 20px;
-        }
 
-        InlineTags {
-            tags: tags_for_day.tags;
-            // x: 0;
+            InlineTags {
+                tags: tags_for_day.tags;
+                // x: 0;
+            }
         }
     }
 }
