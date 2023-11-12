@@ -480,6 +480,9 @@ fn monitor_display(
             backlight: BacklightState::On,
             screen_on: true,
         };
+        // Ensure display really is on.
+        turn_display_on(&config.programs).await;
+
         let mut rx_screen_command = rx_screen_command;
 
         loop {
