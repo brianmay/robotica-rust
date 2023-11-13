@@ -237,13 +237,21 @@ async fn handle_command(
         state.volume.message = message_volume;
     }
 
+    if let Some(msg) = &command.message {
+        tx_screen_command
+            .try_send(ScreenCommand::Message(msg.clone()))
+            .unwrap_or_else(|err| {
+                error!("Failed to send message to screen: {err}");
+            });
+    }
+
     let should_play = {
         let now = chrono::Local::now();
         command.should_play(now, messages_enabled)
     };
 
     if should_play {
-        process_command(state, command, config, tx_screen_command, mqtt).await;
+        process_command(state, command, config, mqtt).await;
     } else {
         info!("Not processing command due to lack of urgency: {command:?}");
     }
@@ -255,7 +263,6 @@ enum Action<'a> {
     Play(&'a String),
     Tasks(&'a Vec<SubTask>),
     Stop,
-    SendMessageToScreen(&'a Message),
 }
 
 impl<'a> Action<'a> {
@@ -263,7 +270,6 @@ impl<'a> Action<'a> {
         self,
         state: &State,
         config: &LoadedConfig,
-        tx_screen_command: &mpsc::Sender<ScreenCommand>,
         mqtt: &MqttTx,
     ) -> Result<(), String> {
         match self {
@@ -288,13 +294,6 @@ impl<'a> Action<'a> {
                     send_task(mqtt, &task);
                 }
             }
-            Self::SendMessageToScreen(msg) => {
-                tx_screen_command
-                    .try_send(ScreenCommand::Message(msg.clone()))
-                    .unwrap_or_else(|err| {
-                        error!("Failed to send message to screen: {err}");
-                    });
-            }
         }
         Ok(())
     }
@@ -302,10 +301,6 @@ impl<'a> Action<'a> {
 
 fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
     let mut actions = Vec::new();
-
-    if let Some(msg) = &command.message {
-        actions.push(Action::SendMessageToScreen(msg));
-    }
 
     if let Some(tasks) = &command.pre_tasks {
         actions.push(Action::Tasks(tasks));
@@ -340,7 +335,6 @@ async fn process_command(
     state: &mut State,
     command: AudioCommand,
     config: &LoadedConfig,
-    tx_screen_command: &mpsc::Sender<ScreenCommand>,
     mqtt: &MqttTx,
 ) {
     let actions = get_actions_for_command(&command);
@@ -369,9 +363,7 @@ async fn process_command(
             let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
-                action
-                    .execute(state, config, tx_screen_command, mqtt)
-                    .await?;
+                action.execute(state, config, mqtt).await?;
             }
 
             if paused && !play_action {
