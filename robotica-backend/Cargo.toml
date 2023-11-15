@@ -44,7 +44,7 @@ tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["fs", "trace"] }
 tower-sessions = { version = "0.4.1", features = ["moka-store"] }
 arc-swap = "1.4.0"
-hyper = "0.14.25"
+hyper = "1.0.0"
 time = "0.3.30"
 
 [build-dependencies]
