@@ -357,33 +357,27 @@ impl PartialEq for PriceSummary {
 
 impl Eq for PriceSummary {}
 
-// fn prices_to_category(prices: &[PriceResponse], category: Option<PriceCategory>) -> PriceCategory {
-//     let new_category = prices
-//         .iter()
-//         .find(|p| p.interval_type == IntervalType::CurrentInterval)
-//         .map_or(PriceCategory::Normal, |price| {
-//             get_price_category(category, price.per_kwh)
-//         });
-
-//     new_category
-// }
-
-fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCategory {
+fn get_price_category(category: Option<PriceCategory>, prices: &[f32]) -> PriceCategory {
     let mut c = category.unwrap_or(PriceCategory::Normal);
 
     let under = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
-        if price < threshold {
+        // If all prices are under the threshold, then change the category.
+        if prices.iter().all(|x| *x < threshold) {
             new_category
         } else {
             c
         }
     };
     let over = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
-        if price > threshold {
-            new_category
-        } else {
-            c
-        }
+        // If the current price is over the threshold, then change the category.
+        let maybe_current_price = prices.first();
+        maybe_current_price.map_or(c, |current_price| {
+            if *current_price > threshold {
+                new_category
+            } else {
+                c
+            }
+        })
     };
 
     match c {
@@ -529,10 +523,13 @@ impl PriceProcessor {
         now: &DateTime<Utc>,
         prices: &[PriceResponse],
     ) -> PriceSummary {
-        let Some(current_price) = prices
+        let current_prices: Vec<&PriceResponse> = prices
             .iter()
-            .find(|p| p.interval_type == IntervalType::CurrentInterval)
-        else {
+            .skip_while(|p| p.interval_type != IntervalType::CurrentInterval)
+            .take(3)
+            .collect();
+
+        let Some(current_price) = current_prices.first() else {
             error!("No current price found in prices: {prices:?}");
             let default_c_per_kwh: u16 = 100;
             return PriceSummary {
@@ -599,7 +596,8 @@ impl PriceProcessor {
 
         // let category = prices_to_category(prices, self.category);
         let old_category = self.category;
-        let category = get_price_category(old_category, current_price.per_kwh);
+        let prices_per_kwh: Vec<f32> = prices.iter().map(|p| p.per_kwh).collect();
+        let category = get_price_category(old_category, &prices_per_kwh);
         self.category = Some(category);
 
         #[allow(clippy::cast_possible_truncation)]
@@ -882,36 +880,50 @@ mod tests {
     fn test_get_price_category() {
         use PriceCategory::{Cheap, Expensive, Normal, SuperCheap};
 
+        // For < thresholds, all prices must be < threshold
+        // For > thresholds, only current price must be > threshold
         let data = [
-            (SuperCheap, 11.0, SuperCheap),
-            (SuperCheap, 11.1, Cheap),
-            (SuperCheap, 16.0, Cheap),
-            (SuperCheap, 16.1, Normal),
-            (SuperCheap, 31.0, Normal),
-            (SuperCheap, 31.1, Expensive),
-            (Cheap, 8.9, SuperCheap),
-            (Cheap, 9.0, Cheap),
-            (Cheap, 16.0, Cheap),
-            (Cheap, 16.1, Normal),
-            (Cheap, 31.0, Normal),
-            (Cheap, 31.1, Expensive),
-            (Normal, 8.9, SuperCheap),
-            (Normal, 9.0, Cheap),
-            (Normal, 13.9, Cheap),
-            (Normal, 14.0, Normal),
-            (Normal, 31.0, Normal),
-            (Normal, 31.1, Expensive),
-            (Expensive, 8.9, SuperCheap),
-            (Expensive, 9.0, Cheap),
-            (Expensive, 13.9, Cheap),
-            (Expensive, 14.0, Normal),
-            (Expensive, 28.9, Normal),
-            (Expensive, 29.0, Expensive),
+            // Super cheap thresholds >11.0 Cheap >16.0 Normal >31.0 Expensive
+            (SuperCheap, [11.0, 11.0, 11.0], SuperCheap),
+            (SuperCheap, [11.1, 11.1, 11.1], Cheap),
+            (SuperCheap, [11.1, 16.1, 11.1], Cheap),
+            (SuperCheap, [11.1, 11.1, 16.1], Cheap),
+            (SuperCheap, [16.0, 16.0, 16.0], Cheap),
+            (SuperCheap, [16.1, 11.1, 11.1], Normal),
+            (SuperCheap, [16.1, 16.1, 16.1], Normal),
+            (SuperCheap, [31.0, 31.0, 31.0], Normal),
+            (SuperCheap, [31.1, 31.1, 31.1], Expensive),
+            // Cheap thresholds >16.0 Normal >31.0 Expensive <9.0 SuperCheap
+            (Cheap, [8.9, 8.9, 8.9], SuperCheap),
+            (Cheap, [8.9, 9.0, 8.9], Cheap),
+            (Cheap, [9.0, 9.0, 9.0], Cheap),
+            (Cheap, [8.9, 8.9, 9.0], Cheap),
+            (Cheap, [11.1, 16.1, 11.1], Cheap),
+            (Cheap, [11.1, 11.1, 16.1], Cheap),
+            (Cheap, [16.0, 16.0, 16.0], Cheap),
+            (Cheap, [16.1, 16.1, 16.1], Normal),
+            (Cheap, [16.1, 11.1, 11.1], Normal),
+            (Cheap, [31.0, 31.0, 31.0], Normal),
+            (Cheap, [31.1, 31.1, 31.1], Expensive),
+            // Normal thresholds >31.0 Expensive <14.0 Cheap <9.0 SuperCheap
+            (Normal, [8.9, 8.9, 8.9], SuperCheap),
+            (Normal, [9.0, 9.0, 9.0], Cheap),
+            (Normal, [13.9, 13.9, 13.9], Cheap),
+            (Normal, [14.0, 14.0, 14.0], Normal),
+            (Normal, [31.0, 31.0, 31.0], Normal),
+            (Normal, [31.1, 31.1, 31.1], Expensive),
+            // Expensive thresholds <29.0 Normal <14.0 Cheap <9.0 SuperCheap
+            (Expensive, [8.9, 8.9, 8.9], SuperCheap),
+            (Expensive, [9.0, 9.0, 9.0], Cheap),
+            (Expensive, [13.9, 13.9, 13.9], Cheap),
+            (Expensive, [14.0, 14.0, 14.0], Normal),
+            (Expensive, [28.9, 28.9, 28.9], Normal),
+            (Expensive, [29.0, 29.0, 29.0], Expensive),
         ];
 
         for d in data {
-            let c = get_price_category(Some(d.0), d.1);
-            assert_eq!(c, d.2, "get_price_category({:?}, {}) = {:?}", d.0, d.1, c);
+            let c = get_price_category(Some(d.0), &d.1);
+            assert_eq!(c, d.2, "get_price_category({:?}, {:?}) = {:?}", d.0, d.1, c);
         }
     }
 
