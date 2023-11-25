@@ -596,7 +596,7 @@ impl PriceProcessor {
 
         // let category = prices_to_category(prices, self.category);
         let old_category = self.category;
-        let prices_per_kwh: Vec<f32> = prices.iter().map(|p| p.per_kwh).collect();
+        let prices_per_kwh: Vec<f32> = current_prices.iter().map(|p| p.per_kwh).collect();
         let category = get_price_category(old_category, &prices_per_kwh);
         self.category = Some(category);
 
@@ -828,6 +828,7 @@ mod tests {
         let prices = vec![
             pr(dt("2020-01-01T00:30:00Z"), 0.0, CurrentInterval),
             pr(dt("2020-01-01T01:00:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T01:10:00Z"), 0.0, ForecastInterval),
             pr(dt("2020-01-01T01:30:00Z"), 10.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 0.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 0.0, ForecastInterval),
