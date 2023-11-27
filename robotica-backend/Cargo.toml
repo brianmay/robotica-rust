@@ -33,7 +33,7 @@ async-trait = "0.1.51"
 pyo3 = { version = "0.20.0", features = ["auto-initialize", "chrono"], optional = true }
 
 # http server
-axum-core = "0.3.4"
+axum-core = "0.4.0"
 axum = { version = "0.6.20", features = ["ws", "macros"] }
 openid = "0.12.0"
 maud = { version = "0.25.0", features = ["axum"] }
