@@ -2,7 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -50,11 +50,11 @@
         pkgs_unstable = nixpkgs-unstable.legacyPackages.${system};
         nodejs = pkgs.nodejs_20;
 
-        poetry = poetry2nix.legacyPackages.${system};
-        poetry_env = poetry.mkPoetryEnv {
+        p2n = import poetry2nix { inherit pkgs; };
+        poetry_env = p2n.mkPoetryEnv {
           python = pkgs.python3;
           projectDir = ./robotica-backend/python;
-          overrides = poetry.defaultPoetryOverrides.extend (self: super: {
+          overrides = p2n.defaultPoetryOverrides.extend (self: super: {
             x-wr-timezone = super.x-wr-timezone.overridePythonAttrs (old: {
               buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];
             });
@@ -88,7 +88,7 @@
             pname = "robotica-frontend";
             version = "0.0.0";
             cargoExtraArgs = "-p robotica-frontend";
-            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs;
               [ # openssl python3
                 protobuf
@@ -146,7 +146,7 @@
             pname = "brian-backend";
             version = "0.0.0";
             cargoExtraArgs = "-p brian-backend";
-            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
             installCargoArtifactsMode = "use-zstd";
           };
@@ -189,7 +189,7 @@
             pname = "robotica-freeswitch";
             version = "0.0.0";
             cargoExtraArgs = "-p freeswitch";
-            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
             # installCargoArtifactsMode = "use-zstd";
           };
@@ -232,7 +232,7 @@
             pname = "robotica-slint";
             version = "0.0.0";
             cargoExtraArgs = "-p robotica-slint";
-            nativeBuildInputs = with pkgs; [ pkgconfig ];
+            nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [
               openssl
               protobuf
@@ -304,53 +304,51 @@
           freeswitch = freeswitch.pkg;
         };
 
-        devShells.default = devenv.lib.mkShell {
-          inherit inputs pkgs;
-          modules = [{
-            packages = with pkgs; [
-              poetry2nix.packages.${system}.poetry
-              poetry_env
-              rust-analyzer
-              pkgconfig
-              openssl
-              protobuf
-              fontconfig
-              freetype
-              nodejs
-              wasm-pack
-              pkgs_unstable.wasm-bindgen-cli
-              slint-lsp
-              rustPlatform
-              # https://github.com/NixOS/nixpkgs/issues/156890
-              binaryen
-              pkg_node2nix
-              pkg_node2nix_wrapper
-              nodePackages.nodeDependencies
-              gcc
-            ];
-            enterShell = ''
-              # kludge for https://github.com/cachix/devenv/issues/862
-              export PKG_CONFIG_PATH_FOR_TARGET="$PKG_CONFIG_PATH"
-              export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.freetype}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libxcb}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXcursor}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXrandr}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXi}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.mesa}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.dbus}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.libGL}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
-              export ROBOTICA_DEBUG=true
-              export CONFIG_FILE="$PWD/robotica-backend.yaml"
-              export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
-              export STATIC_PATH="${robotica-frontend-bindgen}"
-            '';
-            processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
-            processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
-          }];
+        devShells.default = pkgs.mkShell {
+          # inherit inputs pkgs;
+          packages = with pkgs; [
+            poetry
+            poetry_env
+            rust-analyzer
+            pkg-config
+            openssl
+            protobuf
+            fontconfig
+            freetype
+            nodejs
+            wasm-pack
+            pkgs_unstable.wasm-bindgen-cli
+            slint-lsp
+            rustPlatform
+            # https://github.com/NixOS/nixpkgs/issues/156890
+            binaryen
+            pkg_node2nix
+            pkg_node2nix_wrapper
+            nodePackages.nodeDependencies
+            gcc
+          ];
+          enterShell = ''
+            # kludge for https://github.com/cachix/devenv/issues/862
+            export PKG_CONFIG_PATH_FOR_TARGET="$PKG_CONFIG_PATH"
+            export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.freetype}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.xorg.libxcb}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.xorg.libXcursor}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.xorg.libXrandr}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.xorg.libXi}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.mesa}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.dbus}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.libGL}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
+            export ROBOTICA_DEBUG=true
+            export CONFIG_FILE="$PWD/robotica-backend.yaml"
+            export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
+            export STATIC_PATH="${robotica-frontend-bindgen}"
+          '';
+          # processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
+          # processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
         };
         packages = {
           robotica-frontend = robotica-frontend-bindgen;
