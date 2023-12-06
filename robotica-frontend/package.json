@@ -11,7 +11,7 @@
     "autoprefixer": "^10.4.16",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.8.1",
-    "html-webpack-plugin": "^5.5.3",
+    "html-webpack-plugin": "^5.5.4",
     "postcss-loader": "^7.3.3",
     "rimraf": "^5.0.5",
     "sass": "^1.69.3",
