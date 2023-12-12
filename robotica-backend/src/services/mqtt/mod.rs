@@ -497,7 +497,7 @@ fn topic_to_filter(topic: &str) -> Filter {
         path: topic.to_string(),
         qos: rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
         nolocal: true,
-        retain_forward_rule: rumqttc::RetainForwardRule::Forward,
+        // retain_forward_rule: rumqttc::RetainForwardRule::Forward,
         ..Default::default()
     }
 }
