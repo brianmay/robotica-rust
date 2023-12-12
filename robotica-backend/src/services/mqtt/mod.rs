@@ -2,8 +2,7 @@
 pub mod topics;
 
 use rumqttc::tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
-use rumqttc::v5::mqttbytes::v5::Packet;
-use rumqttc::v5::mqttbytes::{Filter, Publish, RetainForwardRule};
+use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
 use serde::Deserialize;
@@ -225,7 +224,7 @@ pub fn run_client(
     let client_id = format!("robotica-rust-{hostname}");
 
     let mut root_store = RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
@@ -250,7 +249,7 @@ pub fn run_client(
         }
         Credentials::None => {}
     }
-    mqtt_options.set_max_packet_size(100 * 10 * 1024, 100 * 10 * 1024);
+    mqtt_options.set_max_packet_size(Some(100 * 10 * 1024));
     // mqtt_options.set_clean_session(false);
 
     let (client, mut event_loop) = AsyncClient::new(mqtt_options, NUMBER_OF_STARTUP_SUBSCRIPTIONS);
@@ -275,7 +274,7 @@ pub fn run_client(
                 event = event_loop.poll() => {
                     match event {
                         Ok(Event::Incoming(i)) => {
-                            incoming_event(&client, *i, &subscriptions);
+                            incoming_event(&client, i, &subscriptions);
                         },
                         Ok(Event::Outgoing(o)) => {
                             if let Outgoing::Publish(p) = o {
@@ -392,7 +391,7 @@ fn watch_tx_closed(
 
 fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptions) {
     match pkt {
-        Incoming::Publish(p, _) => match publish_to_mqtt_message(&p) {
+        Incoming::Publish(p) => match publish_to_mqtt_message(&p) {
             Ok(msg) => {
                 let msg: MqttMessage = msg;
                 let topic = &msg.topic;
@@ -498,7 +497,7 @@ fn topic_to_filter(topic: &str) -> Filter {
         path: topic.to_string(),
         qos: rumqttc::v5::mqttbytes::QoS::ExactlyOnce,
         nolocal: true,
-        retain_forward_rule: RetainForwardRule::OnEverySubscribe,
+        retain_forward_rule: rumqttc::RetainForwardRule::Forward,
         ..Default::default()
     }
 }

@@ -1,6 +1,6 @@
-[patch.crates-io]
+#[patch.crates-io]
 # workaround to break the circular dependency for ahash(https://github.com/tkaitchuck/aHash/issues/95)
-getrandom = { git = 'https://github.com/vladimir-dd/getrandom.git'}
+#getrandom = { git = 'https://github.com/vladimir-dd/getrandom.git'}
 
 [workspace]
 members = [
