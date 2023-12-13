@@ -55,23 +55,23 @@ mod tests {
 
     #[test]
     fn test_merge_yaml_simple() {
-        let a = r#"
+        let a = r"
 a: 1
 c: 3
 d: 5
-"#;
+";
 
-        let b = r#"
+        let b = r"
 a: 2
 b: 3
 d: null
-"#;
+";
 
-        let c = r#"
+        let c = r"
 a: 2
 b: 3
 c: 3
-"#;
+";
 
         let a = serde_yaml::from_str::<Value>(a).unwrap();
         let b = serde_yaml::from_str::<Value>(b).unwrap();
@@ -82,25 +82,25 @@ c: 3
 
     #[test]
     fn test_merge_yaml_nested() {
-        let a = r#"
+        let a = r"
 first:
     a: 1
     c: 3
 third:
     a: 1
     c: 3
-"#;
+";
 
-        let b = r#"
+        let b = r"
 second:
     a: 2
     b: 3
 third:
     a: 2
     b: 3
-"#;
+";
 
-        let c = r#"
+        let c = r"
 first:
     a: 1
     c: 3
@@ -111,7 +111,7 @@ third:
     a: 2
     b: 3
     c: 3
-"#;
+";
 
         let a = serde_yaml::from_str::<Value>(a).unwrap();
         let b = serde_yaml::from_str::<Value>(b).unwrap();
