@@ -24,7 +24,7 @@ tokio = { version = "1.26.0", features = ["full"] }
 futures = "0.3.27"
 clap = { version = "4.1.11", features = ["derive"] }
 chrono = "0.4.19"
-itertools = "0.11.0"
+itertools = "0.12.0"
 envconfig = "0.10.0"
 freeswitch-esl = { git = "https://github.com/KaranGauswami/freeswitch-esl.git" }
 # freeswitch-esl = { path = "/home/brian/tree/3rdparty/freeswitch-esl"}
