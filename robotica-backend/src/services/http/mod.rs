@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use axum::body::{boxed, Body};
+use axum::body::Body;
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, State};
 use axum::http::uri::PathAndQuery;
@@ -18,14 +18,15 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::BoxError;
 use axum::Json;
 use axum::{extract::Query, routing::get, Router};
+use hyper::{Method, StatusCode};
 use maud::{html, Markup, DOCTYPE};
-use reqwest::{Method, StatusCode};
 use robotica_common::config as ui_config;
 use robotica_common::version;
 use serde::Deserialize;
 use thiserror::Error;
 use time::Duration;
 use tokio::fs;
+use tokio::net::TcpListener;
 use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -145,21 +146,9 @@ pub enum HttpError {
     #[error("OIDC error: {0}")]
     Oidc(#[from] oidc::Error),
 
-    /// There was an error decoding the base64 secret.
-    #[error("Base64 Decode Error")]
-    Base64Decode(#[from] base64::DecodeError),
-
-    /// URL Parse error
-    #[error("URL Parse error: {0}")]
-    UrlParse(#[from] url::ParseError),
-
-    /// Address parse error
-    #[error("Address parse error: {0}")]
-    AddrParse(#[from] std::net::AddrParseError),
-
-    /// Hyper error
-    #[error("Hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
+    /// IO error
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Run the HTTP service.
@@ -251,11 +240,9 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
 }
 
 async fn server(http_listener: String, app: Router) -> Result<(), HttpError> {
-    let addr = http_listener.parse()?;
-    tracing::info!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await?;
+    let listener = TcpListener::bind(&http_listener).await?;
+    tracing::info!("listening on {:?}", listener.local_addr());
+    axum::serve(listener, app).await?;
     Ok(())
 }
 
@@ -315,7 +302,7 @@ async fn fallback_handler(
             match status {
                 // If this is an asset file, then don't redirect to index.html
                 StatusCode::NOT_FOUND if !asset_file => serve_index_html(&manifest).await,
-                _ => Ok(response.map(boxed)),
+                _ => Ok(response.map(Body::new)),
             }
         }
         Err(err) => Err(ResponseError::internal_error(format!("error: {err}"))),
