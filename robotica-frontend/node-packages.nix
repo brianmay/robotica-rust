@@ -1813,13 +1813,13 @@ let
         sha512 = "YXxSlJBZTP7RS3tWnQw74ooKa6L9b9i9QYXY21eUEvhZ3u9XLfv6OnFsQq6RxkhHygsaUMvYsZRV5rU/OVNZxw==";
       };
     };
-    "html-webpack-plugin-5.5.3" = {
+    "html-webpack-plugin-5.5.4" = {
       name = "html-webpack-plugin";
       packageName = "html-webpack-plugin";
-      version = "5.5.3";
+      version = "5.5.4";
       src = fetchurl {
-        url = "https://registry.npmjs.org/html-webpack-plugin/-/html-webpack-plugin-5.5.3.tgz";
-        sha512 = "6YrDKTuqaP/TquFH7h4srYWsZx+x6k6+FbsTm0ziCwGHDP78Unr1r9F/H4+sGmMbX08GQcJ+K64x55b+7VM/jg==";
+        url = "https://registry.npmjs.org/html-webpack-plugin/-/html-webpack-plugin-5.5.4.tgz";
+        sha512 = "3wNSaVVxdxcu0jd4FpQFoICdqgxs4zIQQvj+2yQKFfBOnLETQ6X5CDWdeasuGlSsooFlMkEioWDTqBv1wvw5Iw==";
       };
     };
     "htmlparser2-6.1.0" = {
@@ -4094,7 +4094,7 @@ let
           sources."commander-8.3.0"
         ];
       })
-      sources."html-webpack-plugin-5.5.3"
+      sources."html-webpack-plugin-5.5.4"
       sources."htmlparser2-6.1.0"
       sources."http-deceiver-1.2.7"
       sources."http-errors-2.0.0"
