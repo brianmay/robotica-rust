@@ -1,7 +1,7 @@
 //! Source (and sink) for MQTT data.
 pub mod topics;
 
-use rumqttc::tokio_rustls::rustls::{self, ClientConfig, OwnedTrustAnchor, RootCertStore};
+use rumqttc::tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
