@@ -1,7 +1,7 @@
 //! Source (and sink) for MQTT data.
 pub mod topics;
 
-use rumqttc::tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+use rumqttc::tokio_rustls::rustls::{self, ClientConfig, OwnedTrustAnchor, RootCertStore};
 use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::{Outgoing, Transport};
@@ -223,14 +223,7 @@ pub fn run_client(
     let hostname = hostname.to_str().unwrap_or("unknown");
     let client_id = format!("robotica-rust-{hostname}");
 
-    let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    let root_store = get_root_store();
     let client_config = ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
@@ -324,6 +317,28 @@ pub fn run_client(
         }
     });
     Ok(())
+}
+
+fn get_root_store() -> RootCertStore {
+    let mut root_store = rustls::RootCertStore::empty();
+
+    let certs = match rustls_native_certs::load_native_certs() {
+        Ok(certs) => certs,
+        Err(err) => {
+            error!("Failed to load native certs: {:?}", err);
+            return root_store;
+        }
+    };
+
+    for cert in certs {
+        _ = root_store
+            .add(&rustls::Certificate(cert.as_ref().to_vec()))
+            .map_err(|err| {
+                error!("Failed to add certificate: {:?}", err);
+            });
+    }
+
+    root_store
 }
 
 #[allow(clippy::cognitive_complexity)]
