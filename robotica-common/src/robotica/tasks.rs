@@ -79,7 +79,7 @@ impl Task {
     }
 }
 
-/// A task with optional values.
+/// A task with optional target names instead of topics.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubTask {
