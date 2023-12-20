@@ -120,7 +120,6 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
     let tasks = match event.start_end {
         StartEnd::Date(_, _) => vec![],
         StartEnd::DateTime(_, _) => vec![Task {
-            title: format!("Tell everyone {}", event.summary),
             payload: Payload::Command(Command::Message(payload)),
             qos: QoS::ExactlyOnce,
             retain: false,

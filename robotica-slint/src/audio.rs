@@ -138,7 +138,6 @@ pub fn run(
                     } else if let Command::Message(command) = command {
                         let pre_tasks = if command.flash_lights {
                             vec![SubTask{
-                                title: "Flash lights".to_string(),
                                 target: "light".to_string(),
                                 payload: Payload::Command(Command::Light(LightCommand::Flash)),
                                 qos: QoS::ExactlyOnce,

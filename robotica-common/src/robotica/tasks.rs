@@ -33,9 +33,6 @@ pub enum Payload {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Task {
-    /// The title of the task.
-    pub title: String,
-
     /// The payload of the task.
     #[serde(flatten)]
     pub payload: Payload,
@@ -83,9 +80,6 @@ impl Task {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubTask {
-    /// The with a target instead of the required topic.
-    pub title: String,
-
     /// The payload of the task.
     #[serde(flatten)]
     pub payload: Payload,
@@ -113,7 +107,6 @@ impl SubTask {
         );
 
         Task {
-            title: self.title,
             payload: self.payload,
             qos: self.qos,
             retain: self.retain,
@@ -133,14 +126,66 @@ fn json_command_to_text(command: &Value) -> String {
 
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(location_str) = topics_to_locations(&self.topics) {
+            write!(f, "{location_str}: ")?;
+        }
+
         let action_str = match &self.payload {
-            Payload::String(payload) => payload.clone(),
+            Payload::String(payload) => string_to_text(&self.topics, payload),
             Payload::Json(payload) => json_command_to_text(payload),
             Payload::Command(payload) => payload.to_string(),
         };
 
         write!(f, "{action_str}")?;
-
         Ok(())
+    }
+}
+
+fn topics_to_locations(topics: &[String]) -> Option<String> {
+    if topics.is_empty() {
+        Some("Nowhere".to_string())
+    } else {
+        let locations = topics
+            .iter()
+            .filter_map(|s| topic_to_location(s))
+            .collect::<Vec<_>>();
+
+        if locations.is_empty() {
+            None
+        } else {
+            Some(locations.join(", "))
+        }
+    }
+}
+
+fn topic_to_location(topic: &str) -> Option<String> {
+    let split: Vec<&str> = topic.split('/').collect();
+
+    #[allow(clippy::match_same_arms)]
+    match split[..] {
+        ["ha", "event", "message"] => None,
+        ["ha", "event", "sleep", "brian", ..] => Some("Brian's Room".to_string()),
+        ["ha", "event", "wakeup", "brian", ..] => Some("Brian's Room".to_string()),
+        ["command", "Brian", ..] => Some("Brian's Room".to_string()),
+        ["command", "Jan", ..] => Some("Jan's Room".to_string()),
+        ["command", "Twins", ..] => Some("Twins' Room".to_string()),
+        ["command", "Tesla", ..] => Some("Tesla".to_string()),
+        _ => Some(topic.to_string()),
+    }
+}
+
+fn string_to_text(topics: &[String], payload: &str) -> String {
+    let topic = topics.first().map(String::as_str);
+
+    match topic {
+        Some("ha/event/sleep/brian/1") => "Sleep 1".to_string(),
+        Some("ha/event/sleep/brian/2") => "Sleep 2".to_string(),
+        Some("ha/event/sleep/brian/3") => "Sleep 3".to_string(),
+        Some("ha/event/sleep/brian/4") => "Sleep 4".to_string(),
+        Some("ha/event/wakeup/brian/1") => "Wake up 1".to_string(),
+        Some("ha/event/wakeup/brian/2") => "Wake up 2".to_string(),
+        Some("ha/event/wakeup/brian/3") => "Wake up 3".to_string(),
+        Some("ha/event/wakeup/brian/4") => "Wake up 4".to_string(),
+        _ => format!("Unknown {} {}", topics.join(", "), payload),
     }
 }

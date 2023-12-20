@@ -374,7 +374,7 @@ fn sequences_to_slint<'a>(
 ) -> Vec<slint::SequenceData> {
     sequences
         .map(|s| {
-            let tasks: Vec<SharedString> = s.tasks.iter().map(|t| t.title.clone().into()).collect();
+            let tasks: Vec<SharedString> = s.tasks.iter().map(|t| t.to_string().into()).collect();
             let b: VecModel<SharedString> = VecModel::from(tasks);
             let c: ModelRc<SharedString> = ModelRc::new(b);
 

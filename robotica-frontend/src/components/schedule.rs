@@ -208,7 +208,7 @@ fn task_to_html(
     html! {
         html! {
             <>
-                <div class="task" onclick={move |_| on_click.emit(OpenedId::Task(id_clone.clone()))}><span>{&task.title}</span></div>
+                <div class="task" onclick={move |_| on_click.emit(OpenedId::Task(id_clone.clone()))}><span>{task.to_string()}</span></div>
                 {
                     if OpenedId::Task(id) == *opened_id {
                         popover_task_content(task, on_close)
@@ -369,7 +369,7 @@ fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
                 <div class="modal-dialog">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h1 class="modal-title fs-5">{"Task: "}{&task.title}</h1>
+                            <h1 class="modal-title fs-5">{"Task: "}{task.to_owned()}</h1>
                             <button type="button" class="btn-close" aria-label="Close" onclick={on_close.clone()}></button>
                         </div>
                         <div class="modal-body">

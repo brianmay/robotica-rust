@@ -25,9 +25,6 @@ use super::{
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
 pub struct ConfigTask {
-    /// The title of the task.
-    pub title: String,
-
     /// The payload of the task.
     #[serde(flatten)]
     pub payload: Option<Payload>,
@@ -312,7 +309,6 @@ fn config_to_sequence(
         .tasks
         .into_iter()
         .map(|src_task| Task {
-            title: src_task.title,
             payload: src_task
                 .payload
                 .unwrap_or_else(|| Payload::String(String::new())),
@@ -542,11 +538,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/1".to_string()],
                 }],
             },
             Config {
@@ -562,11 +557,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/2".to_string()],
                 }],
             },
         ];
@@ -594,7 +588,7 @@ mod tests {
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].title, "task 1");
+        assert_eq!(sequence[0].tasks[0].topics, vec!["test/task/1".to_string()]);
 
         assert_eq!(
             sequence[1].start_time,
@@ -606,7 +600,7 @@ mod tests {
         );
         assert_eq!(sequence[1].id, "test_1");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].title, "task 2");
+        assert_eq!(sequence[1].tasks[0].topics, vec!["test/task/2".to_string()]);
     }
 
     #[test]
@@ -625,11 +619,10 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/1".to_string()],
                 }],
             },
             Config {
@@ -645,11 +638,10 @@ mod tests {
                 repeat_count: Some(2),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/2".to_string()],
                 }],
             },
         ];
@@ -700,11 +692,10 @@ mod tests {
             repeat_count: Some(0),
             repeat_time: Some(Duration::minutes(5)),
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/1".to_string()],
             }],
         }];
 
@@ -729,11 +720,10 @@ mod tests {
             repeat_count: Some(1),
             repeat_time: Some(Duration::minutes(5)),
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/2".to_string()],
             }],
         }];
 
@@ -763,11 +753,10 @@ mod tests {
                 repeat_count: Some(3),
                 repeat_time: Some(Duration::minutes(5)),
                 tasks: vec![ConfigTask {
-                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/1".to_string()],
                 }],
             },
             Config {
@@ -783,11 +772,10 @@ mod tests {
                 repeat_count: Some(3),
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/2".to_string()],
                 }],
             },
         ];
@@ -840,11 +828,10 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/1".to_string()],
             }],
         };
 
@@ -887,11 +874,10 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/1".to_string()],
             }],
         };
 
@@ -934,11 +920,10 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: None,
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/1".to_string()],
             }],
         };
 
@@ -987,7 +972,6 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1007,7 +991,6 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
@@ -1067,11 +1050,10 @@ mod tests {
             repeat_count: Some(2),
             repeat_time: Some(Duration::minutes(10)),
             tasks: vec![ConfigTask {
-                title: "task 1".to_string(),
                 payload: None,
                 qos: None,
                 retain: None,
-                topics: vec!["test/test".to_string()],
+                topics: vec!["test/task/1".to_string()],
             }],
         }];
 
@@ -1141,11 +1123,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 1".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/1".to_string()],
                 }],
             },
             Config {
@@ -1161,11 +1142,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 2".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/2".to_string()],
                 }],
             },
         ];
@@ -1184,11 +1164,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 3".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/3".to_string()],
                 }],
             },
             Config {
@@ -1204,11 +1183,10 @@ mod tests {
                 repeat_count: None,
                 repeat_time: None,
                 tasks: vec![ConfigTask {
-                    title: "task 4".to_string(),
                     payload: None,
                     qos: None,
                     retain: None,
-                    topics: vec!["test/test".to_string()],
+                    topics: vec!["test/task/4".to_string()],
                 }],
             },
         ];
@@ -1237,8 +1215,7 @@ mod tests {
         );
         assert_eq!(sequence[0].id, "test_0");
         assert_eq!(sequence[0].tasks.len(), 1);
-        assert_eq!(sequence[0].tasks[0].title, "task 1");
-
+        assert_eq!(sequence[0].tasks[0].topics, vec!["test/task/1".to_string()]);
         assert_eq!(
             sequence[1].start_time,
             Utc.with_ymd_and_hms(2020, 12, 25, 0, 10, 0).unwrap()
@@ -1249,7 +1226,7 @@ mod tests {
         );
         assert_eq!(sequence[1].id, "christmas_0");
         assert_eq!(sequence[1].tasks.len(), 1);
-        assert_eq!(sequence[1].tasks[0].title, "task 3");
+        assert_eq!(sequence[0].tasks[0].topics, vec!["test/task/3".to_string()]);
 
         assert_eq!(
             sequence[2].start_time,
@@ -1261,7 +1238,7 @@ mod tests {
         );
         assert_eq!(sequence[2].id, "test_1");
         assert_eq!(sequence[2].tasks.len(), 1);
-        assert_eq!(sequence[2].tasks[0].title, "task 2");
+        assert_eq!(sequence[0].tasks[0].topics, vec!["test/task/2".to_string()]);
 
         assert_eq!(
             sequence[3].start_time,
@@ -1273,7 +1250,7 @@ mod tests {
         );
         assert_eq!(sequence[3].id, "christmas_1");
         assert_eq!(sequence[3].tasks.len(), 1);
-        assert_eq!(sequence[3].tasks[0].title, "task 4");
+        assert_eq!(sequence[0].tasks[0].topics, vec!["test/task/4".to_string()]);
     }
 
     #[test]
@@ -1306,7 +1283,6 @@ mod tests {
                     repeat_count: None,
                     repeat_time: None,
                     tasks: vec![ConfigTask {
-                        title: "task".to_string(),
                         payload: None,
                         qos: None,
                         retain: None,
@@ -1329,7 +1305,6 @@ mod tests {
                     repeat_count: None,
                     repeat_time: None,
                     tasks: vec![ConfigTask {
-                        title: "task 1".to_string(),
                         payload: None,
                         qos: None,
                         retain: None,
