@@ -34,7 +34,10 @@ pub enum Params {
 
         /// The status of the message
         #[serde(rename = "em:0")]
-        em_0: Em0,
+        em_0: Option<Em0>,
+        // The status of the message
+        // #[serde(rename = "emdata:0")]
+        // emdata_0: Option<Em0Data>,
     },
 
     /// NotifyEvent message
@@ -182,7 +185,11 @@ mod tests {
         assert_eq!(data.src, "emeter/0");
         assert_eq!(data.dst, "shellies/shellyem-B8B7F1");
 
-        let Params::NotifyStatus { ts, em_0 } = data.params else {
+        let Params::NotifyStatus {
+            ts,
+            em_0: Some(em_0),
+        } = data.params
+        else {
             panic!();
         };
 

@@ -117,7 +117,10 @@ impl GetQueries for shelly::Notify {
         let time = self.params.get_datetime().unwrap_or_else(Utc::now);
         let topic = |suffix| format!("{topic}/{suffix}");
 
-        if let shelly::Params::NotifyStatus { em_0: status, .. } = self.params {
+        if let shelly::Params::NotifyStatus {
+            em_0: Some(status), ..
+        } = self.params
+        {
             vec![
                 ShellyReading {
                     time,
