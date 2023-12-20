@@ -42,8 +42,6 @@ pub enum Params {
     NotifyEvent {
         /// The timestamp of the message
         ts: f64,
-        /// The status of the message
-        period: u8,
         // TODO: Add the rest of the fields
     },
 }
