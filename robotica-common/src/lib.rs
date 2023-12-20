@@ -12,6 +12,7 @@ pub mod config;
 pub mod controllers;
 pub mod mqtt;
 pub mod robotica;
+pub mod shelly;
 pub mod user;
 pub mod version;
 pub mod websocket;

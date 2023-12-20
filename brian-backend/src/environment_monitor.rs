@@ -1,16 +1,21 @@
 use chrono::{DateTime, Utc};
-use influxdb::InfluxDbWriteable;
+use influxdb::{InfluxDbWriteable, WriteQuery};
 use robotica_backend::pipes::{Subscriber, Subscription};
 use robotica_backend::spawn;
 use robotica_common::anavi_thermometer::{self as anavi};
 use robotica_common::mqtt::{Json, MqttMessage};
-use robotica_common::zwave;
+use robotica_common::{shelly, zwave};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use tap::{Pipe, Tap};
 use tracing::error;
 
 use crate::influxdb::Config;
 use crate::InitState;
+
+trait GetQueries {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery>;
+}
 
 #[derive(Debug, InfluxDbWriteable)]
 struct InfluxReadingF64 {
@@ -18,30 +23,36 @@ struct InfluxReadingF64 {
     time: DateTime<Utc>,
 }
 
-impl From<anavi::Temperature> for InfluxReadingF64 {
-    fn from(reading: anavi::Temperature) -> Self {
-        Self {
-            value: reading.temperature,
+impl GetQueries for anavi::Temperature {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        InfluxReadingF64 {
+            value: self.temperature,
             time: Utc::now(),
         }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
     }
 }
 
-impl From<anavi::Humidity> for InfluxReadingF64 {
-    fn from(reading: anavi::Humidity) -> Self {
-        Self {
-            value: reading.humidity,
+impl GetQueries for anavi::Humidity {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        InfluxReadingF64 {
+            value: self.humidity,
             time: Utc::now(),
         }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
     }
 }
 
-impl From<zwave::Data<f64>> for InfluxReadingF64 {
-    fn from(reading: zwave::Data<f64>) -> Self {
-        Self {
-            value: reading.value,
-            time: reading.get_datetime().unwrap_or_else(Utc::now),
+impl GetQueries for zwave::Data<f64> {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        InfluxReadingF64 {
+            value: self.value,
+            time: self.get_datetime().unwrap_or_else(Utc::now),
         }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
     }
 }
 
@@ -51,12 +62,14 @@ struct InfluxReadingU8 {
     time: DateTime<Utc>,
 }
 
-impl From<zwave::Data<u8>> for InfluxReadingU8 {
-    fn from(reading: zwave::Data<u8>) -> Self {
-        Self {
-            value: reading.value,
-            time: reading.get_datetime().unwrap_or_else(Utc::now),
+impl GetQueries for zwave::Data<u8> {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        InfluxReadingU8 {
+            value: self.value,
+            time: self.get_datetime().unwrap_or_else(Utc::now),
         }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
     }
 }
 
@@ -75,17 +88,82 @@ struct FishTankReading {
     time: DateTime<Utc>,
 }
 
-pub fn monitor_reading<T, Influx>(state: &mut InitState, topic: &str, config: &Config)
+impl GetQueries for FishTankData {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        FishTankReading {
+            distance: self.distance,
+            temperature: self.temperature,
+            tds: self.tds,
+            time: Utc::now(),
+        }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
+    }
+}
+
+#[derive(Debug, InfluxDbWriteable)]
+struct ShellyReading {
+    pub time: DateTime<Utc>,
+    pub act_power: f64,
+    pub aprt_power: f64,
+    pub current: f64,
+    pub freq: f64,
+    pub pf: f64,
+    pub voltage: f64,
+}
+
+impl GetQueries for shelly::NotifyStatus {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        let time = self.params.get_datetime().unwrap_or_else(Utc::now);
+        let status = self.params.em_0;
+        let topic = |suffix| format!("{topic}/{suffix}");
+
+        vec![
+            ShellyReading {
+                time,
+                act_power: status.a_act_power,
+                aprt_power: status.a_aprt_power,
+                current: status.a_current,
+                freq: status.a_freq,
+                pf: status.a_pf,
+                voltage: status.a_voltage,
+            }
+            .into_query(topic("a")),
+            ShellyReading {
+                time,
+                act_power: status.b_act_power,
+                aprt_power: status.b_aprt_power,
+                current: status.b_current,
+                freq: status.b_freq,
+                pf: status.b_pf,
+                voltage: status.b_voltage,
+            }
+            .into_query(topic("b")),
+            ShellyReading {
+                time,
+                act_power: status.c_act_power,
+                aprt_power: status.c_aprt_power,
+                current: status.c_current,
+                freq: status.c_freq,
+                pf: status.c_pf,
+                voltage: status.c_voltage,
+            }
+            .into_query(topic("c")),
+        ]
+        .tap(|x| tracing::debug!("ShellyReading: {:?}", x))
+    }
+}
+
+fn monitor_reading<T>(state: &mut InitState, mqtt_topic: &str, influx_topic: &str, config: &Config)
 where
-    T: Clone + Send + 'static + Into<Influx> + DeserializeOwned,
-    Influx: InfluxDbWriteable + Send,
+    T: Clone + Send + 'static + GetQueries + DeserializeOwned,
     Json<T>: TryFrom<MqttMessage>,
     <Json<T> as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
 {
     let rx = state
         .subscriptions
-        .subscribe_into_stateless::<Json<T>>(topic);
-    let topic = topic.to_string();
+        .subscribe_into_stateless::<Json<T>>(mqtt_topic);
+    let influx_topic = influx_topic.to_string();
     let config = config.clone();
 
     spawn(async move {
@@ -93,38 +171,12 @@ where
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
-            let reading: Influx = data.into();
-            let query = reading.into_query(&topic);
-
-            if let Err(e) = client.query(&query).await {
-                error!("Failed to write to influxdb: {}", e);
-            }
-        }
-    });
-}
-
-pub fn monitor_fishtank(state: &mut InitState, topic: &str, config: &Config) {
-    let rx = state
-        .subscriptions
-        .subscribe_into_stateless::<Json<FishTankData>>(topic);
-    let topic = topic.to_string();
-    let config = config.clone();
-
-    spawn(async move {
-        let client = config.get_client();
-        let mut s = rx.subscribe().await;
-
-        while let Ok(Json(data)) = s.recv().await {
-            let reading = FishTankReading {
-                distance: data.distance,
-                temperature: data.temperature,
-                tds: data.tds,
-                time: Utc::now(),
-            }
-            .into_query(&topic);
-
-            if let Err(e) = client.query(&reading).await {
-                error!("Failed to write to influxdb: {}", e);
+            tracing::debug!("Got data for {influx_topic}");
+            for query in data.get_queries(&influx_topic) {
+                tracing::debug!("Writing to influxdb: {:?}", query);
+                if let Err(e) = client.query(&query).await {
+                    error!("Failed to write to influxdb: {}", e);
+                }
             }
         }
     });
@@ -132,65 +184,75 @@ pub fn monitor_fishtank(state: &mut InitState, topic: &str, config: &Config) {
 
 fn monitor_zwave_switch(state: &mut InitState, topic_substr: &str, config: &Config) {
     // kwh
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        &format!("zwave/{topic_substr}/50/0/value/65537"),
         &format!("zwave/{topic_substr}/50/0/value/65537"),
         config,
     );
 
     // watts
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        &format!("zwave/{topic_substr}/50/0/value/66049"),
         &format!("zwave/{topic_substr}/50/0/value/66049"),
         config,
     );
 
     // voltage
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        &format!("zwave/{topic_substr}/50/0/value/66561"),
         &format!("zwave/{topic_substr}/50/0/value/66561"),
         config,
     );
 
     // current
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        &format!("zwave/{topic_substr}/50/0/value/66817"),
         &format!("zwave/{topic_substr}/50/0/value/66817"),
         config,
     );
 }
 
 pub fn run(state: &mut InitState, config: &Config) {
-    monitor_reading::<anavi::Temperature, InfluxReadingF64>(
+    monitor_reading::<anavi::Temperature>(
         state,
+        "workgroup/3765653003a76f301ad767b4676d7065/air/temperature",
         "workgroup/3765653003a76f301ad767b4676d7065/air/temperature",
         config,
     );
-    monitor_reading::<anavi::Humidity, InfluxReadingF64>(
+    monitor_reading::<anavi::Humidity>(
         state,
+        "workgroup/3765653003a76f301ad767b4676d7065/air/humidity",
         "workgroup/3765653003a76f301ad767b4676d7065/air/humidity",
         config,
     );
-    monitor_reading::<anavi::Temperature, InfluxReadingF64>(
+    monitor_reading::<anavi::Temperature>(
         state,
+        "workgroup/3765653003a76f301ad767b4676d7065/water/temperature",
         "workgroup/3765653003a76f301ad767b4676d7065/water/temperature",
         config,
     );
 
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Air_temperature",
         "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Air_temperature",
         config,
     );
 
-    monitor_reading::<zwave::Data<u8>, InfluxReadingU8>(
+    monitor_reading::<zwave::Data<u8>>(
         state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Humidity",
         "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Humidity",
         config,
     );
 
-    monitor_reading::<zwave::Data<f64>, InfluxReadingF64>(
+    monitor_reading::<zwave::Data<f64>>(
         state,
+        "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Dew_point",
         "zwave/Akiras_Bedroom/Akiras_Environment/49/0/Dew_point",
         config,
     );
@@ -200,5 +262,19 @@ pub fn run(state: &mut InitState, config: &Config) {
     monitor_zwave_switch(state, "Laundry/Freezer", config);
     monitor_zwave_switch(state, "Workshop/Pump", config);
 
-    monitor_fishtank(state, "fishtank/sensors", config);
+    monitor_reading::<FishTankData>(state, "fishtank/sensors", "fishtank/sensors", config);
+
+    monitor_reading::<shelly::NotifyStatus>(
+        state,
+        "shellypro3em-c8f09e8971ec/events/rpc",
+        "shellypro3em-c8f09e8971ec",
+        config,
+    );
+
+    monitor_reading::<shelly::NotifyStatus>(
+        state,
+        "shellypro3em-ec6260977960/events/rpc",
+        "shellypro3em-ec6260977960",
+        config,
+    );
 }
