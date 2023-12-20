@@ -7,7 +7,7 @@ use robotica_common::mqtt::{Json, MqttMessage};
 use robotica_common::{shelly, zwave};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use tap::{Pipe, Tap};
+use tap::Pipe;
 use tracing::error;
 
 use crate::influxdb::Config;
@@ -118,39 +118,42 @@ impl GetQueries for shelly::NotifyStatus {
         let status = self.params.em_0;
         let topic = |suffix| format!("{topic}/{suffix}");
 
-        vec![
-            ShellyReading {
-                time,
-                act_power: status.a_act_power,
-                aprt_power: status.a_aprt_power,
-                current: status.a_current,
-                freq: status.a_freq,
-                pf: status.a_pf,
-                voltage: status.a_voltage,
-            }
-            .into_query(topic("a")),
-            ShellyReading {
-                time,
-                act_power: status.b_act_power,
-                aprt_power: status.b_aprt_power,
-                current: status.b_current,
-                freq: status.b_freq,
-                pf: status.b_pf,
-                voltage: status.b_voltage,
-            }
-            .into_query(topic("b")),
-            ShellyReading {
-                time,
-                act_power: status.c_act_power,
-                aprt_power: status.c_aprt_power,
-                current: status.c_current,
-                freq: status.c_freq,
-                pf: status.c_pf,
-                voltage: status.c_voltage,
-            }
-            .into_query(topic("c")),
-        ]
-        .tap(|x| tracing::debug!("ShellyReading: {:?}", x))
+        if self.method == "NotifyStatus" {
+            vec![
+                ShellyReading {
+                    time,
+                    act_power: status.a_act_power,
+                    aprt_power: status.a_aprt_power,
+                    current: status.a_current,
+                    freq: status.a_freq,
+                    pf: status.a_pf,
+                    voltage: status.a_voltage,
+                }
+                .into_query(topic("a")),
+                ShellyReading {
+                    time,
+                    act_power: status.b_act_power,
+                    aprt_power: status.b_aprt_power,
+                    current: status.b_current,
+                    freq: status.b_freq,
+                    pf: status.b_pf,
+                    voltage: status.b_voltage,
+                }
+                .into_query(topic("b")),
+                ShellyReading {
+                    time,
+                    act_power: status.c_act_power,
+                    aprt_power: status.c_aprt_power,
+                    current: status.c_current,
+                    freq: status.c_freq,
+                    pf: status.c_pf,
+                    voltage: status.c_voltage,
+                }
+                .into_query(topic("c")),
+            ]
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -171,9 +174,7 @@ where
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
-            tracing::debug!("Got data for {influx_topic}");
             for query in data.get_queries(&influx_topic) {
-                tracing::debug!("Writing to influxdb: {:?}", query);
                 if let Err(e) = client.query(&query).await {
                     error!("Failed to write to influxdb: {}", e);
                 }
