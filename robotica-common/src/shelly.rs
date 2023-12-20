@@ -7,7 +7,7 @@ use serde::Serialize;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 /// MQTT message sent by the Shelly EM
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Notify {
     /// The source of the message
@@ -22,7 +22,7 @@ pub struct Notify {
 }
 
 /// Parameters of the MQTT message sent by the Shelly EM
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
 pub enum Params {
@@ -64,7 +64,9 @@ impl Params {
 }
 
 /// The status of the Shelly EM
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// See <https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM>
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Em0 {
     /// The id of the message
@@ -135,6 +137,35 @@ pub struct Em0 {
 
     /// The Total Current
     pub total_current: f64,
+}
+
+/// The temperature field of `SwitchStatus`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Temperature {
+    /// The temperature in degrees Celsius
+    pub t_c: f32,
+
+    /// The temperature in degrees Fahrenheit
+    pub t_f: f32,
+}
+
+/// The status of the Shelly Switch
+///
+/// See <https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Switch>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwitchStatus {
+    /// The id of the message
+    pub id: i64,
+
+    /// The source of the last command
+    pub source: String,
+
+    /// The state of the switch
+    pub output: bool,
+
+    /// The temperature of the switch
+    pub temperature: Temperature,
 }
 
 #[cfg(test)]

@@ -73,6 +73,25 @@ impl GetQueries for zwave::Data<u8> {
     }
 }
 
+#[derive(Debug, InfluxDbWriteable)]
+struct ShellySwitchReading {
+    output: bool,
+    temperature: f32,
+    time: DateTime<Utc>,
+}
+
+impl GetQueries for shelly::SwitchStatus {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        ShellySwitchReading {
+            output: self.output,
+            temperature: self.temperature.t_c,
+            time: Utc::now(),
+        }
+        .pipe(|x| x.into_query(topic))
+        .pipe(|x| vec![x])
+    }
+}
+
 #[derive(Deserialize, Clone, Debug)]
 struct FishTankData {
     distance: u16,
@@ -280,4 +299,6 @@ pub fn run(state: &mut InitState, config: &Config) {
         "shellypro3em-ec6260977960",
         config,
     );
+
+    monitor_reading::<shelly::SwitchStatus>(state, "hotwater/status/switch:0", "hotwater", config);
 }
