@@ -179,7 +179,7 @@ mod tests {
     fn test_shelly_em() {
         let data = r#"{
             "src": "emeter/0",
-            "dst": "shellies/shellyem-B8B7F1",
+            "dst": "shelly/shellyem-B8B7F1",
             "method": "NotifyStatus",
             "params": {
                 "ts": 1684470932558,
@@ -214,7 +214,7 @@ mod tests {
         let data: Notify = serde_json::from_str(data).unwrap();
 
         assert_eq!(data.src, "emeter/0");
-        assert_eq!(data.dst, "shellies/shellyem-B8B7F1");
+        assert_eq!(data.dst, "shelly/shellyem-B8B7F1");
 
         let Params::NotifyStatus {
             ts,
