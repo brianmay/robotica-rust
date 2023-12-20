@@ -112,13 +112,12 @@ struct ShellyReading {
     pub voltage: f64,
 }
 
-impl GetQueries for shelly::NotifyStatus {
+impl GetQueries for shelly::Notify {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
         let time = self.params.get_datetime().unwrap_or_else(Utc::now);
-        let status = self.params.em_0;
         let topic = |suffix| format!("{topic}/{suffix}");
 
-        if self.method == "NotifyStatus" {
+        if let shelly::Params::NotifyStatus { em_0: status, .. } = self.params {
             vec![
                 ShellyReading {
                     time,
@@ -265,14 +264,14 @@ pub fn run(state: &mut InitState, config: &Config) {
 
     monitor_reading::<FishTankData>(state, "fishtank/sensors", "fishtank/sensors", config);
 
-    monitor_reading::<shelly::NotifyStatus>(
+    monitor_reading::<shelly::Notify>(
         state,
         "shellypro3em-c8f09e8971ec/events/rpc",
         "shellypro3em-c8f09e8971ec",
         config,
     );
 
-    monitor_reading::<shelly::NotifyStatus>(
+    monitor_reading::<shelly::Notify>(
         state,
         "shellypro3em-ec6260977960/events/rpc",
         "shellypro3em-ec6260977960",
