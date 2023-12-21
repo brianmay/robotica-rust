@@ -148,7 +148,9 @@
             cargoExtraArgs = "-p brian-backend";
             nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
-            installCargoArtifactsMode = "use-zstd";
+            # See https://github.com/ipetkov/crane/issues/414#issuecomment-1860852084
+            # for possible work around if this is required in the future.
+            # installCargoArtifactsMode = "use-zstd";
           };
 
           # Build *just* the cargo dependencies, so we can reuse
@@ -191,7 +193,6 @@
             cargoExtraArgs = "-p freeswitch";
             nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
-            # installCargoArtifactsMode = "use-zstd";
           };
 
           # Build *just* the cargo dependencies, so we can reuse
@@ -213,7 +214,6 @@
           pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
-            # CARGO_LOG = "cargo::core::compiler::fingerprint=info";
           } // common // build_env);
 
           wrapper = pkgs.writeShellScriptBin "freeswitch" ''
