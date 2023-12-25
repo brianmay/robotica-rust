@@ -178,25 +178,22 @@ fn calendar_start_top_times(
 }
 
 async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Config) {
-    let price_summary_rx = amber::run(&state, config.amber, &config.influxdb).unwrap_or_else(|e| {
+    let amber_outputs = amber::run(&state, config.amber, &config.influxdb).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
 
-    price_summary_rx
-        .clone()
-        .map(|(_, current)| current.is_cheap_2hr)
-        .for_each(move |(old, current)| {
-            if old.is_some() {
-                let message = if current {
-                    "2 hour cheap price has started"
-                } else {
-                    "2 hour cheap price has ended"
-                };
-                info!("{}", message);
-            }
-        });
+    amber_outputs.is_cheap_2hr.for_each(move |(old, current)| {
+        if old.is_some() {
+            let message = if current {
+                "2 hour cheap price has started"
+            } else {
+                "2 hour cheap price has ended"
+            };
+            info!("{}", message);
+        }
+    });
 
-    monitor_charging(&mut state, 1, price_summary_rx).unwrap_or_else(|e| {
+    monitor_charging(&mut state, 1, amber_outputs.price_category).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");
     });
 

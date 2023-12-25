@@ -60,6 +60,33 @@ const fn hours(num: u16) -> u16 {
     num * HOURS_TO_SECONDS
 }
 
+/// Outputs from Amber
+pub struct OutputsReceiver {
+    pub price_category: stateful::Receiver<PriceCategory>,
+    pub is_cheap_2hr: stateful::Receiver<bool>,
+}
+
+pub struct OutputsSender {
+    pub price_category: stateful::Sender<PriceCategory>,
+    pub is_cheap_2hr: stateful::Sender<bool>,
+}
+
+fn new_outputs() -> (OutputsSender, OutputsReceiver) {
+    let (price_category_tx, price_category_rx) = stateful::create_pipe("amber_output_category");
+    let (is_cheap_2hr_tx, is_cheap_2hr_rx) = stateful::create_pipe("amber_output_is_cheap_2hr");
+
+    (
+        OutputsSender {
+            price_category: price_category_tx,
+            is_cheap_2hr: is_cheap_2hr_tx,
+        },
+        OutputsReceiver {
+            price_category: price_category_rx,
+            is_cheap_2hr: is_cheap_2hr_rx,
+        },
+    )
+}
+
 /// Get the current electricity price from Amber
 ///
 /// # Errors
@@ -70,8 +97,8 @@ pub fn run(
     state: &InitState,
     config: Config,
     influxdb_config: &influx::Config,
-) -> Result<stateful::Receiver<PriceSummary>, Error> {
-    let (tx, rx) = stateful::create_pipe("amber_summary");
+) -> Result<OutputsReceiver, Error> {
+    let (tx, rx) = new_outputs();
 
     let psr = state
         .persistent_state_database
@@ -120,7 +147,8 @@ pub fn run(
 
                             // Write the prices to influxdb and send
                             prices_to_influxdb(&influxdb_config, &prices, &summary).await;
-                            tx.try_send(summary);
+                            tx.price_category.try_send(summary.category);
+                            tx.is_cheap_2hr.try_send(summary.is_cheap_2hr);
 
                             // Add margin to allow time for Amber to update.
                             let update_time = update_time + Duration::seconds(5);

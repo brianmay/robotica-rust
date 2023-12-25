@@ -1,4 +1,4 @@
-use crate::amber::{PriceCategory, PriceSummary};
+use crate::amber::PriceCategory;
 use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
@@ -479,7 +479,7 @@ enum TeslaResult {
 pub fn monitor_charging(
     state: &mut InitState,
     car_number: usize,
-    price_summary_rx: stateful::Receiver<PriceSummary>,
+    price_category_rx: stateful::Receiver<PriceCategory>,
 ) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
@@ -490,8 +490,6 @@ pub fn monitor_charging(
 
     let mqtt = state.mqtt.clone();
     let message_sink = state.message_sink.clone();
-
-    let price_category_rx = price_summary_rx.map(|(_, ps)| ps.category);
 
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
