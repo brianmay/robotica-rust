@@ -6,27 +6,7 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/robotica-common"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/robotica-backend"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/robotica-frontend"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "npm"
-    directory: "/robotica-frontend"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/robotica-slint"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/brian-backend"
+    directory: "/"
     schedule:
       interval: "daily"
   - package-ecosystem: github-actions
