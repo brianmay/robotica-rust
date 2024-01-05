@@ -14,7 +14,7 @@ serde_yaml = "0.9.30"
 chrono = { version = "0.4.22", features = ["serde"] }
 chrono-tz = "0.8.0"
 thiserror = "1.0.56"
-color-backtrace = "0.6.0"
+color-backtrace = "0.6.1"
 tracing = "0.1.35"
 tracing-subscriber = "0.3.14"
 robotica-common = { path = "../robotica-common", features = ["websockets"] }

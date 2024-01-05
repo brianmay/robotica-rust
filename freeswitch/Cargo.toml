@@ -11,7 +11,7 @@ static_ssl = ['openssl/vendored']
 
 [dependencies]
 anyhow = "1.0.70"
-color-backtrace = "0.6.0"
+color-backtrace = "0.6.1"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 robotica-backend = { path = "../robotica-backend" }
 serde = { version = "1.0.158", features = ["derive"] }
