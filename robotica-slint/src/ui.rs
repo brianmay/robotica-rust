@@ -31,6 +31,7 @@ mod slint {
     #![allow(clippy::cast_possible_wrap)]
     #![allow(clippy::float_cmp)]
     #![allow(clippy::needless_pass_by_ref_mut)]
+    #![allow(unused_imports)]
 
     slint::include_modules!();
 }
