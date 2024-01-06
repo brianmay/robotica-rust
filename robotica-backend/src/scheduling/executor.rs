@@ -49,17 +49,16 @@ struct Config<T: TimeZone> {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
-    extra_config: ExtraConfig,
+    extra: ExtraConfig,
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 }
 impl<T: TimeZone + Copy> Config<T> {
     fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
-        let calendar =
-            calendar::load(&self.extra_config.calendar_url, start, stop).unwrap_or_else(|e| {
-                error!("Error loading calendar: {e}");
-                Vec::new()
-            });
+        let calendar = calendar::load(&self.extra.calendar_url, start, stop).unwrap_or_else(|e| {
+            error!("Error loading calendar: {e}");
+            Vec::new()
+        });
 
         let mut sequences = Vec::new();
 
@@ -194,7 +193,7 @@ impl AllStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum EventType {
+enum EventKind {
     Start,
     Stop,
 }
@@ -203,7 +202,7 @@ enum EventType {
 struct Event {
     datetime: DateTime<Utc>,
     sequence_index: usize,
-    event_type: EventType,
+    kind: EventKind,
 }
 
 struct State<T: TimeZone> {
@@ -245,7 +244,7 @@ impl<T: TimeZone + Copy> State<T> {
 
     fn publish_tags(&self, tags: &Tags) {
         info!("Tags: {:?}", tags);
-        let topic = format!("robotica/{}/tags", self.config.extra_config.instance);
+        let topic = format!("robotica/{}/tags", self.config.extra.instance);
         let msg = Json(tags);
         let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
             error!("Failed to serialize tags: {:?}", tags);
@@ -269,7 +268,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
 
-        let topic = format!("schedule/{}/all", self.config.extra_config.instance);
+        let topic = format!("schedule/{}/all", self.config.extra.instance);
         self.publish_sequences(&sequences, topic, &self.publish_all_hash)
     }
 
@@ -281,7 +280,7 @@ impl<T: TimeZone + Copy> State<T> {
             .cloned()
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
-        let topic = format!("schedule/{}/important", self.config.extra_config.instance);
+        let topic = format!("schedule/{}/important", self.config.extra.instance);
         self.publish_sequences(&important, topic, &self.publish_important_hash)
     }
 
@@ -294,7 +293,7 @@ impl<T: TimeZone + Copy> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
-        let topic = format!("schedule/{}/pending", self.config.extra_config.instance);
+        let topic = format!("schedule/{}/pending", self.config.extra.instance);
         self.publish_sequences(&pending, topic, &self.publish_pending_hash)
     }
 
@@ -387,7 +386,7 @@ impl<T: TimeZone + Copy> State<T> {
                 let start = Event {
                     datetime: sequence.start_time,
                     sequence_index: index,
-                    event_type: EventType::Start,
+                    kind: EventKind::Start,
                 };
                 events.push(start);
             }
@@ -398,12 +397,12 @@ impl<T: TimeZone + Copy> State<T> {
                 let stop = Event {
                     datetime: sequence.end_time,
                     sequence_index: index,
-                    event_type: EventType::Stop,
+                    kind: EventKind::Stop,
                 };
                 events.push(stop);
             }
         }
-        events.sort_by_key(|event| (event.datetime, event.sequence_index, event.event_type));
+        events.sort_by_key(|event| (event.datetime, event.sequence_index, event.kind));
 
         self.events = VecDeque::from(events);
     }
@@ -411,8 +410,8 @@ impl<T: TimeZone + Copy> State<T> {
     #[must_use]
     #[allow(clippy::cognitive_complexity)]
     fn process_event(&mut self, event: &Event, now: DateTime<Utc>) -> bool {
-        match event.event_type {
-            EventType::Start => {
+        match event.kind {
+            EventKind::Start => {
                 let sequence = &self.sequences[event.sequence_index];
                 let status = self.get_status_for_sequence(sequence);
                 if status != Status::Pending {
@@ -441,7 +440,7 @@ impl<T: TimeZone + Copy> State<T> {
                     true
                 }
             }
-            EventType::Stop => {
+            EventKind::Stop => {
                 let sequence = &self.sequences[event.sequence_index];
                 let status = self.get_status_for_sequence(sequence);
                 if status == Status::InProgress {
@@ -566,7 +565,7 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
                 classifier,
                 scheduler,
                 sequencer,
-                extra_config,
+                extra: extra_config,
                 timezone,
                 calendar_to_sequence: Box::new(calendar_to_sequence),
             }
