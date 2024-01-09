@@ -20,7 +20,7 @@ serde_yaml = "0.9.30"
 anyhow = "1.0.70"
 reqwest = "0.11.23"
 # serde_path_to_error = "0.1.11"
-gethostname = "0.4.0"
+gethostname = "0.4.3"
 thiserror = "1.0.56"
 chrono = "0.4.24"
 lalrpop-util = { version = "0.20.0", features = ["lexer"], optional = true }
