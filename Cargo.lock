@@ -5724,9 +5724,9 @@ checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tower-sessions"
-version = "0.7.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce23a9827d593712d471a19d3cb1334e57a97e5b34a9f02b4eef2114b7405dcd"
+checksum = "201aa0cccd55f565d89086d231328877fb897ba01163a224b6b917e2361a6db6"
 dependencies = [
  "tower-sessions-core",
  "tower-sessions-memory-store",
@@ -5735,9 +5735,9 @@ dependencies = [
 
 [[package]]
 name = "tower-sessions-core"
-version = "0.7.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1d733b3ae4a6a4cb80cd585e87ffe1a1a7011174581785039c83c4cd63ee61c"
+checksum = "12564616434c7c811a229a223552b984f272e772d5dec4f71e61ca5bea7d3a3f"
 dependencies = [
  "async-trait",
  "axum-core 0.4.2",
@@ -5748,6 +5748,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "time",
+ "tokio",
  "tower-cookies",
  "tower-layer",
  "tower-service",
@@ -5757,21 +5758,21 @@ dependencies = [
 
 [[package]]
 name = "tower-sessions-memory-store"
-version = "0.7.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78d855ef8feaef2382c6df2cf4c4b6651dce890019ceaf0ec70c8af2516a1ce9"
+checksum = "d6800cb4ae79785b1bb413e48813306950902ef902f8ea93fce0a25032e2c254"
 dependencies = [
  "async-trait",
- "parking_lot",
  "time",
+ "tokio",
  "tower-sessions-core",
 ]
 
 [[package]]
 name = "tower-sessions-moka-store"
-version = "0.7.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94adaeb066f4c6d763a06f8505e0815ee7d8dee6bd22ead7c2a7a6cc6b12f791"
+checksum = "1a9d73decdac26dfec79f3c2263d9d310253dfda468d1ac8c55ba6dce09b286e"
 dependencies = [
  "async-trait",
  "moka",
