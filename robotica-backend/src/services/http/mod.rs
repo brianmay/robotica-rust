@@ -10,12 +10,10 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use axum::body::Body;
-use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, State};
 use axum::http::uri::PathAndQuery;
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::BoxError;
 use axum::Json;
 use axum::{extract::Query, routing::get, Router};
 use hyper::{Method, StatusCode};
@@ -159,17 +157,10 @@ pub enum HttpError {
 #[allow(clippy::unused_async)]
 pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Result<(), HttpError> {
     let session_store = MokaStore::new(Some(2_000));
-    // let session_store = MemoryStore::default();
-    let session_service = ServiceBuilder::new()
-        .layer(HandleErrorLayer::new(|_: BoxError| async {
-            ResponseError::bad_request("Session error")
-        }))
-        .layer(
-            SessionManagerLayer::new(session_store)
-                .with_secure(true)
-                .with_expiry(Expiry::OnInactivity(Duration::days(7)))
-                .with_same_site(SameSite::Lax),
-        );
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_expiry(Expiry::OnInactivity(Duration::days(7)))
+        .with_same_site(SameSite::Lax);
 
     let redirect = config
         .generate_url_or_default("/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz");
@@ -226,7 +217,7 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
         .route("/config", get(config_handler))
         .fallback(fallback_handler)
         .with_state(state)
-        .layer(session_service)
+        .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     #[allow(clippy::unwrap_used)]
@@ -246,7 +237,7 @@ async fn server(http_listener: String, app: Router) -> Result<(), HttpError> {
     Ok(())
 }
 
-fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), ResponseError> {
+async fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), ResponseError> {
     let closure = || {
         let sub = user_info.sub.clone()?;
         let name = user_info.name.clone()?;
@@ -259,14 +250,15 @@ fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), Respo
 
     session
         .insert("user", user)
+        .await
         .map_err(|err| ResponseError::internal_error(format!("Failed to insert user: {err}")))?;
 
     Ok(())
 }
 
-fn get_user(session: &Session) -> Option<User> {
+async fn get_user(session: &Session) -> Option<User> {
     let user = session.get::<User>("user");
-    user.unwrap_or_default()
+    user.await.unwrap_or_default()
 }
 
 const ASSET_SUFFIXES: [&str; 9] = [
@@ -289,7 +281,7 @@ async fn fallback_handler(
         ASSET_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
     };
 
-    if !asset_file && get_user(&session).is_none() {
+    if !asset_file && get_user(&session).await.is_none() {
         let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
         let auth_url = oidc_client.load().get_auth_url(origin_url);
         return Ok(Redirect::to(&auth_url).into_response());
@@ -343,7 +335,7 @@ fn nav_bar() -> Markup {
 async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Response {
     let version = version::Version::get();
 
-    let user = get_user(&session);
+    let user = get_user(&session).await;
     let backend_js = manifest.get_url("backend.js");
 
     Html(
@@ -395,13 +387,13 @@ async fn oidc_callback(
 
     let response = match result {
         Ok((_token, user_info)) => {
-            set_user(&session, &user_info)?;
+            set_user(&session, &user_info).await?;
 
             let url = http_config.generate_url_or_default(&state);
             Redirect::to(&url).into_response()
         }
         Err(e) => {
-            session.delete();
+            _ = session.delete().await;
             Html(
                 html!(
                         html {
@@ -428,7 +420,7 @@ async fn config_handler(
     State(config): State<Arc<Config>>,
     session: Session,
 ) -> Result<Json<ui_config::Config>, ResponseError> {
-    if get_user(&session).is_none() {
+    if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     };
 

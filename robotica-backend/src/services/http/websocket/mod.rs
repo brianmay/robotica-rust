@@ -34,7 +34,7 @@ pub(super) async fn websocket_handler(
     session: Session,
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
-    if let Some(user) = get_user(&session) {
+    if let Some(user) = get_user(&session).await {
         debug!("Accessing websocket");
         ws.on_upgrade(|socket| websocket(socket, config, user, mqtt))
             .into_response()
