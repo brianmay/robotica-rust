@@ -39,7 +39,7 @@ openid = "0.12.1"
 maud = { version = "0.26.0", features = ["axum"] }
 base64 = "0.21.7"
 url = "2.5.0"
-futures = "0.3.27"
+futures = "0.3.30"
 tower = "0.4.13"
 tower-http = { version = "0.5.0", features = ["fs", "trace"] }
 tower-sessions = { version = "0.9.1", features = ["moka-store"] }
