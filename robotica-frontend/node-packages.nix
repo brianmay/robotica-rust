@@ -1093,13 +1093,13 @@ let
         sha512 = "ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==";
       };
     };
-    "cosmiconfig-8.3.6" = {
+    "cosmiconfig-9.0.0" = {
       name = "cosmiconfig";
       packageName = "cosmiconfig";
-      version = "8.3.6";
+      version = "9.0.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/cosmiconfig/-/cosmiconfig-8.3.6.tgz";
-        sha512 = "kcZ6+W5QzcJ3P1Mt+83OUv/oHFqZHIx8DuxG6eZ5RGMERoLqp4BuGjhHLYGK+Kf5XVkQvqBSmAy/nGWN3qDgEA==";
+        url = "https://registry.npmjs.org/cosmiconfig/-/cosmiconfig-9.0.0.tgz";
+        sha512 = "itvL5h8RETACmOTFc4UfIyB2RfEHi71Ax6E/PivVxq9NseKbOWpeyHEOIbmAw1rs8Ak0VursQNww7lf7YtUwzg==";
       };
     };
     "cross-spawn-7.0.3" = {
@@ -1361,6 +1361,15 @@ let
       src = fetchurl {
         url = "https://registry.npmjs.org/entities/-/entities-2.2.0.tgz";
         sha512 = "p92if5Nz619I0w+akJrLZH0MX0Pb5DX39XOwQTtXSdQQOaYH03S1uIQp4mhOZtAXrxq4ViO67YTiLBo2638o9A==";
+      };
+    };
+    "env-paths-2.2.1" = {
+      name = "env-paths";
+      packageName = "env-paths";
+      version = "2.2.1";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz";
+        sha512 = "+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==";
       };
     };
     "envinfo-7.11.0" = {
@@ -2794,15 +2803,6 @@ let
         sha512 = "5DFkuoqlv1uYQKxy8omFBeJPQcdoE07Kv2sferDCrAq1ohOU+MSDswDIbnx3YAM60qIOnYa53wBhXW0EbMonrQ==";
       };
     };
-    "path-type-4.0.0" = {
-      name = "path-type";
-      packageName = "path-type";
-      version = "4.0.0";
-      src = fetchurl {
-        url = "https://registry.npmjs.org/path-type/-/path-type-4.0.0.tgz";
-        sha512 = "gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==";
-      };
-    };
     "path-type-5.0.0" = {
       name = "path-type";
       packageName = "path-type";
@@ -2848,13 +2848,13 @@ let
         sha512 = "Kkpbhhdjw2qQs2O2DGX+8m5OVqEcbB9HRBvuYM9pgrjEFUg30A9LmXNlTAUj4S9kgtGyrMbTzVjH7E+s5Re2yg==";
       };
     };
-    "postcss-loader-7.3.4" = {
+    "postcss-loader-8.0.0" = {
       name = "postcss-loader";
       packageName = "postcss-loader";
-      version = "7.3.4";
+      version = "8.0.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/postcss-loader/-/postcss-loader-7.3.4.tgz";
-        sha512 = "iW5WTTBSC5BfsBJ9daFMPVrLT36MrNiC6fqOZTTaHjBNX6Pfd5p+hSBqe/fEeNd7pc13QiAyGt7VdGMw4eRC4A==";
+        url = "https://registry.npmjs.org/postcss-loader/-/postcss-loader-8.0.0.tgz";
+        sha512 = "+RiNlmYd1aXYv6QSBOAu6n9eJYy0ydyXTfjljAJ3vFU6MMo2M552zTVcBpBH+R5aAeKaYVG1K9UEyAVsLL1Qjg==";
       };
     };
     "postcss-modules-extract-imports-3.0.0" = {
@@ -3181,13 +3181,13 @@ let
         sha512 = "uUxNQ3zAHeAx5nRFskBnrWzDUJrrvpCPD5FNAoRvTi0WwremlheES3tg+56PaVtCs5QDRX5CBLxxKMDJMEa1WQ==";
       };
     };
-    "sass-loader-13.3.3" = {
+    "sass-loader-14.0.0" = {
       name = "sass-loader";
       packageName = "sass-loader";
-      version = "13.3.3";
+      version = "14.0.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/sass-loader/-/sass-loader-13.3.3.tgz";
-        sha512 = "mt5YN2F1MOZr3d/wBRcZxeFgwgkH44wVc2zohO2YF6JiOMkiXe4BYRZpSu2sO1g71mo/j16txzUhsKZlqjVGzA==";
+        url = "https://registry.npmjs.org/sass-loader/-/sass-loader-14.0.0.tgz";
+        sha512 = "oceP9wWbep/yRJ2+sMbCzk0UsXsDzdNis+N8nu9i5GwPXjy6v3DNB6TqfJLSpPO9k4+B8x8p/CEgjA9ZLkoLug==";
       };
     };
     "schema-utils-3.3.0" = {
@@ -4035,11 +4035,7 @@ let
       sources."cookie-signature-1.0.6"
       sources."copy-webpack-plugin-12.0.2"
       sources."core-util-is-1.0.3"
-      (sources."cosmiconfig-8.3.6" // {
-        dependencies = [
-          sources."path-type-4.0.0"
-        ];
-      })
+      sources."cosmiconfig-9.0.0"
       sources."cross-spawn-7.0.3"
       sources."css-loader-6.9.1"
       sources."css-select-4.3.0"
@@ -4066,6 +4062,7 @@ let
       sources."encodeurl-1.0.2"
       sources."enhanced-resolve-5.15.0"
       sources."entities-2.2.0"
+      sources."env-paths-2.2.1"
       sources."envinfo-7.11.0"
       sources."error-ex-1.3.2"
       sources."es-module-lexer-1.4.1"
@@ -4241,7 +4238,7 @@ let
       sources."picomatch-2.3.1"
       sources."pkg-dir-4.2.0"
       sources."postcss-8.4.33"
-      sources."postcss-loader-7.3.4"
+      sources."postcss-loader-8.0.0"
       sources."postcss-modules-extract-imports-3.0.0"
       sources."postcss-modules-local-by-default-4.0.4"
       sources."postcss-modules-scope-3.1.1"
@@ -4286,7 +4283,7 @@ let
       sources."safe-buffer-5.2.1"
       sources."safer-buffer-2.1.2"
       sources."sass-1.70.0"
-      sources."sass-loader-13.3.3"
+      sources."sass-loader-14.0.0"
       sources."schema-utils-4.2.0"
       sources."select-hose-2.0.0"
       sources."selfsigned-2.4.1"
