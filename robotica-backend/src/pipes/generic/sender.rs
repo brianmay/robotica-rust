@@ -19,7 +19,7 @@ impl<T> Sender<T> {
     pub fn try_send(&self, data: T) {
         let msg = SendMessage::Set(data);
         if let Err(err) = self.tx.try_send(msg) {
-            error!("send failed: {}", err);
+            error!("send failed({}): {}", self.name, err);
         }
     }
 
