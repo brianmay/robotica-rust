@@ -193,7 +193,7 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
         }
     });
 
-    monitor_charging(&mut state, 1, amber_outputs.price_category).unwrap_or_else(|e| {
+    monitor_charging(&mut state, 1, amber_outputs.charge_request).unwrap_or_else(|e| {
         panic!("Error running tesla charging monitor: {e}");
     });
 

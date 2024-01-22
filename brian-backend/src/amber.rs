@@ -1,5 +1,6 @@
 //! Get information from Amber electricity supplier
 
+use chrono::NaiveTime;
 use chrono::{FixedOffset, Local, TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
 use serde::{Deserialize, Serialize};
@@ -61,29 +62,41 @@ const fn hours(num: u16) -> u16 {
     num * HOURS_TO_SECONDS
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ChargeRequest {
+    ChargeTo(u8),
+    //DoNotCharge,
+}
+
 /// Outputs from Amber
 pub struct OutputsReceiver {
-    pub price_category: stateful::Receiver<PriceCategory>,
+    // pub price_category: stateful::Receiver<PriceCategory>,
     pub is_cheap_2hr: stateful::Receiver<bool>,
+    pub charge_request: stateful::Receiver<ChargeRequest>,
 }
 
 pub struct OutputsSender {
-    pub price_category: stateful::Sender<PriceCategory>,
+    // pub price_category: stateful::Sender<PriceCategory>,
     pub is_cheap_2hr: stateful::Sender<bool>,
+    pub charge_request: stateful::Sender<ChargeRequest>,
 }
 
 fn new_outputs() -> (OutputsSender, OutputsReceiver) {
-    let (price_category_tx, price_category_rx) = stateful::create_pipe("amber_output_category");
+    // let (price_category_tx, price_category_rx) = stateful::create_pipe("amber_output_category");
     let (is_cheap_2hr_tx, is_cheap_2hr_rx) = stateful::create_pipe("amber_output_is_cheap_2hr");
+    let (charge_request_tx, charge_request_rx) =
+        stateful::create_pipe("amber_output_charge_request");
 
     (
         OutputsSender {
-            price_category: price_category_tx,
+            // price_category: price_category_tx,
             is_cheap_2hr: is_cheap_2hr_tx,
+            charge_request: charge_request_tx,
         },
         OutputsReceiver {
-            price_category: price_category_rx,
+            // price_category: price_category_rx,
             is_cheap_2hr: is_cheap_2hr_rx,
+            charge_request: charge_request_rx,
         },
     )
 }
@@ -147,10 +160,13 @@ pub fn run(
                             if let Some(summary) = summary {
                                 let update_time = summary.next_update;
 
+                                let charge_request = summary_to_charge_request(&summary, now, &Local);
+
                                 // Write the prices to influxdb and send
                                 prices_to_influxdb(&influxdb_config, &prices, &summary).await;
-                                tx.price_category.try_send(summary.category);
+                                // tx.price_category.try_send(summary.category);
                                 tx.is_cheap_2hr.try_send(summary.is_cheap_2hr);
+                                tx.charge_request.try_send(charge_request);
 
                                 // Add margin to allow time for Amber to update.
                                 let update_time = update_time + Duration::seconds(5);
@@ -732,6 +748,31 @@ fn get_price_for_cheapest_period(
         .copied()
 }
 
+fn summary_to_charge_request<T: TimeZone>(
+    summary: &PriceSummary,
+    dt: DateTime<Utc>,
+    tz: &T,
+) -> ChargeRequest {
+    let now = dt.with_timezone(tz);
+    let time = now.time();
+
+    #[allow(clippy::unwrap_used)]
+    let start_time = NaiveTime::from_hms_opt(3, 0, 0).unwrap();
+    #[allow(clippy::unwrap_used)]
+    let end_time = NaiveTime::from_hms_opt(6, 30, 0).unwrap();
+    let force = time > start_time && time < end_time;
+
+    #[allow(clippy::match_same_arms)]
+    match (force, summary.category) {
+        (_, PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
+        (_, PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
+        (true, PriceCategory::Normal) => ChargeRequest::ChargeTo(70),
+        (false, PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
+        (true, PriceCategory::Expensive) => ChargeRequest::ChargeTo(50),
+        (false, PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -1151,5 +1192,91 @@ mod tests {
         let now = dt("2020-01-01T01:30:00Z");
         let p = get_weighted_price(&prices, &now);
         assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_summary_to_charge_request_normal() {
+        let now = dt("2020-01-01T00:00:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::SuperCheap,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(90));
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Cheap,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(80));
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Normal,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(50));
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Expensive,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(20));
+    }
+
+    #[test]
+    fn test_summary_to_charge_request_forced() {
+        let now = dt("2020-01-01T03:30:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::SuperCheap,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(90));
+
+        let now = dt("2020-01-01T03:30:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Cheap,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(80));
+
+        let now = dt("2020-01-01T03:30:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Normal,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(70));
+
+        let now = dt("2020-01-01T03:30:00Z");
+        let summary = PriceSummary {
+            category: PriceCategory::Expensive,
+            is_cheap_2hr: true,
+            c_per_kwh: 0.0,
+            next_update: dt("2020-01-01T01:00:00Z"),
+        };
+        let cr = summary_to_charge_request(&summary, now, &Utc);
+        assert_eq!(cr, ChargeRequest::ChargeTo(50));
     }
 }

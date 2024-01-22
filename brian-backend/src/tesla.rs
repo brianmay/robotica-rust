@@ -1,4 +1,4 @@
-use crate::amber::PriceCategory;
+use crate::amber::ChargeRequest;
 use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
@@ -387,7 +387,6 @@ impl From<PollInterval> for Interval {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct PersistentState {
     auto_charge: bool,
-    force_charge: bool,
 }
 
 /// Errors that can occur when monitoring charging.
@@ -479,7 +478,7 @@ enum TeslaResult {
 pub fn monitor_charging(
     state: &mut InitState,
     car_number: usize,
-    price_category_rx: stateful::Receiver<PriceCategory>,
+    charge_request_rx: stateful::Receiver<ChargeRequest>,
 ) -> Result<(), MonitorChargingError> {
     let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
@@ -505,25 +504,6 @@ pub fn monitor_charging(
                         DeviceAction::TurnOff => DevicePower::Off,
                     };
                     publish_auto_charge(car_number, status, &mqtt);
-                }
-                cmd
-            })
-    };
-
-    let force_charge_rx = {
-        let mqtt = mqtt.clone();
-        state
-            .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(&format!(
-                "command/Tesla/{car_number}/ForceCharge"
-            ))
-            .map(move |Json(cmd)| {
-                if let Command::Device(cmd) = &cmd {
-                    let status = match cmd.action {
-                        DeviceAction::TurnOn => DevicePower::AutoOff,
-                        DeviceAction::TurnOff => DevicePower::Off,
-                    };
-                    publish_force_change(car_number, status, &mqtt);
                 }
                 cmd
             })
@@ -589,15 +569,14 @@ pub fn monitor_charging(
         let mut interval = PollInterval::Long;
         let mut timer: Interval = interval.into();
 
-        let mut price_category_s = price_category_rx.subscribe().await;
+        let mut charge_request_s = charge_request_rx.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
-        let mut force_charge_s = force_charge_rx.subscribe().await;
-        let mut location_charge_s = is_home_rx.subscribe().await;
+        let mut is_home_s = is_home_rx.subscribe().await;
         let mut battery_level_s = battery_level.subscribe().await;
         let mut charge_limit_s = charge_limit.subscribe().await;
         let mut charging_state_s = charging_state_rx.subscribe().await;
 
-        let mut price_category: Option<PriceCategory> = None;
+        let mut charge_request: Option<ChargeRequest> = None;
         let mut ps = ps;
 
         loop {
@@ -612,9 +591,9 @@ pub fn monitor_charging(
                         }
                     }
                 }
-                Ok(new_price_category) = price_category_s.recv() => {
-                    info!("New price summary: {:?}", new_price_category);
-                    price_category = Some(new_price_category);
+                Ok(new_charge_request) = charge_request_s.recv() => {
+                    info!("New price summary: {:?}", new_charge_request);
+                    charge_request = Some(new_charge_request);
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
@@ -631,21 +610,6 @@ pub fn monitor_charging(
                         info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
-                Ok(cmd) = force_charge_s.recv() => {
-                    if let Command::Device(cmd) = cmd {
-                        ps.force_charge = match cmd.action {
-                            DeviceAction::TurnOn => true,
-                            DeviceAction::TurnOff => false,
-                        };
-                        psr.save(&ps).unwrap_or_else(|e| {
-                            error!("Error saving persistent state: {}", e);
-                        });
-                        info!("Force charge: {}", ps.force_charge);
-                        update_force_charge(&tesla_state, car_number, ps.force_charge, &mqtt);
-                    } else {
-                        info!("Ignoring invalid force_charge command: {cmd:?}");
-                    }
-                }
                 Ok(Parsed(new_charge_limit)) = charge_limit_s.recv() => {
                     info!("Charge limit: {new_charge_limit}");
                     tesla_state.charge_limit = Some(new_charge_limit);
@@ -654,7 +618,7 @@ pub fn monitor_charging(
                     info!("Charge level: {new_charge_level}");
                     tesla_state.battery_level = Some(new_charge_level);
                 }
-                Ok(new_is_at_home) = location_charge_s.recv() => {
+                Ok(new_is_at_home) = is_home_s.recv() => {
                     info!("Location is at home: {new_is_at_home}");
                     tesla_state.is_at_home = Some(new_is_at_home);
                 }
@@ -690,22 +654,18 @@ pub fn monitor_charging(
                 let result = sequence.execute(&token, car_id).await;
                 TeslaResult::Tried(result)
             } else if is_at_home == Some(true) && ps.auto_charge {
-                if let Some(price_category) = price_category {
-                    let result = check_charge(
-                        car_id,
-                        &token,
-                        &tesla_state,
-                        price_category,
-                        ps.force_charge,
-                    )
-                    .await;
+                if let Some(charge_request) = charge_request {
+                    let result = check_charge(car_id, &token, &tesla_state, charge_request).await;
                     TeslaResult::Tried(result)
                 } else {
                     info!("No price summary available, skipping charge check");
                     TeslaResult::Skipped
                 }
             } else {
-                info!("Skipping charge check");
+                info!(
+                    "Skipping charge check, is_at_home={is_at_home:?}, auto_charge={auto_charge:?}",
+                    auto_charge = ps.auto_charge
+                );
                 TeslaResult::Skipped
             };
 
@@ -741,7 +701,6 @@ pub fn monitor_charging(
             info!("Next poll {interval:?} {:?}", timer.period());
 
             update_auto_charge(ps.auto_charge, car_number, &tesla_state, &mqtt);
-            update_force_charge(&tesla_state, car_number, ps.force_charge, &mqtt);
         }
     });
 
@@ -802,47 +761,12 @@ fn publish_auto_charge(
     mqtt.try_send(msg);
 }
 
-fn update_force_charge(
-    tesla_state: &TeslaState,
-    car_number: usize,
-    force_charge: bool,
-    mqtt: &robotica_backend::services::mqtt::MqttTx,
-) {
-    let notified_errors = tesla_state.notified_errors;
-    let is_charging = tesla_state.is_charging();
-    let status = match (notified_errors, force_charge, is_charging) {
-        (true, _, _) => DevicePower::DeviceError,
-        (false, true, false) => DevicePower::AutoOff,
-        (false, true, true) => DevicePower::On,
-        (false, false, _) => DevicePower::Off,
-    };
-
-    publish_force_change(car_number, status, mqtt);
-}
-
-fn publish_force_change(
-    car_number: usize,
-    status: DevicePower,
-    mqtt: &robotica_backend::services::mqtt::MqttTx,
-) {
-    let topic = format!("state/Tesla/{car_number}/ForceCharge/power");
-    let string: String = status.into();
-    let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
-    mqtt.try_send(msg);
-}
-
 async fn get_car_id(token: &Token, car_n: usize) -> Result<Option<u64>> {
     let vehicles = token.get_vehicles().await?;
     let vehicle = vehicles.get(car_n - 1);
     debug!("Got vehicle: {:?}", vehicle);
     let number = vehicle.map(|v| v.id);
     Ok(number)
-}
-
-#[allow(dead_code)]
-enum RequestedCharge {
-    DontCharge,
-    ChargeTo(u8),
 }
 
 enum ChargingSummary {
@@ -852,34 +776,26 @@ enum ChargingSummary {
     Unknown,
 }
 
-impl RequestedCharge {
-    const fn min_charge(self, min_charge: u8) -> Self {
-        match self {
-            Self::DontCharge => Self::ChargeTo(min_charge),
-            Self::ChargeTo(limit) if limit < min_charge => Self::ChargeTo(min_charge),
-            Self::ChargeTo(_) => self,
-        }
-    }
-}
-
 #[allow(clippy::too_many_lines)]
 async fn check_charge(
     car_id: u64,
     token: &Token,
     tesla_state: &TeslaState,
-    price_category: PriceCategory,
-    force_charge: bool,
+    charge_request: ChargeRequest,
 ) -> Result<(), SequenceError> {
     info!("Checking charge");
 
-    let (should_charge, charge_limit) = should_charge(price_category, force_charge, tesla_state);
+    let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
 
     // We should not attempt to start charging if charging is complete.
     let charging_state = &tesla_state.charging_state;
     let can_start_charge =
         charging_state.map_or(true, |state| state != ChargingStateEnum::Complete);
 
-    info!("Current data: {price_category:?}, {tesla_state:?}, force charge: {force_charge}, notified_errors: {}", tesla_state.notified_errors);
+    info!(
+        "Current data: {charge_request:?}, {tesla_state:?}, notified_errors: {}",
+        tesla_state.notified_errors
+    );
     info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
@@ -960,26 +876,10 @@ enum ShouldCharge {
     // DontTouch,
 }
 
-fn should_charge(
-    price_category: PriceCategory,
-    force_charge: bool,
-    tesla_state: &TeslaState,
-) -> (ShouldCharge, u8) {
-    #[allow(clippy::match_same_arms)]
-    let requested_charge = match &price_category {
-        PriceCategory::Expensive => RequestedCharge::ChargeTo(20),
-        PriceCategory::Normal => RequestedCharge::ChargeTo(50),
-        PriceCategory::Cheap => RequestedCharge::ChargeTo(80),
-        PriceCategory::SuperCheap => RequestedCharge::ChargeTo(90),
-    };
-    let requested_charge = if force_charge {
-        requested_charge.min_charge(70)
-    } else {
-        requested_charge
-    };
-    let (should_charge, charge_limit) = match requested_charge {
-        RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
-        RequestedCharge::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
+fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (ShouldCharge, u8) {
+    let (should_charge, charge_limit) = match charge_request {
+        // RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
+        ChargeRequest::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
     };
 
     #[allow(clippy::match_same_arms)]

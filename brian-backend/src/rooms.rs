@@ -375,26 +375,15 @@ fn tesla_config() -> UiConfig {
         switches: vec![ButtonRowConfig {
             id: "switches".to_string(),
             title: "Switches".to_string(),
-            buttons: vec![
-                ButtonConfig {
-                    id: "charge".to_string(),
-                    title: "Charge".to_string(),
-                    icon: Icon::Light,
-                    controller: ControllerConfig::Switch(switch::Config {
-                        action: Action::Toggle,
-                        topic_substr: "Tesla/1/AutoCharge".to_string(),
-                    }),
-                },
-                ButtonConfig {
-                    id: "force".to_string(),
-                    title: "Force".to_string(),
-                    icon: Icon::Light,
-                    controller: ControllerConfig::Switch(switch::Config {
-                        action: Action::Toggle,
-                        topic_substr: "Tesla/1/ForceCharge".to_string(),
-                    }),
-                },
-            ],
+            buttons: vec![ButtonConfig {
+                id: "charge".to_string(),
+                title: "Charge".to_string(),
+                icon: Icon::Light,
+                controller: ControllerConfig::Switch(switch::Config {
+                    action: Action::Toggle,
+                    topic_substr: "Tesla/1/AutoCharge".to_string(),
+                }),
+            }],
         }],
         hdmi_matrix: vec![],
     }
