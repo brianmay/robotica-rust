@@ -3,6 +3,7 @@
 use chrono::{FixedOffset, Local, TimeZone, Utc};
 use influxdb::InfluxDbWriteable;
 use serde::{Deserialize, Serialize};
+use tap::Pipe;
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use tracing::{error, info};
@@ -143,25 +144,31 @@ pub fn run(
                             let summary = pp.prices_to_summary(&now, &prices);
                             pp.save(&psr);
 
-                            let update_time = summary.next_update;
+                            if let Some(summary) = summary {
+                                let update_time = summary.next_update;
 
-                            // Write the prices to influxdb and send
-                            prices_to_influxdb(&influxdb_config, &prices, &summary).await;
-                            tx.price_category.try_send(summary.category);
-                            tx.is_cheap_2hr.try_send(summary.is_cheap_2hr);
+                                // Write the prices to influxdb and send
+                                prices_to_influxdb(&influxdb_config, &prices, &summary).await;
+                                tx.price_category.try_send(summary.category);
+                                tx.is_cheap_2hr.try_send(summary.is_cheap_2hr);
 
-                            // Add margin to allow time for Amber to update.
-                            let update_time = update_time + Duration::seconds(5);
+                                // Add margin to allow time for Amber to update.
+                                let update_time = update_time + Duration::seconds(5);
 
-                            // How long to the current interval expires?
-                            let now = utc_now();
-                            let duration: Duration = update_time - now;
-                            info!("Next price update: {update_time:?} in {duration}");
+                                // How long to the current interval expires?
+                                let now = utc_now();
+                                let duration: Duration = update_time - now;
+                                info!("Next price update: {update_time:?} in {duration}");
 
-                            // Ensure we update prices at least once once every 5 minutes.
-                            let max_duration = Duration::minutes(5);
-                            let min_duration = Duration::seconds(30);
-                            duration.clamp(min_duration, max_duration)
+                                // Ensure we update prices at least once once every 5 minutes.
+                                let max_duration = Duration::minutes(5);
+                                let min_duration = Duration::seconds(30);
+                                duration.clamp(min_duration, max_duration)
+                            } else {
+                                // If we failed to get a summary, try again in 1 minute
+                                info!("Retry in 1 minute");
+                                Duration::minutes(1)
+                            }
                         }
                         Err(err) => {
                             error!("Failed to get prices: {}", err);
@@ -372,12 +379,12 @@ struct PriceSummary {
     next_update: DateTime<Utc>,
 }
 
-fn get_price_category(category: Option<PriceCategory>, prices: &[f32]) -> PriceCategory {
+fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCategory {
     let mut c = category.unwrap_or(PriceCategory::Normal);
 
     let under = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
         // If all prices are under the threshold, then change the category.
-        if prices.iter().all(|x| *x < threshold) {
+        if price < threshold {
             new_category
         } else {
             c
@@ -385,14 +392,11 @@ fn get_price_category(category: Option<PriceCategory>, prices: &[f32]) -> PriceC
     };
     let over = |c: PriceCategory, threshold: f32, new_category: PriceCategory| {
         // If the current price is over the threshold, then change the category.
-        let maybe_current_price = prices.first();
-        maybe_current_price.map_or(c, |current_price| {
-            if *current_price > threshold {
-                new_category
-            } else {
-                c
-            }
-        })
+        if price > threshold {
+            new_category
+        } else {
+            c
+        }
     };
 
     match c {
@@ -533,26 +537,20 @@ impl PriceProcessor {
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub fn prices_to_summary(
         &mut self,
         now: &DateTime<Utc>,
         prices: &[PriceResponse],
-    ) -> PriceSummary {
-        let current_prices: Vec<&PriceResponse> = prices
-            .iter()
-            .skip_while(|p| p.interval_type != IntervalType::CurrentInterval)
-            .take(3)
-            .collect();
-
-        let Some(current_price) = current_prices.first() else {
+    ) -> Option<PriceSummary> {
+        let Some(current_price) = get_current_price_response(prices, now) else {
             error!("No current price found in prices: {prices:?}");
-            let default_c_per_kwh: u16 = 100;
-            return PriceSummary {
-                is_cheap_2hr: false,
-                c_per_kwh: f32::from(default_c_per_kwh),
-                next_update: *now + Duration::seconds(30),
-                category: PriceCategory::Expensive,
-            };
+            return None;
+        };
+
+        let Some(weighted_price) = get_weighted_price(prices, now) else {
+            error!("No current price found in prices: {prices:?}");
+            return None;
         };
 
         let (start_day, end_day) = get_2hr_day(now);
@@ -610,8 +608,8 @@ impl PriceProcessor {
 
         // let category = prices_to_category(prices, self.category);
         let old_category = self.category;
-        let prices_per_kwh: Vec<f32> = current_prices.iter().map(|p| p.per_kwh).collect();
-        let category = get_price_category(old_category, &prices_per_kwh);
+        // let prices_per_kwh: Vec<f32> = current_prices.iter().map(|p| p.per_kwh).collect();
+        let category = get_price_category(old_category, weighted_price);
         self.category = Some(category);
 
         #[allow(clippy::cast_possible_truncation)]
@@ -623,7 +621,7 @@ impl PriceProcessor {
         };
         info!("Price summary: {old_category:?} --> {ps:?}");
 
-        ps
+        Some(ps)
     }
 }
 
@@ -662,6 +660,47 @@ fn get_day<T: TimeZone + std::fmt::Debug>(
 /// Divide two numbers and round up
 const fn divide_round_up(dividend: i64, divisor: i64) -> i64 {
     (dividend + divisor - 1) / divisor
+}
+
+fn is_period_current(pr: &PriceResponse, dt: &DateTime<Utc>) -> bool {
+    pr.start_time <= *dt && pr.end_time > *dt
+}
+
+fn get_current_price_response<'a>(
+    prices: &'a [PriceResponse],
+    dt: &DateTime<Utc>,
+) -> Option<&'a PriceResponse> {
+    prices.iter().find(|pr| is_period_current(pr, dt))
+}
+
+fn get_weighted_price(prices: &[PriceResponse], dt: &DateTime<Utc>) -> Option<f32> {
+    let pos = prices.iter().position(|pr| is_period_current(pr, dt));
+
+    let Some(pos) = pos else {
+        return None;
+    };
+
+    let prefix_pos = if pos > 0 { pos - 1 } else { 0 };
+    let postfix_pos = if pos + 1 < prices.len() { pos + 1 } else { pos };
+
+    let prefix = prices[prefix_pos].per_kwh;
+    let current = prices[pos].per_kwh;
+    let postfix = prices[postfix_pos].per_kwh;
+
+    let values = [prefix, current, postfix];
+    let weights = [25u8, 50u8, 25u8];
+    let total_weights = f32::from(weights.iter().map(|x| u16::from(*x)).sum::<u16>());
+
+    let result = values
+        .iter()
+        .zip(weights.iter())
+        .map(|(v, w)| v * f32::from(*w))
+        .sum::<f32>()
+        .pipe(|x| x / total_weights);
+
+    info!("Prices {values:?} {weights:?} --> {result}");
+
+    Some(result)
 }
 
 fn get_price_for_cheapest_period(
@@ -852,7 +891,7 @@ mod tests {
             pr(dt("2020-01-01T05:30:00Z"), -10.0, ForecastInterval),
         ];
 
-        let summary = pp.prices_to_summary(&now, &prices);
+        let summary = pp.prices_to_summary(&now, &prices).unwrap();
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, true);
         assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
@@ -877,7 +916,7 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        let summary = pp.prices_to_summary(&now, &prices);
+        let summary = pp.prices_to_summary(&now, &prices).unwrap();
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, false);
         assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
@@ -896,45 +935,38 @@ mod tests {
         // For > thresholds, only current price must be > threshold
         let data = [
             // Super cheap thresholds >11.0 Cheap >16.0 Normal >31.0 Expensive
-            (SuperCheap, [11.0, 11.0, 11.0], SuperCheap),
-            (SuperCheap, [11.1, 11.1, 11.1], Cheap),
-            (SuperCheap, [11.1, 16.1, 11.1], Cheap),
-            (SuperCheap, [11.1, 11.1, 16.1], Cheap),
-            (SuperCheap, [16.0, 16.0, 16.0], Cheap),
-            (SuperCheap, [16.1, 11.1, 11.1], Normal),
-            (SuperCheap, [16.1, 16.1, 16.1], Normal),
-            (SuperCheap, [31.0, 31.0, 31.0], Normal),
-            (SuperCheap, [31.1, 31.1, 31.1], Expensive),
+            (SuperCheap, 10.0, SuperCheap),
+            (SuperCheap, 11.1, Cheap),
+            (SuperCheap, 16.0, Cheap),
+            (SuperCheap, 16.1, Normal),
+            (SuperCheap, 31.0, Normal),
+            (SuperCheap, 31.1, Expensive),
             // Cheap thresholds >16.0 Normal >31.0 Expensive <9.0 SuperCheap
-            (Cheap, [8.9, 8.9, 8.9], SuperCheap),
-            (Cheap, [8.9, 9.0, 8.9], Cheap),
-            (Cheap, [9.0, 9.0, 9.0], Cheap),
-            (Cheap, [8.9, 8.9, 9.0], Cheap),
-            (Cheap, [11.1, 16.1, 11.1], Cheap),
-            (Cheap, [11.1, 11.1, 16.1], Cheap),
-            (Cheap, [16.0, 16.0, 16.0], Cheap),
-            (Cheap, [16.1, 16.1, 16.1], Normal),
-            (Cheap, [16.1, 11.1, 11.1], Normal),
-            (Cheap, [31.0, 31.0, 31.0], Normal),
-            (Cheap, [31.1, 31.1, 31.1], Expensive),
+            (Cheap, 8.9, SuperCheap),
+            (Cheap, 9.0, Cheap),
+            (Cheap, 11.1, Cheap),
+            (Cheap, 16.0, Cheap),
+            (Cheap, 16.1, Normal),
+            (Cheap, 31.0, Normal),
+            (Cheap, 31.1, Expensive),
             // Normal thresholds >31.0 Expensive <14.0 Cheap <9.0 SuperCheap
-            (Normal, [8.9, 8.9, 8.9], SuperCheap),
-            (Normal, [9.0, 9.0, 9.0], Cheap),
-            (Normal, [13.9, 13.9, 13.9], Cheap),
-            (Normal, [14.0, 14.0, 14.0], Normal),
-            (Normal, [31.0, 31.0, 31.0], Normal),
-            (Normal, [31.1, 31.1, 31.1], Expensive),
+            (Normal, 8.9, SuperCheap),
+            (Normal, 9.0, Cheap),
+            (Normal, 13.9, Cheap),
+            (Normal, 14.0, Normal),
+            (Normal, 31.0, Normal),
+            (Normal, 31.1, Expensive),
             // Expensive thresholds <29.0 Normal <14.0 Cheap <9.0 SuperCheap
-            (Expensive, [8.9, 8.9, 8.9], SuperCheap),
-            (Expensive, [9.0, 9.0, 9.0], Cheap),
-            (Expensive, [13.9, 13.9, 13.9], Cheap),
-            (Expensive, [14.0, 14.0, 14.0], Normal),
-            (Expensive, [28.9, 28.9, 28.9], Normal),
-            (Expensive, [29.0, 29.0, 29.0], Expensive),
+            (Expensive, 8.9, SuperCheap),
+            (Expensive, 9.0, Cheap),
+            (Expensive, 13.9, Cheap),
+            (Expensive, 14.0, Normal),
+            (Expensive, 28.9, Normal),
+            (Expensive, 29.0, Expensive),
         ];
 
         for d in data {
-            let c = get_price_category(Some(d.0), &d.1);
+            let c = get_price_category(Some(d.0), d.1);
             assert_eq!(c, d.2, "get_price_category({:?}, {:?}) = {:?}", d.0, d.1, c);
         }
     }
@@ -983,5 +1015,141 @@ mod tests {
             assert_eq!(start, dt("2020-01-02T18:00:00Z"));
             assert_eq!(stop, dt("2020-01-03T18:00:00Z"));
         }
+    }
+
+    #[test]
+    fn test_is_period_current() {
+        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>| PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: 0.0,
+            spot_per_kwh: 0.0,
+            interval_type: IntervalType::CurrentInterval,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: TariffInformation {
+                period: PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"));
+        assert_eq!(is_period_current(&p, &now), true);
+
+        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:00:00Z"));
+        assert_eq!(is_period_current(&p, &now), false);
+
+        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:00:01Z"));
+        assert_eq!(is_period_current(&p, &now), true);
+
+        let p = pr(dt("2019-01-01T23:59:59Z"), dt("2020-01-01T00:00:00Z"));
+        assert_eq!(is_period_current(&p, &now), false);
+
+        let p = pr(dt("2019-01-01T23:59:59Z"), dt("2020-01-01T00:00:01Z"));
+        assert_eq!(is_period_current(&p, &now), true);
+    }
+
+    #[test]
+    fn test_get_current_price_response() {
+        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>| PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: 0.0,
+            spot_per_kwh: 0.0,
+            interval_type: IntervalType::CurrentInterval,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: TariffInformation {
+                period: PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let prices = vec![
+            pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z")),
+            pr(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z")),
+            pr(dt("2020-01-01T01:00:00Z"), dt("2020-01-01T01:30:00Z")),
+        ];
+
+        let now = dt("2019-12-31T23:59:59Z");
+        let p = get_current_price_response(&prices, &now);
+        assert!(p.is_none());
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let p = get_current_price_response(&prices, &now).unwrap();
+        assert_eq!(p.start_time, prices[0].start_time);
+        assert_eq!(p.end_time, prices[0].end_time);
+
+        let now = dt("2020-01-01T00:30:00Z");
+        let p = get_current_price_response(&prices, &now).unwrap();
+        assert_eq!(p.start_time, prices[1].start_time);
+        assert_eq!(p.end_time, prices[1].end_time);
+
+        let now = dt("2020-01-01T01:00:00Z");
+        let p = get_current_price_response(&prices, &now).unwrap();
+        assert_eq!(p.start_time, prices[2].start_time);
+        assert_eq!(p.end_time, prices[2].end_time);
+
+        let now = dt("2020-01-01T01:30:00Z");
+        let p = get_current_price_response(&prices, &now);
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_get_weighted_price() {
+        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>, price| PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: price,
+            spot_per_kwh: price,
+            interval_type: IntervalType::CurrentInterval,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: TariffInformation {
+                period: PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let prices = vec![
+            pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 1.0),
+            pr(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z"), 2.0),
+            pr(dt("2020-01-01T01:00:00Z"), dt("2020-01-01T01:30:00Z"), 4.0),
+        ];
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let p = get_weighted_price(&prices, &now).unwrap();
+        assert_approx_eq!(f32, p, 1.25);
+
+        let now = dt("2020-01-01T00:30:00Z");
+        let p = get_weighted_price(&prices, &now).unwrap();
+        assert_approx_eq!(f32, p, 2.25);
+
+        let now = dt("2020-01-01T01:00:00Z");
+        let p = get_weighted_price(&prices, &now).unwrap();
+        assert_approx_eq!(f32, p, 3.5);
+
+        let now = dt("2020-01-01T01:30:00Z");
+        let p = get_weighted_price(&prices, &now);
+        assert!(p.is_none());
     }
 }
