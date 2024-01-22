@@ -365,25 +365,12 @@ pub enum PriceCategory {
     Expensive,
 }
 #[derive(Debug, Clone)]
-pub struct PriceSummary {
-    pub category: PriceCategory,
-    pub is_cheap_2hr: bool,
-    pub c_per_kwh: f32,
-    pub dc_per_kwh: i32,
-    pub next_update: DateTime<Utc>,
+struct PriceSummary {
+    category: PriceCategory,
+    is_cheap_2hr: bool,
+    c_per_kwh: f32,
+    next_update: DateTime<Utc>,
 }
-
-// Ignore the c_per_kwh when comparing.
-impl PartialEq for PriceSummary {
-    fn eq(&self, other: &Self) -> bool {
-        self.category == other.category
-            && self.is_cheap_2hr == other.is_cheap_2hr
-            && self.dc_per_kwh == other.dc_per_kwh
-            && self.next_update == other.next_update
-    }
-}
-
-impl Eq for PriceSummary {}
 
 fn get_price_category(category: Option<PriceCategory>, prices: &[f32]) -> PriceCategory {
     let mut c = category.unwrap_or(PriceCategory::Normal);
@@ -563,7 +550,6 @@ impl PriceProcessor {
             return PriceSummary {
                 is_cheap_2hr: false,
                 c_per_kwh: f32::from(default_c_per_kwh),
-                dc_per_kwh: i32::from(default_c_per_kwh) * 10,
                 next_update: *now + Duration::seconds(30),
                 category: PriceCategory::Expensive,
             };
@@ -633,7 +619,6 @@ impl PriceProcessor {
             category,
             is_cheap_2hr: is_cheap,
             c_per_kwh: current_price.per_kwh,
-            dc_per_kwh: (current_price.per_kwh * 10.0).round() as i32,
             next_update: current_price.end_time,
         };
         info!("Price summary: {old_category:?} --> {ps:?}");
@@ -871,7 +856,6 @@ mod tests {
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, true);
         assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
-        assert_eq!(summary.dc_per_kwh, 0);
         assert_eq!(summary.next_update, dt("2020-01-01T01:00:00Z"));
         let ds = &pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
@@ -897,7 +881,6 @@ mod tests {
         assert_eq!(summary.category, PriceCategory::SuperCheap);
         assert_eq!(summary.is_cheap_2hr, false);
         assert_approx_eq!(f32, summary.c_per_kwh, 0.0);
-        assert_eq!(summary.dc_per_kwh, 0);
         assert_eq!(summary.next_update, dt("2020-01-01T01:30:00Z"));
         let ds = pp.day;
         assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
