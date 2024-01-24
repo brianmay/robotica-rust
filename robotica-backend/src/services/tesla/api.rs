@@ -455,7 +455,7 @@ impl Token {
     ///
     /// Returns error if the HTTP request failed.
     pub async fn get_vehicles(&self) -> Result<Vec<Vehicle>, Error> {
-        let url = "https://owner-api.teslamotors.com/api/1/vehicles";
+        let url = "https://owner-api.teslamotors.com/api/1/products";
         let response: OuterVehiclesResponse = get_with_token(url, &self.access_token).await?;
         Ok(response.response)
     }
