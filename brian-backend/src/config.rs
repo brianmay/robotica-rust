@@ -67,7 +67,7 @@ pub struct Config {
     // pub schedule_file: PathBuf,
     // pub sequences_file: PathBuf,
     pub mqtt: mqtt::Config,
-    pub amber: amber::Config,
+    pub amber: amber::api::Config,
     pub http: http::Config,
     pub influxdb: influxdb::Config,
     pub executor: executor::ExtraConfig,
