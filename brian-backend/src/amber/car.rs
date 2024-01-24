@@ -1,5 +1,5 @@
 use super::{PriceCategory, Prices};
-use chrono::{DateTime, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use robotica_backend::{
     pipes::{
         stateful::{create_pipe, Receiver},
@@ -8,6 +8,7 @@ use robotica_backend::{
     spawn,
 };
 use std::sync::Arc;
+use tracing::info;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ChargeRequest {
@@ -22,7 +23,7 @@ pub fn run(rx: Receiver<Arc<Prices>>) -> Receiver<ChargeRequest> {
         let mut s = rx.subscribe().await;
 
         while let Ok(prices) = s.recv().await {
-            let cr = prices_to_charge_request(&prices, Utc::now(), &Utc);
+            let cr = prices_to_charge_request(&prices, Utc::now(), &Local);
             tx_out.try_send(cr);
         }
     });
@@ -45,14 +46,20 @@ fn prices_to_charge_request<T: TimeZone>(
     let force = time > start_time && time < end_time;
 
     #[allow(clippy::match_same_arms)]
-    match (force, prices.category) {
+    let result = match (force, prices.category) {
         (_, PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
         (_, PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
         (true, PriceCategory::Normal) => ChargeRequest::ChargeTo(70),
         (false, PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
         (true, PriceCategory::Expensive) => ChargeRequest::ChargeTo(50),
         (false, PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
-    }
+    };
+
+    info!(
+        "Charge request ({time:?},{force:?},{category:?}): {result:?}",
+        category = prices.category
+    );
+    result
 }
 
 #[cfg(test)]

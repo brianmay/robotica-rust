@@ -1,4 +1,4 @@
-use crate::{amber, influxdb};
+use crate::{amber, influxdb, tesla};
 use envconfig::Envconfig;
 use robotica_backend::{
     scheduling::executor,
@@ -57,21 +57,13 @@ impl Environment {
 
 #[derive(Deserialize)]
 pub struct Config {
-    // pub state_path: PathBuf,
-    // pub static_path: PathBuf,
-    // pub http_listener: String,
-    // pub hostname: String,
-    // pub root_url: reqwest::Url,
-    // pub debug: bool,
-    // pub classifications_file: PathBuf,
-    // pub schedule_file: PathBuf,
-    // pub sequences_file: PathBuf,
     pub mqtt: mqtt::Config,
     pub amber: amber::api::Config,
     pub http: http::Config,
     pub influxdb: influxdb::Config,
     pub executor: executor::ExtraConfig,
     pub persistent_state: persistent_state::Config,
+    pub teslas: Vec<tesla::Config>,
 }
 
 /// An error loading the Config
@@ -89,20 +81,3 @@ pub enum Error {
     #[error("Error merging files: {0}")]
     Merge(#[from] robotica_backend::serde::Error),
 }
-
-// impl Config {
-//     /// Load the classifier config from the given path.
-//     ///
-//     /// # Errors
-//     ///
-//     /// If the file cannot be read or parsed.
-//     pub fn load(filename: &Path) -> Result<Self, Error> {
-//         let f =
-//             std::fs::File::open(filename).map_err(|e| Error::File(filename.to_path_buf(), e))?;
-
-//         let config: Self =
-//             serde_yaml::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
-
-//         Ok(config)
-//     }
-// }

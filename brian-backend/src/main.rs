@@ -184,11 +184,15 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
 
-    let charge_request = amber::car::run(prices);
+    for tesla in config.teslas {
+        let charge_request = amber::car::run(prices.clone());
 
-    monitor_charging(&mut state, 1, charge_request).unwrap_or_else(|e| {
-        panic!("Error running tesla charging monitor: {e}");
-    });
+        monitor_charging(&mut state, &tesla, charge_request).unwrap_or_else(|e| {
+            panic!("Error running tesla charging monitor: {e}");
+        });
+        tesla::monitor_tesla_location(&mut state, &tesla);
+        tesla::monitor_tesla_doors(&mut state, &tesla);
+    }
 
     let rooms = rooms::get();
     http::run(state.mqtt.clone(), rooms, config.http)
@@ -196,8 +200,6 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
-    tesla::monitor_tesla_location(&mut state, 1);
-    tesla::monitor_tesla_doors(&mut state, 1);
 
     environment_monitor::run(&mut state, &config.influxdb);
 

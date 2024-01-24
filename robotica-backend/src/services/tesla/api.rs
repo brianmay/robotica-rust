@@ -15,6 +15,16 @@ use crate::{
     services::persistent_state::{self, PersistentStateRow},
 };
 
+/// A vehicle ID for the owner-api endpoint.
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub struct VehicleId(u64);
+
+impl ToString for VehicleId {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
 async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
     debug!("post {}", url);
 
@@ -138,7 +148,7 @@ struct SetChargeLimit {
 #[derive(Deserialize, Debug)]
 pub struct Vehicle {
     /// Vehicle ID for owner-api endpoint.
-    pub id: u64,
+    pub id: VehicleId,
     /// Vehicle ID for streaming or Auto park API.
     pub vehicle_id: u64,
 
@@ -443,8 +453,11 @@ impl Token {
     /// # Errors
     ///
     /// Returns `WakeupError::Reqwest` if the HTTP request failed.
-    pub async fn wake_up(&self, id: u64) -> Result<WakeUpResponse, Error> {
-        let url = format!("https://owner-api.teslamotors.com/api/1/vehicles/{id}/wake_up");
+    pub async fn wake_up(&self, id: VehicleId) -> Result<WakeUpResponse, Error> {
+        let url = format!(
+            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/wake_up",
+            id = id.to_string()
+        );
         let response: OuterWakeUpResponse = post_with_token(&url, &self.access_token, &()).await?;
         Ok(response.response)
     }
@@ -466,7 +479,7 @@ impl Token {
     ///
     /// Returns `WakeupError::Reqwest` if the HTTP request failed.
     /// Returns `WakeupError::Timeout` if the car didn't wake up before the timeout elapsed.
-    pub async fn wait_for_wake_up(&self, id: u64) -> Result<(), WakeupError> {
+    pub async fn wait_for_wake_up(&self, id: VehicleId) -> Result<(), WakeupError> {
         let timeout = Instant::now() + Duration::from_secs(60);
 
         info!("Trying to wake up (initial)");
@@ -498,9 +511,11 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_start(&self, id: u64) -> Result<(), GenericError> {
-        let url =
-            format!("https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_start");
+    pub async fn charge_start(&self, id: VehicleId) -> Result<(), GenericError> {
+        let url = format!(
+            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_start",
+            id = id.to_string()
+        );
         let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &()).await?;
         response.into()
     }
@@ -511,9 +526,11 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_stop(&self, id: u64) -> Result<(), GenericError> {
-        let url =
-            format!("https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_stop");
+    pub async fn charge_stop(&self, id: VehicleId) -> Result<(), GenericError> {
+        let url = format!(
+            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_stop",
+            id = id.to_string()
+        );
         let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &()).await?;
         response.into()
     }
@@ -524,9 +541,10 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn set_charge_limit(&self, id: u64, percent: u8) -> Result<(), GenericError> {
+    pub async fn set_charge_limit(&self, id: VehicleId, percent: u8) -> Result<(), GenericError> {
         let url = format!(
-            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/set_charge_limit"
+            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/set_charge_limit",
+            id = id.to_string()
         );
         let body = SetChargeLimit { percent };
         let response: OuterGenericResponse =
@@ -545,9 +563,10 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn get_charge_state(&self, id: u64) -> Result<ChargeState, Error> {
+    pub async fn get_charge_state(&self, id: VehicleId) -> Result<ChargeState, Error> {
         let url = format!(
-            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/data_request/charge_state"
+            "https://owner-api.teslamotors.com/api/1/vehicles/{id}/data_request/charge_state",
+            id = id.to_string()
         );
         let response: OuterChargeState = get_with_token(&url, &self.access_token).await?;
         Ok(response.response)
@@ -563,7 +582,7 @@ enum Command {
 }
 
 impl Command {
-    async fn execute(&self, token: &Token, id: u64) -> Result<(), SequenceError> {
+    async fn execute(&self, token: &Token, id: VehicleId) -> Result<(), SequenceError> {
         match self {
             Command::WakeUp => token.wait_for_wake_up(id).await?,
             Command::SetChargeLimit(percent) => token.set_charge_limit(id, *percent).await?,
@@ -624,7 +643,7 @@ impl CommandSequence {
     ///
     /// Returns error if the wake up request failed.
     /// Returns error if any of the commands failed.
-    pub async fn execute(&self, token: &Token, car_id: u64) -> Result<(), SequenceError> {
+    pub async fn execute(&self, token: &Token, car_id: VehicleId) -> Result<(), SequenceError> {
         if self.commands.is_empty() {
             return Ok(());
         }

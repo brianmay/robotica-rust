@@ -179,8 +179,15 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
     Ok((rx_prices, rx_usage))
 }
 
-fn is_period_current(pr: &api::PriceResponse, dt: &DateTime<Utc>) -> bool {
-    pr.start_time <= *dt && pr.end_time > *dt
+fn is_period_current(pr: &api::PriceResponse, _dt: &DateTime<Utc>) -> bool {
+    // Amber intervals are weird, for example:
+    // start_time: 2024-01-24T05:00:01Z, end_time: 2024-01-24T05:30:00Z,
+    // start_time: 2024-01-24T05:30:01Z, end_time: 2024-01-24T06:00:00Z
+    // start_time: 2024-01-24T06:00:01Z, end_time: 2024-01-24T06:30:00Z
+    // which means that there is a 1 second gap between intervals.
+    // pr.start_time <= *dt && pr.end_time > *dt
+    // Just use the Amber declared current interval for now.
+    pr.interval_type == api::IntervalType::CurrentInterval
 }
 
 fn get_current_price_response<'a>(
@@ -273,6 +280,8 @@ mod tests {
     use chrono::Local;
     use float_cmp::assert_approx_eq;
 
+    use crate::amber::api::IntervalType;
+
     use super::*;
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
@@ -325,13 +334,15 @@ mod tests {
 
     #[test]
     fn test_is_period_current() {
-        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>| api::PriceResponse {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  interval_type: IntervalType| api::PriceResponse {
             date: start_time.with_timezone(&Local).date_naive(),
             start_time,
             end_time,
             per_kwh: 0.0,
             spot_per_kwh: 0.0,
-            interval_type: api::IntervalType::CurrentInterval,
+            interval_type,
             renewables: 0.0,
             duration: 0,
             channel_type: api::ChannelType::General,
@@ -346,31 +357,53 @@ mod tests {
         };
 
         let now = dt("2020-01-01T00:00:00Z");
-        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"));
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:30:00Z"),
+            IntervalType::CurrentInterval,
+        );
         assert_eq!(is_period_current(&p, &now), true);
 
-        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:00:00Z"));
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:00:00Z"),
+            IntervalType::ActualInterval,
+        );
         assert_eq!(is_period_current(&p, &now), false);
 
-        let p = pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:00:01Z"));
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:00:01Z"),
+            IntervalType::CurrentInterval,
+        );
         assert_eq!(is_period_current(&p, &now), true);
 
-        let p = pr(dt("2019-01-01T23:59:59Z"), dt("2020-01-01T00:00:00Z"));
+        let p = pr(
+            dt("2019-01-01T23:59:59Z"),
+            dt("2020-01-01T00:00:00Z"),
+            IntervalType::ActualInterval,
+        );
         assert_eq!(is_period_current(&p, &now), false);
 
-        let p = pr(dt("2019-01-01T23:59:59Z"), dt("2020-01-01T00:00:01Z"));
+        let p = pr(
+            dt("2019-01-01T23:59:59Z"),
+            dt("2020-01-01T00:00:01Z"),
+            IntervalType::CurrentInterval,
+        );
         assert_eq!(is_period_current(&p, &now), true);
     }
 
     #[test]
     fn test_get_current_price_response() {
-        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>| api::PriceResponse {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  interval_type: IntervalType| api::PriceResponse {
             date: start_time.with_timezone(&Local).date_naive(),
             start_time,
             end_time,
             per_kwh: 0.0,
             spot_per_kwh: 0.0,
-            interval_type: api::IntervalType::CurrentInterval,
+            interval_type,
             renewables: 0.0,
             duration: 0,
             channel_type: api::ChannelType::General,
@@ -384,31 +417,56 @@ mod tests {
             },
         };
 
-        let prices = vec![
-            pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z")),
-            pr(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z")),
-            pr(dt("2020-01-01T01:00:00Z"), dt("2020-01-01T01:30:00Z")),
-        ];
+        let it = |current, n: i32| match n.cmp(&current) {
+            std::cmp::Ordering::Less => IntervalType::ActualInterval,
+            std::cmp::Ordering::Equal => IntervalType::CurrentInterval,
+            std::cmp::Ordering::Greater => IntervalType::ForecastInterval,
+        };
+
+        let prices_fn = |current| {
+            vec![
+                pr(
+                    dt("2020-01-01T00:00:00Z"),
+                    dt("2020-01-01T00:30:00Z"),
+                    it(current, 0),
+                ),
+                pr(
+                    dt("2020-01-01T00:30:00Z"),
+                    dt("2020-01-01T01:00:00Z"),
+                    it(current, 1),
+                ),
+                pr(
+                    dt("2020-01-01T01:00:00Z"),
+                    dt("2020-01-01T01:30:00Z"),
+                    it(current, 2),
+                ),
+            ]
+        };
 
         let now = dt("2019-12-31T23:59:59Z");
+        let prices = prices_fn(-1);
         let p = get_current_price_response(&prices, &now);
         assert!(p.is_none());
 
         let now = dt("2020-01-01T00:00:00Z");
+        let prices = prices_fn(0);
         let p = get_current_price_response(&prices, &now).unwrap();
         assert_eq!(p.start_time, prices[0].start_time);
         assert_eq!(p.end_time, prices[0].end_time);
 
         let now = dt("2020-01-01T00:30:00Z");
+        let prices = prices_fn(1);
         let p = get_current_price_response(&prices, &now).unwrap();
         assert_eq!(p.start_time, prices[1].start_time);
         assert_eq!(p.end_time, prices[1].end_time);
 
         let now = dt("2020-01-01T01:00:00Z");
+        let prices = prices_fn(2);
         let p = get_current_price_response(&prices, &now).unwrap();
         assert_eq!(p.start_time, prices[2].start_time);
         assert_eq!(p.end_time, prices[2].end_time);
 
+        let prices = prices_fn(3);
         let now = dt("2020-01-01T01:30:00Z");
         let p = get_current_price_response(&prices, &now);
         assert!(p.is_none());
@@ -416,13 +474,16 @@ mod tests {
 
     #[test]
     fn test_get_weighted_price() {
-        let pr = |start_time: DateTime<Utc>, end_time: DateTime<Utc>, price| api::PriceResponse {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  price,
+                  interval_type: IntervalType| api::PriceResponse {
             date: start_time.with_timezone(&Local).date_naive(),
             start_time,
             end_time,
             per_kwh: price,
             spot_per_kwh: price,
-            interval_type: api::IntervalType::CurrentInterval,
+            interval_type,
             renewables: 0.0,
             duration: 0,
             channel_type: api::ChannelType::General,
@@ -436,25 +497,52 @@ mod tests {
             },
         };
 
-        let prices = vec![
-            pr(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 1.0),
-            pr(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z"), 2.0),
-            pr(dt("2020-01-01T01:00:00Z"), dt("2020-01-01T01:30:00Z"), 4.0),
-        ];
+        let it = |current, n: i32| match n.cmp(&current) {
+            std::cmp::Ordering::Less => IntervalType::ActualInterval,
+            std::cmp::Ordering::Equal => IntervalType::CurrentInterval,
+            std::cmp::Ordering::Greater => IntervalType::ForecastInterval,
+        };
+
+        let prices_fn = |current| {
+            vec![
+                pr(
+                    dt("2020-01-01T00:00:00Z"),
+                    dt("2020-01-01T00:30:00Z"),
+                    1.0,
+                    it(current, 0),
+                ),
+                pr(
+                    dt("2020-01-01T00:30:00Z"),
+                    dt("2020-01-01T01:00:00Z"),
+                    2.0,
+                    it(current, 1),
+                ),
+                pr(
+                    dt("2020-01-01T01:00:00Z"),
+                    dt("2020-01-01T01:30:00Z"),
+                    4.0,
+                    it(current, 2),
+                ),
+            ]
+        };
 
         let now = dt("2020-01-01T00:00:00Z");
+        let prices = prices_fn(0);
         let p = get_weighted_price(&prices, &now).unwrap();
         assert_approx_eq!(f32, p, 1.25);
 
         let now = dt("2020-01-01T00:30:00Z");
+        let prices = prices_fn(1);
         let p = get_weighted_price(&prices, &now).unwrap();
         assert_approx_eq!(f32, p, 2.25);
 
         let now = dt("2020-01-01T01:00:00Z");
+        let prices = prices_fn(2);
         let p = get_weighted_price(&prices, &now).unwrap();
         assert_approx_eq!(f32, p, 3.5);
 
         let now = dt("2020-01-01T01:30:00Z");
+        let prices = prices_fn(3);
         let p = get_weighted_price(&prices, &now);
         assert!(p.is_none());
     }
