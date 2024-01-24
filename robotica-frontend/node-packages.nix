@@ -3748,13 +3748,13 @@ let
         sha512 = "O84QOnr0icsbFGLS0O3bI5FswxzRr8/gHwWkDlQFskhSPryQXvrTMxjxGP4+iWYoauLoBvfDpkrOauZ+0iZpDA==";
       };
     };
-    "webpack-5.89.0" = {
+    "webpack-5.90.0" = {
       name = "webpack";
       packageName = "webpack";
-      version = "5.89.0";
+      version = "5.90.0";
       src = fetchurl {
-        url = "https://registry.npmjs.org/webpack/-/webpack-5.89.0.tgz";
-        sha512 = "qyfIC10pOr70V+jkmud8tMfajraGCZMBWJtrmuBymQKCrLTRejBI8STDp1MCyZu/QTdZSeacCQYpYNQVOzX5kw==";
+        url = "https://registry.npmjs.org/webpack/-/webpack-5.90.0.tgz";
+        sha512 = "bdmyXRCXeeNIePv6R6tGPyy20aUobw4Zy8r0LUS2EWO+U+Ke/gYDgsCh7bl5rB6jPpr4r0SZa6dPxBxLooDT3w==";
       };
     };
     "webpack-cli-5.1.4" = {
@@ -4384,7 +4384,7 @@ let
       sources."vary-1.1.2"
       sources."watchpack-2.4.0"
       sources."wbuf-1.7.3"
-      (sources."webpack-5.89.0" // {
+      (sources."webpack-5.90.0" // {
         dependencies = [
           sources."ajv-6.12.6"
           sources."ajv-keywords-3.5.2"
