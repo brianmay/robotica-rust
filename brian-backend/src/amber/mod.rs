@@ -13,6 +13,7 @@ use tracing::{error, info};
 
 pub mod api;
 pub mod car;
+pub mod hot_water;
 pub mod logging;
 
 #[derive(Copy, Debug, Clone, Eq, PartialEq)]
@@ -23,6 +24,7 @@ pub enum PriceCategory {
     Expensive,
 }
 
+#[derive(Debug)]
 pub struct Prices {
     pub list: Vec<api::PriceResponse>,
     pub category: PriceCategory,
@@ -38,8 +40,8 @@ impl PartialEq for Prices {
 impl Eq for Prices {}
 
 impl Prices {
-    pub fn current(&self) -> Option<&api::PriceResponse> {
-        get_current_price_response(&self.list, &self.dt)
+    pub fn current(&self, dt: &DateTime<Utc>) -> Option<&api::PriceResponse> {
+        get_current_price_response(&self.list, dt)
     }
 }
 

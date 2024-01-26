@@ -24,11 +24,12 @@ use chrono::{Duration, Local, TimeZone};
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
-use robotica_backend::pipes::stateless;
+use robotica_backend::pipes::{stateless, Subscriber, Subscription};
 use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
+use robotica_backend::spawn;
 use robotica_common::mqtt::QoS;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
@@ -183,6 +184,36 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
     });
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
+
+    let hot_water_request = amber::hot_water::run(&state, prices.clone());
+    spawn(async move {
+        let mut s = hot_water_request.subscribe().await;
+
+        while let Ok(request) = s.recv().await {
+            info!("Hot water request: {request:?}");
+            //     let payload = match request {
+            //         amber::hot_water::HotWaterRequest::On => Payload::Command(Command::HotWaterOn),
+            //         amber::hot_water::HotWaterRequest::Off => Payload::Command(Command::HotWaterOff),
+            //     };
+            //     state
+            //         .message_sink
+            //         .try_send(Message::new(
+            //             "Hot Water",
+            //             &format!("{:?}", request),
+            //             MessagePriority::Low,
+            //             audience::everyone(),
+            //         ))
+            //         .unwrap_or_else(|e| {
+            //             error!("Error sending hot water message: {e}");
+            //         });
+            //     state
+            //         .subscriptions
+            //         .publish("ha/event/message", payload)
+            //         .unwrap_or_else(|e| {
+            //             error!("Error sending hot water message: {e}");
+            //         });
+        }
+    });
 
     for tesla in config.teslas {
         let charge_request = amber::car::run(prices.clone());

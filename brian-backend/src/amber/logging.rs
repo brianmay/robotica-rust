@@ -6,6 +6,7 @@ use robotica_backend::{
     pipes::{stateful::Receiver, Subscriber, Subscription},
     spawn,
 };
+use robotica_common::datetime::utc_now;
 use std::sync::Arc;
 use tracing::error;
 
@@ -61,6 +62,7 @@ struct UsageReading {
 
 async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     let client = influxdb_config.get_client();
+    let now = utc_now();
 
     for data in &prices.list {
         let reading = PriceReading {
@@ -77,7 +79,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
         }
     }
 
-    if let Some(current) = prices.current() {
+    if let Some(current) = prices.current(&now) {
         let reading = PriceSummaryReading {
             // is_cheap_2hr: false,
             per_kwh: current.per_kwh,
