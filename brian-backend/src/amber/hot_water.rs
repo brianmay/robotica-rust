@@ -32,6 +32,7 @@ struct DayState {
     #[serde(with = "robotica_common::datetime::with_duration")]
     cheap_power_for_day: Duration,
     last_cheap_update: Option<DateTime<Utc>>,
+    cheapest_price: f32,
 }
 
 impl DayState {
@@ -42,6 +43,7 @@ impl DayState {
             end: end_day,
             cheap_power_for_day: duration_from_hms(0, 0, 0),
             last_cheap_update: None,
+            cheapest_price: 10.0,
         }
     }
 
@@ -114,12 +116,15 @@ impl DayState {
             number_of_intervals
         );
 
-        let cheapest_price =
+        self.cheapest_price =
             get_price_for_cheapest_period(&prices.list, number_of_intervals, &start_day, &end_day)
-                .unwrap_or(10.0);
+                .unwrap_or(self.cheapest_price);
 
-        let is_cheap = current_price.per_kwh <= cheapest_price;
-        info!("Cheapest price: {cheapest_price:?} {is_cheap}",);
+        let is_cheap = current_price.per_kwh <= self.cheapest_price;
+        info!(
+            "Cheapest price: {cheapest_price:?} {is_cheap}",
+            cheapest_price = self.cheapest_price
+        );
 
         if is_cheap {
             self.last_cheap_update = Some(now);
