@@ -37,4 +37,4 @@ crate-type = ["cdylib", "rlib"]
 # futures = "0.3.25"
 # js-sys = "0.3.22"
 # wasm-bindgen-futures = "0.4.33"
-wasm-bindgen-test = "0.3.40"
+wasm-bindgen-test = "0.3.41"
