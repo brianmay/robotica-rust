@@ -132,7 +132,7 @@ impl Manifest {
 struct HttpState {
     mqtt: MqttTx,
     config: Arc<Config>,
-    oidc_client: Arc<ArcSwap<Client>>,
+    oidc_client: Arc<ArcSwap<Option<Client>>>,
     rooms: Arc<ui_config::Rooms>,
     manifest: Arc<Manifest>,
 }
@@ -162,19 +162,19 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
         .with_expiry(Expiry::OnInactivity(Duration::days(7)))
         .with_same_site(SameSite::Lax);
 
-    let redirect = config
-        .generate_url_or_default("/openid_connect_redirect_uri?iss=https://auth.linuxpenguins.xyz");
+    let root_url = &config.root_url;
+    let redirect_path = format!("/openid_connect_redirect_uri?iss={root_url}");
+    let redirect_uri = config.generate_url_or_default(&redirect_path);
 
     let oidc_config = oidc::Config {
         issuer: config.oidc_discovery_url.clone(),
         client_id: config.oidc_client_id.clone(),
         client_secret: config.oidc_client_secret.clone(),
-        redirect_uri: redirect,
+        redirect_uri,
         scopes: config.oidc_scopes.clone(),
     };
 
-    let client = Client::new(&oidc_config).await?;
-    let oidc_client = Arc::new(ArcSwap::new(Arc::new(client)));
+    let oidc_client = Arc::new(ArcSwap::new(Arc::new(None)));
 
     let config = Arc::new(config);
     let rooms = Arc::new(rooms);
@@ -190,7 +190,7 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
                 let new_client = Client::new(&oidc_config).await;
                 match new_client {
                     Ok(new_client) => {
-                        client.store(Arc::new(new_client));
+                        client.store(Arc::new(Some(new_client)));
                     }
                     Err(e) => {
                         tracing::error!("failed to refresh oidc client: {}", e);
@@ -267,7 +267,7 @@ const ASSET_SUFFIXES: [&str; 9] = [
 
 async fn fallback_handler(
     session: Session,
-    State(oidc_client): State<Arc<ArcSwap<Client>>>,
+    State(oidc_client): State<Arc<ArcSwap<Option<Client>>>>,
     State(http_config): State<Arc<Config>>,
     State(manifest): State<Arc<Manifest>>,
     req: Request<Body>,
@@ -283,7 +283,11 @@ async fn fallback_handler(
 
     if !asset_file && get_user(&session).await.is_none() {
         let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
-        let auth_url = oidc_client.load().get_auth_url(origin_url);
+        let oidc_client = oidc_client.load();
+        let Some(oidc_client) = oidc_client.as_ref() else {
+            return Err(ResponseError::OidcError());
+        };
+        let auth_url = oidc_client.get_auth_url(origin_url);
         return Ok(Redirect::to(&auth_url).into_response());
     }
 
@@ -372,7 +376,7 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
 
 async fn oidc_callback(
     State(http_config): State<Arc<Config>>,
-    State(oidc_client): State<Arc<ArcSwap<Client>>>,
+    State(oidc_client): State<Arc<ArcSwap<Option<Client>>>>,
     Query(params): Query<HashMap<String, String>>,
     session: Session,
 ) -> Result<Response, ResponseError> {
@@ -383,7 +387,14 @@ async fn oidc_callback(
         .cloned()
         .unwrap_or_else(|| "/".to_string());
 
-    let result = oidc_client.load().request_token(&code).await;
+    let result = {
+        let oidc_client = oidc_client.load();
+        let Some(oidc_client) = oidc_client.as_ref() else {
+            return Err(ResponseError::OidcError());
+        };
+
+        oidc_client.request_token(&code).await
+    };
 
     let response = match result {
         Ok((_token, user_info)) => {

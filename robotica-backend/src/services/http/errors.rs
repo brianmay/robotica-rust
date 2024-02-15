@@ -7,6 +7,7 @@ pub enum ResponseError {
     MethodNotAllowed,
     InternalError(String),
     BadRequest(String),
+    OidcError(),
 }
 
 impl ResponseError {
@@ -32,6 +33,7 @@ impl IntoResponse for ResponseError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
+            Self::OidcError() => (StatusCode::INTERNAL_SERVER_ERROR, "OIDC Error").into_response(),
         }
     }
 }
