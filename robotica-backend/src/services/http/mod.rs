@@ -140,10 +140,6 @@ struct HttpState {
 /// An error running the HTTP service.
 #[derive(Error, Debug)]
 pub enum HttpError {
-    /// There was an error configuring OIDC support.
-    #[error("OIDC error: {0}")]
-    Oidc(#[from] oidc::Error),
-
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -162,15 +158,13 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
         .with_expiry(Expiry::OnInactivity(Duration::days(7)))
         .with_same_site(SameSite::Lax);
 
-    let root_url = &config.root_url;
-    let redirect_path = format!("/openid_connect_redirect_uri?iss={root_url}");
-    let redirect_uri = config.generate_url_or_default(&redirect_path);
+    let redirect = config.generate_url_or_default("/openid_connect_redirect_uri");
 
     let oidc_config = oidc::Config {
         issuer: config.oidc_discovery_url.clone(),
         client_id: config.oidc_client_id.clone(),
         client_secret: config.oidc_client_secret.clone(),
-        redirect_uri,
+        redirect_uri: redirect,
         scopes: config.oidc_scopes.clone(),
     };
 
@@ -184,16 +178,16 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
         let client = oidc_client.clone();
         spawn(async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
-
                 tracing::info!("refreshing oidc client");
                 let new_client = Client::new(&oidc_config).await;
                 match new_client {
                     Ok(new_client) => {
                         client.store(Arc::new(Some(new_client)));
+                        tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
                     }
                     Err(e) => {
                         tracing::error!("failed to refresh oidc client: {}", e);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
                     }
                 }
             }
