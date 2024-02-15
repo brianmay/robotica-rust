@@ -310,7 +310,7 @@
             packages = with pkgs; [
               poetry
               poetry_env
-              rust-analyzer
+              pkgs_unstable.rust-analyzer
               pkg-config
               openssl
               protobuf
