@@ -76,13 +76,13 @@ impl<T: TimeZone + Copy> Config<T> {
         sequences
     }
 
-    fn get_sequences_for_date(&self, date: Date) -> Vec<Sequence> {
+    fn get_sequences_for_date(&self, date: NaiveDate) -> Vec<Sequence> {
         let tomorrow = date + Duration::days(1);
         let c_date = classifier::classify_date_with_config(&date, &self.classifier);
         let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.classifier);
 
         let schedule = scheduler::get_schedule_with_config(
-            &date,
+            date,
             &c_date,
             &c_tomorrow,
             &self.scheduler,

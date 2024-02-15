@@ -2,12 +2,15 @@
 //!
 
 use super::{
-    ast::{Boolean, Fields},
+    ast::{Boolean, Fields, Reference},
     conditions,
 };
-use chrono::TimeZone;
+use chrono::Datelike;
+use chrono::{NaiveDate, TimeZone};
 use field_ref::field_ref_of;
-use robotica_common::datetime::{convert_date_time_to_utc_or_default, Date, DateTime, Time};
+use robotica_common::datetime::{
+    convert_date_time_to_utc_or_default, week_day_to_string, DateTime, Time,
+};
 use serde::{Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
@@ -58,6 +61,7 @@ impl Config {
 struct Context {
     today: HashSet<String>,
     tomorrow: HashSet<String>,
+    day_of_week: String,
 }
 
 fn get_fields() -> Fields<Context> {
@@ -72,6 +76,10 @@ fn get_fields() -> Fields<Context> {
     fields
         .sets
         .insert("tomorrow".to_string(), field_ref_of!(Context => tomorrow));
+    fields.any.insert(
+        "day_of_week".to_string(),
+        Reference::String(field_ref_of!(Context => day_of_week)),
+    );
     fields
 }
 
@@ -118,12 +126,18 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
     Ok(config)
 }
 
-fn is_condition_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<String>) -> bool {
+fn is_condition_ok(
+    config: &Config,
+    date: NaiveDate,
+    today: &HashSet<String>,
+    tomorrow: &HashSet<String>,
+) -> bool {
     config.if_cond.as_ref().map_or(true, |s_if| {
         s_if.iter().any(|s_if| {
             let context = Context {
                 today: today.clone(),
                 tomorrow: tomorrow.clone(),
+                day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
             };
             s_if.eval(&context)
         })
@@ -153,14 +167,14 @@ pub enum ScheduleError {}
 /// Returns an error if a date time cannot be converted to UTC.
 #[allow(clippy::implicit_hasher)]
 pub fn get_schedule_with_config<T: TimeZone>(
-    date: &Date,
+    date: NaiveDate,
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
     config_list: &[Config],
     timezone: &T,
 ) -> Result<Vec<Schedule>, ScheduleError> {
     let schedule = config_list.iter().filter(|config| {
-        is_condition_ok(config, today, tomorrow) && is_tags_ok(config, today, tomorrow)
+        is_condition_ok(config, date, today, tomorrow) && is_tags_ok(config, today, tomorrow)
     });
 
     let sequences: Result<Vec<Schedule>, ScheduleError> = schedule
@@ -175,7 +189,7 @@ pub fn get_schedule_with_config<T: TimeZone>(
                 .as_ref()
                 .map_or_else(HashSet::new, |o| o.iter().cloned().collect());
             let schedule = Schedule {
-                datetime: convert_date_time_to_utc_or_default(*date, seq.time, timezone),
+                datetime: convert_date_time_to_utc_or_default(date, seq.time, timezone),
                 sequence_name: name,
                 options,
             };
@@ -330,7 +344,7 @@ mod tests {
     fn test_every_day() {
         let config_list = config();
 
-        let date = Date::from_ymd_opt(2018, 12, 24).unwrap();
+        let date = NaiveDate::from_ymd_opt(2018, 12, 24).unwrap();
         let today = ["today"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
@@ -338,7 +352,7 @@ mod tests {
         let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
-            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -360,7 +374,7 @@ mod tests {
     fn test_christmas() {
         let config_list = config();
 
-        let date = Date::from_ymd_opt(2018, 12, 25).unwrap();
+        let date = NaiveDate::from_ymd_opt(2018, 12, 25).unwrap();
         let today = ["christmas"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
@@ -368,7 +382,7 @@ mod tests {
         let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
-            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -395,7 +409,7 @@ mod tests {
     fn test_boxing() {
         let config_list = config();
 
-        let date = Date::from_ymd_opt(2018, 12, 26).unwrap();
+        let date = NaiveDate::from_ymd_opt(2018, 12, 26).unwrap();
         let today = ["boxing"];
         let today: HashSet<String> = today.iter().map(std::string::ToString::to_string).collect();
         let tomorrow: HashSet<String> = HashSet::from([]);
@@ -403,7 +417,7 @@ mod tests {
         let timezone = FixedOffset::east_opt(60 * 60 * 10).unwrap();
 
         let schedule =
-            get_schedule_with_config(&date, &today, &tomorrow, &config_list, &timezone).unwrap();
+            get_schedule_with_config(date, &today, &tomorrow, &config_list, &timezone).unwrap();
 
         let expected: Vec<ExpectedResult> = vec![
             ExpectedResult {
@@ -424,7 +438,7 @@ mod tests {
     fn check_results(
         schedule: &[Schedule],
         expected: &[ExpectedResult],
-        date: Date,
+        date: NaiveDate,
         timezone: FixedOffset,
     ) {
         assert!(
