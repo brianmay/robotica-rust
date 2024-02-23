@@ -41,7 +41,7 @@ base64 = "0.21.7"
 url = "2.5.0"
 futures = "0.3.30"
 tower = "0.4.13"
-tower-http = { version = "0.5.1", features = ["fs", "trace"] }
+tower-http = { version = "0.5.2", features = ["fs", "trace"] }
 tower-sessions = { version = "0.9.1", features = ["moka-store"] }
 arc-swap = "1.4.0"
 hyper = "1.2.0"
