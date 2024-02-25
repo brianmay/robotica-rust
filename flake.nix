@@ -70,7 +70,7 @@
         nodePackages = pkgs.buildNpmPackage {
           name = "robotica-frontend";
           src = ./robotica-frontend;
-          npmDepsHash = "sha256-dNDH88p2cniTFVhwLgRnZ+ky9kNCv8/fEMj1IwL7luE=";
+          npmDepsHash = "sha256-rxuB1A2SellbEw7YPU3GW/vQvkZh4kF6C9r4CjtqRNg=";
           # npmDepsHash = pkgs.lib.fakeHash;
           dontNpmBuild = true;
           inherit nodejs;
@@ -322,6 +322,7 @@
               # https://github.com/NixOS/nixpkgs/issues/156890
               binaryen
               nodePackages
+              prefetch-npm-deps
               gcc
             ];
             enterShell = ''
