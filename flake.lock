@@ -321,22 +321,6 @@
         "type": "github"
       }
     },
-    "node2nix": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1673551689,
-        "narHash": "sha256-8OxTOkwBPcnjyhXhxQEDd8tiaQoHt91zUJX5Ka+IXco=",
-        "owner": "svanderburg",
-        "repo": "node2nix",
-        "rev": "315e1b85a6761152f57a41ccea5e2570981ec670",
-        "type": "github"
-      },
-      "original": {
-        "owner": "svanderburg",
-        "repo": "node2nix",
-        "type": "github"
-      }
-    },
     "poetry2nix": {
       "inputs": {
         "flake-utils": "flake-utils_3",
@@ -397,7 +381,6 @@
         "flockenzeit": "flockenzeit",
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-unstable": "nixpkgs-unstable",
-        "node2nix": "node2nix",
         "poetry2nix": "poetry2nix",
         "rust-overlay": "rust-overlay"
       }

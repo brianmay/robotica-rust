@@ -14,18 +14,13 @@
       url = "github:nix-community/poetry2nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    node2nix = {
-      url = "github:svanderburg/node2nix";
-      # inputs.nixpkgs.follows = "nixpkgs";
-      flake = false;
-    };
     flockenzeit.url = "github:balsoft/flockenzeit";
     # See https://github.com/cachix/devenv/issues/756
     devenv.url = "github:cachix/devenv/v0.6.3";
   };
 
   outputs = inputs@{ self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
-    , nixpkgs-unstable, node2nix, flockenzeit, devenv }:
+    , nixpkgs-unstable, flockenzeit, devenv }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         # pkgs_arm = nixpkgs.legacyPackages."aarch64-linux";
@@ -72,8 +67,20 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
 
-        nodePackages =
-          import robotica-frontend/default.nix { inherit pkgs system nodejs; };
+        nodePackages = pkgs.buildNpmPackage {
+          name = "robotica-frontend";
+          src = ./robotica-frontend;
+          npmDepsHash = "sha256-dNDH88p2cniTFVhwLgRnZ+ky9kNCv8/fEMj1IwL7luE=";
+          # npmDepsHash = pkgs.lib.fakeHash;
+          dontNpmBuild = true;
+          inherit nodejs;
+
+          installPhase = ''
+            mkdir $out
+            cp -r node_modules $out
+            ln -s $out/node_modules/.bin $out/bin
+          '';
+        };
 
         build_env = {
           BUILD_DATE =
@@ -129,8 +136,8 @@
               --omit-default-module-path \
               ${robotica-frontend.pkg}/lib/robotica_frontend.wasm
 
-            ln -s ${nodePackages.nodeDependencies}/lib/node_modules ./node_modules
-            export PATH="${nodePackages.nodeDependencies}/bin:$PATH"
+            ln -s ${nodePackages}/node_modules ./node_modules
+            export PATH="${nodejs}/bin:${nodePackages}/bin:$PATH"
             webpack
           '';
 
@@ -280,15 +287,6 @@
           pkg = wrapper;
         };
 
-        pkg_node2nix = (import "${node2nix}/default.nix" {
-          inherit system pkgs nodejs;
-        }).package;
-
-        pkg_node2nix_wrapper = pkgs.writeShellScriptBin "update_node" ''
-          cd robotica-frontend
-          exec ${pkg_node2nix}/bin/node2nix --development -l
-        '';
-
       in {
         checks = {
           robotica-slint-clippy = robotica-slint.clippy;
@@ -323,9 +321,7 @@
               rustPlatform
               # https://github.com/NixOS/nixpkgs/issues/156890
               binaryen
-              pkg_node2nix
-              pkg_node2nix_wrapper
-              nodePackages.nodeDependencies
+              nodePackages
               gcc
             ];
             enterShell = ''
