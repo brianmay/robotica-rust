@@ -23,7 +23,7 @@ reqwest = "0.11.24"
 gethostname = "0.4.3"
 thiserror = "1.0.57"
 chrono = "0.4.34"
-lalrpop-util = { version = "0.20.0", features = ["lexer"], optional = true }
+lalrpop-util = { version = "0.20.2", features = ["lexer"], optional = true }
 regex = "1.7.3"
 field-ref = "0.2.1"
 tracing = "0.1.35"
