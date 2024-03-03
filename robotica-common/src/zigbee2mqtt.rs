@@ -9,8 +9,9 @@ use crate::mqtt::Json;
 #[allow(dead_code)]
 #[derive(Deserialize, Clone, Eq, PartialEq)]
 pub struct Door {
-    battery: u8,
-    battery_low: bool,
+    // We don't care about battery status just yet.
+    // battery: f32,
+    // battery_low: bool,
     contact: bool,
     #[serde(rename = "linkquality")]
     link_quality: u8,
