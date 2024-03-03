@@ -286,6 +286,14 @@ impl<T: FromStr + PartialEq> PartialEq for Parsed<T> {
 
 impl<T: FromStr + Eq> Eq for Parsed<T> {}
 
+impl<T: FromStr> Deref for Parsed<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// The error type for u8 conversion
 #[derive(Error, Debug)]
 pub enum ParsedError<ParserError> {

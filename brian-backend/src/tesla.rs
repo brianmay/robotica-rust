@@ -163,7 +163,11 @@ impl Location {
     }
 }
 
-pub fn monitor_tesla_location(state: &mut InitState, tesla: &Config) {
+pub fn monitor_tesla_location(
+    state: &mut InitState,
+    tesla: &Config,
+    charging_info: stateful::Receiver<ChargingInformation>,
+) {
     let location = state
         .subscriptions
         .subscribe_into_stateful::<String>(&format!(
@@ -183,6 +187,8 @@ pub fn monitor_tesla_location(state: &mut InitState, tesla: &Config) {
 
     spawn(async move {
         let mut location_s = location.subscribe().await;
+        let mut charging_info_s = charging_info.subscribe().await;
+
         let mut old_location = {
             let Ok(old_location_raw) = location_s.recv().await else {
                 error!("Failed to get initial Tesla location");
@@ -191,18 +197,40 @@ pub fn monitor_tesla_location(state: &mut InitState, tesla: &Config) {
             Location::from_string(old_location_raw)
         };
 
-        while let Ok(new_location_raw) = location_s.recv().await {
-            let new_location = Location::from_string(new_location_raw);
+        let mut old_charging_info: ChargingInformation =
+            charging_info_s.recv().await.unwrap_or(ChargingInformation {
+                battery_level: 0,
+                charge_limit: 0,
+                charging_state: ChargingStateEnum::Disconnected,
+            });
 
-            // Departed location message.
-            let msg = left_location_message(&old_location);
-            output_location_message(&old_location, msg, &message_sink);
+        loop {
+            select! {
+                Ok(new_charging_info) = charging_info_s.recv() => {
+                    if old_charging_info.charging_state != new_charging_info.charging_state || old_charging_info.charge_limit != new_charging_info.charge_limit {
+                        announce_charging_state(&old_charging_info, &new_charging_info, &message_sink);
+                    }
+                    old_charging_info = new_charging_info;
+                },
+                Ok(new_location_raw) = location_s.recv() => {
+                    let new_location = Location::from_string(new_location_raw);
 
-            // Arrived location message.
-            let msg = arrived_location_message(&new_location);
-            output_location_message(&new_location, msg, &message_sink);
+                    // Departed location message.
+                    let msg = left_location_message(&old_location);
+                    output_location_message(&old_location, msg, &message_sink);
 
-            old_location = new_location;
+                    // Arrived location message.
+                    let msg = arrived_location_message(&new_location);
+                    output_location_message(&new_location, msg, &message_sink);
+
+                    if new_location == Location::String("home".to_string()) {
+                        announce_charging_state(&old_charging_info, &old_charging_info, &message_sink);
+                    }
+
+                    old_location = new_location;
+                }
+                else => break,
+            }
         }
     });
 }
@@ -410,25 +438,23 @@ pub enum MonitorChargingError {
 }
 
 fn announce_charging_state(
-    charging_state: ChargingStateEnum,
-    old_tesla_state: &TeslaState,
+    old_charging_info: &ChargingInformation,
+    charging_info: &ChargingInformation,
     message_sink: &stateless::Sender<Message>,
 ) {
-    let was_plugged_in = old_tesla_state
-        .charging_state
-        .map(ChargingStateEnum::is_plugged_in);
-    let is_plugged_in = charging_state.is_plugged_in();
+    let was_plugged_in = old_charging_info.charging_state.is_plugged_in();
+    let is_plugged_in = charging_info.charging_state.is_plugged_in();
 
     #[allow(clippy::bool_comparison)]
-    let plugged_in_msg = if was_plugged_in == Some(true) && is_plugged_in == false {
+    let plugged_in_msg = if was_plugged_in == true && is_plugged_in == false {
         Some("has been freed".to_string())
-    } else if was_plugged_in == Some(false) && is_plugged_in == true {
+    } else if was_plugged_in == false && is_plugged_in == true {
         Some("has been leashed".to_string())
     } else {
         None
     };
 
-    let charge_msg = match charging_state {
+    let charge_msg = match charging_info.charging_state {
         ChargingStateEnum::Disconnected => "is disconnected",
         ChargingStateEnum::Charging => "is charging",
         ChargingStateEnum::NoPower => "plug failed",
@@ -437,9 +463,10 @@ fn announce_charging_state(
         ChargingStateEnum::Stopped => "has stopped charging",
     };
 
-    let charge_msg = old_tesla_state.battery_level.map_or_else(
-        || charge_msg.to_string(),
-        |level| format!("{charge_msg} at ({level}%)"),
+    let charge_msg = format!(
+        "{charge_msg} from ({level}%) to ({limit}%)",
+        level = charging_info.battery_level,
+        limit = charging_info.charge_limit
     );
 
     let msg = [plugged_in_msg, Some(charge_msg)]
@@ -455,19 +482,18 @@ fn announce_charging_state(
 
 #[derive(Debug)]
 struct TeslaState {
-    charge_limit: Option<u8>,
-    battery_level: Option<u8>,
-    charging_state: Option<ChargingStateEnum>,
-    is_at_home: Option<bool>,
+    charge_limit: u8,
+    battery_level: u8,
+    charging_state: ChargingStateEnum,
+    is_at_home: bool,
     last_success: DateTime<Utc>,
     notified_errors: bool,
     send_left_home_commands: bool,
 }
 
 impl TeslaState {
-    fn is_charging(&self) -> bool {
-        self.charging_state
-            .map_or(false, ChargingStateEnum::is_charging)
+    const fn is_charging(&self) -> bool {
+        self.charging_state.is_charging()
     }
 }
 
@@ -486,13 +512,22 @@ enum TeslaResult {
     Tried(Result<(), SequenceError>),
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ChargingInformation {
+    battery_level: u8,
+    charge_limit: u8,
+    charging_state: ChargingStateEnum,
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut InitState,
     tesla: &Config,
     charge_request_rx: stateful::Receiver<ChargeRequest>,
-) -> Result<(), MonitorChargingError> {
+) -> Result<stateful::Receiver<ChargingInformation>, MonitorChargingError> {
     let id = tesla.teslamate_id.to_string();
+
+    let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
 
     let tesla_secret = state.persistent_state_database.for_name("tesla_token");
 
@@ -562,16 +597,6 @@ pub fn monitor_charging(
             error!("Failed to talk to Tesla API: {}", err);
         };
 
-        let mut tesla_state = TeslaState {
-            charge_limit: None,
-            battery_level: None,
-            charging_state: None,
-            is_at_home: None,
-            last_success: Utc::now(),
-            notified_errors: false,
-            send_left_home_commands: false,
-        };
-
         let mut interval = PollInterval::Long;
         let mut timer: Interval = interval.into();
 
@@ -584,6 +609,27 @@ pub fn monitor_charging(
 
         let mut charge_request: Option<ChargeRequest> = None;
         let mut ps = ps;
+
+        let mut tesla_state = TeslaState {
+            charge_limit: *charge_limit_s.recv().await.as_deref().unwrap_or(&0),
+            battery_level: *battery_level_s.recv().await.as_deref().unwrap_or(&0),
+            charging_state: charging_state_s
+                .recv()
+                .await
+                .unwrap_or(ChargingStateEnum::Disconnected),
+            is_at_home: is_home_s.recv().await.unwrap_or(false),
+            last_success: Utc::now(),
+            notified_errors: false,
+            send_left_home_commands: false,
+        };
+
+        info!("Initial Tesla state: {:?}", tesla_state);
+
+        tx_summary.try_send(ChargingInformation {
+            battery_level: tesla_state.battery_level,
+            charge_limit: tesla_state.charge_limit,
+            charging_state: tesla_state.charging_state,
+        });
 
         loop {
             let was_at_home = tesla_state.is_at_home;
@@ -618,31 +664,28 @@ pub fn monitor_charging(
                 }
                 Ok(Parsed(new_charge_limit)) = charge_limit_s.recv() => {
                     info!("Charge limit: {new_charge_limit}");
-                    tesla_state.charge_limit = Some(new_charge_limit);
+                    tesla_state.charge_limit = new_charge_limit;
                 }
                 Ok(Parsed(new_charge_level)) = battery_level_s.recv() => {
                     info!("Charge level: {new_charge_level}");
-                    tesla_state.battery_level = Some(new_charge_level);
+                    tesla_state.battery_level = new_charge_level;
                 }
                 Ok(new_is_at_home) = is_home_s.recv() => {
                     info!("Location is at home: {new_is_at_home}");
-                    tesla_state.is_at_home = Some(new_is_at_home);
+                    tesla_state.is_at_home = new_is_at_home;
                 }
 
-                Ok((old, charging_state)) = charging_state_s.recv_old_new() => {
+                Ok(charging_state) = charging_state_s.recv() => {
                     info!("Charging state: {charging_state:?}");
-                    if old.is_some() {
-                        announce_charging_state(charging_state, &tesla_state, &message_sink);
-                    }
-                    tesla_state.charging_state = Some(charging_state);
+                    tesla_state.charging_state = charging_state;
                 }
             }
 
             let is_at_home = tesla_state.is_at_home;
-            if was_at_home == Some(true) && is_at_home == Some(false) {
+            if was_at_home && !is_at_home {
                 info!("Tesla has left home - sending left home commands");
                 tesla_state.send_left_home_commands = true;
-            } else if is_at_home == Some(true) && tesla_state.send_left_home_commands {
+            } else if is_at_home && tesla_state.send_left_home_commands {
                 info!("Tesla is at home - cancelling left home commands");
                 tesla_state.send_left_home_commands = false;
             }
@@ -659,7 +702,7 @@ pub fn monitor_charging(
                 info!("Sending left home commands: {sequence:?}");
                 let result = sequence.execute(&token, tesla.tesla_id).await;
                 TeslaResult::Tried(result)
-            } else if is_at_home == Some(true) && ps.auto_charge {
+            } else if is_at_home && ps.auto_charge {
                 if let Some(charge_request) = charge_request {
                     let result =
                         check_charge(tesla.tesla_id, &token, &tesla_state, charge_request).await;
@@ -675,6 +718,12 @@ pub fn monitor_charging(
                 );
                 TeslaResult::Skipped
             };
+
+            tx_summary.try_send(ChargingInformation {
+                battery_level: tesla_state.battery_level,
+                charge_limit: tesla_state.charge_limit,
+                charging_state: tesla_state.charging_state,
+            });
 
             let new_interval = match result {
                 TeslaResult::Skipped => {
@@ -711,7 +760,7 @@ pub fn monitor_charging(
         }
     });
 
-    Ok(())
+    Ok(rx_summary)
 }
 
 fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Message>) {
@@ -787,7 +836,6 @@ enum ChargingSummary {
     Charging,
     NotCharging,
     Disconnected,
-    Unknown,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -802,9 +850,8 @@ async fn check_charge(
     let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
 
     // We should not attempt to start charging if charging is complete.
-    let charging_state = &tesla_state.charging_state;
-    let can_start_charge =
-        charging_state.map_or(true, |state| state != ChargingStateEnum::Complete);
+    let charging_state = tesla_state.charging_state;
+    let can_start_charge = charging_state != ChargingStateEnum::Complete;
 
     info!(
         "Current data: {charge_request:?}, {tesla_state:?}, notified_errors: {}",
@@ -813,9 +860,7 @@ async fn check_charge(
     info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
-    let set_charge_limit = tesla_state
-        .charge_limit
-        .map_or(true, |current_limit| current_limit != charge_limit);
+    let set_charge_limit = tesla_state.charge_limit != charge_limit;
 
     // Construct sequence of commands to send to Tesla.
     let mut sequence = CommandSequence::new();
@@ -834,13 +879,12 @@ async fn check_charge(
     // Get charging state
     #[allow(clippy::match_same_arms)]
     let charging_summary = match charging_state {
-        Some(ChargingStateEnum::Starting) => ChargingSummary::Charging,
-        Some(ChargingStateEnum::Charging) => ChargingSummary::Charging,
-        Some(ChargingStateEnum::Complete) => ChargingSummary::NotCharging,
-        Some(ChargingStateEnum::Stopped) => ChargingSummary::NotCharging,
-        Some(ChargingStateEnum::Disconnected) => ChargingSummary::Disconnected,
-        Some(ChargingStateEnum::NoPower) => ChargingSummary::Disconnected,
-        None => ChargingSummary::Unknown,
+        ChargingStateEnum::Starting => ChargingSummary::Charging,
+        ChargingStateEnum::Charging => ChargingSummary::Charging,
+        ChargingStateEnum::Complete => ChargingSummary::NotCharging,
+        ChargingStateEnum::Stopped => ChargingSummary::NotCharging,
+        ChargingStateEnum::Disconnected => ChargingSummary::Disconnected,
+        ChargingStateEnum::NoPower => ChargingSummary::Disconnected,
     };
 
     // Start/stop charging as required.
@@ -859,15 +903,6 @@ async fn check_charge(
                 sequence.add_charge_start();
             }
             ChargingSummary::NotCharging => {}
-            ChargingSummary::Unknown if should_charge == DoNotCharge => {
-                info!("Stopping charge (unknown)");
-                sequence.add_charge_stop();
-            }
-            ChargingSummary::Unknown if should_charge == DoCharge && can_start_charge => {
-                info!("Starting charge (unknown)");
-                sequence.add_charge_start();
-            }
-            ChargingSummary::Unknown => {}
             ChargingSummary::Disconnected => info!("Car is disconnected"),
         }
     }
@@ -898,14 +933,13 @@ fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (Sh
 
     #[allow(clippy::match_same_arms)]
     let should_charge = match (should_charge, tesla_state.battery_level) {
-        (sc @ ShouldCharge::DoCharge, Some(level)) => {
+        (sc @ ShouldCharge::DoCharge, level) => {
             if level < charge_limit {
                 sc
             } else {
                 ShouldCharge::DoNotCharge
             }
         }
-        (sc @ ShouldCharge::DoCharge, None) => sc,
         (sc @ ShouldCharge::DoNotCharge, _) => sc,
         // (sc @ ShouldCharge::DontTouch, _) => sc,
     };
