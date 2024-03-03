@@ -9,6 +9,7 @@ use tokio::{
     select,
     time::{self, sleep_until, Instant, Interval},
 };
+use tracing::debug;
 
 pub enum DelayInputState<T> {
     Idle,
@@ -55,7 +56,9 @@ where
 
         loop {
             select! {
-                Ok(v) = s.recv_old_new() => {
+                v = s.recv_old_new() => {
+                    let Ok(v) = v else { break};
+
                     // debug!("delay received: {:?}", v);
                     let active_value = is_active(&v);
                     let (_, v) = v;
@@ -85,7 +88,6 @@ where
                     }
                     state = if options.skip_subsequent_delay { DelayInputState::NoDelay } else { DelayInputState::Idle };
                 },
-                else => { break; }
             }
         }
     });
@@ -125,7 +127,9 @@ where
 
         loop {
             select! {
-                Ok(v) = s.recv_old_new() => {
+                v = s.recv_old_new() => {
+                    let Ok(v) = v else { break};
+
                     // debug!("delay received: {:?}", v);
                     let active_value = is_active(&v);
                     let (_, v)= v;
@@ -150,7 +154,90 @@ where
                         // debug!("delay timer, not sending anything (shouldn't happen)");
                     }
                 },
-                else => { break; }
+            }
+        }
+    });
+    rx_out
+}
+
+#[derive(Debug)]
+pub enum RateLimitState<T> {
+    Idle,
+    Waiting(Instant),
+    Delaying(Instant, T),
+}
+
+impl<T: Sync> RateLimitState<T> {
+    async fn maybe_sleep_until(&self) -> Option<()> {
+        match self {
+            Self::Idle => None,
+            Self::Waiting(instant) | Self::Delaying(instant, _) => {
+                sleep_until(*instant).await;
+                Some(())
+            }
+        }
+    }
+}
+
+pub fn rate_limit<T>(
+    name: &str,
+    duration: Duration,
+    rx: stateful::Receiver<T>,
+) -> stateful::Receiver<T>
+where
+    T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
+{
+    let (tx_out, rx_out) = stateful::create_pipe(name);
+    spawn(async move {
+        let mut state = RateLimitState::Idle;
+        let mut s = rx.subscribe().await;
+
+        loop {
+            select! {
+                v = s.recv_old_new() => {
+                    let Ok((old, v)) = v else { break};
+
+                    debug!("rate_limit received: {:?}", v);
+                    state =
+                    {
+                        #[allow(clippy::match_same_arms)]
+                        match (old.is_some(), state) {
+                            (false, _) => {
+                                // Don't rate limit initial value
+                                tx_out.try_send(v);
+                                RateLimitState::Idle
+                            },
+                            (true, RateLimitState::Idle) => {
+                                tx_out.try_send(v);
+                                RateLimitState::Waiting(Instant::now() + duration)
+                            },
+                            (true, RateLimitState::Waiting(instant)) => {
+                                RateLimitState::Delaying(instant, v)
+                            },
+                            (true, RateLimitState::Delaying(instant, _)) => {
+                                RateLimitState::Delaying(instant, v)
+                            },
+                        }
+                    };
+                },
+                Some(()) = state.maybe_sleep_until() => {
+                    debug!("rate_limit timer: {:?}", state);
+                    state = {
+                        #[allow(clippy::match_same_arms)]
+                        match state {
+                        RateLimitState::Idle => {
+                            RateLimitState::Idle
+                        },
+                        RateLimitState::Waiting(_) => {
+                            RateLimitState::Idle
+                        },
+                        RateLimitState::Delaying(_, v) => {
+                            tx_out.try_send(v);
+                            RateLimitState::Waiting(Instant::now() + duration)
+                        },
+                    }
+                }
+                }
             }
         }
     });

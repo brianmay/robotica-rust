@@ -4,7 +4,7 @@ use tokio::select;
 use tracing::debug;
 
 use robotica_backend::{devices::hdmi::Command, pipes::stateless, spawn};
-use robotica_common::mqtt::{Json, MqttMessage, QoS};
+use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::commands;
 
 use crate::{robotica::Id, InitState};
@@ -75,7 +75,7 @@ pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
                         let output = format!("output{}", output + 1);
                         let topic = id.get_state_topic(&output.to_string());
                         let payload = input;
-                        let message = MqttMessage::new(topic, payload, true, QoS::AtLeastOnce);
+                        let message = MqttMessage::new(topic, payload, Retain::Retain, QoS::AtLeastOnce);
                         mqtt.try_send(message);
                     }
                 },

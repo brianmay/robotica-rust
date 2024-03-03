@@ -16,3 +16,7 @@ pub const fn brian(private: bool) -> &'static str {
 pub const fn twins() -> &'static str {
     "twins"
 }
+
+pub const fn dining_room() -> &'static str {
+    "dining"
+}

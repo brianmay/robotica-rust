@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use robotica_common::{
     datetime::{DateTime, Duration},
-    mqtt::QoS,
+    mqtt::{QoS, Retain},
     robotica::tasks::{Payload, Task},
     scheduler::{Importance, Mark, Status},
 };
@@ -36,7 +36,7 @@ pub struct ConfigTask {
     qos: Option<u8>,
 
     /// The retain flag to be used when sending the message.
-    retain: Option<bool>,
+    retain: Option<Retain>,
 
     /// The topics this task will send to.
     topics: Vec<String>,
@@ -317,7 +317,7 @@ fn config_to_sequence(
                 .payload
                 .unwrap_or_else(|| Payload::String(String::new())),
             qos: map_qos(src_task.qos),
-            retain: src_task.retain.unwrap_or(false),
+            retain: src_task.retain.unwrap_or(Retain::NoRetain),
             topics: src_task.topics,
         })
         .collect();

@@ -11,7 +11,7 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    mqtt::{Json, MqttMessage, QoS},
+    mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{
         commands::Command,
         lights::{self, Colors, LightCommand, PowerColor, PowerLevel, PowerState, State, HSBK},
@@ -548,7 +548,7 @@ fn send_state(mqtt: &MqttTx, state: &lights::State, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/status");
     match serde_json::to_string(&state) {
         Ok(json) => {
-            let msg = MqttMessage::new(topic, json, true, QoS::AtLeastOnce);
+            let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
             mqtt.try_send(msg);
         }
         Err(e) => {
@@ -561,7 +561,7 @@ fn send_power_state(mqtt: &MqttTx, power_state: &PowerState, topic_substr: &str)
     let topic = format!("state/{topic_substr}/power");
     match serde_json::to_string(&power_state) {
         Ok(json) => {
-            let msg = MqttMessage::new(topic, json, true, QoS::AtLeastOnce);
+            let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
             mqtt.try_send(msg);
         }
         Err(e) => {
@@ -572,7 +572,7 @@ fn send_power_state(mqtt: &MqttTx, power_state: &PowerState, topic_substr: &str)
 
 fn send_scene<Scene: ScenesTrait>(mqtt: &MqttTx, scene: &Scene, topic_substr: &str) {
     let topic = format!("state/{topic_substr}/scene");
-    let msg = MqttMessage::new(topic, scene.to_string(), true, QoS::AtLeastOnce);
+    let msg = MqttMessage::new(topic, scene.to_string(), Retain::Retain, QoS::AtLeastOnce);
     mqtt.try_send(msg);
 }
 

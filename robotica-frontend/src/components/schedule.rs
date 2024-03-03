@@ -393,7 +393,7 @@ fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
                             </tr>
                             <tr>
                                 <th scope="row">{"Retain"}</th>
-                                <td>{task.retain}</td>
+                                <td>{format!("{:?}", task.retain)}</td>
                             </tr>
                         </tbody>
                     </table>

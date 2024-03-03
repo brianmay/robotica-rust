@@ -3,7 +3,7 @@ use std::sync::Arc;
 use freeswitch_esl::{Esl, EslConnection, EslError};
 use robotica_backend::{services::mqtt::MqttTx, spawn};
 use robotica_common::{
-    mqtt::MqttMessage,
+    mqtt::{MqttMessage, Retain},
     robotica::{audio::MessagePriority, message::Message},
 };
 use serde::Deserialize;
@@ -115,7 +115,7 @@ fn send_message(message: &str, config: &Config, mqtt: &MqttTx) {
     let msg = MqttMessage::from_json(
         &config.topic,
         &msg,
-        false,
+        Retain::NoRetain,
         robotica_common::mqtt::QoS::ExactlyOnce,
     );
 

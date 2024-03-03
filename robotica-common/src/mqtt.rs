@@ -2,6 +2,8 @@
 
 use core::fmt;
 use std::{
+    convert::Infallible,
+    error::Error,
     fmt::Formatter,
     ops::Deref,
     str::{FromStr, Utf8Error},
@@ -14,6 +16,42 @@ use thiserror::Error;
 
 #[cfg(feature = "websockets")]
 use crate::{protobuf::ProtobufIntoFrom, protos};
+
+/// The retain flag for a MQTT message.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum Retain {
+    /// The message should be retained.
+    Retain,
+
+    /// The message should not be retained.
+    NoRetain,
+}
+
+impl Serialize for Retain {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Retain::Retain => serializer.serialize_bool(true),
+            Retain::NoRetain => serializer.serialize_bool(false),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Retain {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = bool::deserialize(deserializer)?;
+        if value {
+            Ok(Retain::Retain)
+        } else {
+            Ok(Retain::NoRetain)
+        }
+    }
+}
 
 /// The `QoS` level for a MQTT message.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -68,7 +106,7 @@ pub struct MqttMessage {
     pub payload: Vec<u8>,
 
     /// Was/Is this message retained?
-    pub retain: bool,
+    pub retain: Retain,
 
     /// What is the QoS of this message?
     pub qos: QoS,
@@ -101,7 +139,7 @@ impl Default for MqttMessage {
         Self {
             topic: String::new(),
             payload: Vec::new(),
-            retain: false,
+            retain: Retain::NoRetain,
             qos: QoS::ExactlyOnce,
         }
     }
@@ -113,7 +151,7 @@ impl MqttMessage {
     pub fn new(
         topic: impl Into<String>,
         payload: impl Into<String>,
-        retain: bool,
+        retain: Retain,
         qos: QoS,
     ) -> Self {
         Self {
@@ -124,6 +162,20 @@ impl MqttMessage {
         }
     }
 
+    /// Create a new message from a Mqtt Serializer
+    ///
+    /// # Errors
+    ///
+    /// If the payload cannot be serialized.
+    pub fn from_serializer<T: MqttSerializer>(
+        topic: impl Into<String>,
+        payload: &T,
+        retain: Retain,
+        qos: QoS,
+    ) -> Result<Self, T::Error> {
+        payload.serialize(topic, retain, qos)
+    }
+
     /// Create a new message from a JSON value.
     ///
     /// # Errors
@@ -132,7 +184,7 @@ impl MqttMessage {
     pub fn from_json(
         topic: impl Into<String>,
         payload: &impl Serialize,
-        retain: bool,
+        retain: Retain,
         qos: QoS,
     ) -> Result<Self, serde_json::Error> {
         let payload = serde_json::to_string(payload)?;
@@ -157,7 +209,10 @@ impl ProtobufIntoFrom for MqttMessage {
         Self::Protobuf {
             topic: self.topic,
             payload: self.payload,
-            retain: self.retain,
+            retain: match self.retain {
+                Retain::Retain => true,
+                Retain::NoRetain => false,
+            },
             qos: self.qos as u32,
         }
     }
@@ -166,7 +221,11 @@ impl ProtobufIntoFrom for MqttMessage {
         Some(Self {
             topic: msg.topic,
             payload: msg.payload,
-            retain: msg.retain,
+            retain: if msg.retain {
+                Retain::Retain
+            } else {
+                Retain::NoRetain
+            },
             qos: match msg.qos {
                 0 => QoS::AtMostOnce,
                 1 => QoS::AtLeastOnce,
@@ -320,6 +379,9 @@ impl<Body: DeserializeOwned> TryFrom<MqttMessage> for Arc<Json<Body>> {
 
 /// Serialize an object to a MQTT message.
 pub trait MqttSerializer {
+    /// The error type for serialization.
+    type Error: Error;
+
     /// Serialize an object to a MQTT message.
     ///
     /// # Errors
@@ -328,30 +390,33 @@ pub trait MqttSerializer {
     fn serialize(
         &self,
         topic: impl Into<String>,
-        retain: bool,
+        retain: Retain,
         qos: QoS,
-    ) -> Result<MqttMessage, JsonError>;
+    ) -> Result<MqttMessage, Self::Error>;
 }
 
 impl<T: Serialize> MqttSerializer for Json<T> {
+    type Error = JsonError;
+
     fn serialize(
         &self,
         topic: impl Into<String>,
-        retain: bool,
+        retain: Retain,
         qos: QoS,
-    ) -> Result<MqttMessage, JsonError> {
+    ) -> Result<MqttMessage, Self::Error> {
         let payload = serde_json::to_string(&self.0)?;
         Ok(MqttMessage::new(topic, payload, retain, qos))
     }
 }
 
 impl MqttSerializer for String {
+    type Error = Infallible;
     fn serialize(
         &self,
         topic: impl Into<String>,
-        retain: bool,
+        retain: Retain,
         qos: QoS,
-    ) -> Result<MqttMessage, JsonError> {
+    ) -> Result<MqttMessage, Self::Error> {
         Ok(MqttMessage::new(topic, self, retain, qos))
     }
 }

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::error;
 
-use crate::mqtt::{self, MqttMessage};
+use crate::mqtt::{self, MqttMessage, Retain};
 
 use super::commands::Command;
 
@@ -44,7 +44,7 @@ pub struct Task {
     pub qos: mqtt::QoS,
 
     /// The retain value to be used when sending the message.
-    pub retain: bool,
+    pub retain: mqtt::Retain,
 
     /// The topics this task will send to.
     pub topics: Vec<String>,
@@ -94,7 +94,7 @@ pub struct SubTask {
     pub qos: mqtt::QoS,
 
     /// The retain value to be used when sending the message.
-    pub retain: bool,
+    pub retain: Retain,
 
     /// The target of this subtask
     pub target: String,

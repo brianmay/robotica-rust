@@ -23,7 +23,7 @@ use tracing::{debug, error, info};
 
 use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
 use robotica_backend::spawn;
-use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS};
+use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS, Retain};
 
 use super::InitState;
 
@@ -767,7 +767,7 @@ fn publish_auto_charge(
         id = teslamate_id.to_string()
     );
     let string: String = status.into();
-    let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
+    let msg = MqttMessage::new(topic, string, Retain::Retain, QoS::AtLeastOnce);
     mqtt.try_send(msg);
 }
 

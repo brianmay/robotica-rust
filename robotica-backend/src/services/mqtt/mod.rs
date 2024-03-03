@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error};
 
-use robotica_common::mqtt::{MqttMessage, QoS};
+use robotica_common::mqtt::{MqttMessage, MqttSerializer, QoS, Retain};
 
 use crate::pipes::{generic, stateful, stateless};
 use crate::spawn;
@@ -46,7 +46,11 @@ fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
     Ok(MqttMessage {
         topic,
         payload,
-        retain: msg.retain,
+        retain: if msg.retain {
+            Retain::Retain
+        } else {
+            Retain::NoRetain
+        },
         qos: qos_from_rumqttc(msg.qos),
     })
 }
@@ -89,6 +93,24 @@ impl MqttTx {
             .try_send(MqttCommand::MqttOut(msg))
             .map_err(|e| error!("MQTT send error: {}", e));
     }
+
+    /// Serialize and send a message to the MQTT broker.
+    pub fn try_serialize_send<T: MqttSerializer>(
+        &self,
+        topic: impl Into<String>,
+        payload: &T,
+        retain: Retain,
+        qos: QoS,
+    ) {
+        let msg = payload.serialize(topic, retain, qos);
+
+        match msg {
+            Ok(msg) => self.try_send(msg),
+            Err(err) => error!("Failed to serialize message: {:?}", err),
+        }
+    }
+
+    /// Serialize and send
 
     /// Subscribe to a topic and return a receiver for the messages.
     /// The receiver will be closed when the MQTT connection is closed.
@@ -284,7 +306,7 @@ pub fn run_client(
                     match msg {
                         MqttCommand::MqttOut(msg) => {
                             debug!(
-                                "Outgoing mqtt {} {}.",
+                                "Outgoing mqtt {:?} {}.",
                                 msg.retain,
                                 msg.topic
                             );
@@ -294,7 +316,12 @@ pub fn run_client(
                                 subscription.tx.try_send(msg.clone());
                             }
 
-                            if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), msg.retain, msg.payload) {
+                            let retain = match msg.retain {
+                                Retain::Retain => true,
+                                Retain::NoRetain => false,
+                            };
+
+                            if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), retain, msg.payload) {
                                 error!("Failed to publish message: {:?}.", err);
                             }
                         },
@@ -540,7 +567,7 @@ mod tests {
             topic: "test".to_string(),
             payload: "test".into(),
             qos: QoS::AtLeastOnce,
-            retain: false,
+            retain: Retain::NoRetain,
         };
 
         let data: String = msg.try_into().unwrap();
@@ -549,11 +576,16 @@ mod tests {
 
     #[test]
     fn test_string_to_message() {
-        let msg = MqttMessage::new("test", "test".to_string(), false, QoS::AtLeastOnce);
+        let msg = MqttMessage::new(
+            "test",
+            "test".to_string(),
+            Retain::NoRetain,
+            QoS::AtLeastOnce,
+        );
         assert_eq!(msg.topic, "test");
         assert_eq!(msg.payload, b"test");
         assert_eq!(msg.qos, QoS::AtLeastOnce);
-        assert!(!msg.retain);
+        assert!(matches!(msg.retain, Retain::NoRetain));
     }
 
     #[test]
@@ -562,7 +594,7 @@ mod tests {
             topic: "test".to_string(),
             payload: "true".into(),
             qos: QoS::AtLeastOnce,
-            retain: false,
+            retain: Retain::NoRetain,
         };
 
         let data: bool = msg.try_into().unwrap();

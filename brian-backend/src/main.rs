@@ -19,24 +19,30 @@ mod robotica;
 mod rooms;
 mod tesla;
 
+use std::time::Duration;
+
 use anyhow::Result;
-use chrono::{Duration, Local, TimeZone};
+use chrono::{Local, TimeDelta, TimeZone};
+use delays::rate_limit;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
-use robotica_backend::pipes::{stateless, Subscriber, Subscription};
+use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
 use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
 use robotica_backend::spawn;
-use robotica_common::mqtt::QoS;
+use robotica_common::mqtt::{Json, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::lights::LightCommand;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::version;
+use robotica_common::zigbee2mqtt::{Door, DoorState};
+use tap::Pipe;
 use tracing::{debug, error, info};
 
 use self::tesla::monitor_charging;
@@ -124,7 +130,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
             title: format!("Tell everyone {}", event.summary),
             payload: Payload::Command(Command::Message(payload)),
             qos: QoS::ExactlyOnce,
-            retain: false,
+            retain: Retain::NoRetain,
             topics: ["ha/event/message".to_string()].to_vec(),
         }],
     };
@@ -151,7 +157,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
         // It doesn't matter if we get then wrong here.
         // Insert dummy values for now.
         schedule_date: chrono::Utc::now().date_naive(),
-        duration: Duration::zero(),
+        duration: TimeDelta::zero(),
     })
 }
 
@@ -180,7 +186,7 @@ fn calendar_start_top_times(
 
 async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Config) {
     let (prices, usage) = amber::run(config.amber).unwrap_or_else(|e| {
-        panic!("Error running amber2: {e}");
+        panic!("Error running amber: {e}");
     });
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
@@ -214,6 +220,48 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
             //         });
         }
     });
+
+    let bathroom_door: stateful::Receiver<DoorState> = state
+        .subscriptions
+        .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
+        .map(|(_, json)| json.into())
+        .pipe(|rx| rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30), rx));
+    {
+        let mqtt = state.mqtt.clone();
+        let message_sink = state.message_sink.clone();
+        spawn(async move {
+            let mut s = bathroom_door.subscribe().await;
+
+            while let Ok((old, door)) = s.recv_old_new().await {
+                if old.is_some() {
+                    info!("Bathroom door state: {door:?}");
+                    let action = match door {
+                        DoorState::Open => LightCommand::TurnOff,
+                        DoorState::Closed => LightCommand::TurnOn {
+                            scene: "busy".to_string(),
+                        },
+                    };
+                    let command = Command::Light(action);
+                    let message = match door {
+                        DoorState::Open => "The bathroom is vacant",
+                        DoorState::Closed => "The bathroom is occupied",
+                    };
+                    mqtt.try_serialize_send(
+                        "command/Passage/Light/split/bathroom",
+                        &Json(command),
+                        Retain::NoRetain,
+                        QoS::ExactlyOnce,
+                    );
+                    message_sink.try_send(Message::new(
+                        "Bathroom Door",
+                        message,
+                        MessagePriority::DaytimeOnly,
+                        audience::dining_room(),
+                    ));
+                }
+            }
+        });
+    }
 
     for tesla in config.teslas {
         let charge_request = amber::car::run(prices.clone());

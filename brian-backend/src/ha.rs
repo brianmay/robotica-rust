@@ -3,26 +3,11 @@ use robotica_backend::pipes::Subscriber;
 use robotica_backend::pipes::Subscription;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_common::mqtt::Json;
-use robotica_common::mqtt::MqttMessage;
-use robotica_common::mqtt::MqttSerializer;
 use robotica_common::mqtt::QoS;
+use robotica_common::mqtt::Retain;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
-use tracing::error;
 use tracing::info;
-
-#[allow(dead_code)]
-fn string_to_message(msg: Message) -> Option<MqttMessage> {
-    let topic = "ha/event/message".to_string();
-    let command = Command::Message(msg);
-    Json(command)
-        .serialize(topic, false, QoS::ExactlyOnce)
-        .map_err(|err| {
-            error!("Failed to serialize message.");
-            err
-        })
-        .ok()
-}
 
 pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<Message> {
     let (tx, rx) = stateless::create_pipe::<Message>("messages");
@@ -30,9 +15,13 @@ pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<Message> {
         let mut rx = rx.subscribe().await;
         while let Ok(msg) = rx.recv().await {
             info!("Sending message {:?}", msg);
-            if let Some(msg) = string_to_message(msg) {
-                mqtt.try_send(msg);
-            }
+            let payload = Json(Command::Message(msg));
+            mqtt.try_serialize_send(
+                "ha/event/message",
+                &payload,
+                Retain::NoRetain,
+                QoS::ExactlyOnce,
+            );
         }
     });
     tx

@@ -1,7 +1,7 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
-use crate::mqtt::{MqttMessage, MqttSerializer, QoS};
+use crate::mqtt::{MqttMessage, MqttSerializer, QoS, Retain};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -141,7 +141,7 @@ const fn get_press_on_or_off(state: DisplayState, action: Action) -> TurnOnOff {
 #[must_use]
 fn mqtt_command(topic: &str, payload: &impl MqttSerializer) -> Option<MqttMessage> {
     payload
-        .serialize(topic, false, QoS::ExactlyOnce)
+        .serialize(topic, Retain::NoRetain, QoS::ExactlyOnce)
         .map_or_else(
             |_| {
                 error!("Failed to serialize payload for topic {}", topic);

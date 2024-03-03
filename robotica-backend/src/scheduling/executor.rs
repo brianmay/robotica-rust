@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use chrono::{NaiveDate, TimeZone, Utc};
-use robotica_common::mqtt::{Json, MqttSerializer, QoS};
+use robotica_common::mqtt::{Json, MqttSerializer, QoS, Retain};
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
@@ -246,7 +246,7 @@ impl<T: TimeZone + Copy> State<T> {
         info!("Tags: {:?}", tags);
         let topic = format!("robotica/{}/tags", self.config.extra.instance);
         let msg = Json(tags);
-        let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
+        let Ok(message) = msg.serialize(topic, Retain::Retain, QoS::ExactlyOnce) else {
             error!("Failed to serialize tags: {:?}", tags);
             return;
         };
@@ -305,7 +305,7 @@ impl<T: TimeZone + Copy> State<T> {
         old_hash: &Option<ObjectHash>,
     ) -> Option<ObjectHash> {
         let msg = Json(sequences);
-        let Ok(message) = msg.serialize(topic, true, QoS::ExactlyOnce) else {
+        let Ok(message) = msg.serialize(topic, Retain::Retain, QoS::ExactlyOnce) else {
             error!("Failed to serialize sequences: {:?}", sequences);
             return None;
         };

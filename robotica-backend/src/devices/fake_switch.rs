@@ -1,6 +1,6 @@
 //! Fake a digital on/off switch
 use robotica_common::{
-    mqtt::{Json, MqttMessage, QoS},
+    mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{
         commands::Command,
         switch::{DeviceAction, DevicePower},
@@ -34,7 +34,7 @@ pub fn run(subscription: &mut Subscriptions, mqtt: MqttTx, topic_substr: impl In
                                 DeviceAction::TurnOn => DevicePower::On,
                             };
                             let string: String = status.into();
-                            let msg = MqttMessage::new(topic, string, true, QoS::AtLeastOnce);
+                            let msg = MqttMessage::new(topic, string, Retain::Retain, QoS::AtLeastOnce);
                             mqtt.try_send(msg);
                         },
                         command => {

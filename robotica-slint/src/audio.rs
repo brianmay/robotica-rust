@@ -15,14 +15,13 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    mqtt::{Json, MqttMessage, QoS},
+    mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{
         audio::{AudioCommand, Message, State},
         commands::Command,
         lights::LightCommand,
         switch::DevicePower,
-        tasks::SubTask,
-        tasks::{Payload, Task},
+        tasks::{Payload, SubTask, Task},
     },
 };
 use serde::Deserialize;
@@ -142,7 +141,7 @@ pub fn run(
                                 target: "light".to_string(),
                                 payload: Payload::Command(Command::Light(LightCommand::Flash)),
                                 qos: QoS::ExactlyOnce,
-                                retain: false,
+                                retain: Retain::NoRetain,
                             }]
                         } else {
                             vec![]
@@ -202,7 +201,7 @@ fn send_state(mqtt: &MqttTx, state: &State, topic_substr: &str) {
     let topic = format!("state/{topic_substr}");
     match serde_json::to_string(&state) {
         Ok(json) => {
-            let msg = MqttMessage::new(topic, json, true, QoS::AtLeastOnce);
+            let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
             mqtt.try_send(msg);
         }
         Err(e) => {
