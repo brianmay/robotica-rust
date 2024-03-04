@@ -234,8 +234,13 @@ pub fn monitor_tesla_location(
                     output_location_message(&new_location, msg, &message_sink);
 
                     if new_is_at_home {
-                        let msg = format!("The Tesla is at {level}% and would charge to {limit}%",
-                            level=old_charging_info.battery_level, limit=old_charging_info.charge_limit);
+                        let level = old_charging_info.battery_level;
+                        let limit = old_charging_info.charge_limit;
+                        let msg = if level < limit {
+                            format!("The Tesla is at {level}% and would charge to {limit}%")
+                        } else {
+                            format!("The Tesla is at {level}% and the limit is {limit}%")
+                        };
                         let msg = new_message(msg, MessagePriority::DaytimeOnly);
                         message_sink.try_send(msg);
                     }
@@ -475,13 +480,13 @@ impl ChargingMessage {
 
     fn to_string(self, level: u8) -> String {
         match self {
-            Self::Disconnected => format!("The Tesla is disconnected at {level}%"),
+            Self::Disconnected => format!("is disconnected at {level}%"),
             Self::Charging { limit } => {
-                format!("The Tesla is charging from {level}% to {limit}%")
+                format!("is charging from {level}% to {limit}%")
             }
-            Self::NoPower => format!("The Tesla plug failed at {level}%"),
-            Self::Complete => format!("The Tesla is finished charging at ({level}%)"),
-            Self::Stopped => format!("The Tesla has stopped charging at ({level}%)"),
+            Self::NoPower => format!("plug failed at {level}%"),
+            Self::Complete => format!("is finished charging at {level}%"),
+            Self::Stopped => format!("has stopped charging at {level}%"),
         }
     }
 }
