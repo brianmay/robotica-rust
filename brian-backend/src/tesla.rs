@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::Add;
 use std::time::Duration;
+use tap::Pipe;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Interval;
@@ -161,6 +162,13 @@ impl Location {
             Self::Nowhere => false,
         }
     }
+
+    fn is_at_home(&self) -> bool {
+        match self {
+            Self::String(s) => s == "home",
+            Self::Nowhere => false,
+        }
+    }
 }
 
 pub fn monitor_tesla_location(
@@ -203,17 +211,19 @@ pub fn monitor_tesla_location(
                 charge_limit: 0,
                 charging_state: ChargingStateEnum::Disconnected,
             });
+        let mut old_is_at_home = old_location.is_at_home();
 
         loop {
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
-                    if old_charging_info.charging_state != new_charging_info.charging_state || old_charging_info.charge_limit != new_charging_info.charge_limit {
+                    if old_is_at_home && (old_charging_info.charging_state != new_charging_info.charging_state || old_charging_info.charge_limit != new_charging_info.charge_limit) {
                         announce_charging_state(&old_charging_info, &new_charging_info, &message_sink);
                     }
                     old_charging_info = new_charging_info;
                 },
                 Ok(new_location_raw) = location_s.recv() => {
                     let new_location = Location::from_string(new_location_raw);
+                    let new_is_at_home = new_location.is_at_home();
 
                     // Departed location message.
                     let msg = left_location_message(&old_location);
@@ -223,11 +233,15 @@ pub fn monitor_tesla_location(
                     let msg = arrived_location_message(&new_location);
                     output_location_message(&new_location, msg, &message_sink);
 
-                    if new_location == Location::String("home".to_string()) {
-                        announce_charging_state(&old_charging_info, &old_charging_info, &message_sink);
+                    if new_is_at_home {
+                        let msg = format!("The Tesla is at {level}% and would charge to {limit}%",
+                            level=old_charging_info.battery_level, limit=old_charging_info.charge_limit);
+                        let msg = new_message(msg, MessagePriority::DaytimeOnly);
+                        message_sink.try_send(msg);
                     }
 
                     old_location = new_location;
+                    old_is_at_home = new_is_at_home;
                 }
                 else => break,
             }
@@ -437,47 +451,83 @@ pub enum MonitorChargingError {
     LoadPersistentState(#[from] persistent_state::Error),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChargingMessage {
+    Disconnected,
+    Charging { limit: u8 },
+    NoPower,
+    Complete,
+    Stopped,
+}
+
+impl ChargingMessage {
+    const fn get(charging_info: &ChargingInformation) -> Self {
+        match charging_info.charging_state {
+            ChargingStateEnum::Disconnected => Self::Disconnected,
+            ChargingStateEnum::Charging | ChargingStateEnum::Starting => Self::Charging {
+                limit: charging_info.charge_limit,
+            },
+            ChargingStateEnum::NoPower => Self::NoPower,
+            ChargingStateEnum::Complete => Self::Complete,
+            ChargingStateEnum::Stopped => Self::Stopped,
+        }
+    }
+
+    fn to_string(self, level: u8) -> String {
+        match self {
+            Self::Disconnected => format!("The Tesla is disconnected at {level}%"),
+            Self::Charging { limit } => {
+                format!("The Tesla is charging from {level}% to {limit}%")
+            }
+            Self::NoPower => format!("The Tesla plug failed at {level}%"),
+            Self::Complete => format!("The Tesla is finished charging at ({level}%)"),
+            Self::Stopped => format!("The Tesla has stopped charging at ({level}%)"),
+        }
+    }
+}
+
 fn announce_charging_state(
     old_charging_info: &ChargingInformation,
     charging_info: &ChargingInformation,
     message_sink: &stateless::Sender<Message>,
 ) {
-    let was_plugged_in = old_charging_info.charging_state.is_plugged_in();
-    let is_plugged_in = charging_info.charging_state.is_plugged_in();
+    let plugged_in_msg = {
+        let was_plugged_in = old_charging_info.charging_state.is_plugged_in();
+        let is_plugged_in = charging_info.charging_state.is_plugged_in();
 
-    #[allow(clippy::bool_comparison)]
-    let plugged_in_msg = if was_plugged_in == true && is_plugged_in == false {
-        Some("has been freed".to_string())
-    } else if was_plugged_in == false && is_plugged_in == true {
-        Some("has been leashed".to_string())
-    } else {
-        None
+        if was_plugged_in && !is_plugged_in {
+            Some("has been freed".to_string())
+        } else if !was_plugged_in && is_plugged_in {
+            Some("has been leashed".to_string())
+        } else {
+            None
+        }
     };
 
-    let charge_msg = match charging_info.charging_state {
-        ChargingStateEnum::Disconnected => "is disconnected",
-        ChargingStateEnum::Charging => "is charging",
-        ChargingStateEnum::NoPower => "plug failed",
-        ChargingStateEnum::Complete => "is finished charging",
-        ChargingStateEnum::Starting => "is starting to charge",
-        ChargingStateEnum::Stopped => "has stopped charging",
+    let charge_msg = {
+        // We do not want an announcement every time the battery level changes.
+        let level = charging_info.battery_level;
+        // But we do want an announcement if other charging information changes.
+        let old_msg = ChargingMessage::get(old_charging_info);
+        let new_msg = ChargingMessage::get(charging_info);
+        if old_msg == new_msg {
+            None
+        } else {
+            new_msg.to_string(level).pipe(Some)
+        }
     };
 
-    let charge_msg = format!(
-        "{charge_msg} from ({level}%) to ({limit}%)",
-        level = charging_info.battery_level,
-        limit = charging_info.charge_limit
-    );
+    if plugged_in_msg.is_some() || charge_msg.is_some() {
+        let msg = [plugged_in_msg, charge_msg]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" and ");
 
-    let msg = [plugged_in_msg, Some(charge_msg)]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" and ");
-
-    let msg = format!("The Tesla {msg}");
-    let msg = new_message(msg, MessagePriority::DaytimeOnly);
-    message_sink.try_send(msg);
+        let msg = format!("The Tesla {msg}");
+        let msg = new_message(msg, MessagePriority::DaytimeOnly);
+        message_sink.try_send(msg);
+    }
 }
 
 #[derive(Debug)]
