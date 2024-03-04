@@ -216,7 +216,7 @@ pub fn monitor_tesla_location(
         loop {
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
-                    if old_is_at_home && (old_charging_info.charging_state != new_charging_info.charging_state || old_charging_info.charge_limit != new_charging_info.charge_limit) {
+                    if old_is_at_home  {
                         announce_charging_state(&old_charging_info, &new_charging_info, &message_sink);
                     }
                     old_charging_info = new_charging_info;
