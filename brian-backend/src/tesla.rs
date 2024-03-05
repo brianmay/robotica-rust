@@ -3,7 +3,7 @@ use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
     ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError, VehicleId,
@@ -141,14 +141,14 @@ impl Display for Door {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum Location {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Location {
     String(String),
     Nowhere,
 }
 
 impl Location {
-    fn from_string(s: String) -> Self {
+    pub fn from_string(s: String) -> Self {
         if s == "not_home" {
             Self::Nowhere
         } else {
@@ -156,14 +156,14 @@ impl Location {
         }
     }
 
-    fn censor(&self) -> bool {
+    pub fn censor(&self) -> bool {
         match self {
             Self::String(s) => s != "home",
             Self::Nowhere => false,
         }
     }
 
-    fn is_at_home(&self) -> bool {
+    pub fn is_at_home(&self) -> bool {
         match self {
             Self::String(s) => s == "home",
             Self::Nowhere => false,
@@ -171,39 +171,48 @@ impl Location {
     }
 }
 
-pub fn monitor_tesla_location(
-    state: &mut InitState,
-    tesla: &Config,
-    charging_info: stateful::Receiver<ChargingInformation>,
-) {
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ShouldPlugin {
+    ShouldPlugin,
+    NoActionRequired,
+}
+
+pub fn location_stream(state: &mut InitState, tesla: &Config) -> stateful::Receiver<Location> {
     let location = state
         .subscriptions
         .subscribe_into_stateful::<String>(&format!(
             "state/Tesla/{id}/Location",
             id = tesla.teslamate_id.to_string()
-        ));
+        ))
+        .map(|(_, new)| Location::from_string(new));
 
     let duration = Duration::from_secs(30);
-    let location = delay_input(
+    delay_input(
         "tesla_location",
         duration,
         location,
-        |(old_location, location)| old_location.is_some() && location != "not_home",
+        |(old_location, location)| old_location.is_some() && *location != Location::Nowhere,
         DelayInputOptions::default(),
-    );
+    )
+}
+
+pub fn monitor_tesla_location(
+    state: &InitState,
+    location_stream: stateful::Receiver<Location>,
+    charging_info: stateful::Receiver<ChargingInformation>,
+) -> stateful::Receiver<ShouldPlugin> {
     let message_sink = state.message_sink.clone();
+    let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
 
     spawn(async move {
-        let mut location_s = location.subscribe().await;
+        let mut location_s = location_stream.subscribe().await;
         let mut charging_info_s = charging_info.subscribe().await;
 
-        let mut old_location = {
-            let Ok(old_location_raw) = location_s.recv().await else {
-                error!("Failed to get initial Tesla location");
-                return;
-            };
-            Location::from_string(old_location_raw)
+        let Ok(mut old_location) = location_s.recv().await else {
+            error!("Failed to get initial Tesla location");
+            return;
         };
+        let mut old_is_at_home = old_location.is_at_home();
 
         let mut old_charging_info: ChargingInformation =
             charging_info_s.recv().await.unwrap_or(ChargingInformation {
@@ -211,7 +220,6 @@ pub fn monitor_tesla_location(
                 charge_limit: 0,
                 charging_state: ChargingStateEnum::Disconnected,
             });
-        let mut old_is_at_home = old_location.is_at_home();
 
         loop {
             select! {
@@ -221,8 +229,7 @@ pub fn monitor_tesla_location(
                     }
                     old_charging_info = new_charging_info;
                 },
-                Ok(new_location_raw) = location_s.recv() => {
-                    let new_location = Location::from_string(new_location_raw);
+                Ok(new_location) = location_s.recv() => {
                     let new_is_at_home = new_location.is_at_home();
 
                     // Departed location message.
@@ -249,6 +256,44 @@ pub fn monitor_tesla_location(
                     old_is_at_home = new_is_at_home;
                 }
                 else => break,
+            }
+
+            let should_plugin = if old_is_at_home
+                && !old_charging_info.charging_state.is_plugged_in()
+                && !old_charging_info.battery_level <= 80
+            {
+                ShouldPlugin::ShouldPlugin
+            } else {
+                ShouldPlugin::NoActionRequired
+            };
+            tx.try_send(should_plugin);
+        }
+    });
+
+    rx
+}
+
+pub fn plug_in_reminder(state: &InitState, should_plugin_stream: stateful::Receiver<ShouldPlugin>) {
+    let message_sink = state.message_sink.clone();
+
+    let should_plugin_stream = delay_repeat(
+        "tesla_should_plugin (repeat)",
+        Duration::from_secs(60 * 10),
+        should_plugin_stream,
+        |(_, should_plugin)| *should_plugin == ShouldPlugin::ShouldPlugin,
+    );
+
+    spawn(async move {
+        let mut s = should_plugin_stream.subscribe().await;
+        while let Ok(should_plugin) = s.recv().await {
+            let time = chrono::Local::now();
+            if time.hour() >= 18 && time.hour() <= 22 && should_plugin == ShouldPlugin::ShouldPlugin
+            {
+                let msg = new_message(
+                    "The Tesla might run away and should be leashed",
+                    MessagePriority::Low,
+                );
+                message_sink.try_send(msg);
             }
         }
     });

@@ -265,13 +265,15 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
 
     for tesla in config.teslas {
         let charge_request = amber::car::run(prices.clone());
-
+        let location_stream = tesla::location_stream(&mut state, &tesla);
         let charging_info =
             monitor_charging(&mut state, &tesla, charge_request).unwrap_or_else(|e| {
                 panic!("Error running tesla charging monitor: {e}");
             });
-        tesla::monitor_tesla_location(&mut state, &tesla, charging_info);
+        let should_plugin_stream =
+            tesla::monitor_tesla_location(&state, location_stream, charging_info);
         tesla::monitor_tesla_doors(&mut state, &tesla);
+        tesla::plug_in_reminder(&state, should_plugin_stream);
     }
 
     let rooms = rooms::get();
