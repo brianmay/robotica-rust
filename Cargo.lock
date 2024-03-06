@@ -4637,7 +4637,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-core",
- "base64 0.21.7",
+ "base64 0.22.0",
  "bytes",
  "chrono",
  "env_logger",
