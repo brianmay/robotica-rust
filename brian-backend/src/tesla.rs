@@ -217,7 +217,7 @@ pub fn monitor_tesla_location(
         let mut old_charging_info: ChargingInformation =
             charging_info_s.recv().await.unwrap_or(ChargingInformation {
                 battery_level: 0,
-                charge_limit: 0,
+                charge_request: ChargeRequest::ChargeTo(0),
                 charging_state: ChargingStateEnum::Disconnected,
             });
 
@@ -242,7 +242,7 @@ pub fn monitor_tesla_location(
 
                     if new_is_at_home {
                         let level = old_charging_info.battery_level;
-                        let limit = old_charging_info.charge_limit;
+                        let ChargeRequest::ChargeTo(limit) = old_charging_info.charge_request;
                         let msg = if level < limit {
                             format!("The Tesla is at {level}% and would charge to {limit}%")
                         } else {
@@ -512,11 +512,11 @@ enum ChargingMessage {
 
 impl ChargingMessage {
     const fn get(charging_info: &ChargingInformation) -> Self {
+        let ChargeRequest::ChargeTo(limit) = charging_info.charge_request;
+
         match charging_info.charging_state {
             ChargingStateEnum::Disconnected => Self::Disconnected,
-            ChargingStateEnum::Charging | ChargingStateEnum::Starting => Self::Charging {
-                limit: charging_info.charge_limit,
-            },
+            ChargingStateEnum::Charging | ChargingStateEnum::Starting => Self::Charging { limit },
             ChargingStateEnum::NoPower => Self::NoPower,
             ChargingStateEnum::Complete => Self::Complete,
             ChargingStateEnum::Stopped => Self::Stopped,
@@ -615,7 +615,7 @@ enum TeslaResult {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChargingInformation {
     battery_level: u8,
-    charge_limit: u8,
+    charge_request: ChargeRequest,
     charging_state: ChargingStateEnum,
 }
 
@@ -707,7 +707,10 @@ pub fn monitor_charging(
         let mut charge_limit_s = charge_limit.subscribe().await;
         let mut charging_state_s = charging_state_rx.subscribe().await;
 
-        let mut charge_request: Option<ChargeRequest> = None;
+        let mut charge_request: ChargeRequest = charge_request_s
+            .recv()
+            .await
+            .unwrap_or(ChargeRequest::ChargeTo(0));
         let mut ps = ps;
 
         let mut tesla_state = TeslaState {
@@ -727,8 +730,8 @@ pub fn monitor_charging(
 
         tx_summary.try_send(ChargingInformation {
             battery_level: tesla_state.battery_level,
-            charge_limit: tesla_state.charge_limit,
             charging_state: tesla_state.charging_state,
+            charge_request,
         });
 
         loop {
@@ -745,7 +748,7 @@ pub fn monitor_charging(
                 }
                 Ok(new_charge_request) = charge_request_s.recv() => {
                     info!("New price summary: {:?}", new_charge_request);
-                    charge_request = Some(new_charge_request);
+                    charge_request = new_charge_request;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
@@ -803,14 +806,9 @@ pub fn monitor_charging(
                 let result = sequence.execute(&token, tesla.tesla_id).await;
                 TeslaResult::Tried(result)
             } else if is_at_home && ps.auto_charge {
-                if let Some(charge_request) = charge_request {
-                    let result =
-                        check_charge(tesla.tesla_id, &token, &tesla_state, charge_request).await;
-                    TeslaResult::Tried(result)
-                } else {
-                    info!("No price summary available, skipping charge check");
-                    TeslaResult::Skipped
-                }
+                let result =
+                    check_charge(tesla.tesla_id, &token, &tesla_state, charge_request).await;
+                TeslaResult::Tried(result)
             } else {
                 info!(
                     "Skipping charge check, is_at_home={is_at_home:?}, auto_charge={auto_charge:?}",
@@ -821,8 +819,8 @@ pub fn monitor_charging(
 
             tx_summary.try_send(ChargingInformation {
                 battery_level: tesla_state.battery_level,
-                charge_limit: tesla_state.charge_limit,
                 charging_state: tesla_state.charging_state,
+                charge_request,
             });
 
             let new_interval = match result {
