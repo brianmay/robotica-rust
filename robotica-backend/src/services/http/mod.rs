@@ -29,7 +29,9 @@ use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_sessions::cookie::SameSite;
-use tower_sessions::{Expiry, MokaStore, Session, SessionManagerLayer};
+use tower_sessions::session_store::ExpiredDeletion;
+use tower_sessions::{Expiry, Session, SessionManagerLayer};
+use tower_sessions_sqlx_store::PostgresStore;
 use tracing::error;
 
 use robotica_common::user::User;
@@ -151,8 +153,20 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Result<(), HttpError> {
-    let session_store = MokaStore::new(Some(2_000));
+pub async fn run(
+    mqtt: MqttTx,
+    rooms: ui_config::Rooms,
+    config: Config,
+    postgres: sqlx::PgPool,
+) -> Result<(), HttpError> {
+    let session_store = PostgresStore::new(postgres);
+
+    tokio::task::spawn(
+        session_store
+            .clone()
+            .continuously_delete_expired(tokio::time::Duration::from_secs(60)),
+    );
+
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::days(7)))
@@ -209,6 +223,7 @@ pub async fn run(mqtt: MqttTx, rooms: ui_config::Rooms, config: Config) -> Resul
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
         .route("/config", get(config_handler))
+        .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
         .with_state(state)
         .layer(session_layer)
@@ -417,6 +432,26 @@ async fn oidc_callback(
     };
 
     Ok(response)
+}
+
+async fn logout_handler(session: Session) -> Response {
+    match session.delete().await {
+        Ok(()) => Redirect::to("/").into_response(),
+        Err(e) => Html(
+            html!(
+                    html {
+                        head {
+                            title { "Robotica - Logout" }
+                        }
+                        body {
+                            h1 { ( format!("Logout Failed: {e}") ) }
+                        }
+                    }
+            )
+            .into_string(),
+        )
+        .into_response(),
+    }
 }
 
 #[allow(clippy::unused_async)]

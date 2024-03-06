@@ -85,7 +85,14 @@ async fn main() -> Result<()> {
         persistent_state_database,
     };
 
-    setup_pipes(state, mqtt_rx, config).await;
+    let postgres = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&config.database_url)
+        .await?;
+
+    sqlx::migrate!("../migrations").run(&postgres).await?;
+
+    setup_pipes(state, mqtt_rx, config, postgres).await;
 
     loop {
         debug!("I haven't crashed yet!");
@@ -184,7 +191,12 @@ fn calendar_start_top_times(
     Some((start_time, end_time))
 }
 
-async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Config) {
+async fn setup_pipes(
+    mut state: InitState,
+    mqtt_rx: MqttRx,
+    config: config::Config,
+    postgres: sqlx::PgPool,
+) {
     let (prices, usage) = amber::run(config.amber).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
@@ -277,7 +289,7 @@ async fn setup_pipes(mut state: InitState, mqtt_rx: MqttRx, config: config::Conf
     }
 
     let rooms = rooms::get();
-    http::run(state.mqtt.clone(), rooms, config.http)
+    http::run(state.mqtt.clone(), rooms, config.http, postgres.clone())
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 

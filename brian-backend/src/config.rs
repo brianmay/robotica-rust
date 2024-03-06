@@ -19,6 +19,9 @@ pub struct Environment {
 
     #[envconfig(from = "STATIC_PATH")]
     pub static_path: Option<PathBuf>,
+
+    #[envconfig(from = "DATABASE_URL")]
+    pub database_url: Option<String>,
 }
 
 fn load_file(filename: &Path) -> Result<serde_yaml::Value, Error> {
@@ -38,6 +41,14 @@ impl Environment {
             robotica_backend::serde::merge_yaml(config, secrets)?
         } else {
             config
+        };
+
+        let config = {
+            let mut env_config = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+            if let Some(database_url) = &self.database_url {
+                env_config["database_url"] = serde_yaml::Value::String(database_url.clone());
+            }
+            robotica_backend::serde::merge_yaml(config, env_config)?
         };
 
         let mut config: Config =
@@ -64,6 +75,7 @@ pub struct Config {
     pub executor: executor::ExtraConfig,
     pub persistent_state: persistent_state::Config,
     pub teslas: Vec<tesla::Config>,
+    pub database_url: String,
 }
 
 /// An error loading the Config

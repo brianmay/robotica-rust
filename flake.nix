@@ -324,6 +324,7 @@
               nodePackages
               prefetch-npm-deps
               gcc
+              sqlx-cli
             ];
             enterShell = ''
               # kludge for https://github.com/cachix/devenv/issues/862
@@ -344,9 +345,23 @@
               export CONFIG_FILE="$PWD/robotica-backend.yaml"
               export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
               export STATIC_PATH="${robotica-frontend-bindgen}"
+              export DATABASE_URL="postgresql://robotica:your_secure_password_here@localhost/robotica"
             '';
             processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
             processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
+            services.postgres = {
+              enable = true;
+              package = pkgs.postgresql_15;
+              listen_addresses = "127.0.0.1";
+              initialDatabases = [{ name = "robotica"; }];
+              initialScript = ''
+                \c robotica;
+                CREATE USER robotica with encrypted password 'your_secure_password_here';
+                GRANT ALL PRIVILEGES ON DATABASE robotica TO robotica;
+                -- GRANT ALL ON SCHEMA public TO robotica;
+                ALTER USER robotica WITH SUPERUSER;
+              '';
+            };
           }];
         };
         packages = {
