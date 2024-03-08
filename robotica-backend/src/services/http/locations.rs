@@ -3,12 +3,19 @@ use axum::routing::{delete, get, post, put};
 use axum::{extract::State, Json};
 use geo::{Geometry, Point};
 use geozero::wkb;
+use robotica_common::robotica::locations::Location;
 use tap::Pipe;
 use tower_sessions::Session;
 use tracing::error;
 
 use super::errors::ResponseError;
 use super::{get_user, HttpState};
+
+#[derive(Debug, serde::Deserialize)]
+struct LocationData {
+    name: String,
+    bounds: geo::Polygon<f64>,
+}
 
 // #[derive(Debug)]
 // pub struct DbLocation {
@@ -19,20 +26,13 @@ use super::{get_user, HttpState};
 
 pub fn router(state: HttpState) -> axum::Router {
     axum::Router::new()
-        .route("/list", get(list_handler))
+        .route("/", get(list_handler))
         .route("/create", post(create_handler))
-        .route("/update", put(update_handler))
         .route("/search", post(search_handler))
         .route("/:id", delete(delete_handler))
         .route("/:id", get(get_handler))
+        .route("/:id", put(update_handler))
         .with_state(state)
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct Location {
-    id: i32,
-    name: String,
-    bounds: geo::Polygon<f64>,
 }
 
 pub async fn list_handler(
@@ -67,10 +67,10 @@ pub async fn list_handler(
     .pipe(Ok)
 }
 
-pub async fn create_handler(
+async fn create_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Json(location): Json<Location>,
+    Json(location): Json<LocationData>,
 ) -> Result<Json<i32>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
@@ -91,10 +91,10 @@ pub async fn create_handler(
     .pipe(Ok)
 }
 
-pub async fn delete_handler(
-    Path(id): Path<i32>,
+async fn delete_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
+    Path(id): Path<i32>,
 ) -> Result<Json<()>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
@@ -107,10 +107,11 @@ pub async fn delete_handler(
     ().pipe(Json).pipe(Ok)
 }
 
-pub async fn update_handler(
+async fn update_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Json(location): Json<Location>,
+    Path(id): Path<i32>,
+    Json(location): Json<LocationData>,
 ) -> Result<Json<()>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
@@ -123,7 +124,7 @@ pub async fn update_handler(
         r#"UPDATE locations SET name = $1, bounds = $2 WHERE id = $3"#,
         location.name,
         geo as _,
-        location.id
+        id
     )
     .execute(&postgres)
     .await?;
@@ -132,9 +133,9 @@ pub async fn update_handler(
 }
 
 pub async fn get_handler(
-    Path(id): Path<i32>,
     State(postgres): State<sqlx::PgPool>,
     session: Session,
+    Path(id): Path<i32>,
 ) -> Result<Json<Location>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);

@@ -229,7 +229,7 @@ pub async fn run(
         .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
         .with_state(state.clone())
-        .nest("/locations", locations::router(state))
+        .nest("/api/locations", locations::router(state))
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 

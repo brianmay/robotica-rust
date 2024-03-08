@@ -33,6 +33,7 @@ use yew_router::prelude::*;
 
 use robotica_common::version;
 
+use components::locations::LocationsView;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
@@ -49,6 +50,8 @@ enum Route {
     Schedule,
     #[at("/tags")]
     Tags,
+    #[at("/locations")]
+    Locations,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -60,6 +63,7 @@ fn switch(selected_route: Route) -> Html {
         Route::Room { id } => html! { <Room id={id}/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
+        Route::Locations => html! { <LocationsView/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
@@ -246,6 +250,9 @@ fn nav_bar() -> Html {
                         </li>
                         <li class="nav-item">
                             { link(Route::Tags, "Tags") }
+                        </li>
+                        <li class="nav-item">
+                            { link(Route::Locations, "Locations") }
                         </li>
                     </ul>
                 </div>
