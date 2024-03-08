@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "bounds!: wkb::Decode<geo::Geometry<f64>>",
+        "type_info": {
+          "Custom": {
+            "name": "geography",
+            "kind": "Simple"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6cd6ad6fa2c7bd8773e2d9d95a123dcf7b35dec2c8f4718c0cf6e9d339c53fe8"
+}

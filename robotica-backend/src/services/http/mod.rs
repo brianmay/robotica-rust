@@ -1,5 +1,6 @@
 //! HTTP server
 mod errors;
+mod locations;
 mod oidc;
 mod urls;
 mod websocket;
@@ -137,6 +138,7 @@ struct HttpState {
     oidc_client: Arc<ArcSwap<Option<Client>>>,
     rooms: Arc<ui_config::Rooms>,
     manifest: Arc<Manifest>,
+    postgres: sqlx::PgPool,
 }
 
 /// An error running the HTTP service.
@@ -159,7 +161,7 @@ pub async fn run(
     config: Config,
     postgres: sqlx::PgPool,
 ) -> Result<(), HttpError> {
-    let session_store = PostgresStore::new(postgres);
+    let session_store = PostgresStore::new(postgres.clone());
 
     tokio::task::spawn(
         session_store
@@ -214,6 +216,7 @@ pub async fn run(
         oidc_client,
         rooms,
         manifest,
+        postgres,
     };
 
     let http_listener = state.config.http_listener.clone();
@@ -225,7 +228,8 @@ pub async fn run(
         .route("/config", get(config_handler))
         .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
-        .with_state(state)
+        .with_state(state.clone())
+        .nest("/locations", locations::router(state))
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 

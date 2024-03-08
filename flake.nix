@@ -351,7 +351,7 @@
             processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
             services.postgres = {
               enable = true;
-              package = pkgs.postgresql_15;
+              package = pkgs.postgresql_15.withPackages (ps: [ ps.postgis ]);
               listen_addresses = "127.0.0.1";
               initialDatabases = [{ name = "robotica"; }];
               initialScript = ''
