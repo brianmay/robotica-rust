@@ -14,7 +14,10 @@
 #![allow(clippy::option_if_let_else)]
 
 mod components;
+mod robotica_wasm;
 mod services;
+
+use paste::paste;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -33,7 +36,7 @@ use yew_router::prelude::*;
 
 use robotica_common::version;
 
-use components::locations::LocationsView;
+use components::locations::locations_view::LocationsView;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;

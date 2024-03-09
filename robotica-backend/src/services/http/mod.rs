@@ -1,6 +1,6 @@
 //! HTTP server
+mod api;
 mod errors;
-mod locations;
 mod oidc;
 mod urls;
 mod websocket;
@@ -15,7 +15,6 @@ use axum::extract::{FromRef, State};
 use axum::http::uri::PathAndQuery;
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::Json;
 use axum::{extract::Query, routing::get, Router};
 use hyper::{Method, StatusCode};
 use maud::{html, Markup, DOCTYPE};
@@ -41,6 +40,8 @@ use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
 use crate::spawn;
 
+use self::api::config::config_handler;
+use self::api::locations;
 use self::errors::ResponseError;
 use self::oidc::Client;
 
@@ -456,22 +457,4 @@ async fn logout_handler(session: Session) -> Response {
         )
         .into_response(),
     }
-}
-
-#[allow(clippy::unused_async)]
-async fn config_handler(
-    State(rooms): State<Arc<ui_config::Rooms>>,
-    State(config): State<Arc<Config>>,
-    session: Session,
-) -> Result<Json<ui_config::Config>, ResponseError> {
-    if get_user(&session).await.is_none() {
-        return Err(ResponseError::AuthenticationFailed);
-    };
-
-    let result = ui_config::Config {
-        rooms: rooms.as_ref().clone(),
-        instance: config.instance.clone(),
-    };
-
-    Ok(Json(result))
 }

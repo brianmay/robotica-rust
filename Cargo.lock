@@ -4819,6 +4819,7 @@ dependencies = [
  "gloo-utils 0.2.0",
  "itertools 0.12.1",
  "leaflet",
+ "paste",
  "reqwasm",
  "robotica-common",
  "serde",

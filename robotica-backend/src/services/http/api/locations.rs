@@ -3,42 +3,30 @@ use axum::routing::{delete, get, post, put};
 use axum::{extract::State, Json};
 use geo::{Geometry, Point};
 use geozero::wkb;
-use robotica_common::robotica::locations::Location;
+use robotica_common::robotica::http_api::ApiResponse;
+use robotica_common::robotica::locations::{CreateLocation, Location};
 use tap::Pipe;
 use tower_sessions::Session;
 use tracing::error;
 
+use super::super::{get_user, HttpState};
 use super::errors::ResponseError;
-use super::{get_user, HttpState};
-
-#[derive(Debug, serde::Deserialize)]
-struct LocationData {
-    name: String,
-    bounds: geo::Polygon<f64>,
-}
-
-// #[derive(Debug)]
-// pub struct DbLocation {
-//     id: i32,
-//     name: String,
-//     bounds: wkb::Decode<geo::Geometry<f64>>,
-// }
 
 pub fn router(state: HttpState) -> axum::Router {
     axum::Router::new()
         .route("/", get(list_handler))
+        .route("/", put(update_handler))
         .route("/create", post(create_handler))
         .route("/search", post(search_handler))
         .route("/:id", delete(delete_handler))
         .route("/:id", get(get_handler))
-        .route("/:id", put(update_handler))
         .with_state(state)
 }
 
 pub async fn list_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-) -> Result<Json<Vec<Location>>, ResponseError> {
+) -> Result<Json<ApiResponse<Vec<Location>>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     };
@@ -63,6 +51,7 @@ pub async fn list_handler(
         }
     })
     .collect::<Vec<_>>()
+    .pipe(ApiResponse::success)
     .pipe(Json)
     .pipe(Ok)
 }
@@ -70,13 +59,13 @@ pub async fn list_handler(
 async fn create_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Json(location): Json<LocationData>,
-) -> Result<Json<i32>, ResponseError> {
+    Json(location): Json<CreateLocation>,
+) -> Result<Json<ApiResponse<Location>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     };
 
-    let geometry = Geometry::Polygon(location.bounds);
+    let geometry = Geometry::Polygon(location.bounds.clone());
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
@@ -86,7 +75,12 @@ async fn create_handler(
     )
     .fetch_one(&postgres)
     .await?
-    .id
+    .pipe(|id| Location {
+        id: id.id,
+        name: location.name,
+        bounds: location.bounds,
+    })
+    .pipe(ApiResponse::success)
     .pipe(Json)
     .pipe(Ok)
 }
@@ -95,41 +89,48 @@ async fn delete_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
     Path(id): Path<i32>,
-) -> Result<Json<()>, ResponseError> {
+) -> Result<Json<ApiResponse<()>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     };
 
-    sqlx::query!(r#"DELETE FROM locations WHERE id = $1"#, id)
+    let rc = sqlx::query!(r#"DELETE FROM locations WHERE id = $1"#, id)
         .execute(&postgres)
         .await?;
 
-    ().pipe(Json).pipe(Ok)
+    if rc.rows_affected() == 0 {
+        ResponseError::NotFoundError().pipe(Err)
+    } else {
+        ApiResponse::success(()).pipe(Json).pipe(Ok)
+    }
 }
 
 async fn update_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Path(id): Path<i32>,
-    Json(location): Json<LocationData>,
-) -> Result<Json<()>, ResponseError> {
+    Json(location): Json<Location>,
+) -> Result<Json<ApiResponse<Location>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     };
 
-    let geometry = Geometry::Polygon(location.bounds);
+    let geometry = Geometry::Polygon(location.bounds.clone());
     let geo = wkb::Encode(geometry);
 
-    sqlx::query!(
+    let rc = sqlx::query!(
         r#"UPDATE locations SET name = $1, bounds = $2 WHERE id = $3"#,
         location.name,
         geo as _,
-        id
+        location.id
     )
     .execute(&postgres)
     .await?;
 
-    ().pipe(Json).pipe(Ok)
+    if rc.rows_affected() == 0 {
+        ResponseError::NotFoundError().pipe(Err)
+    } else {
+        ApiResponse::success(location).pipe(Json).pipe(Ok)
+    }
 }
 
 pub async fn get_handler(
@@ -146,7 +147,12 @@ pub async fn get_handler(
         id
     )
     .fetch_one(&postgres)
-    .await?;
+    .await.
+    map_err(|err| if matches!(err, sqlx::Error::RowNotFound) {
+        ResponseError::NotFoundError()
+    } else {
+        ResponseError::SqlError(err)
+    })?;
 
     if let Some(Geometry::Polygon(p)) = location.bounds.geometry {
         Location {
@@ -158,7 +164,7 @@ pub async fn get_handler(
         .pipe(Ok)
     } else {
         error!("Not a polygon: {:?}", location.bounds);
-        Err(ResponseError::InternalError("Not a polygon".to_string()))
+        Err(ResponseError::internal_error("Not a polygon"))
     }
 }
 

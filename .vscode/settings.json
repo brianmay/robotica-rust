@@ -66,6 +66,7 @@
         "oneshot",
         "ownerapi",
         "paho",
+        "polyline",
         "popover",
         "postgis",
         "protobuf",
