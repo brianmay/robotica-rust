@@ -153,6 +153,10 @@ impl Component for ItemMapComponent {
             </div>
         }
     }
+
+    fn destroy(&mut self, _ctx: &Context<Self>) {
+        self.map.on("resize", &JsValue::null());
+    }
 }
 
 fn create_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {

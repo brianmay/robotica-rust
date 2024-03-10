@@ -25,6 +25,7 @@ pub enum Msg {
     Save,
     SaveSuccess(Location),
     SaveFailed(String),
+    Cancel,
     DeleteSuccess,
     CreatePolygon(geo::Polygon),
     UpdatePolygon(geo::Polygon),
@@ -41,7 +42,6 @@ pub enum LocationStatus {
     Unchanged,
     Changed,
     Saving,
-    Saved,
     Error(String),
 }
 
@@ -53,10 +53,7 @@ impl LocationStatus {
     pub const fn can_save(&self) -> bool {
         matches!(
             self,
-            LocationStatus::Unchanged
-                | LocationStatus::Changed
-                | LocationStatus::Error(_)
-                | LocationStatus::Saved
+            LocationStatus::Unchanged | LocationStatus::Changed | LocationStatus::Error(_)
         )
     }
 }
@@ -217,20 +214,14 @@ impl Component for LocationsView {
                     false
                 }
             },
-            Msg::SaveSuccess(location) => {
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.location = ActionLocation::Update(location);
-                    location_state.status = LocationStatus::Saved;
+            Msg::SaveSuccess(_location) => {
+                if self.location_state.is_some() {
+                    self.location_state = None;
                     load_list(ctx);
                     true
                 } else {
                     false
                 }
-            }
-            Msg::DeleteSuccess => {
-                self.location_state = None;
-                load_list(ctx);
-                true
             }
             Msg::SaveFailed(error) => {
                 if let Some(location_state) = &mut self.location_state {
@@ -240,23 +231,38 @@ impl Component for LocationsView {
                     false
                 }
             }
+            Msg::Cancel => {
+                debug!("Cancelling");
+                self.location_state = None;
+                true
+            }
+            Msg::DeleteSuccess => {
+                self.location_state = None;
+                load_list(ctx);
+                true
+            }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let select_location = ctx.link().callback(Msg::SelectLocation);
-
-        let save = ctx.link().callback(|e: MouseEvent| {
-            e.prevent_default();
-            Msg::Save
-        });
-
         let locations = match &self.loading_status {
             LoadingStatus::Loaded(locations) => locations.clone(),
             LoadingStatus::Error(_) | LoadingStatus::Loading => Arc::new(Vec::new()),
         };
 
+        let create_polygon = ctx.link().callback(Msg::CreatePolygon);
+
         if let Some(location_state) = &self.location_state {
+            let save = ctx.link().callback(|e: MouseEvent| {
+                e.prevent_default();
+                Msg::Save
+            });
+
+            let cancel = ctx.link().callback(|e: MouseEvent| {
+                e.prevent_default();
+                Msg::Cancel
+            });
+
             let update_name = ctx.link().callback(Msg::UpdateName);
             let update_color = ctx.link().callback(Msg::UpdateColor);
             let update_announce_on_enter = ctx.link().callback(|x| {
@@ -266,7 +272,6 @@ impl Component for LocationsView {
             let update_announce_on_exit = ctx
                 .link()
                 .callback(|x| Msg::UpdateAnnounceOnExit(x != "true"));
-            let create_polygon = ctx.link().callback(Msg::CreatePolygon);
             let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
             let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
 
@@ -276,7 +281,6 @@ impl Component for LocationsView {
                 LocationStatus::Unchanged => "Unchanged".to_string(),
                 LocationStatus::Changed => "Changed".to_string(),
                 LocationStatus::Saving => "Saving".to_string(),
-                LocationStatus::Saved => "Saved".to_string(),
                 LocationStatus::Error(err) => format!("Error {err}"),
             };
 
@@ -286,7 +290,6 @@ impl Component for LocationsView {
                 <>
                     <h1>{name.clone()}</h1>
                     <ItemMapComponent location={location_state.location.clone()} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
-                    <Control select_location={select_location} locations={locations}/>
                     <form>
                         <TextInput id="name" label="Name" value={name} on_change={update_name} />
                         <TextInput id="color" label="Color" value={location_state.location.color()} on_change={update_color} />
@@ -296,11 +299,16 @@ impl Component for LocationsView {
                         <button onclick={save} disabled={disable_save} >
                             {"Save"}
                         </button>
+                        <button onclick={cancel} >
+                            {"Cancel"}
+                        </button>
                         <p>{msg}</p>
                     </form>
                 </>
             }
         } else {
+            let select_location = ctx.link().callback(Msg::SelectLocation);
+
             let msg = match &self.loading_status {
                 LoadingStatus::Loading => "Loading".to_string(),
                 LoadingStatus::Loaded(_) => "Loaded".to_string(),
@@ -310,7 +318,7 @@ impl Component for LocationsView {
             html! {
                 <>
                     <h1>{"Locations"}</h1>
-                    <ListMapComponent locations={locations.clone()}  />
+                    <ListMapComponent locations={locations.clone()}  create_polygon={create_polygon} />
                     <Control select_location={select_location} locations={locations}/>
                     <p>{msg}</p>
                 </>
