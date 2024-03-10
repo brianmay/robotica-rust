@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use crate::robotica_wasm::draw_control;
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
+use robotica_common::robotica::locations::Location;
 use tap::{Pipe, Tap};
 use tracing::debug;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -13,10 +16,17 @@ use super::ActionLocation;
 
 pub enum Msg {}
 
-pub struct ItemMapComponent {
+#[derive(PartialEq, Clone)]
+pub enum MapObject {
+    List(Arc<Vec<Location>>),
+    Item(ActionLocation),
+}
+
+pub struct MapComponent {
     map: Map,
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
+    draw_control: draw_control::DrawControl,
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
@@ -25,19 +35,21 @@ pub struct ItemMapComponent {
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
-    pub location: ActionLocation,
+    pub object: MapObject,
     pub create_polygon: Callback<geo::Polygon>,
     pub update_polygon: Callback<geo::Polygon>,
     pub delete_polygon: Callback<()>,
 }
 
-impl ItemMapComponent {
+impl MapComponent {
     fn render_map(&self) -> Html {
         let node: &Node = &self.container.clone().into();
         Html::VRef(node.clone())
     }
 
-    fn draw_location(&self, location: &ActionLocation) {
+    fn draw_item(&self, location: &ActionLocation) {
+        self.draw_layer.clear_layers();
+
         let options = leaflet::PolylineOptions::default();
         options.set_color(location.color());
         options.set_fill_color(location.color());
@@ -58,16 +70,62 @@ impl ItemMapComponent {
             .unchecked_into::<leaflet::Layer>()
             .add_to_layer_group(&self.draw_layer);
 
-        debug!("Fitting bounds {:?}", self.draw_layer.get_bounds());
+        debug!(
+            "Fitting bounds in draw_item {:?}",
+            self.draw_layer.get_bounds()
+        );
         self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
+    }
+
+    fn draw_list(&self, locations: &Arc<Vec<Location>>) {
+        self.draw_layer.clear_layers();
+
+        let options = leaflet::PolylineOptions::default();
+        options.set_weight(3.0);
+        options.set_opacity(0.5);
+        options.set_fill(true);
+
+        for location in locations.iter() {
+            options.set_color(location.color.clone());
+            options.set_fill_color(location.color.clone());
+
+            let lat_lngs = location
+                .bounds
+                .exterior()
+                .coords()
+                .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
+                .map(JsValue::from)
+                .collect();
+
+            leaflet::Polygon::new_with_options(&lat_lngs, &options)
+                .unchecked_into::<leaflet::Layer>()
+                .add_to_layer_group(&self.draw_layer);
+        }
+
+        if !locations.is_empty() {
+            debug!(
+                "Fitting bounds in draw_list {:?}",
+                self.draw_layer.get_bounds()
+            );
+            self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
+        }
+    }
+
+    fn draw_object(&self, object: &MapObject) {
+        match object {
+            MapObject::List(locations) => self.draw_list(locations),
+            MapObject::Item(location) => self.draw_item(location),
+        }
     }
 }
 
-impl Component for ItemMapComponent {
+impl Component for MapComponent {
     type Message = Msg;
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
+        let object = &ctx.props().object;
+
         let container: Element = document().create_element("div").unwrap();
         let container: HtmlElement = container.dyn_into().unwrap();
         container.set_class_name("map");
@@ -76,25 +134,8 @@ impl Component for ItemMapComponent {
         let draw_layer = leaflet::FeatureGroup::new();
         draw_layer.add_to(&leaflet_map);
 
-        let draw = {
-            let edit_options = draw_control::EditOptions::new();
-            edit_options.set_feature_group(draw_layer.clone());
-
-            let draw_options = draw_control::DrawOptions::new();
-            draw_options.set_polyline(false);
-            draw_options.set_polygon(true);
-            draw_options.set_rectangle(false);
-            draw_options.set_circle(false);
-            draw_options.set_marker(false);
-            draw_options.set_circle_marker(false);
-
-            let options = draw_control::DrawControlOptions::new();
-            options.set_edit(edit_options);
-            options.set_draw(draw_options);
-
-            draw_control::DrawControl::new(&options)
-        };
-        leaflet_map.add_control(&draw);
+        let draw_control = draw_control(&draw_layer, object);
+        leaflet_map.add_control(&draw_control);
 
         let create_handler = create_handler(ctx);
         let update_handler = update_handler(ctx);
@@ -105,7 +146,7 @@ impl Component for ItemMapComponent {
         leaflet_map.on("draw:created", create_handler.as_ref());
         leaflet_map.on("draw:edited", update_handler.as_ref());
         leaflet_map.on("draw:deleted", delete_handler.as_ref());
-        leaflet_map.on("resize", resize_handler.as_ref());
+        // leaflet_map.on("resize", resize_handler.as_ref());
 
         add_tile_layer(&leaflet_map);
 
@@ -119,12 +160,13 @@ impl Component for ItemMapComponent {
             map: leaflet_map,
             container,
             draw_layer,
+            draw_control,
             _create_handler: create_handler,
             _update_handler: update_handler,
             _delete_handler: delete_handler,
             _resize_handler: resize_handler,
         }
-        .tap(|s| s.draw_location(&ctx.props().location))
+        .tap(|s| s.draw_object(object))
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
@@ -138,12 +180,22 @@ impl Component for ItemMapComponent {
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         let props = ctx.props();
 
-        if props.location == old_props.location {
-            false
-        } else {
-            self.draw_location(&props.location);
-            true
+        if props.object == old_props.object {
+            return false;
         }
+
+        match (&props.object, &old_props.object) {
+            (MapObject::Item(_), MapObject::Item(_)) | (MapObject::List(_), MapObject::List(_)) => {
+            }
+            _ => {
+                self.map.remove_control(&self.draw_control);
+                self.draw_control = draw_control(&self.draw_layer, &props.object);
+                self.map.add_control(&self.draw_control);
+            }
+        }
+
+        self.draw_object(&props.object);
+        true
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
@@ -159,7 +211,48 @@ impl Component for ItemMapComponent {
     }
 }
 
-fn create_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+fn draw_control(
+    draw_layer: &leaflet::FeatureGroup,
+    object: &MapObject,
+) -> draw_control::DrawControl {
+    let options = match object {
+        MapObject::List(_locations) => {
+            let draw_options = draw_control::DrawOptions::new();
+            draw_options.set_polyline(false);
+            draw_options.set_polygon(true);
+            draw_options.set_rectangle(false);
+            draw_options.set_circle(false);
+            draw_options.set_marker(false);
+            draw_options.set_circle_marker(false);
+
+            let options = draw_control::DrawControlOptions::new();
+            options.set_draw(draw_options);
+
+            options
+        }
+        MapObject::Item(_location) => {
+            let edit_options = draw_control::EditOptions::new();
+            edit_options.set_feature_group(draw_layer.clone());
+
+            let draw_options = draw_control::DrawOptions::new();
+            draw_options.set_polyline(false);
+            draw_options.set_polygon(true);
+            draw_options.set_rectangle(false);
+            draw_options.set_circle(false);
+            draw_options.set_marker(false);
+            draw_options.set_circle_marker(false);
+
+            let options = draw_control::DrawControlOptions::new();
+            options.set_draw(draw_options);
+            options.set_edit(edit_options);
+
+            options
+        }
+    };
+    draw_control::DrawControl::new(&options)
+}
+
+fn create_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
     let create_polygon = ctx.props().create_polygon.clone();
     Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
         let exterior = event
@@ -184,7 +277,7 @@ fn create_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
     })
 }
 
-fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+fn update_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
     let update_polygon = ctx.props().update_polygon.clone();
     Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
         let exterior = event
@@ -214,7 +307,7 @@ fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
     })
 }
 
-fn delete_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+fn delete_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
     let delete_polygon = ctx.props().delete_polygon.clone();
     Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
         delete_polygon.emit(());

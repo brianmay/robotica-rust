@@ -1,9 +1,8 @@
 use robotica_common::robotica::locations::{CreateLocation, Location};
 
 pub mod control;
-pub mod item_map;
-pub mod list_map;
 pub mod locations_view;
+pub mod map;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActionLocation {

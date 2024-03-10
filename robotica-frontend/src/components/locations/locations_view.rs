@@ -1,7 +1,8 @@
-use super::{
-    control::Control, item_map::ItemMapComponent, list_map::ListMapComponent, ActionLocation,
+use super::{control::Control, ActionLocation};
+use crate::components::{
+    forms::{checkbox::Checkbox, text_input::TextInput},
+    locations::map::{MapComponent, MapObject},
 };
-use crate::components::forms::{checkbox::Checkbox, text_input::TextInput};
 use gloo_net::http::Request;
 use reqwasm::{http::Response, Error};
 use robotica_common::robotica::{
@@ -161,18 +162,32 @@ impl Component for LocationsView {
             }
             Msg::CreatePolygon(polygon) => {
                 debug!("Creating polygon: {:?}", polygon);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.location = CreateLocation {
+                let location_state = if let Some(location_state) = &mut self.location_state {
+                    let name = format!("{} New", location_state.location.name());
+                    CreateLocation {
                         bounds: polygon,
-                        name: location_state.location.name(),
+                        name,
                         color: location_state.location.color(),
                         announce_on_enter: location_state.location.announce_on_enter(),
                         announce_on_exit: location_state.location.announce_on_exit(),
                     }
-                    .pipe(ActionLocation::Create);
-                    location_state.status = LocationStatus::Saving;
-                    save_location(location_state, ctx);
+                } else {
+                    CreateLocation {
+                        bounds: polygon,
+                        name: "New location".to_string(),
+                        color: "#000000".to_string(),
+                        announce_on_enter: false,
+                        announce_on_exit: false,
+                    }
                 }
+                .pipe(ActionLocation::Create)
+                .pipe(|x| LocationState {
+                    location: x,
+                    status: LocationStatus::Saving,
+                });
+
+                save_location(&location_state, ctx);
+                self.location_state = Some(location_state);
                 true
             }
             Msg::UpdatePolygon(polygon) => {
@@ -250,9 +265,7 @@ impl Component for LocationsView {
             LoadingStatus::Error(_) | LoadingStatus::Loading => Arc::new(Vec::new()),
         };
 
-        let create_polygon = ctx.link().callback(Msg::CreatePolygon);
-
-        if let Some(location_state) = &self.location_state {
+        let controls = if let Some(location_state) = &self.location_state {
             let save = ctx.link().callback(|e: MouseEvent| {
                 e.prevent_default();
                 Msg::Save
@@ -272,8 +285,6 @@ impl Component for LocationsView {
             let update_announce_on_exit = ctx
                 .link()
                 .callback(|x| Msg::UpdateAnnounceOnExit(x != "true"));
-            let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
-            let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
 
             let disable_save = !location_state.status.can_save();
 
@@ -289,7 +300,6 @@ impl Component for LocationsView {
             html! {
                 <>
                     <h1>{name.clone()}</h1>
-                    <ItemMapComponent location={location_state.location.clone()} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
                     <form>
                         <TextInput id="name" label="Name" value={name} on_change={update_name} />
                         <TextInput id="color" label="Color" value={location_state.location.color()} on_change={update_color} />
@@ -318,9 +328,27 @@ impl Component for LocationsView {
             html! {
                 <>
                     <h1>{"Locations"}</h1>
-                    <ListMapComponent locations={locations.clone()}  create_polygon={create_polygon} />
-                    <Control select_location={select_location} locations={locations}/>
+                    <Control select_location={select_location} locations={locations.clone()}/>
                     <p>{msg}</p>
+                </>
+            }
+        };
+
+        let object = if let Some(location_state) = &self.location_state {
+            MapObject::Item(location_state.location.clone())
+        } else {
+            MapObject::List(locations)
+        };
+
+        {
+            let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
+            let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
+
+            let create_polygon = ctx.link().callback(Msg::CreatePolygon);
+            html! {
+                <>
+                    <MapComponent object={object} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
+                    {controls}
                 </>
             }
         }
