@@ -135,7 +135,8 @@ impl Component for LocationsView {
                         name: location_state.location.name(),
                     }
                     .pipe(ActionLocation::Create);
-                    location_state.status = LocationStatus::Changed;
+                    location_state.status = LocationStatus::Saving;
+                    save_location(location_state, ctx);
                 }
                 true
             }
@@ -143,7 +144,8 @@ impl Component for LocationsView {
                 debug!("Updating polygon: {:?}", polygon);
                 if let Some(location_state) = &mut self.location_state {
                     location_state.location.set_bounds(polygon);
-                    location_state.status = LocationStatus::Changed;
+                    location_state.status = LocationStatus::Saving;
+                    save_location(location_state, ctx);
                 }
                 true
             }
