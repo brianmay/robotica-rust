@@ -10,20 +10,11 @@ pub enum ResponseError {
     #[error("Authentication failed")]
     AuthenticationFailed,
 
-    #[error("Internal error: {0}")]
-    InternalError(String),
-
     #[error("SQL error: {0}")]
     SqlError(#[from] sqlx::Error),
 
     #[error("Object does not exist")]
     NotFoundError(),
-}
-
-impl ResponseError {
-    pub fn internal_error(message: impl Into<String>) -> Self {
-        Self::InternalError(message.into())
-    }
 }
 
 impl IntoResponse for ResponseError {
@@ -32,11 +23,6 @@ impl IntoResponse for ResponseError {
             Self::AuthenticationFailed => {
                 let error = api_error("Authentication failed");
                 (StatusCode::UNAUTHORIZED, Json(error)).into_response()
-            }
-            Self::InternalError(message) => {
-                error!("Internal error: {}", message);
-                let error = api_error("Internal error");
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(error)).into_response()
             }
             Self::SqlError(err) => {
                 error!("SQL Error: {}", err);
