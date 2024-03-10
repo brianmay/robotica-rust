@@ -41,6 +41,8 @@ impl Component for ListMapComponent {
         let draw_layer = leaflet::FeatureGroup::new();
         draw_layer.add_to(&leaflet_map);
 
+        add_tile_layer(&leaflet_map);
+
         Self {
             map: leaflet_map,
             container,
@@ -48,11 +50,10 @@ impl Component for ListMapComponent {
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            self.map.set_view(&LatLng::new(0.0, 0.0), 11.0);
-            add_tile_layer(&self.map);
-        }
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+        // if first_render {
+        //     add_tile_layer(&self.map);
+        // }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
@@ -87,6 +88,7 @@ impl Component for ListMapComponent {
                     .add_to_layer_group(&self.draw_layer);
             }
 
+            self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             true
         }
     }

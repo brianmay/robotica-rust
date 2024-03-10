@@ -189,6 +189,7 @@ impl Component for LocationsView {
             }
             Msg::DeleteSuccess => {
                 self.location_state = None;
+                load_list(ctx);
                 true
             }
             Msg::SaveFailed(error) => {

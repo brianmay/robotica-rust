@@ -1,6 +1,7 @@
 use crate::robotica_wasm::draw_control;
 use geo::coord;
 use gloo_utils::document;
+use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use tap::{Pipe, Tap};
 use tracing::debug;
@@ -19,6 +20,7 @@ pub struct ItemMapComponent {
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
+    _resize_handler: Closure<dyn FnMut(leaflet::Event)>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -56,21 +58,9 @@ impl ItemMapComponent {
             .unchecked_into::<leaflet::Layer>()
             .add_to_layer_group(&self.draw_layer);
 
-        let lat = calc_center(&location.bounds());
-        self.map.set_view(&LatLng::new(lat.y(), lat.x()), 21.0);
+        debug!("Fitting bounds {:?}", self.draw_layer.get_bounds());
+        self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
     }
-}
-
-fn calc_center(polygon: &geo::Polygon) -> geo::Point {
-    let mut lon = 0.0;
-    let mut lat = 0.0;
-    for point in polygon.exterior().points() {
-        lon += point.x();
-        lat += point.y();
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let length = polygon.exterior().points().count() as f64;
-    geo::Point(coord! {x: lon / length, y: lat / length}).tap(|p| debug!("Center: {:?}", p))
 }
 
 impl Component for ItemMapComponent {
@@ -106,61 +96,20 @@ impl Component for ItemMapComponent {
         };
         leaflet_map.add_control(&draw);
 
-        let create_polygon = ctx.props().create_polygon.clone();
-        let create_handler = Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-            debug!("create_handler: {:?}", event);
-            let exterior = event
-                .layer()
-                .dyn_into::<leaflet::Layer>()
-                .unwrap()
-                .dyn_into::<leaflet::Polyline>()
-                .unwrap()
-                .get_lat_lngs()
-                .iter()
-                .map(|latlng| {
-                    let latlng = latlng.dyn_into::<leaflet::LatLng>().unwrap();
-                    debug!("Latlng: {:?}", latlng);
-                    geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
-                })
-                .collect::<Vec<_>>()
-                .pipe(geo::LineString::from);
-
-            create_polygon.emit(geo::Polygon::new(exterior, vec![]));
-        });
-
-        let update_polygon = ctx.props().update_polygon.clone();
-        let update_handler = Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-            debug!("update_handler: {:?}", event);
-            let exterior = event
-                .layer()
-                .dyn_into::<leaflet::Layer>()
-                .unwrap()
-                .dyn_into::<leaflet::Polyline>()
-                .unwrap()
-                .get_lat_lngs()
-                .iter()
-                .map(|latlng| {
-                    let latlng = latlng.dyn_into::<leaflet::LatLng>().unwrap();
-                    debug!("Latlng: {:?}", latlng);
-                    geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
-                })
-                .collect::<Vec<_>>()
-                .pipe(geo::LineString::from);
-
-            update_polygon.emit(geo::Polygon::new(exterior, vec![]));
-        });
-
-        let delete_polygon = ctx.props().delete_polygon.clone();
-        let delete_handler = Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-            debug!("delete_handler: {:?}", event);
-            delete_polygon.emit(());
-        });
+        let create_handler = create_handler(ctx);
+        let update_handler = update_handler(ctx);
+        let delete_handler = delete_handler(ctx);
+        // Hack: Required to ensure the map fit_bounds works
+        let resize_handler = resize_handler(&leaflet_map, &draw_layer);
 
         leaflet_map.on("draw:created", create_handler.as_ref());
         leaflet_map.on("draw:edited", update_handler.as_ref());
         leaflet_map.on("draw:deleted", delete_handler.as_ref());
+        leaflet_map.on("resize", resize_handler.as_ref());
 
-        // Trigger a resize event to force the map to render
+        add_tile_layer(&leaflet_map);
+
+        // Hack: Trigger a resize event to force the map to render
         web_sys::window()
             .unwrap()
             .dispatch_event(&Event::new("resize").unwrap())
@@ -173,15 +122,13 @@ impl Component for ItemMapComponent {
             _create_handler: create_handler,
             _update_handler: update_handler,
             _delete_handler: delete_handler,
+            _resize_handler: resize_handler,
         }
         .tap(|s| s.draw_location(&ctx.props().location))
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
-        if first_render {
-            // self.map.set_view(&LatLng::new(0.0, 0.0), 11.0);
-            add_tile_layer(&self.map);
-        }
+        if first_render {}
     }
 
     fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
@@ -195,10 +142,6 @@ impl Component for ItemMapComponent {
             false
         } else {
             self.draw_location(&props.location);
-
-            let lat = calc_center(&props.location.bounds());
-            self.map.set_view(&LatLng::new(lat.y(), lat.x()), 21.0);
-
             true
         }
     }
@@ -210,6 +153,82 @@ impl Component for ItemMapComponent {
             </div>
         }
     }
+}
+
+fn create_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+    let create_polygon = ctx.props().create_polygon.clone();
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        let exterior = event
+            .layer()
+            .unchecked_into::<leaflet::Polyline>()
+            .get_lat_lngs()
+            .iter()
+            .flat_map(|lat_lng_array| {
+                let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                lat_lng_array
+                    .iter()
+                    .map(|latlng| {
+                        let latlng = latlng.unchecked_into::<leaflet::LatLng>();
+                        geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .pipe(geo::LineString::from);
+
+        create_polygon.emit(geo::Polygon::new(exterior, vec![]));
+    })
+}
+
+fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+    let update_polygon = ctx.props().update_polygon.clone();
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        let exterior = event
+            // .unchecked_into::<JsValue>()
+            .pipe(|x| Reflect::get(&x, &"layers".into()))
+            .unwrap()
+            .tap(|l| debug!("Layer: {:?}", l))
+            .unchecked_into::<leaflet::LayerGroup>()
+            .get_layers()
+            .get(0)
+            .unchecked_into::<leaflet::Polyline>()
+            .get_lat_lngs()
+            .iter()
+            .flat_map(|lat_lng_array| {
+                let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                lat_lng_array
+                    .iter()
+                    .map(|latlng| {
+                        let latlng = latlng.unchecked_into::<leaflet::LatLng>();
+                        geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .pipe(geo::LineString::from);
+
+        update_polygon.emit(geo::Polygon::new(exterior, vec![]));
+    })
+}
+
+fn delete_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
+    let delete_polygon = ctx.props().delete_polygon.clone();
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        debug!("delete_handler: {:?}", event);
+        delete_polygon.emit(());
+    })
+}
+
+fn resize_handler(
+    leaflet_map: &Map,
+    draw_layer: &leaflet::FeatureGroup,
+) -> Closure<dyn FnMut(leaflet::Event)> {
+    let map = leaflet_map.clone();
+    let draw_layer = draw_layer.clone();
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        debug!("view_reset_handler: {:?}", event);
+        map.fit_bounds(draw_layer.get_bounds().as_ref());
+    })
 }
 
 fn add_tile_layer(map: &Map) {

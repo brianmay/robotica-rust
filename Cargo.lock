@@ -4818,6 +4818,7 @@ dependencies = [
  "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
  "itertools 0.12.1",
+ "js-sys",
  "leaflet",
  "paste",
  "reqwasm",
