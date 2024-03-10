@@ -50,7 +50,10 @@ impl LocationStatus {
     pub const fn can_save(&self) -> bool {
         matches!(
             self,
-            LocationStatus::Unchanged | LocationStatus::Changed | LocationStatus::Error(_)
+            LocationStatus::Unchanged
+                | LocationStatus::Changed
+                | LocationStatus::Error(_)
+                | LocationStatus::Saved
         )
     }
 }
