@@ -1,7 +1,7 @@
 use super::{
     control::Control, item_map::ItemMapComponent, list_map::ListMapComponent, ActionLocation,
 };
-use crate::components::forms::text_input::TextInput;
+use crate::components::forms::{checkbox::Checkbox, text_input::TextInput};
 use gloo_net::http::Request;
 use reqwasm::{http::Response, Error};
 use robotica_common::robotica::{
@@ -19,6 +19,9 @@ pub enum Msg {
     SelectLocation(Location),
     Locations(Arc<Vec<Location>>),
     UpdateName(String),
+    UpdateColor(String),
+    UpdateAnnounceOnEnter(bool),
+    UpdateAnnounceOnExit(bool),
     Save,
     SaveSuccess(Location),
     SaveFailed(String),
@@ -105,6 +108,7 @@ impl Component for LocationsView {
     }
 
     #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::LoadFailed(err) => {
@@ -130,12 +134,43 @@ impl Component for LocationsView {
                 }
                 true
             }
+            Msg::UpdateColor(color) => {
+                debug!("Updating color: {}", color);
+                if let Some(location_state) = &mut self.location_state {
+                    location_state.location.set_color(color);
+                    location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
+            Msg::UpdateAnnounceOnEnter(announce_on_enter) => {
+                debug!("Updating announce_on_enter: {}", announce_on_enter);
+                if let Some(location_state) = &mut self.location_state {
+                    location_state
+                        .location
+                        .set_announce_on_enter(announce_on_enter);
+                    location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
+            Msg::UpdateAnnounceOnExit(announce_on_exit) => {
+                debug!("Updating announce_on_exit: {}", announce_on_exit);
+                if let Some(location_state) = &mut self.location_state {
+                    location_state
+                        .location
+                        .set_announce_on_exit(announce_on_exit);
+                    location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
             Msg::CreatePolygon(polygon) => {
                 debug!("Creating polygon: {:?}", polygon);
                 if let Some(location_state) = &mut self.location_state {
                     location_state.location = CreateLocation {
                         bounds: polygon,
                         name: location_state.location.name(),
+                        color: location_state.location.color(),
+                        announce_on_enter: location_state.location.announce_on_enter(),
+                        announce_on_exit: location_state.location.announce_on_exit(),
                     }
                     .pipe(ActionLocation::Create);
                     location_state.status = LocationStatus::Saving;
@@ -223,6 +258,14 @@ impl Component for LocationsView {
 
         if let Some(location_state) = &self.location_state {
             let update_name = ctx.link().callback(Msg::UpdateName);
+            let update_color = ctx.link().callback(Msg::UpdateColor);
+            let update_announce_on_enter = ctx.link().callback(|x| {
+                debug! {x};
+                Msg::UpdateAnnounceOnEnter(x != "true")
+            });
+            let update_announce_on_exit = ctx
+                .link()
+                .callback(|x| Msg::UpdateAnnounceOnExit(x != "true"));
             let create_polygon = ctx.link().callback(Msg::CreatePolygon);
             let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
             let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
@@ -245,7 +288,11 @@ impl Component for LocationsView {
                     <ItemMapComponent location={location_state.location.clone()} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
                     <Control select_location={select_location} locations={locations}/>
                     <form>
-                        <TextInput label="Name" value={name} on_change={update_name} />
+                        <TextInput id="name" label="Name" value={name} on_change={update_name} />
+                        <TextInput id="color" label="Color" value={location_state.location.color()} on_change={update_color} />
+                        <Checkbox id="announce_on_enter" label="Announce on enter" value={location_state.location.announce_on_enter()} on_change={update_announce_on_enter} />
+                        <Checkbox id="announce_on_exit" label="Announce on exit" value={location_state.location.announce_on_exit()} on_change={update_announce_on_exit} />
+
                         <button onclick={save} disabled={disable_save} >
                             {"Save"}
                         </button>

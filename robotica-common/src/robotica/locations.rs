@@ -11,6 +11,15 @@ pub struct Location {
 
     /// The boundary of the location.
     pub bounds: geo::Polygon<f64>,
+
+    /// The color of the polygon
+    pub color: String,
+
+    /// Should we announce when something enters this location?
+    pub announce_on_enter: bool,
+
+    /// Should we announce when something enters this location?
+    pub announce_on_exit: bool,
 }
 
 /// A request to create a new location.
@@ -21,4 +30,13 @@ pub struct CreateLocation {
 
     /// The boundary of the location.
     pub bounds: geo::Polygon<f64>,
+
+    /// The color of the polygon
+    pub color: String,
+
+    /// Should we announce when something enters this location?
+    pub announce_on_enter: bool,
+
+    /// Should we announce when something enters this location?
+    pub announce_on_exit: bool,
 }

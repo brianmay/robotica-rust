@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE id = $1",
+  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,21 @@
       },
       {
         "ordinal": 2,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "announce_on_enter",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "announce_on_exit",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
         "name": "bounds!: wkb::Decode<geo::Geometry<f64>>",
         "type_info": {
           "Custom": {
@@ -32,8 +47,11 @@
     "nullable": [
       false,
       false,
+      false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "6cd6ad6fa2c7bd8773e2d9d95a123dcf7b35dec2c8f4718c0cf6e9d339c53fe8"
+  "hash": "f9cf52ed51322a8c857ac8aee7ce649c3bea53bbc3cd95cfb4ad5f376419cf33"
 }

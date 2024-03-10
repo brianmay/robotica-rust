@@ -67,23 +67,24 @@ impl Component for ListMapComponent {
             false
         } else {
             let options = leaflet::PolylineOptions::default();
-            options.set_color("red".to_string());
-            options.set_fill_color("red".to_string());
             options.set_weight(3.0);
             options.set_opacity(0.5);
             options.set_fill(true);
 
             self.draw_layer.clear_layers();
             for location in props.locations.iter() {
-                let latlngs = location
+                options.set_color(location.color.clone());
+                options.set_fill_color(location.color.clone());
+
+                let lat_lngs = location
                     .bounds
                     .exterior()
                     .coords()
-                    .map(|latlng| LatLng::new(latlng.y, latlng.x))
+                    .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
                     .map(JsValue::from)
                     .collect();
 
-                leaflet::Polygon::new_with_options(&latlngs, &options)
+                leaflet::Polygon::new_with_options(&lat_lngs, &options)
                     .unchecked_into::<leaflet::Layer>()
                     .add_to_layer_group(&self.draw_layer);
             }

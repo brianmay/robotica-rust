@@ -39,22 +39,22 @@ impl ItemMapComponent {
 
     fn draw_location(&self, location: &ActionLocation) {
         let options = leaflet::PolylineOptions::default();
-        options.set_color("red".to_string());
-        options.set_fill_color("red".to_string());
+        options.set_color(location.color());
+        options.set_fill_color(location.color());
         options.set_weight(3.0);
         options.set_opacity(0.5);
         options.set_fill(true);
 
         self.draw_layer.clear_layers();
-        let latlngs = location
+        let lat_lngs = location
             .bounds()
             .exterior()
             .coords()
-            .map(|latlng| LatLng::new(latlng.y, latlng.x))
+            .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
             .map(JsValue::from)
             .collect();
 
-        leaflet::Polygon::new_with_options(&latlngs, &options)
+        leaflet::Polygon::new_with_options(&lat_lngs, &options)
             .unchecked_into::<leaflet::Layer>()
             .add_to_layer_group(&self.draw_layer);
 
@@ -167,9 +167,9 @@ fn create_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
                 let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
                 lat_lng_array
                     .iter()
-                    .map(|latlng| {
-                        let latlng = latlng.unchecked_into::<leaflet::LatLng>();
-                        geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
+                    .map(|lat_lng| {
+                        let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                        geo::Point(coord! {x: lat_lng.lng(), y: lat_lng.lat()})
                     })
                     .collect::<Vec<_>>()
             })
@@ -187,7 +187,6 @@ fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
             // .unchecked_into::<JsValue>()
             .pipe(|x| Reflect::get(&x, &"layers".into()))
             .unwrap()
-            .tap(|l| debug!("Layer: {:?}", l))
             .unchecked_into::<leaflet::LayerGroup>()
             .get_layers()
             .get(0)
@@ -198,9 +197,9 @@ fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
                 let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
                 lat_lng_array
                     .iter()
-                    .map(|latlng| {
-                        let latlng = latlng.unchecked_into::<leaflet::LatLng>();
-                        geo::Point(coord! {x: latlng.lng(), y: latlng.lat()})
+                    .map(|lat_lng| {
+                        let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                        geo::Point(coord! {x: lat_lng.lng(), y: lat_lng.lat()})
                     })
                     .collect::<Vec<_>>()
             })
@@ -213,8 +212,7 @@ fn update_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet:
 
 fn delete_handler(ctx: &Context<ItemMapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
     let delete_polygon = ctx.props().delete_polygon.clone();
-    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        debug!("delete_handler: {:?}", event);
+    Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
         delete_polygon.emit(());
     })
 }
@@ -225,8 +223,7 @@ fn resize_handler(
 ) -> Closure<dyn FnMut(leaflet::Event)> {
     let map = leaflet_map.clone();
     let draw_layer = draw_layer.clone();
-    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        debug!("view_reset_handler: {:?}", event);
+    Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
         map.fit_bounds(draw_layer.get_bounds().as_ref());
     })
 }

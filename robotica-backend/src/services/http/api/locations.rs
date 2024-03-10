@@ -32,7 +32,7 @@ pub async fn list_handler(
     };
 
     sqlx::query!(
-        r#"SELECT id, name, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations"#
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations"#
     )
     .fetch_all(&postgres)
     .await?
@@ -43,6 +43,9 @@ pub async fn list_handler(
                 id: row.id,
                 name: row.name,
                 bounds: p,
+                color: row.color,
+                announce_on_enter: row.announce_on_enter,
+                announce_on_exit: row.announce_on_exit,
             }
             .pipe(Some)
         } else {
@@ -69,8 +72,11 @@ async fn create_handler(
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"INSERT INTO locations (name, bounds) VALUES ($1, $2) RETURNING id"#,
+        r#"INSERT INTO locations (name, color, announce_on_enter, announce_on_exit, bounds) VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
         location.name,
+        location.color,
+        location.announce_on_enter,
+        location.announce_on_exit,
         geo as _
     )
     .fetch_one(&postgres)
@@ -79,6 +85,9 @@ async fn create_handler(
         id: id.id,
         name: location.name,
         bounds: location.bounds,
+        color: location.color,
+        announce_on_enter: location.announce_on_enter,
+        announce_on_exit: location.announce_on_exit,
     })
     .pipe(ApiResponse::success)
     .pipe(Json)
@@ -118,8 +127,11 @@ async fn update_handler(
     let geo = wkb::Encode(geometry);
 
     let rc = sqlx::query!(
-        r#"UPDATE locations SET name = $1, bounds = $2 WHERE id = $3"#,
+        r#"UPDATE locations SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6"#,
         location.name,
+        location.color,
+        location.announce_on_enter,
+        location.announce_on_exit,
         geo as _,
         location.id
     )
@@ -143,7 +155,7 @@ pub async fn get_handler(
     };
 
     let location = sqlx::query!(
-        r#"SELECT id, name, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE id = $1"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE id = $1"#,
         id
     )
     .fetch_one(&postgres)
@@ -159,6 +171,9 @@ pub async fn get_handler(
             id: location.id,
             name: location.name,
             bounds: p,
+            color: location.color,
+            announce_on_enter: location.announce_on_enter,
+            announce_on_exit: location.announce_on_exit,
         }
         .pipe(Json)
         .pipe(Ok)
@@ -181,7 +196,7 @@ pub async fn search_handler(
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"SELECT id, name, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE ST_Intersects($1, bounds)"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE ST_Intersects($1, bounds)"#,
         geo as _
     )
     .fetch_all(&postgres)
@@ -193,6 +208,9 @@ pub async fn search_handler(
                 id: row.id,
                 name: row.name,
                 bounds: p,
+                color: row.color,
+                announce_on_enter: row.announce_on_enter,
+                announce_on_exit: row.announce_on_exit,
             }
             .pipe(Some)
         } else {
