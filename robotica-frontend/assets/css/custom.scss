@@ -128,7 +128,17 @@ footer {
     padding: 0;
 }
 
+
+html, body {
+    height: 100%;
+}
+
+.map-container {
+    height: calc(100% - 500px);
+
+}
+
 .map {
-    height: 400px;
+    height: 100%;
     width: 100%;
 }

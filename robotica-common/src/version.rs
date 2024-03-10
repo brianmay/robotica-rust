@@ -27,7 +27,7 @@ impl Version {
     pub fn get() -> Version {
         Version {
             build_date: BUILD_DATE.unwrap_or("unknown").into(),
-            vcs_ref: VCS_REF.unwrap_or("unknown").into(),
+            vcs_ref: VCS_REF.unwrap_or("dirty").into(),
         }
     }
 }
