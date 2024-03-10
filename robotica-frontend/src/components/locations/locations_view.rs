@@ -1,8 +1,13 @@
-use super::{control::Control, item_map::ItemMapComponent, list_map::ListMapComponent};
+use super::{
+    control::Control, item_map::ItemMapComponent, list_map::ListMapComponent, ActionLocation,
+};
 use crate::components::forms::text_input::TextInput;
 use gloo_net::http::Request;
 use reqwasm::{http::Response, Error};
-use robotica_common::robotica::{http_api::ApiResponse, locations::Location};
+use robotica_common::robotica::{
+    http_api::ApiResponse,
+    locations::{CreateLocation, Location},
+};
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use tap::Pipe;
@@ -17,6 +22,10 @@ pub enum Msg {
     Save,
     SaveSuccess(Location),
     SaveFailed(String),
+    DeleteSuccess,
+    CreatePolygon(geo::Polygon),
+    UpdatePolygon(geo::Polygon),
+    DeletePolygon,
 }
 
 pub enum LoadingStatus {
@@ -47,9 +56,10 @@ impl LocationStatus {
 }
 
 pub struct LocationState {
-    pub location: Location,
+    pub location: ActionLocation,
     pub status: LocationStatus,
 }
+
 pub struct LocationsView {
     location_state: Option<LocationState>,
     loading_status: LoadingStatus,
@@ -100,7 +110,7 @@ impl Component for LocationsView {
             }
             Msg::SelectLocation(location) => {
                 self.location_state = Some(LocationState {
-                    location,
+                    location: ActionLocation::Update(location),
                     status: LocationStatus::Unchanged,
                 });
                 true
@@ -112,8 +122,41 @@ impl Component for LocationsView {
             Msg::UpdateName(name) => {
                 debug!("Updating name: {}", name);
                 if let Some(location_state) = &mut self.location_state {
-                    location_state.location.name = name;
+                    location_state.location.set_name(name);
                     location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
+            Msg::CreatePolygon(polygon) => {
+                debug!("Creating polygon: {:?}", polygon);
+                if let Some(location_state) = &mut self.location_state {
+                    location_state.location = CreateLocation {
+                        bounds: polygon,
+                        name: location_state.location.name(),
+                    }
+                    .pipe(ActionLocation::Create);
+                    location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
+            Msg::UpdatePolygon(polygon) => {
+                debug!("Updating polygon: {:?}", polygon);
+                if let Some(location_state) = &mut self.location_state {
+                    location_state.location.set_bounds(polygon);
+                    location_state.status = LocationStatus::Changed;
+                }
+                true
+            }
+            Msg::DeletePolygon => {
+                debug!("Deleting polygon");
+                if let Some(location_state) = &mut self.location_state {
+                    location_state.status = LocationStatus::Changed;
+                    match &location_state.location {
+                        ActionLocation::Create(_) => self.location_state = None,
+                        ActionLocation::Update(location) => {
+                            delete_location(location, ctx);
+                        }
+                    }
                 }
                 true
             }
@@ -136,13 +179,17 @@ impl Component for LocationsView {
             },
             Msg::SaveSuccess(location) => {
                 if let Some(location_state) = &mut self.location_state {
-                    location_state.location = location;
+                    location_state.location = ActionLocation::Update(location);
                     location_state.status = LocationStatus::Saved;
                     load_list(ctx);
                     true
                 } else {
                     false
                 }
+            }
+            Msg::DeleteSuccess => {
+                self.location_state = None;
+                true
             }
             Msg::SaveFailed(error) => {
                 if let Some(location_state) = &mut self.location_state {
@@ -156,8 +203,8 @@ impl Component for LocationsView {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let cb = ctx.link().callback(Msg::SelectLocation);
-        let update_name = ctx.link().callback(Msg::UpdateName);
+        let select_location = ctx.link().callback(Msg::SelectLocation);
+
         let save = ctx.link().callback(|e: MouseEvent| {
             e.prevent_default();
             Msg::Save
@@ -169,6 +216,11 @@ impl Component for LocationsView {
         };
 
         if let Some(location_state) = &self.location_state {
+            let update_name = ctx.link().callback(Msg::UpdateName);
+            let create_polygon = ctx.link().callback(Msg::CreatePolygon);
+            let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
+            let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
+
             let disable_save = !location_state.status.can_save();
 
             let msg = match &location_state.status {
@@ -179,13 +231,15 @@ impl Component for LocationsView {
                 LocationStatus::Error(err) => format!("Error {err}"),
             };
 
+            let name = location_state.location.name();
+
             html! {
                 <>
-                    <h1>{&location_state.location.name}</h1>
-                    <ItemMapComponent location={location_state.location.clone()} />
-                    <Control select_location={cb} locations={locations}/>
+                    <h1>{name.clone()}</h1>
+                    <ItemMapComponent location={location_state.location.clone()} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
+                    <Control select_location={select_location} locations={locations}/>
                     <form>
-                        <TextInput label="Name" value={location_state.location.name.clone()} on_change={update_name} />
+                        <TextInput label="Name" value={name} on_change={update_name} />
                         <button onclick={save} disabled={disable_save} >
                             {"Save"}
                         </button>
@@ -204,7 +258,7 @@ impl Component for LocationsView {
                 <>
                     <h1>{"Locations"}</h1>
                     <ListMapComponent locations={locations.clone()}  />
-                    <Control select_location={cb} locations={locations}/>
+                    <Control select_location={select_location} locations={locations}/>
                     <p>{msg}</p>
                 </>
             }
@@ -237,13 +291,27 @@ fn save_location(location_state: &LocationState, ctx: &Context<LocationsView>) {
     spawn_local(async move {
         debug!("Sending request");
 
-        let response = Request::put("/api/locations")
-            .json(&location)
-            .unwrap()
-            .send()
-            .await
-            .pipe(process_response::<Location>)
-            .await;
+        let response = match location {
+            ActionLocation::Create(location) => {
+                Request::post("/api/locations/create")
+                    .json(&location)
+                    .unwrap()
+                    .send()
+                    .await
+                    .pipe(process_response::<Location>)
+                    .await
+            }
+
+            ActionLocation::Update(location) => {
+                Request::put("/api/locations")
+                    .json(&location)
+                    .unwrap()
+                    .send()
+                    .await
+                    .pipe(process_response::<Location>)
+                    .await
+            }
+        };
 
         let result = match response {
             Ok(response) => {
@@ -253,6 +321,31 @@ fn save_location(location_state: &LocationState, ctx: &Context<LocationsView>) {
             Err(err) => {
                 debug!("Failed to save location: {err}");
                 Msg::SaveFailed(format!("Failed to save location: {err}"))
+            }
+        };
+
+        link.send_message(result);
+    });
+}
+
+fn delete_location(location: &Location, ctx: &Context<LocationsView>) {
+    let id = location.id;
+    let link = ctx.link().clone();
+    spawn_local(async move {
+        let response = Request::delete(&format!("/api/locations/{id}"))
+            .send()
+            .await
+            .pipe(process_response::<()>)
+            .await;
+
+        let result = match response {
+            Ok(()) => {
+                debug!("Location deleted");
+                Msg::DeleteSuccess
+            }
+            Err(err) => {
+                debug!("Failed to delete location: {err}");
+                Msg::SaveFailed(format!("Failed to delete location: {err}"))
             }
         };
 

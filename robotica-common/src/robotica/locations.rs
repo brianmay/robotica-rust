@@ -14,7 +14,7 @@ pub struct Location {
 }
 
 /// A request to create a new location.
-#[derive(Debug, serde::Deserialize, Clone, PartialEq)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct CreateLocation {
     /// The name of the location.
     pub name: String,
