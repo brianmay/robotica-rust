@@ -183,10 +183,9 @@ impl Component for LocationsView {
                 .pipe(ActionLocation::Create)
                 .pipe(|x| LocationState {
                     location: x,
-                    status: LocationStatus::Saving,
+                    status: LocationStatus::Changed,
                 });
 
-                save_location(&location_state, ctx);
                 self.location_state = Some(location_state);
                 true
             }
