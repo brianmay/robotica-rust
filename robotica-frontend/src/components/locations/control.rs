@@ -1,25 +1,24 @@
+use robotica_common::robotica::locations::Location;
 use std::sync::Arc;
-
-use super::locations::LocationWrapper;
 use tracing::debug;
 use yew::prelude::*;
 
 pub enum Msg {
-    LocationChosen(LocationWrapper),
+    LocationChosen(Location),
 }
 
 pub struct Control {
-    locations: Arc<Vec<LocationWrapper>>,
+    locations: Arc<Vec<Location>>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
-    pub locations: Arc<Vec<LocationWrapper>>,
-    pub select_location: Callback<LocationWrapper>,
+    pub locations: Arc<Vec<Location>>,
+    pub select_location: Callback<Location>,
 }
 
 impl Control {
-    fn button(ctx: &Context<Self>, location: LocationWrapper) -> Html {
+    fn button(ctx: &Context<Self>, location: Location) -> Html {
         let name = location.name.clone();
         let cb = ctx
             .link()

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO locations (name, bounds) VALUES ($1, $2) RETURNING id",
+  "query": "INSERT INTO locations (name, color, announce_on_enter, announce_on_exit, bounds) VALUES ($1, $2, $3, $4, $5) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,9 @@
     "parameters": {
       "Left": [
         "Varchar",
+        "Varchar",
+        "Bool",
+        "Bool",
         {
           "Custom": {
             "name": "geography",
@@ -24,5 +27,5 @@
       false
     ]
   },
-  "hash": "342ddf3207d089b67cd70fc1ca0e61535985607782dc32849ad7de5090b54608"
+  "hash": "f9223fc713e91bf459b7e6fdb7f8af6e944e69fd2f539dc8b1c541161856c58e"
 }

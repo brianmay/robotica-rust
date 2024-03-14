@@ -13,6 +13,7 @@ extern crate lalrpop_util;
 
 // extern crate robotica_backend_macros;
 
+pub mod database;
 pub mod devices;
 pub mod pipes;
 pub mod serde;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE ST_Intersects($1, bounds)",
+  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE ST_Intersects($1, bounds)",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,21 @@
       },
       {
         "ordinal": 2,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "announce_on_enter",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "announce_on_exit",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
         "name": "bounds!: wkb::Decode<geo::Geometry<f64>>",
         "type_info": {
           "Custom": {
@@ -37,8 +52,11 @@
     "nullable": [
       false,
       false,
+      false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "21483b30c510c463e25ed99fb252e8f09c392842eea922a35fadb7093fd3b5cb"
+  "hash": "f8f8ce44b1ad74394bccc596d84fc05d5c1bff8859000caf4bdf4e2ec6ff42c3"
 }

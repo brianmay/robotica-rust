@@ -1,11 +1,14 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE locations SET name = $1, bounds = $2 WHERE id = $3",
+  "query": "UPDATE locations SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
         "Varchar",
+        "Varchar",
+        "Bool",
+        "Bool",
         {
           "Custom": {
             "name": "geography",
@@ -17,5 +20,5 @@
     },
     "nullable": []
   },
-  "hash": "8c09d79a1679ee1271d25569af4841136a0c4d6bb89b9796a4819f40b91e8442"
+  "hash": "a7b4f479d1334502694e36c8c389028149300ba8bc7f3801bbe7404b1e8c3f4e"
 }
