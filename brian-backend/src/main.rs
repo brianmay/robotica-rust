@@ -22,7 +22,7 @@ mod tesla;
 use std::time::Duration;
 
 use anyhow::Result;
-use chrono::{Local, TimeDelta, TimeZone};
+use chrono::{Local, TimeZone};
 use delays::rate_limit;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
@@ -164,7 +164,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
         // It doesn't matter if we get then wrong here.
         // Insert dummy values for now.
         schedule_date: chrono::Utc::now().date_naive(),
-        duration: TimeDelta::zero(),
+        duration: Duration::ZERO,
     })
 }
 

@@ -2,6 +2,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use chrono::{NaiveDate, Utc};
@@ -10,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use robotica_common::{
-    datetime::{DateTime, Duration},
+    datetime::{duration, DateTime},
     mqtt::{QoS, Retain},
     robotica::tasks::{Payload, Task},
     scheduler::{Importance, Mark, Status},
@@ -94,7 +95,7 @@ impl Config {
         self.repeat_count.unwrap_or(1)
     }
     fn repeat_time(&self) -> Duration {
-        self.repeat_time.unwrap_or_else(|| Duration::minutes(1))
+        self.repeat_time.unwrap_or_else(|| duration::minutes(1))
     }
 }
 
@@ -322,7 +323,7 @@ fn config_to_sequence(
         })
         .collect();
 
-    let default_latest_time = Duration::minutes(1);
+    let default_latest_time = duration::minutes(1);
     let latest_time = *start_time + config.latest_time.unwrap_or(default_latest_time);
 
     #[allow(deprecated)]
@@ -537,7 +538,7 @@ mod tests {
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
                 zero_time: Some(true),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -557,7 +558,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -620,7 +621,7 @@ mod tests {
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 latest_time: None,
                 repeat_count: Some(2),
                 repeat_time: None,
@@ -640,7 +641,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 latest_time: None,
                 repeat_count: Some(2),
                 repeat_time: None,
@@ -695,10 +696,10 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(false),
-            duration: Duration::minutes(15),
+            duration: duration::minutes(15),
             latest_time: None,
             repeat_count: Some(0),
-            repeat_time: Some(Duration::minutes(5)),
+            repeat_time: Some(duration::minutes(5)),
             tasks: vec![ConfigTask {
                 title: "task 1".to_string(),
                 payload: None,
@@ -724,10 +725,10 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(false),
-            duration: Duration::minutes(15),
+            duration: duration::minutes(15),
             latest_time: None,
             repeat_count: Some(1),
-            repeat_time: Some(Duration::minutes(5)),
+            repeat_time: Some(duration::minutes(5)),
             tasks: vec![ConfigTask {
                 title: "task 1".to_string(),
                 payload: None,
@@ -742,7 +743,7 @@ mod tests {
         let result = expand_config(config[0]);
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0].duration, Duration::minutes(15));
+        assert_eq!(result[0].duration, duration::minutes(15));
         assert_eq!(result[0].number, 0);
         assert_eq!(result[0].repeat_number, 1);
     }
@@ -758,10 +759,10 @@ mod tests {
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 latest_time: None,
                 repeat_count: Some(3),
-                repeat_time: Some(Duration::minutes(5)),
+                repeat_time: Some(duration::minutes(5)),
                 tasks: vec![ConfigTask {
                     title: "task 1".to_string(),
                     payload: None,
@@ -778,7 +779,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 latest_time: None,
                 repeat_count: Some(3),
                 repeat_time: None,
@@ -797,30 +798,30 @@ mod tests {
         let result = expand_config(config[0]);
         assert_eq!(result.len(), 3);
 
-        assert_eq!(result[0].duration, Duration::minutes(5));
+        assert_eq!(result[0].duration, duration::minutes(5));
         assert_eq!(result[0].number, 0);
         assert_eq!(result[0].repeat_number, 1);
 
-        assert_eq!(result[1].duration, Duration::minutes(5));
+        assert_eq!(result[1].duration, duration::minutes(5));
         assert_eq!(result[1].number, 0);
         assert_eq!(result[1].repeat_number, 2);
 
-        assert_eq!(result[2].duration, Duration::minutes(15));
+        assert_eq!(result[2].duration, duration::minutes(15));
         assert_eq!(result[2].number, 0);
         assert_eq!(result[2].repeat_number, 3);
 
         let result = expand_config(config[1]);
         assert_eq!(result.len(), 3);
 
-        assert_eq!(result[0].duration, Duration::minutes(1));
+        assert_eq!(result[0].duration, duration::minutes(1));
         assert_eq!(result[0].number, 1);
         assert_eq!(result[0].repeat_number, 1);
 
-        assert_eq!(result[1].duration, Duration::minutes(1));
+        assert_eq!(result[1].duration, duration::minutes(1));
         assert_eq!(result[1].number, 1);
         assert_eq!(result[1].repeat_number, 2);
 
-        assert_eq!(result[2].duration, Duration::minutes(15));
+        assert_eq!(result[2].duration, duration::minutes(15));
         assert_eq!(result[2].number, 1);
         assert_eq!(result[2].repeat_number, 3);
     }
@@ -835,7 +836,7 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(false),
-            duration: Duration::minutes(15),
+            duration: duration::minutes(15),
             latest_time: None,
             repeat_count: Some(2),
             repeat_time: None,
@@ -852,13 +853,13 @@ mod tests {
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config,
             },
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config,
             },
         ];
@@ -882,7 +883,7 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(true),
-            duration: Duration::minutes(15),
+            duration: duration::minutes(15),
             latest_time: None,
             repeat_count: Some(2),
             repeat_time: None,
@@ -899,13 +900,13 @@ mod tests {
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config,
             },
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config,
             },
         ];
@@ -929,7 +930,7 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(false),
-            duration: Duration::minutes(15),
+            duration: duration::minutes(15),
             latest_time: None,
             repeat_count: Some(2),
             repeat_time: None,
@@ -951,13 +952,13 @@ mod tests {
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config,
             },
             ExpandedConfig {
                 number: 0,
                 repeat_number: 1,
-                duration: Duration::minutes(15),
+                duration: duration::minutes(15),
                 config: &config2,
             },
         ];
@@ -982,7 +983,7 @@ mod tests {
                 options: Some(HashSet::from(["boxing".to_string()])),
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1002,7 +1003,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(true),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1062,10 +1063,10 @@ mod tests {
             options: Some(HashSet::from(["boxing".to_string()])),
             if_cond: None,
             zero_time: Some(true),
-            duration: Duration::minutes(30),
+            duration: duration::minutes(30),
             latest_time: None,
             repeat_count: Some(2),
-            repeat_time: Some(Duration::minutes(10)),
+            repeat_time: Some(duration::minutes(10)),
             tasks: vec![ConfigTask {
                 title: "task 1".to_string(),
                 payload: None,
@@ -1136,7 +1137,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(true),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1156,7 +1157,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1179,7 +1180,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(true),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1199,7 +1200,7 @@ mod tests {
                 options: None,
                 if_cond: None,
                 zero_time: Some(false),
-                duration: Duration::minutes(30),
+                duration: duration::minutes(30),
                 latest_time: None,
                 repeat_count: None,
                 repeat_time: None,
@@ -1301,7 +1302,7 @@ mod tests {
                     options: None,
                     if_cond: None,
                     zero_time: Some(true),
-                    duration: Duration::minutes(30),
+                    duration: duration::minutes(30),
                     latest_time: None,
                     repeat_count: None,
                     repeat_time: None,
@@ -1324,7 +1325,7 @@ mod tests {
                     options: None,
                     if_cond: None,
                     zero_time: Some(false),
-                    duration: Duration::minutes(30),
+                    duration: duration::minutes(30),
                     latest_time: None,
                     repeat_count: None,
                     repeat_time: None,

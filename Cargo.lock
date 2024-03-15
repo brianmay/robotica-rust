@@ -4800,6 +4800,7 @@ dependencies = [
  "prost-types",
  "serde",
  "serde_json",
+ "tap",
  "thiserror",
  "tracing",
 ]

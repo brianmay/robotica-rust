@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 #[cfg(feature = "chrono")]
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 
 /// MQTT message sent by the Shelly EM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,8 +58,7 @@ impl Params {
             Params::NotifyEvent { ts, .. } | Params::NotifyStatus { ts, .. } => *ts,
         };
         #[allow(clippy::cast_possible_truncation)]
-        let naive = NaiveDateTime::from_timestamp_millis((ts * 1000.0) as i64)?;
-        Some(DateTime::from_naive_utc_and_offset(naive, Utc))
+        DateTime::from_timestamp_millis((ts * 1000.0) as i64)
     }
 }
 

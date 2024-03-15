@@ -30,3 +30,5 @@ pub mod datetime;
 
 #[cfg(feature = "chrono")]
 pub mod scheduler;
+
+pub use chrono::TimeDelta;

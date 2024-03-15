@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, FixedOffset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, TimeDelta, Utc};
 use robotica_backend::{
     pipes::stateful::{create_pipe, Receiver},
     spawn,
 };
-use robotica_common::datetime::utc_now;
+use robotica_common::{datetime::utc_now, time_delta};
 use tap::Pipe;
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
@@ -71,6 +71,11 @@ pub enum Error {
     Internal(String),
 }
 
+const ONE_DAY: TimeDelta = time_delta!(days: 1);
+const RETRY_TIME: TimeDelta = time_delta!(minutes: 1);
+const MIN_POLL_TIME: TimeDelta = time_delta!(minutes: 5);
+const MAX_POLL_TIME: TimeDelta = time_delta!(minutes: 30);
+
 type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
 
 pub fn run(config: api::Config) -> Result<Outputs, Error> {
@@ -96,8 +101,8 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                 () = sleep_until(price_instant) => {
                     let now = utc_now();
                     let today = now.with_timezone(&nem_timezone).date_naive();
-                    let yesterday = today - Duration::days(1);
-                    let tomorrow = today + Duration::days(1);
+                    let yesterday = today - ONE_DAY;
+                    let tomorrow = today + ONE_DAY;
 
                     // Get prices for the current interval.
                     let prices = api::get_prices(&config, yesterday, tomorrow).await;
@@ -108,7 +113,7 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                             let update_time = get_current_price_response(&prices, &now).map_or_else(|| {
                                 error!("No current price found in prices: {prices:?}");
                                 // If we failed to get a current price, try again in 1 minute
-                                now + Duration::minutes(1)
+                                now + RETRY_TIME
                             }, |current_price| {
                                 info!("Current price: {current_price:?}");
                                 current_price.end_time
@@ -137,15 +142,13 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                                 info!("Next price update: {update_time:?} in {duration}");
 
                                 // Ensure we update prices at least once once every 5 minutes.
-                                let max_duration = Duration::minutes(5);
-                                let min_duration = Duration::seconds(30);
-                                duration.clamp(min_duration, max_duration)
+                                duration.clamp(MIN_POLL_TIME, MAX_POLL_TIME)
                             }
                         }
                         Err(err) => {
                             error!("Failed to get prices: {}", err);
                             // If we failed to get prices, try again in 1 minute
-                            Duration::minutes(1)
+                            RETRY_TIME
                         }
                     };
 
@@ -158,8 +161,8 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                     // Update the amber usage once an hour.
                     let now = utc_now();
                     let today = now.with_timezone(&nem_timezone).date_naive();
-                    let yesterday = today - Duration::days(1);
-                    let tomorrow = today + Duration::days(1);
+                    let yesterday = today - ONE_DAY;
+                    let tomorrow = today + ONE_DAY;
 
                     // Get usage for the current interval.
                     match api::get_usage(&config, yesterday, tomorrow).await {

@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use reqwest::Error;
-use robotica_common::mqtt::MqttMessage;
+use robotica_common::{mqtt::MqttMessage, time_delta};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::{sleep, Instant};
@@ -389,6 +389,9 @@ impl Token {
         Ok(())
     }
 
+    const DEFAULT_EXPIRES_TIME: TimeDelta = time_delta!(minutes: 1);
+    const DEFAULT_RENEW_TIME: TimeDelta = time_delta!(minutes: 1);
+
     async fn renew(&self) -> Result<Self, Error> {
         let url = "https://auth.tesla.com/oauth2/v3/token";
         let body = TokenRenew {
@@ -406,11 +409,9 @@ impl Token {
                 .checked_sub(Duration::from_secs(60 * 60))
                 .unwrap_or_default();
 
-            let expires_in = chrono::Duration::from_std(expires_in)
-                .unwrap_or_else(|_| chrono::Duration::seconds(60));
-
-            let renew_in = chrono::Duration::from_std(renew_in)
-                .unwrap_or_else(|_| chrono::Duration::seconds(60));
+            let expires_in =
+                chrono::Duration::from_std(expires_in).unwrap_or(Self::DEFAULT_EXPIRES_TIME);
+            let renew_in = chrono::Duration::from_std(renew_in).unwrap_or(Self::DEFAULT_RENEW_TIME);
 
             let now = chrono::Utc::now();
             let renew_at = now + renew_in;

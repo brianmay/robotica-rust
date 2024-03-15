@@ -4,15 +4,17 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::time::Duration;
 
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, TimeDelta, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS, Retain};
+use robotica_common::time_delta;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
 
-use robotica_common::datetime::{utc_now, Date, DateTime, Duration};
+use robotica_common::datetime::{utc_now, Date, DateTime, NaiveDateIter};
 use robotica_common::scheduler::{Importance, Mark, MarkStatus, Status, Tags, TagsForDay};
 
 use crate::pipes::{Subscriber, Subscription};
@@ -45,6 +47,10 @@ pub struct ExtraConfig {
     pub sequences_file: PathBuf,
 }
 
+const ONE_DAY: TimeDelta = time_delta!(days: 1);
+const FIRST_OFFSET: TimeDelta = time_delta!(days: -1);
+const LAST_OFFSET: TimeDelta = time_delta!(days: 4);
+
 struct Config<T: TimeZone> {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
@@ -68,7 +74,11 @@ impl<T: TimeZone + Copy> Config<T> {
                     .start_time
                     .with_timezone(&self.timezone)
                     .date_naive();
-                sequence.duration = sequence.end_time - sequence.start_time;
+                let delta = sequence.end_time - sequence.start_time;
+                sequence.duration = delta.to_std().unwrap_or_else(|e| {
+                    error!("Error getting duration for {sequence:?}: {e}");
+                    Duration::default()
+                });
                 sequences.push(sequence);
             }
         }
@@ -77,7 +87,7 @@ impl<T: TimeZone + Copy> Config<T> {
     }
 
     fn get_sequences_for_date(&self, date: NaiveDate) -> Vec<Sequence> {
-        let tomorrow = date + Duration::days(1);
+        let tomorrow = date + ONE_DAY;
         let c_date = classifier::classify_date_with_config(&date, &self.classifier);
         let c_tomorrow = classifier::classify_date_with_config(&tomorrow, &self.classifier);
 
@@ -101,36 +111,27 @@ impl<T: TimeZone + Copy> Config<T> {
     }
 
     fn get_tags(&self, today: Date) -> Tags {
-        let first_offset = -1;
-        // Stop date is exclusive, so we have to add an extra day.
-        let last_offset = 4 + 1;
+        let first_date = today + FIRST_OFFSET;
+        let last_date = today + LAST_OFFSET;
 
-        // Get Yesterday, Today, and next 3 days.
-        let tags = (first_offset..last_offset)
-            .map(|day| {
-                let date = today + Duration::days(day);
+        let tags = NaiveDateIter::new(first_date, last_date)
+            .map(|date| {
                 let tags = classifier::classify_date_with_config(&date, &self.classifier);
                 TagsForDay { date, tags }
             })
             .collect();
+
         Tags(tags)
     }
 
     fn get_sequences_all(&self, today: Date) -> Vec<Sequence> {
-        let first_offset = -1;
-        // Stop date is exclusive, so we have to add an extra day.
-        let last_offset = 4 + 1;
+        let first_date = today + FIRST_OFFSET;
+        let last_date = today + LAST_OFFSET;
 
-        // Get Yesterday, Today, and next 3 days.
-        let s = (first_offset..last_offset).flat_map(|day| {
-            let date = today + Duration::days(day);
-            self.get_sequences_for_date(date)
-        });
+        let s = NaiveDateIter::new(first_date, last_date)
+            .flat_map(|date| self.get_sequences_for_date(date));
 
-        let calendar = self.load_calendar(
-            today + Duration::days(first_offset),
-            today + Duration::days(last_offset),
-        );
+        let calendar = self.load_calendar(first_date, last_date);
         let mut sequences = Vec::new();
         sequences.extend(s);
         sequences.extend(calendar);
@@ -220,6 +221,8 @@ struct State<T: TimeZone> {
     publish_pending_hash: Option<ObjectHash>,
 }
 
+const REFRESH_TIME: TimeDelta = time_delta!(minutes: 5);
+
 impl<T: TimeZone + Copy> State<T> {
     fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
@@ -230,7 +233,7 @@ impl<T: TimeZone + Copy> State<T> {
             self.calendar_refresh_time = *now;
             self.publish_all_sequences();
             self.all_marks.expire(now);
-        } else if *now > self.calendar_refresh_time + Duration::minutes(5) {
+        } else if *now > self.calendar_refresh_time + REFRESH_TIME {
             self.calendar_refresh_time = *now;
             self.set_sequences_all();
             self.publish_all_sequences();
@@ -318,6 +321,9 @@ impl<T: TimeZone + Copy> State<T> {
         Some(new_hash)
     }
 
+    // We poll at least every minute just in case system time changes.
+    const POLL_INTERVAL: TimeDelta = time_delta!(minutes: 1);
+
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
         let next = self.events.front();
         next.map_or_else(
@@ -325,9 +331,8 @@ impl<T: TimeZone + Copy> State<T> {
             |next| {
                 let next = next.datetime;
                 let mut next = next - *now;
-                // We poll at least every two minutes just in case system time changes.
-                if next > chrono::Duration::minutes(1) {
-                    next = chrono::Duration::minutes(1);
+                if next > Self::POLL_INTERVAL {
+                    next = Self::POLL_INTERVAL;
                 }
                 let next = next.to_std().unwrap_or(std::time::Duration::from_secs(60));
                 Instant::now() + next

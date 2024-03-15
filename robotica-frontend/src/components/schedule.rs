@@ -7,7 +7,7 @@ use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use robotica_common::{
-    datetime::datetime_to_string,
+    datetime::{datetime_to_string, DurationExt},
     mqtt::{Json, MqttMessage},
     robotica::tasks::Task,
     scheduler::{Mark, MarkStatus, Sequence},

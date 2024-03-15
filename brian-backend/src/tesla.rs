@@ -3,7 +3,7 @@ use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, TimeDelta, Timelike, Utc};
 use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
     ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError, VehicleId,
@@ -12,6 +12,7 @@ use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
+use robotica_common::time_delta;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::Add;
@@ -871,9 +872,11 @@ fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Mes
     }
 }
 
+const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = time_delta!(minutes: 30);
+
 fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<Message>) {
     if !tesla_state.notified_errors
-        && tesla_state.last_success.add(chrono::Duration::minutes(30)) < Utc::now()
+        && tesla_state.last_success.add(FAILURE_NOTIFICATION_INTERVAL) < Utc::now()
     {
         let msg = new_message(
             "The Tesla and I have not been talking to each other for 30 minutes",
