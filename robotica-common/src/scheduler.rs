@@ -3,16 +3,14 @@ use std::{
     collections::HashSet,
     fmt::{Display, Formatter},
     ops::Deref,
+    time::Duration,
 };
 
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{
-    datetime::{DateTime, Duration},
-    robotica::tasks::Task,
-};
+use crate::{datetime::DateTime, robotica::tasks::Task};
 
 /// The status of the Sequence.
 #[derive(Deserialize, Serialize, Copy, Clone, Debug, Eq, PartialEq)]

@@ -4,7 +4,7 @@ use super::{
     api::{IntervalType, PriceResponse},
     Prices,
 };
-use chrono::{DateTime, Duration, Local, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use robotica_backend::{
     pipes::{
         stateful::{create_pipe, Receiver},
@@ -13,7 +13,10 @@ use robotica_backend::{
     services::persistent_state::PersistentStateRow,
     spawn,
 };
-use robotica_common::datetime::{convert_date_time_to_utc_or_default, duration_from_hms, utc_now};
+use robotica_common::{
+    datetime::{convert_date_time_to_utc_or_default, time_delta, utc_now},
+    time_delta,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -29,11 +32,15 @@ struct DayState {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 
-    #[serde(with = "robotica_common::datetime::with_duration")]
-    cheap_power_for_day: Duration,
+    #[serde(with = "robotica_common::datetime::with_time_delta")]
+    cheap_power_for_day: TimeDelta,
     last_cheap_update: Option<DateTime<Utc>>,
     cheapest_price: f32,
 }
+
+const CHEAP_TIME: TimeDelta = time_delta!(hours: 2);
+const INTERVAL: TimeDelta = time_delta!(minutes: 30);
+const ONE_DAY: TimeDelta = time_delta!(days: 1);
 
 impl DayState {
     fn new(now: &DateTime<Utc>) -> Self {
@@ -41,7 +48,7 @@ impl DayState {
         Self {
             start: start_day,
             end: end_day,
-            cheap_power_for_day: duration_from_hms(0, 0, 0),
+            cheap_power_for_day: TimeDelta::zero(),
             last_cheap_update: None,
             cheapest_price: 10.0,
         }
@@ -89,28 +96,19 @@ impl DayState {
             self.cheap_power_for_day += duration;
         }
 
-        {
-            let duration = self.cheap_power_for_day;
-            let seconds = duration.num_seconds() % 60;
-            let minutes = (duration.num_seconds() / 60) % 60;
-            let hours = (duration.num_seconds() / 60) / 60;
-            info!(
-                "Cheap power for day: {:0>2}:{:0>2}:{:0>2}",
-                hours, minutes, seconds
-            );
-        }
-
-        let interval_duration = Duration::minutes(30);
-        let duration = Duration::hours(2)
+        let interval_duration = INTERVAL;
+        let duration = CHEAP_TIME
             .checked_sub(&self.cheap_power_for_day)
-            .unwrap_or_else(|| duration_from_hms(0, 0, 0));
+            .unwrap_or_else(TimeDelta::zero);
 
         let number_of_intervals =
             divide_round_up(duration.num_minutes(), interval_duration.num_minutes());
         let number_of_intervals: usize = number_of_intervals.try_into().unwrap_or_default();
 
         info!(
-            "Number of intervals: {}/{}={}",
+            "Cheap power for day: {}, time left: {}, number of intervals: {}/{}={}",
+            time_delta::to_string(&self.cheap_power_for_day),
+            time_delta::to_string(&duration),
             duration.num_minutes(),
             interval_duration.num_minutes(),
             number_of_intervals
@@ -148,12 +146,12 @@ fn get_day<T: TimeZone>(
     local: &T,
 ) -> (DateTime<Utc>, DateTime<Utc>) {
     let today = now.with_timezone(local).date_naive();
-    let tomorrow = today + Duration::days(1);
+    let tomorrow = today + ONE_DAY;
     let mut start_day = convert_date_time_to_utc_or_default(today, time, local);
     let mut end_day = convert_date_time_to_utc_or_default(tomorrow, time, local);
     if *now < start_day {
-        start_day -= Duration::days(1);
-        end_day -= Duration::days(1);
+        start_day -= ONE_DAY;
+        end_day -= ONE_DAY;
     }
     (start_day, end_day)
 }
@@ -244,7 +242,7 @@ mod tests {
 
         let pr = |start_time: DateTime<Utc>, price| {
             let date = start_time.with_timezone(&Local).date_naive();
-            let end_time = start_time + Duration::minutes(30);
+            let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
                 start_time,
@@ -345,7 +343,7 @@ mod tests {
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&Local).date_naive();
-            let end_time = start_time + Duration::minutes(30);
+            let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
                 start_time,
@@ -387,7 +385,7 @@ mod tests {
 
         let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
         assert!(matches!(request, Request::Heat));
-        assert_eq!(ds.cheap_power_for_day, Duration::minutes(0));
+        assert_eq!(ds.cheap_power_for_day, TimeDelta::zero());
         let cp = ds.last_cheap_update.unwrap();
         assert_eq!(cp, now);
 
@@ -414,7 +412,7 @@ mod tests {
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
         let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
         assert!(matches!(request, Request::DoNotHeat));
-        assert_eq!(ds.cheap_power_for_day, Duration::minutes(45));
+        assert_eq!(ds.cheap_power_for_day, TimeDelta::try_minutes(45).unwrap());
         let cp = ds.last_cheap_update;
         assert_eq!(cp, None);
     }

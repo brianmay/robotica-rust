@@ -1,7 +1,7 @@
 //! Structures for Z-Wave devices over MQTT
 
 #[cfg(feature = "chrono")]
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 
 /// Generic Z-Wave Data
 #[derive(serde::Deserialize, Clone)]
@@ -16,9 +16,8 @@ pub struct Data<T> {
 impl<T> Data<T> {
     /// Get the datetime of the reading.
     #[cfg(feature = "chrono")]
-    pub fn get_datetime(&self) -> Option<DateTime<Utc>> {
-        let naive = NaiveDateTime::from_timestamp_millis(self.time)?;
-        Some(DateTime::from_naive_utc_and_offset(naive, Utc))
+    pub const fn get_datetime(&self) -> Option<DateTime<Utc>> {
+        DateTime::from_timestamp_millis(self.time)
     }
 }
 

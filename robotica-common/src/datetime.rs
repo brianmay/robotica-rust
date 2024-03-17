@@ -1,6 +1,7 @@
 //! Serializable datetime types.
 
-use chrono::{Datelike, Local, NaiveDateTime, TimeZone, Utc};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, TimeDelta, TimeZone, Utc};
+use std::time::Duration;
 use thiserror::Error;
 
 /// A Date.
@@ -14,9 +15,6 @@ pub type DateTime<Tz> = chrono::DateTime<Tz>;
 
 /// A day of the week.
 pub type Weekday = chrono::Weekday;
-
-/// A duration between two times.
-pub type Duration = chrono::Duration;
 
 /// Get the number of days from CE of the date.
 ///
@@ -66,50 +64,14 @@ pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
     local.format("%Y-%m-%d %H:%M:%S %z").to_string()
 }
 
-/// Create a new Duration.
-#[must_use]
-pub fn duration_from_hms(hours: i64, minutes: i64, seconds: i64) -> Duration {
-    chrono::Duration::hours(hours)
-        + chrono::Duration::minutes(minutes)
-        + chrono::Duration::seconds(seconds)
-}
+// /// Create a new Duration.
+// #[must_use]
+// pub fn duration_from_hms(hours: u64, minutes: u64, seconds: u64) -> std::time::Duration {
+//     std::time::Duration::from_secs((hours * 60 + minutes) * 60 + seconds)
+// }
 
-const fn div_rem(a: u64, b: u64) -> (u64, u64) {
+const fn div_rem_u64(a: u64, b: u64) -> (u64, u64) {
     (a / b, a % b)
-}
-
-/// A Serializable Duration.
-#[derive(Error, Debug)]
-pub enum DurationParseError {
-    /// The duration is invalid.
-    #[error("Invalid duration {0}")]
-    InvalidDuration(String),
-}
-
-fn duration_from_str(s: &str) -> Result<Duration, DurationParseError> {
-    let splits = s.split(':').collect::<Vec<&str>>();
-    if splits.len() == 2 {
-        let hours = splits[0]
-            .parse::<i64>()
-            .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
-        let minutes = splits[1]
-            .parse::<i64>()
-            .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
-        Ok(duration_from_hms(hours, minutes, 0))
-    } else if splits.len() == 3 {
-        let hours = splits[0]
-            .parse::<i64>()
-            .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
-        let minutes = splits[1]
-            .parse::<i64>()
-            .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
-        let seconds = splits[2]
-            .parse::<i64>()
-            .map_err(|_| DurationParseError::InvalidDuration(s.to_string()))?;
-        Ok(duration_from_hms(hours, minutes, seconds))
-    } else {
-        Err(DurationParseError::InvalidDuration(s.to_string()))
-    }
 }
 
 /// Serde serialization deserialization for a duration.
@@ -126,7 +88,41 @@ pub mod with_duration {
         D: Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
-        let d = super::duration_from_str(&s).map_err(serde::de::Error::custom)?;
+        let d = super::duration::from_str(&s)
+            .map_err(|_| serde::de::Error::custom(format!("Invalid duration {s}")))?;
+        Ok(d)
+    }
+
+    /// Serialize a duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is invalid.
+    pub fn serialize<S>(duration: &super::Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let result = super::duration::to_string(duration);
+        serializer.serialize_str(&result)
+    }
+}
+
+/// Serde serialization deserialization for a duration.
+pub mod with_time_delta {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Deserialize a duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is invalid.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<super::TimeDelta, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let d = super::time_delta::from_str(&s)
+            .map_err(|_| serde::de::Error::custom(format!("Invalid time delta {s}")))?;
         Ok(d)
     }
 
@@ -135,18 +131,11 @@ pub mod with_duration {
     /// # Errors
     ///
     /// If the duration is negative.
-    pub fn serialize<S>(duration: &super::Duration, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(duration: &super::TimeDelta, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = duration.to_std().map_err(serde::ser::Error::custom)?;
-
-        let secs = s.as_secs();
-
-        let (minutes, secs) = super::div_rem(secs, 60);
-        let (hours, minutes) = super::div_rem(minutes, 60);
-
-        let result = format!("{hours:02}:{minutes:02}:{secs:02}");
+        let result = super::time_delta::to_string(duration);
         serializer.serialize_str(&result)
     }
 }
@@ -228,14 +217,317 @@ pub fn convert_date_time_to_utc_or_default<T: TimeZone>(
     };
 
     convert(time)
-        .or_else(|| convert(time - Duration::hours(1)))
-        .or_else(|| convert(time + Duration::hours(1)))
+        .or_else(|| convert(time - duration::hours(1)))
+        .or_else(|| convert(time + duration::hours(1)))
         .unwrap_or_else(|| {
             let datetime = chrono::NaiveDateTime::new(date, time);
             chrono::Utc
                 .from_utc_datetime(&datetime)
                 .with_timezone(&chrono::Utc)
         })
+}
+
+/// `Duration` helpers
+pub mod duration {
+    use std::time::Duration;
+    use thiserror::Error;
+
+    /// Create a new Duration from days.
+    #[must_use]
+    pub const fn days(u32: u64) -> Duration {
+        Duration::from_secs(u32 * 24 * 3600)
+    }
+    /// Create a new Duration from hours.
+    #[must_use]
+    pub const fn hours(u32: u64) -> Duration {
+        Duration::from_secs(u32 * 3600)
+    }
+
+    /// Create a new Duration from minutes.
+    #[must_use]
+    pub const fn minutes(u32: u64) -> Duration {
+        Duration::from_secs(u32 * 60)
+    }
+
+    /// Create a new Duration from seconds.
+    #[must_use]
+    pub const fn seconds(u32: u64) -> Duration {
+        Duration::from_secs(u32)
+    }
+
+    /// An error that can occur when creating a `Duration`.
+    #[derive(Error, Debug)]
+    pub enum HmsError {
+        /// Minutes overflow
+        #[error("Minutes overflow")]
+        MinutesOverflow,
+
+        /// Seconds overflow
+        #[error("Seconds overflow")]
+        SecondsOverflow,
+
+        /// Total seconds overflow
+        #[error("Total seconds overflow")]
+        TotalSecondsOverflow,
+    }
+
+    /// Create a new Duration from hours, minutes and seconds.
+    ///
+    /// # Errors
+    ///
+    /// If the hours, minutes or seconds are out of range.
+    pub fn try_hms(hours: u64, minutes: u64, seconds: u64) -> Result<Duration, HmsError> {
+        if minutes > 59 {
+            return Err(HmsError::MinutesOverflow);
+        }
+        if seconds > 59 {
+            return Err(HmsError::SecondsOverflow);
+        }
+
+        hours
+            .checked_mul(3600)
+            .and_then(|x| x.checked_add(minutes * 60))
+            .and_then(|x| x.checked_add(seconds))
+            .map(Duration::from_secs)
+            .ok_or(HmsError::TotalSecondsOverflow)
+    }
+
+    /// Get the hours, minutes and seconds of a duration.
+    #[must_use]
+    pub const fn hms(duration: &Duration) -> (u64, u64, u64) {
+        let secs = duration.as_secs();
+        let (minutes, secs) = super::div_rem_u64(secs, 60);
+        let (hours, minutes) = super::div_rem_u64(minutes, 60);
+        (hours, minutes, secs)
+    }
+
+    /// Turn a duration into a string.
+    #[must_use]
+    pub fn to_string(duration: &Duration) -> String {
+        let (hours, minutes, seconds) = hms(duration);
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    }
+
+    /// An error that can occur when parsing a `Duration`.
+    #[derive(Error, Debug)]
+
+    pub enum DurationParseError {
+        /// Invalid duration
+        #[error("Invalid duration")]
+        InvalidDuration,
+    }
+
+    /// Turn a string into a `Duration`
+    ///
+    /// # Errors
+    ///
+    /// If the string is not a valid `Duration`.
+    pub fn from_str(s: &str) -> Result<Duration, DurationParseError> {
+        let splits = s.split(':').collect::<Vec<&str>>();
+
+        if s.len() < 2 {
+            return Err(DurationParseError::InvalidDuration);
+        }
+
+        let hours = splits[0]
+            .parse::<u64>()
+            .map_err(|_| DurationParseError::InvalidDuration)?;
+        let minutes = splits[1]
+            .parse::<u64>()
+            .map_err(|_| DurationParseError::InvalidDuration)?;
+
+        if splits.len() == 2 {
+            try_hms(hours, minutes, 0).map_err(|_| DurationParseError::InvalidDuration)
+        } else if splits.len() == 3 {
+            let seconds = splits[2]
+                .parse::<u64>()
+                .map_err(|_| DurationParseError::InvalidDuration)?;
+            try_hms(hours, minutes, seconds).map_err(|_| DurationParseError::InvalidDuration)
+        } else {
+            Err(DurationParseError::InvalidDuration)
+        }
+    }
+}
+
+/// `TimeDelta` helpers
+pub mod time_delta {
+    use chrono::TimeDelta;
+    use thiserror::Error;
+
+    /// An error that can occur when creating a `Duration`.
+    #[derive(Error, Debug)]
+    pub enum HmsError {
+        /// Minutes overflow
+        #[error("Minutes overflow")]
+        MinutesOverflow,
+
+        /// Seconds overflow
+        #[error("Seconds overflow")]
+        SecondsOverflow,
+
+        /// Total seconds overflow
+        #[error("Total seconds overflow")]
+        TotalSecondsOverflow,
+    }
+
+    /// Create a new Duration from hours, minutes and seconds.
+    ///
+    /// # Errors
+    ///
+    /// If the hours, minutes or seconds are out of range.
+    pub fn try_hms(
+        positive: bool,
+        hours: u64,
+        minutes: u64,
+        seconds: u64,
+    ) -> Result<TimeDelta, HmsError> {
+        if minutes > 59 {
+            return Err(HmsError::MinutesOverflow);
+        }
+        if seconds > 59 {
+            return Err(HmsError::SecondsOverflow);
+        }
+        hours
+            .checked_mul(3600)
+            .and_then(|x| x.checked_add(minutes * 60))
+            .and_then(|x| x.checked_add(seconds))
+            .and_then::<i64, _>(|x| x.try_into().ok())
+            .and_then(|x| x.checked_mul(if positive { 1 } else { -1 }))
+            .and_then(TimeDelta::try_seconds)
+            .ok_or(HmsError::TotalSecondsOverflow)
+    }
+
+    /// Get the hours, minutes and seconds of a duration.
+    #[must_use]
+    pub const fn hms(duration: &TimeDelta) -> (bool, u64, u64, u64) {
+        let secs = duration.num_seconds();
+        if secs < 0 {
+            #[allow(clippy::cast_sign_loss)]
+            let secs = -secs as u64;
+            let (minutes, secs) = super::div_rem_u64(secs, 60);
+            let (hours, minutes) = super::div_rem_u64(minutes, 60);
+            (false, hours, minutes, secs)
+        } else {
+            #[allow(clippy::cast_sign_loss)]
+            let secs = secs as u64;
+            let (minutes, secs) = super::div_rem_u64(secs, 60);
+            let (hours, minutes) = super::div_rem_u64(minutes, 60);
+            (true, hours, minutes, secs)
+        }
+    }
+
+    /// Turn a duration into a string.
+    #[must_use]
+    pub fn to_string(duration: &TimeDelta) -> String {
+        let (neg, hours, minutes, seconds) = hms(duration);
+        format!(
+            "{sign}{hours:02}:{minutes:02}:{seconds:02}",
+            sign = if neg { "" } else { "-" }
+        )
+    }
+
+    /// An error that can occur when parsing a `TimeDelta`.
+    #[derive(Error, Debug)]
+    pub enum TimeDeltaParseError {
+        /// Invalid duration
+        #[error("Invalid time delta")]
+        InvalidTimeDelta,
+    }
+
+    /// Turn a string into a `TimeDelta`.
+    ///
+    /// # Errors
+    ///
+    /// If the string is not a valid `TimeDelta`.
+    pub fn from_str(s: &str) -> Result<TimeDelta, TimeDeltaParseError> {
+        let (s, positive) = s
+            .strip_prefix('-')
+            .map_or((s, true), |stripped| (stripped, false));
+
+        let splits = s.split(':').collect::<Vec<&str>>();
+
+        if s.len() < 2 {
+            return Err(TimeDeltaParseError::InvalidTimeDelta);
+        }
+
+        let hours = splits[0]
+            .parse::<u64>()
+            .map_err(|_| TimeDeltaParseError::InvalidTimeDelta)?;
+        let minutes = splits[1]
+            .parse::<u64>()
+            .map_err(|_| TimeDeltaParseError::InvalidTimeDelta)?;
+
+        let seconds = if splits.len() == 2 {
+            0
+        } else {
+            splits[2]
+                .parse::<u64>()
+                .map_err(|_| TimeDeltaParseError::InvalidTimeDelta)?
+        };
+
+        try_hms(positive, hours, minutes, seconds)
+            .map_err(|_| TimeDeltaParseError::InvalidTimeDelta)
+    }
+}
+
+/// An iterator over a range of `NaiveDate`s.
+pub struct NaiveDateIter {
+    start: NaiveDate,
+    end: NaiveDate,
+}
+
+impl NaiveDateIter {
+    /// Create a new `NaiveDateIter`.
+    #[must_use]
+    pub const fn new(start: NaiveDate, end: NaiveDate) -> NaiveDateIter {
+        NaiveDateIter { start, end }
+    }
+}
+
+impl Iterator for NaiveDateIter {
+    type Item = NaiveDate;
+    fn next(&mut self) -> Option<NaiveDate> {
+        if self.start.gt(&self.end) {
+            None
+        } else {
+            let res = self.start;
+            if let Some(new_start) = self.start.succ_opt() {
+                self.start = new_start;
+                Some(res)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// Macro to create a `TimeDelta` from an integer and panic if out of range
+#[macro_export]
+macro_rules! time_delta {
+    (days: $days:expr) => {
+        match $crate::TimeDelta::try_days($days) {
+            Some(duration) => duration,
+            None => panic!("days is invalid"),
+        }
+    };
+    (hours: $hours:expr) => {
+        match $crate::TimeDelta::try_hours($hours) {
+            Some(duration) => duration,
+            None => panic!("hours is invalid"),
+        }
+    };
+    (minutes: $minutes:expr) => {
+        match $crate::TimeDelta::try_minutes($minutes) {
+            Some(duration) => duration,
+            None => panic!("minutes is invalid"),
+        }
+    };
+    (seconds: $seconds:expr) => {
+        match $crate::TimeDelta::try_seconds($seconds) {
+            Some(duration) => duration,
+            None => panic!("seconds is invalid"),
+        }
+    };
 }
 
 #[cfg(test)]
@@ -298,33 +590,59 @@ mod tests {
     }
 
     #[test]
-    fn test_duration() {
-        let duration = duration_from_str("1:2").unwrap();
-        assert_eq!(duration.num_hours(), 1);
-        assert_eq!(duration.num_minutes(), 60 + 2);
-        assert_eq!(duration.num_seconds(), (60 + 2) * 60);
+    fn test_duration_try_hms() {
+        let duration = duration::try_hms(1, 2, 3).unwrap();
+        assert_eq!(duration.as_secs(), (60 + 2) * 60 + 3);
 
-        let duration = duration_from_str("1:2:3").unwrap();
-        assert_eq!(duration.num_hours(), 1);
-        assert_eq!(duration.num_minutes(), 60 + 2);
-        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+        let duration = duration::try_hms(1, 60, 3);
+        assert!(matches!(duration, Err(duration::HmsError::MinutesOverflow)));
 
-        let duration = duration_from_str("1:2:3:4");
+        let duration = duration::try_hms(1, 2, 60);
+        assert!(matches!(duration, Err(duration::HmsError::SecondsOverflow)));
+
+        let duration = duration::try_hms(u64::max_value(), 2, 3);
         assert!(matches!(
             duration,
-            Err(DurationParseError::InvalidDuration(_))
+            Err(duration::HmsError::TotalSecondsOverflow)
+        ));
+    }
+
+    #[test]
+    fn test_duration_hms() {
+        let duration = Duration::from_secs((60 + 2) * 60 + 3);
+        assert_eq!(duration::hms(&duration), (1, 2, 3));
+    }
+
+    #[test]
+    fn test_duration_to_string() {
+        let duration = Duration::from_secs((60 + 2) * 60 + 3);
+        assert_eq!(duration::to_string(&duration), "01:02:03");
+    }
+
+    #[test]
+    fn test_duration_from_str() {
+        let duration = duration::from_str("1:2").unwrap();
+        assert_eq!(duration.as_secs(), (60 + 2) * 60);
+
+        let duration = duration::from_str("1:2:3").unwrap();
+        assert_eq!(duration.as_secs(), (60 + 2) * 60 + 3);
+
+        let duration = duration::from_str("1:2:3:4");
+        assert!(matches!(
+            duration,
+            Err(duration::DurationParseError::InvalidDuration)
         ));
 
-        let duration = duration_from_str("1");
+        let duration = duration::from_str("1");
         assert!(matches!(
             duration,
-            Err(DurationParseError::InvalidDuration(_))
+            Err(duration::DurationParseError::InvalidDuration)
         ));
 
-        let duration = duration_from_str("1:a:3:4");
+        let duration = duration::from_str("1:a:3:4");
         assert!(matches!(
             duration,
-            Err(DurationParseError::InvalidDuration(_))
+            Err(duration::DurationParseError::InvalidDuration)
         ));
     }
 
@@ -337,7 +655,7 @@ mod tests {
     #[test]
     fn test_duration_serialize() {
         let duration = DurationWrapper {
-            duration: duration_from_str("1:2:3").unwrap(),
+            duration: duration::from_str("1:2:3").unwrap(),
         };
         let json = serde_json::to_string(&duration).unwrap();
         assert_eq!(json, "{\"duration\":\"01:02:03\"}");
@@ -347,9 +665,106 @@ mod tests {
     fn test_duration_deserialize() {
         let json = "{\"duration\":\"01:02:03\"}";
         let DurationWrapper { duration }: DurationWrapper = serde_json::from_str(json).unwrap();
-        assert_eq!(duration.num_hours(), 1);
-        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.as_secs(), (60 + 2) * 60 + 3);
+    }
+
+    #[test]
+    fn test_time_delta_try_hms() {
+        let duration = time_delta::try_hms(true, 1, 2, 3).unwrap();
         assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+
+        let duration = time_delta::try_hms(false, 1, 2, 3).unwrap();
+        assert_eq!(duration.num_seconds(), -((60 + 2) * 60 + 3));
+
+        let duration = time_delta::try_hms(true, 1, 60, 3);
+        assert!(matches!(
+            duration,
+            Err(time_delta::HmsError::MinutesOverflow)
+        ));
+
+        let duration = time_delta::try_hms(true, 1, 2, 60);
+        assert!(matches!(
+            duration,
+            Err(time_delta::HmsError::SecondsOverflow)
+        ));
+
+        let duration = time_delta::try_hms(true, u64::max_value(), 2, 3);
+        assert!(matches!(
+            duration,
+            Err(time_delta::HmsError::TotalSecondsOverflow)
+        ));
+    }
+
+    #[test]
+    fn test_time_delta_hms() {
+        let duration = time_delta::from_str("1:2:3").unwrap();
+        assert_eq!(time_delta::hms(&duration), (true, 1, 2, 3));
+
+        let duration = time_delta::from_str("-1:2:3").unwrap();
+        assert_eq!(time_delta::hms(&duration), (false, 1, 2, 3));
+    }
+
+    #[test]
+    fn test_time_delta_to_string() {
+        let duration = time_delta::from_str("1:2:3").unwrap();
+        assert_eq!(time_delta::to_string(&duration), "01:02:03");
+
+        let duration = time_delta::from_str("-1:2:3").unwrap();
+        assert_eq!(time_delta::to_string(&duration), "-01:02:03");
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct TimeDeltaWrapper {
+        #[serde(with = "super::with_time_delta")]
+        duration: TimeDelta,
+    }
+
+    #[test]
+    fn test_time_delta_serialize() {
+        let duration = TimeDeltaWrapper {
+            duration: time_delta::from_str("1:2:3").unwrap(),
+        };
+        let json = serde_json::to_string(&duration).unwrap();
+        assert_eq!(json, "{\"duration\":\"01:02:03\"}");
+    }
+
+    #[test]
+    fn test_time_delta_deserialize() {
+        let json = "{\"duration\": \"01:02:03\"}";
+        let TimeDeltaWrapper { duration } = serde_json::from_str(json).unwrap();
+        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.num_hours(), 1);
+    }
+
+    #[test]
+    fn test_negative_time_delta_serialize() {
+        let duration = TimeDeltaWrapper {
+            duration: time_delta::from_str("-1:2:3").unwrap(),
+        };
+        let json = serde_json::to_string(&duration).unwrap();
+        assert_eq!(json, "{\"duration\":\"-01:02:03\"}");
+    }
+
+    #[test]
+    fn test_negative_time_delta_deserialize() {
+        let json = "{\"duration\": \"-01:02:03\"}";
+        let TimeDeltaWrapper { duration } = serde_json::from_str(json).unwrap();
+        assert_eq!(duration.num_seconds(), -((60 + 2) * 60 + 3));
+        assert_eq!(duration.num_minutes(), -(60 + 2));
+        assert_eq!(duration.num_hours(), -1);
+    }
+
+    #[test]
+    fn test_invalid_negative_time_delta_deserialize() {
+        let json = "{\"duration\": \"-01:-02:-03\"}";
+        let Err(err) = serde_json::from_str::<TimeDeltaWrapper>(json) else {
+            panic!("Didn't get an error")
+        };
+        assert_eq!(
+            err.to_string(),
+            "Invalid time delta -01:-02:-03 at line 1 column 27"
+        );
     }
 
     #[derive(Serialize, Deserialize)]
@@ -362,7 +777,7 @@ mod tests {
     #[test]
     fn test_option_duration_serialize() {
         let duration = OptionDurationWrapper {
-            my_duration: Some(duration_from_str("1:2:3").unwrap()),
+            my_duration: Some(duration::from_str("1:2:3").unwrap()),
         };
         let json = serde_json::to_string(&duration).unwrap();
         assert_eq!(json, "{\"my_duration\":\"01:02:03\"}");
@@ -379,9 +794,7 @@ mod tests {
             my_duration: duration,
         }: OptionDurationWrapper = serde_json::from_str(json).unwrap();
         let duration = duration.unwrap();
-        assert_eq!(duration.num_hours(), 1);
-        assert_eq!(duration.num_minutes(), 60 + 2);
-        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+        assert_eq!(duration.as_secs(), (60 + 2) * 60 + 3);
 
         let json = "{\"my_duration\":null}";
         let OptionDurationWrapper {
