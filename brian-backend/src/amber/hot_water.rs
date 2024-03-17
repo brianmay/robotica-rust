@@ -14,7 +14,7 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    datetime::{convert_date_time_to_utc_or_default, utc_now},
+    datetime::{convert_date_time_to_utc_or_default, time_delta, utc_now},
     time_delta,
 };
 use serde::{Deserialize, Serialize};
@@ -96,17 +96,6 @@ impl DayState {
             self.cheap_power_for_day += duration;
         }
 
-        {
-            let duration = self.cheap_power_for_day;
-            let seconds = duration.num_seconds() % 60;
-            let minutes = (duration.num_seconds() / 60) % 60;
-            let hours = (duration.num_seconds() / 60) / 60;
-            info!(
-                "Cheap power for day: {:0>2}:{:0>2}:{:0>2}",
-                hours, minutes, seconds
-            );
-        }
-
         let interval_duration = INTERVAL;
         let duration = CHEAP_TIME
             .checked_sub(&self.cheap_power_for_day)
@@ -117,7 +106,9 @@ impl DayState {
         let number_of_intervals: usize = number_of_intervals.try_into().unwrap_or_default();
 
         info!(
-            "Number of intervals: {}/{}={}",
+            "Cheap power for day: {}, time left: {}, number of intervals: {}/{}={}",
+            time_delta::to_string(&self.cheap_power_for_day),
+            time_delta::to_string(&duration),
             duration.num_minutes(),
             interval_duration.num_minutes(),
             number_of_intervals
