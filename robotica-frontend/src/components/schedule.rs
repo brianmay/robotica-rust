@@ -7,7 +7,7 @@ use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use robotica_common::{
-    datetime::{datetime_to_string, DurationExt},
+    datetime::{datetime_to_string, duration},
     mqtt::{Json, MqttMessage},
     robotica::tasks::Task,
     scheduler::{Mark, MarkStatus, Sequence},
@@ -308,7 +308,7 @@ fn popover_sequence_content(sequence: &Sequence, on_close: &Callback<()>) -> Htm
                             </tr>
                             <tr>
                                 <th scope="row">{"Required Duration"}</th>
-                                <td>{sequence.duration.to_string()}</td>
+                                <td>{duration::to_string(&sequence.duration)}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Latest Time"}</th>
