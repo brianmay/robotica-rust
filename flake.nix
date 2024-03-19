@@ -347,7 +347,9 @@
               export STATIC_PATH="${robotica-frontend-bindgen}"
               export DATABASE_URL="postgresql://robotica:your_secure_password_here@localhost/robotica"
             '';
-            processes.mqtt = { exec = "${pkgs.mosquitto}/bin/mosquitto"; };
+            processes.mqtt = {
+              exec = "${pkgs.mosquitto}/bin/mosquitto -c mosquitto.conf";
+            };
             processes.influxdb = { exec = "${pkgs.influxdb}/bin/influxd"; };
             services.postgres = {
               enable = true;

@@ -7,3 +7,4 @@
 /.devenv
 /result
 *.yaml
+/mosquitto.conf
