@@ -825,8 +825,8 @@ pub fn monitor_charging(
                     tesla_state.send_left_home_commands = false;
                     LONG_INTERVAL
                 }
-                TeslaResult::Tried(Err(SequenceError::RateLimit(duration))) => {
-                    info!("Rate limited, retrying in {:?}", duration);
+                TeslaResult::Tried(Err(SequenceError::WaitRetry(duration))) => {
+                    info!("Failed, retrying in {:?}", duration);
                     duration
                 }
                 TeslaResult::Tried(Err(err)) => {

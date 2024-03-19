@@ -7,7 +7,6 @@ use robotica_common::{datetime::duration, mqtt::MqttMessage, time_delta};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tap::Pipe;
 use thiserror::Error;
-use tokio::time::{sleep, Instant};
 use tracing::{debug, error, info};
 
 use crate::{
@@ -27,6 +26,7 @@ impl ToString for VehicleId {
 
 /// Error when something went wrong with the API
 #[derive(Debug, Error)]
+
 pub enum Error {
     /// Reqwest error
     #[error("Reqwest error: {0}")]
@@ -83,19 +83,20 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
     Ok(text)
 }
 
-// async fn get<U: DeserializeOwned>(url: &str) -> Result<U, Error> {
-//     let client = reqwest::Client::new();
-//     let response = client
-//         .get(url)
-//         .header("Content-Type", "application/json")
-//         .timeout(Duration::from_secs(30))
-//         .send()
-//         .await?
-//         .pipe(handle_error)?;
+#[allow(dead_code)]
+async fn get<U: DeserializeOwned>(url: &str) -> Result<U, Error> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .header("Content-Type", "application/json")
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await?
+        .pipe(handle_error)?;
 
-//     let text = response.json().await?;
-//     Ok(text)
-// }
+    let text = response.json().await?;
+    Ok(text)
+}
 
 async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U, Error> {
     debug!("get_with_token: {}", url);
@@ -403,17 +404,9 @@ impl From<OuterGenericResponse> for Result<(), ApiError> {
 /// An error occurred while trying to wake up the car
 #[derive(Debug, Error)]
 pub enum WakeupError {
-    /// Reqwest error
-    #[error("Reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
-
-    /// Json error
-    #[error("Json error: {0}")]
-    Json(#[from] serde_json::Error),
-
-    /// We couldn't wake up the car before the timeout elapsed
-    #[error("Wakeup timeout error")]
-    Timeout,
+    /// wait and retry error
+    #[error("Wait & Retry in: {}", duration::to_string(.0))]
+    WaitRetry(Duration),
 }
 
 /// An error occurred while running a sequence of commands
@@ -427,25 +420,19 @@ pub enum SequenceError {
     #[error("Json error: {0}")]
     Json(#[from] serde_json::Error),
 
-    /// rate limit error
-    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
-    RateLimit(Duration),
+    /// wait and retry error
+    #[error("Wait & Retry in: {}", duration::to_string(.0))]
+    WaitRetry(Duration),
 
     /// The HTTP request succeeded, but the response was not successful.
     #[error("Generic tesla error: {0}")]
     Failed(String),
-
-    /// We couldn't wake up the car before the timeout elapsed
-    #[error("Wakeup timeout error")]
-    Timeout,
 }
 
 impl From<WakeupError> for SequenceError {
     fn from(error: WakeupError) -> Self {
         match error {
-            WakeupError::Reqwest(e) => SequenceError::Reqwest(e),
-            WakeupError::Json(e) => SequenceError::Json(e),
-            WakeupError::Timeout => SequenceError::Timeout,
+            WakeupError::WaitRetry(duration) => SequenceError::WaitRetry(duration),
         }
     }
 }
@@ -455,7 +442,7 @@ impl From<ApiError> for SequenceError {
         match error {
             ApiError::Reqwest(e) => SequenceError::Reqwest(e),
             ApiError::Json(e) => SequenceError::Json(e),
-            ApiError::RateLimit(duration) => SequenceError::RateLimit(duration),
+            ApiError::RateLimit(duration) => SequenceError::WaitRetry(duration),
             ApiError::Failed(e) => SequenceError::Failed(e),
         }
     }
@@ -571,47 +558,43 @@ impl Token {
     ///
     /// Returns `WakeupError::Reqwest` if the HTTP request failed.
     /// Returns `WakeupError::Timeout` if the car didn't wake up before the timeout elapsed.
-    pub async fn wait_for_wake_up(&self, id: VehicleId) -> Result<(), WakeupError> {
-        let timeout = Instant::now() + Duration::from_secs(60);
-        while Instant::now() < timeout {
-            info!("Trying to wake up");
-            let response = self.wake_up(id).await;
+    pub async fn wake_up_and_process_response(&self, id: VehicleId) -> Result<(), WakeupError> {
+        info!("Trying to wake up");
+        let response = self.wake_up(id).await;
 
-            match response {
-                // Car is awake
-                Ok(response) if response.state == "online" => {
-                    info!("Car is online");
-                    // Wait a bit more to make sure the car is ready
-                    sleep(Duration::from_secs(30)).await;
-                    return Ok(());
-                }
+        match response {
+            // Car is awake
+            Ok(response) if response.state == "online" => {
+                info!("Trying to wake up: Car is online");
+                Ok(())
+            }
 
-                // Car is not awake yet
-                Ok(_) => {
-                    info!("Car is not online yet");
-                    sleep(Duration::from_secs(5)).await;
-                }
+            // Car is not awake yet
+            Ok(_) => {
+                info!("Trying to wake up: Car is not online yet");
+                Err(WakeupError::WaitRetry(Duration::from_secs(5)))
+            }
 
-                Err(Error::Reqwest(err)) => {
-                    error!("Reqwest error: {}", err);
-                    sleep(Duration::from_secs(5)).await;
-                }
+            Err(Error::Reqwest(err)) => {
+                error!("Trying to wake up: Reqwest error: {}", err);
+                Err(WakeupError::WaitRetry(Duration::from_secs(5)))
+            }
 
-                // Rate limited by Tesla
-                Err(Error::RateLimit(duration)) => {
-                    info!("Rate limit, retry in: {}", duration::to_string(&duration));
-                    sleep(duration).await;
-                }
+            // Rate limited by Tesla
+            Err(Error::RateLimit(duration)) => {
+                info!(
+                    "Trying to wake up: rate limit, retry in: {}",
+                    duration::to_string(&duration)
+                );
+                Err(WakeupError::WaitRetry(duration))
+            }
 
-                // This should never happen
-                Err(Error::Json(err)) => {
-                    error!("Json error: {}", err);
-                    return Err(err.into());
-                }
-            };
+            // This should never happen
+            Err(Error::Json(err)) => {
+                error!("Trying to wake up: Json error (should not happen): {}", err);
+                Err(WakeupError::WaitRetry(Duration::from_secs(60)))
+            }
         }
-
-        Err(WakeupError::Timeout)
     }
 
     /// Request the car start charging
@@ -693,7 +676,7 @@ enum Command {
 impl Command {
     async fn execute(&self, token: &Token, id: VehicleId) -> Result<(), SequenceError> {
         match self {
-            Command::WakeUp => token.wait_for_wake_up(id).await?,
+            Command::WakeUp => token.wake_up_and_process_response(id).await?,
             Command::SetChargeLimit(percent) => token.set_charge_limit(id, *percent).await?,
             Command::ChargeStart => token.charge_start(id).await?,
             Command::ChargeStop => token.charge_stop(id).await?,
