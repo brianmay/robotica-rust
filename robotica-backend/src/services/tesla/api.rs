@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use reqwest::Error;
-use robotica_common::{mqtt::MqttMessage, time_delta};
+use robotica_common::{datetime::duration, mqtt::MqttMessage, time_delta};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tap::Pipe;
 use thiserror::Error;
 use tokio::time::{sleep, Instant};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{
     is_debug_mode,
@@ -25,6 +25,46 @@ impl ToString for VehicleId {
     }
 }
 
+/// Error when something went wrong with the API
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Reqwest error
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    /// Json error
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// rate limit error
+    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    RateLimit(Duration),
+}
+
+fn handle_error(response: reqwest::Response) -> Result<reqwest::Response, Error> {
+    if response.status() == 429 {
+        let headers = response.headers();
+        let retry_time = headers
+            .get("Retry-After")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(60)
+            .pipe(Duration::from_secs);
+
+        info!(
+            "Got 429 rate limited, retry in: {}",
+            duration::to_string(&retry_time)
+        );
+
+        for (name, value) in headers {
+            info!("rate limit header header {}: {:?}", name, value);
+        }
+
+        return Err(Error::RateLimit(retry_time));
+    }
+    response.error_for_status()?.pipe(Ok)
+}
+
 async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
     debug!("post {}", url);
 
@@ -36,7 +76,7 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
         .timeout(Duration::from_secs(30))
         .send()
         .await?
-        .error_for_status()?;
+        .pipe(handle_error)?;
 
     let text = response.json().await?;
     debug!("post done {}", url);
@@ -51,7 +91,7 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
 //         .timeout(Duration::from_secs(30))
 //         .send()
 //         .await?
-//         .error_for_status()?;
+//         .pipe(handle_error)?;
 
 //     let text = response.json().await?;
 //     Ok(text)
@@ -68,7 +108,7 @@ async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U
         .timeout(Duration::from_secs(30))
         .send()
         .await?
-        .error_for_status()?;
+        .pipe(handle_error)?;
 
     // let text = response.text().await?;
     // println!("{}", text);
@@ -298,28 +338,64 @@ pub enum TokenError {
     /// Reqwest error
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    /// Json error
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// Rate limit error
+    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    RateLimit(Duration),
+}
+
+impl From<Error> for TokenError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Reqwest(e) => TokenError::Reqwest(e),
+            Error::Json(e) => TokenError::Json(e),
+            Error::RateLimit(duration) => TokenError::RateLimit(duration),
+        }
+    }
 }
 
 /// A generic error return from the API
 #[derive(Debug, Error)]
-pub enum GenericError {
-    /// The HTTP request failed.
-    #[error("Tesla reqwest error: {0}")]
+pub enum ApiError {
+    /// Reqwest error
+    #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    /// Json error
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// Rate limit error
+    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    RateLimit(Duration),
 
     /// The HTTP request succeeded, but the response was not successful.
     #[error("Generic tesla error: {0}")]
     Failed(String),
 }
 
-impl From<OuterGenericResponse> for Result<(), GenericError> {
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Reqwest(e) => ApiError::Reqwest(e),
+            Error::Json(e) => ApiError::Json(e),
+            Error::RateLimit(duration) => ApiError::RateLimit(duration),
+        }
+    }
+}
+
+impl From<OuterGenericResponse> for Result<(), ApiError> {
     fn from(response: OuterGenericResponse) -> Self {
         if response.response.result {
             Ok(())
         } else if response.response.reason.is_empty() {
-            Err(GenericError::Failed("no reason".into()))
+            Err(ApiError::Failed("no reason".into()))
         } else {
-            Err(GenericError::Failed(response.response.reason))
+            Err(ApiError::Failed(response.response.reason))
         }
     }
 }
@@ -327,9 +403,13 @@ impl From<OuterGenericResponse> for Result<(), GenericError> {
 /// An error occurred while trying to wake up the car
 #[derive(Debug, Error)]
 pub enum WakeupError {
-    /// The HTTP request failed.
-    #[error("Wakeup reqwest error: {0}")]
+    /// Reqwest error
+    #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    /// Json error
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
 
     /// We couldn't wake up the car before the timeout elapsed
     #[error("Wakeup timeout error")]
@@ -339,9 +419,17 @@ pub enum WakeupError {
 /// An error occurred while running a sequence of commands
 #[derive(Debug, Error)]
 pub enum SequenceError {
-    /// The HTTP request failed.
-    #[error("Tesla reqwest error: {0}")]
+    /// Reqwest error
+    #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    /// Json error
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// rate limit error
+    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    RateLimit(Duration),
 
     /// The HTTP request succeeded, but the response was not successful.
     #[error("Generic tesla error: {0}")]
@@ -356,16 +444,19 @@ impl From<WakeupError> for SequenceError {
     fn from(error: WakeupError) -> Self {
         match error {
             WakeupError::Reqwest(e) => SequenceError::Reqwest(e),
+            WakeupError::Json(e) => SequenceError::Json(e),
             WakeupError::Timeout => SequenceError::Timeout,
         }
     }
 }
 
-impl From<GenericError> for SequenceError {
-    fn from(error: GenericError) -> Self {
+impl From<ApiError> for SequenceError {
+    fn from(error: ApiError) -> Self {
         match error {
-            GenericError::Reqwest(e) => SequenceError::Reqwest(e),
-            GenericError::Failed(e) => SequenceError::Failed(e),
+            ApiError::Reqwest(e) => SequenceError::Reqwest(e),
+            ApiError::Json(e) => SequenceError::Json(e),
+            ApiError::RateLimit(duration) => SequenceError::RateLimit(duration),
+            ApiError::Failed(e) => SequenceError::Failed(e),
         }
     }
 }
@@ -482,25 +573,42 @@ impl Token {
     /// Returns `WakeupError::Timeout` if the car didn't wake up before the timeout elapsed.
     pub async fn wait_for_wake_up(&self, id: VehicleId) -> Result<(), WakeupError> {
         let timeout = Instant::now() + Duration::from_secs(60);
-
-        info!("Trying to wake up (initial)");
-        let response = self.wake_up(id).await?;
-        if response.state == "online" {
-            info!("Car is already online");
-            return Ok(());
-        }
-
         while Instant::now() < timeout {
-            info!("Trying to wake up (retry)");
-            let response = self.wake_up(id).await?;
-            if response.state == "online" {
-                info!("Car is online");
-                sleep(Duration::from_secs(30)).await;
-                info!("Car is online (after sleep)");
-                return Ok(());
-            }
-            info!("Car is not online");
-            sleep(Duration::from_secs(5)).await;
+            info!("Trying to wake up");
+            let response = self.wake_up(id).await;
+
+            match response {
+                // Car is awake
+                Ok(response) if response.state == "online" => {
+                    info!("Car is online");
+                    // Wait a bit more to make sure the car is ready
+                    sleep(Duration::from_secs(30)).await;
+                    return Ok(());
+                }
+
+                // Car is not awake yet
+                Ok(_) => {
+                    info!("Car is not online yet");
+                    sleep(Duration::from_secs(5)).await;
+                }
+
+                Err(Error::Reqwest(err)) => {
+                    error!("Reqwest error: {}", err);
+                    sleep(Duration::from_secs(5)).await;
+                }
+
+                // Rate limited by Tesla
+                Err(Error::RateLimit(duration)) => {
+                    info!("Rate limit, retry in: {}", duration::to_string(&duration));
+                    sleep(duration).await;
+                }
+
+                // This should never happen
+                Err(Error::Json(err)) => {
+                    error!("Json error: {}", err);
+                    return Err(err.into());
+                }
+            };
         }
 
         Err(WakeupError::Timeout)
@@ -512,7 +620,7 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_start(&self, id: VehicleId) -> Result<(), GenericError> {
+    pub async fn charge_start(&self, id: VehicleId) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_start",
             id = id.to_string()
@@ -527,7 +635,7 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_stop(&self, id: VehicleId) -> Result<(), GenericError> {
+    pub async fn charge_stop(&self, id: VehicleId) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_stop",
             id = id.to_string()
@@ -542,7 +650,7 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn set_charge_limit(&self, id: VehicleId, percent: u8) -> Result<(), GenericError> {
+    pub async fn set_charge_limit(&self, id: VehicleId, percent: u8) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/set_charge_limit",
             id = id.to_string()

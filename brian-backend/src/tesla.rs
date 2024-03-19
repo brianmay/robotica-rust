@@ -8,6 +8,7 @@ use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
     ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError, VehicleId,
 };
+use robotica_common::datetime::duration;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
@@ -20,7 +21,7 @@ use std::time::Duration;
 use tap::Pipe;
 use thiserror::Error;
 use tokio::select;
-use tokio::time::Interval;
+use tokio::time::sleep_until;
 use tracing::{debug, error, info};
 
 use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
@@ -467,27 +468,8 @@ fn doors_to_message(open: &[Door]) -> String {
     msg
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PollInterval {
-    Short,
-    Long,
-}
-
-impl From<PollInterval> for Duration {
-    fn from(pi: PollInterval) -> Self {
-        match pi {
-            PollInterval::Short => Self::from_secs(30),
-            PollInterval::Long => Self::from_secs(5 * 60),
-        }
-    }
-}
-
-impl From<PollInterval> for Interval {
-    fn from(pi: PollInterval) -> Self {
-        let duration: Duration = pi.into();
-        tokio::time::interval(duration)
-    }
-}
+const SHORT_INTERVAL: Duration = Duration::from_secs(30);
+const LONG_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct PersistentState {
@@ -698,9 +680,6 @@ pub fn monitor_charging(
             error!("Failed to talk to Tesla API: {}", err);
         };
 
-        let mut interval = PollInterval::Long;
-        let mut timer: Interval = interval.into();
-
         let mut charge_request_s = charge_request_rx.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut is_home_s = is_home_rx.subscribe().await;
@@ -735,11 +714,17 @@ pub fn monitor_charging(
             charge_request,
         });
 
+        let mut timer = {
+            let new_interval = SHORT_INTERVAL;
+            info!("Next poll {}", duration::to_string(&new_interval));
+            tokio::time::Instant::now().add(new_interval)
+        };
+
         loop {
             let was_at_home = tesla_state.is_at_home;
 
             select! {
-                _ = timer.tick() => {
+                () = sleep_until(timer) => {
                     match check_token(&mut token, &tesla_secret).await {
                         Ok(()) => {}
                         Err(err) => {
@@ -830,7 +815,7 @@ pub fn monitor_charging(
                     tesla_state.last_success = Utc::now();
                     tesla_state.notified_errors = false;
                     tesla_state.send_left_home_commands = false;
-                    PollInterval::Long
+                    LONG_INTERVAL
                 }
                 TeslaResult::Tried(Ok(())) => {
                     info!("Success executing command sequence");
@@ -838,22 +823,21 @@ pub fn monitor_charging(
                     tesla_state.last_success = Utc::now();
                     tesla_state.notified_errors = false;
                     tesla_state.send_left_home_commands = false;
-                    PollInterval::Long
+                    LONG_INTERVAL
+                }
+                TeslaResult::Tried(Err(SequenceError::RateLimit(duration))) => {
+                    info!("Rate limited, retrying in {:?}", duration);
+                    duration
                 }
                 TeslaResult::Tried(Err(err)) => {
                     info!("Error executing command sequence: {}", err);
                     notify_errors(&mut tesla_state, &message_sink);
-                    PollInterval::Short
+                    SHORT_INTERVAL
                 }
             };
 
-            if interval != new_interval {
-                interval = new_interval;
-                timer = interval.into();
-                info!("Resetting poll timer to {interval:?} {:?}", timer.period());
-            }
-
-            info!("Next poll {interval:?} {:?}", timer.period());
+            info!("Next poll {}", duration::to_string(&new_interval));
+            timer = tokio::time::Instant::now().add(new_interval);
 
             update_auto_charge(ps.auto_charge, tesla.teslamate_id, &tesla_state, &mqtt);
         }
