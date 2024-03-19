@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use chrono::{NaiveDate, TimeDelta, TimeZone, Utc};
 use robotica_common::mqtt::{Json, MqttSerializer, QoS, Retain};
-use robotica_common::time_delta;
+use robotica_common::unsafe_time_delta;
 use thiserror::Error;
 use tokio::select;
 use tokio::time::Instant;
@@ -47,9 +47,9 @@ pub struct ExtraConfig {
     pub sequences_file: PathBuf,
 }
 
-const ONE_DAY: TimeDelta = time_delta!(days: 1);
-const FIRST_OFFSET: TimeDelta = time_delta!(days: -1);
-const LAST_OFFSET: TimeDelta = time_delta!(days: 4);
+const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
+const FIRST_OFFSET: TimeDelta = unsafe_time_delta!(days: -1);
+const LAST_OFFSET: TimeDelta = unsafe_time_delta!(days: 4);
 
 struct Config<T: TimeZone> {
     classifier: Vec<classifier::Config>,
@@ -221,7 +221,7 @@ struct State<T: TimeZone> {
     publish_pending_hash: Option<ObjectHash>,
 }
 
-const REFRESH_TIME: TimeDelta = time_delta!(minutes: 5);
+const REFRESH_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
 
 impl<T: TimeZone + Copy> State<T> {
     fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
@@ -322,7 +322,7 @@ impl<T: TimeZone + Copy> State<T> {
     }
 
     // We poll at least every minute just in case system time changes.
-    const POLL_INTERVAL: TimeDelta = time_delta!(minutes: 1);
+    const POLL_INTERVAL: TimeDelta = unsafe_time_delta!(minutes: 1);
 
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
         let next = self.events.front();

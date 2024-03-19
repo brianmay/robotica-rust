@@ -501,9 +501,30 @@ impl Iterator for NaiveDateIter {
     }
 }
 
-/// Macro to create a `TimeDelta` from an integer and panic if out of range
+/// Macro to create a `Duration` from an integer and panic if out of range
+///
+/// Note: This macro only intended for static values where the values are known not to overflow.
 #[macro_export]
-macro_rules! time_delta {
+macro_rules! unsafe_duration {
+    (days: $days:expr) => {
+        $crate::Duration::from_secs($days * 24 * 3600)
+    };
+    (hours: $hours:expr) => {
+        $crate::Duration::from_secs($hours * 3600)
+    };
+    (minutes: $minutes:expr) => {
+        $crate::Duration::from_secs($minutes * 60)
+    };
+    (seconds: $seconds:expr) => {
+        match $crate::Duration::from_secs($seconds)
+    };
+}
+
+/// Macro to create a `TimeDelta` from an integer and panic if out of range
+///
+/// Note: This macro only intended for static values where the values are known not to overflow.
+#[macro_export]
+macro_rules! unsafe_time_delta {
     (days: $days:expr) => {
         match $crate::TimeDelta::try_days($days) {
             Some(duration) => duration,
@@ -526,6 +547,19 @@ macro_rules! time_delta {
         match $crate::TimeDelta::try_seconds($seconds) {
             Some(duration) => duration,
             None => panic!("seconds is invalid"),
+        }
+    };
+}
+
+/// Macro to create a `NaiveDate` from a year, month and day and panic if invalid
+///
+/// Note: This macro only intended for static values where the values are known not to overflow.
+#[macro_export]
+macro_rules! unsafe_naive_time_hms {
+    ($hours:expr, $minutes:expr, $seconds:expr) => {
+        match $crate::NaiveTime::from_hms_opt($hours, $minutes, $seconds) {
+            Some(time) => time,
+            None => panic!("Invalid time"),
         }
     };
 }

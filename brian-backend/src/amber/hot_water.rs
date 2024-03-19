@@ -15,7 +15,7 @@ use robotica_backend::{
 };
 use robotica_common::{
     datetime::{convert_date_time_to_utc_or_default, time_delta, utc_now},
-    time_delta,
+    unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -38,9 +38,8 @@ struct DayState {
     cheapest_price: f32,
 }
 
-const CHEAP_TIME: TimeDelta = time_delta!(hours: 2);
-const INTERVAL: TimeDelta = time_delta!(minutes: 30);
-const ONE_DAY: TimeDelta = time_delta!(days: 1);
+const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 2);
+const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
 
 impl DayState {
     fn new(now: &DateTime<Utc>) -> Self {
@@ -96,13 +95,15 @@ impl DayState {
             self.cheap_power_for_day += duration;
         }
 
-        let interval_duration = INTERVAL;
+        let interval_duration = prices.interval;
+        // Something is seriously messed up if conversion from u64 to i64 fails.
+        let interval_minutes: i64 = (interval_duration.as_secs() / 60).try_into().unwrap_or(30);
+
         let duration = CHEAP_TIME
             .checked_sub(&self.cheap_power_for_day)
             .unwrap_or_else(TimeDelta::zero);
 
-        let number_of_intervals =
-            divide_round_up(duration.num_minutes(), interval_duration.num_minutes());
+        let number_of_intervals = divide_round_up(duration.num_minutes(), interval_minutes);
         let number_of_intervals: usize = number_of_intervals.try_into().unwrap_or_default();
 
         info!(
@@ -110,7 +111,7 @@ impl DayState {
             time_delta::to_string(&self.cheap_power_for_day),
             time_delta::to_string(&duration),
             duration.num_minutes(),
-            interval_duration.num_minutes(),
+            interval_minutes,
             number_of_intervals
         );
 
@@ -219,6 +220,8 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
     use chrono::{FixedOffset, Local};
+    use robotica_common::unsafe_duration;
+    use std::time::Duration;
 
     use crate::amber::{
         api::{ChannelType, PeriodType, TariffInformation},
@@ -230,6 +233,8 @@ mod tests {
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
     }
+
+    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
     #[test]
     fn test_get_price_for_cheapest_period() {
@@ -381,6 +386,7 @@ mod tests {
             list: prices,
             category: PriceCategory::SuperCheap,
             dt: now,
+            interval: INTERVAL,
         };
 
         let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
@@ -407,6 +413,7 @@ mod tests {
             list: prices,
             category: PriceCategory::SuperCheap,
             dt: now,
+            interval: INTERVAL,
         };
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");

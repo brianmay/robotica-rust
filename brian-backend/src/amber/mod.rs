@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use chrono::{DateTime, Duration, FixedOffset, TimeDelta, Utc};
+use chrono::{DateTime, FixedOffset, TimeDelta, Timelike, Utc};
 use robotica_backend::{
     pipes::stateful::{create_pipe, Receiver},
     spawn,
 };
-use robotica_common::{datetime::utc_now, time_delta};
+use robotica_common::{datetime::utc_now, unsafe_duration, unsafe_time_delta};
 use tap::Pipe;
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
@@ -29,6 +29,7 @@ pub struct Prices {
     pub list: Vec<api::PriceResponse>,
     pub category: PriceCategory,
     pub dt: DateTime<Utc>,
+    pub interval: Duration,
 }
 
 impl PartialEq for Prices {
@@ -71,10 +72,11 @@ pub enum Error {
     Internal(String),
 }
 
-const ONE_DAY: TimeDelta = time_delta!(days: 1);
-const RETRY_TIME: TimeDelta = time_delta!(minutes: 1);
-const MIN_POLL_TIME: TimeDelta = time_delta!(minutes: 5);
-const MAX_POLL_TIME: TimeDelta = time_delta!(minutes: 30);
+const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
+const RETRY_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
+const MIN_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
+const MAX_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 30);
+const DEFAULT_INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
 type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
 
@@ -105,11 +107,20 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                     let tomorrow = today + ONE_DAY;
 
                     // Get prices for the current interval.
-                    let prices = api::get_prices(&config, yesterday, tomorrow).await;
+                    let prices = {
+                        let mut prices = api::get_prices(&config, yesterday, tomorrow).await;
+
+                        if let Ok(prices) = &mut prices {
+                            fix_amber_weirdness(prices);
+                        }
+
+                        prices
+                    };
 
                     // Process the results.
                     let next_delay = match prices {
                         Ok(prices) => {
+
                             let update_time = get_current_price_response(&prices, &now).map_or_else(|| {
                                 error!("No current price found in prices: {prices:?}");
                                 // If we failed to get a current price, try again in 1 minute
@@ -126,19 +137,30 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                                 category = Some(c);
                             });
 
+                            let interval = prices.last().map_or_else(|| {
+                                error!("No interval found in prices: {prices:?}");
+                                // If we failed to get an interval, just use default
+                                DEFAULT_INTERVAL
+
+                            }, |last_price| {
+                                // If this produces an error, end time must have been before start time!
+                                (last_price.end_time - last_price.start_time).to_std().unwrap_or(DEFAULT_INTERVAL)
+                            });
+
                             info!("Price category: {category:?}");
                             if let Some(category) = category {
                                 tx_prices.try_send(Arc::new(Prices {
                                     list: prices,
                                     category,
                                     dt: now,
+                                    interval,
                                 }));
                             }
 
                             {
                                 // How long to the current interval expires?
                                 let now = utc_now();
-                                let duration: Duration = update_time - now;
+                                let duration: TimeDelta = update_time - now;
                                 info!("Next price update: {update_time:?} in {duration}");
 
                                 // Ensure we update prices at least once once every 5 minutes.
@@ -276,6 +298,15 @@ fn get_price_category(category: Option<PriceCategory>, price: f32) -> PriceCateg
     }
 
     c
+}
+
+fn fix_amber_weirdness(prices: &mut [api::PriceResponse]) {
+    #![allow(clippy::unwrap_used)]
+    for pr in prices.iter_mut() {
+        // Amber sets start time to +1 second, which is weird, and stuffs up calculations.
+        // This cannot actually panic.
+        pr.start_time = pr.start_time.with_second(0).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -550,5 +581,66 @@ mod tests {
         let prices = prices_fn(3);
         let p = get_weighted_price(&prices, &now);
         assert!(p.is_none());
+    }
+
+    #[test]
+    fn test_fix_amber_weirdness() {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  interval_type: IntervalType| api::PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: 0.0,
+            spot_per_kwh: 0.0,
+            interval_type,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: api::ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: api::TariffInformation {
+                period: api::PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let it = |current, n: i32| match n.cmp(&current) {
+            std::cmp::Ordering::Less => IntervalType::ActualInterval,
+            std::cmp::Ordering::Equal => IntervalType::CurrentInterval,
+            std::cmp::Ordering::Greater => IntervalType::ForecastInterval,
+        };
+
+        let prices_fn = |current| {
+            vec![
+                pr(
+                    dt("2020-01-01T00:00:01Z"),
+                    dt("2020-01-01T00:30:00Z"),
+                    it(current, 0),
+                ),
+                pr(
+                    dt("2020-01-01T00:30:01Z"),
+                    dt("2020-01-01T01:00:00Z"),
+                    it(current, 1),
+                ),
+                pr(
+                    dt("2020-01-01T01:00:01Z"),
+                    dt("2020-01-01T01:30:00Z"),
+                    it(current, 2),
+                ),
+            ]
+        };
+
+        let mut prices = prices_fn(1);
+        fix_amber_weirdness(&mut prices);
+        assert_eq!(prices.len(), 3);
+        assert_eq!(prices[0].start_time, dt("2020-01-01T00:00:00Z"));
+        assert_eq!(prices[0].end_time, dt("2020-01-01T00:30:00Z"));
+        assert_eq!(prices[1].start_time, dt("2020-01-01T00:30:00Z"));
+        assert_eq!(prices[1].end_time, dt("2020-01-01T01:00:00Z"));
+        assert_eq!(prices[2].start_time, dt("2020-01-01T01:00:00Z"));
+        assert_eq!(prices[2].end_time, dt("2020-01-01T01:30:00Z"));
     }
 }

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use robotica_common::{datetime::duration, mqtt::MqttMessage, time_delta};
+use robotica_common::{datetime::duration, mqtt::MqttMessage, unsafe_time_delta};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tap::Pipe;
 use thiserror::Error;
@@ -467,8 +467,8 @@ impl Token {
         Ok(())
     }
 
-    const DEFAULT_EXPIRES_TIME: TimeDelta = time_delta!(minutes: 1);
-    const DEFAULT_RENEW_TIME: TimeDelta = time_delta!(minutes: 1);
+    const DEFAULT_EXPIRES_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
+    const DEFAULT_RENEW_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
 
     async fn renew(&self) -> Result<Self, Error> {
         let url = "https://auth.tesla.com/oauth2/v3/token";

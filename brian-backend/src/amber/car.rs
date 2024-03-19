@@ -7,6 +7,7 @@ use robotica_backend::{
     },
     spawn,
 };
+use robotica_common::unsafe_naive_time_hms;
 use std::sync::Arc;
 use tracing::info;
 
@@ -31,6 +32,9 @@ pub fn run(rx: Receiver<Arc<Prices>>) -> Receiver<ChargeRequest> {
     rx_out
 }
 
+const START_TIME: NaiveTime = unsafe_naive_time_hms!(3, 0, 0);
+const END_TIME: NaiveTime = unsafe_naive_time_hms!(6, 30, 0);
+
 fn prices_to_charge_request<T: TimeZone>(
     prices: &Prices,
     dt: DateTime<Utc>,
@@ -39,11 +43,7 @@ fn prices_to_charge_request<T: TimeZone>(
     let now = dt.with_timezone(tz);
     let time = now.time();
 
-    #[allow(clippy::unwrap_used)]
-    let start_time = NaiveTime::from_hms_opt(3, 0, 0).unwrap();
-    #[allow(clippy::unwrap_used)]
-    let end_time = NaiveTime::from_hms_opt(6, 30, 0).unwrap();
-    let force = time > start_time && time < end_time;
+    let force = time >= START_TIME && time < END_TIME;
 
     #[allow(clippy::match_same_arms)]
     let result = match (force, prices.category) {
@@ -67,7 +67,13 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
 
+    use std::time::Duration;
+
+    use robotica_common::unsafe_duration;
+
     use super::*;
+
+    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
@@ -80,6 +86,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::SuperCheap,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(90));
@@ -89,6 +96,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Cheap,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(80));
@@ -98,6 +106,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Normal,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(50));
@@ -107,6 +116,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Expensive,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(20));
@@ -119,6 +129,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::SuperCheap,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(90));
@@ -128,6 +139,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Cheap,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(80));
@@ -137,6 +149,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Normal,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(70));
@@ -146,6 +159,7 @@ mod tests {
             list: vec![],
             category: PriceCategory::Expensive,
             dt: now,
+            interval: INTERVAL,
         };
         let cr = prices_to_charge_request(&summary, now, &Utc);
         assert_eq!(cr, ChargeRequest::ChargeTo(50));

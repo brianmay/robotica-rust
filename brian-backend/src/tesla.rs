@@ -13,7 +13,7 @@ use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
-use robotica_common::time_delta;
+use robotica_common::unsafe_time_delta;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::Add;
@@ -856,7 +856,7 @@ fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Mes
     }
 }
 
-const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = time_delta!(minutes: 30);
+const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = unsafe_time_delta!(minutes: 30);
 
 fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<Message>) {
     if !tesla_state.notified_errors
