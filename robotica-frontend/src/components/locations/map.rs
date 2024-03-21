@@ -283,6 +283,7 @@ impl Component for MapComponent {
                     car_marker.remove_from(&self.map);
                 }
                 self.car_marker = None;
+                self.draw_object();
             }
         }
         false
