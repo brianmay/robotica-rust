@@ -50,7 +50,6 @@ pub struct MapComponent {
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
-    _resize_handler: Closure<dyn FnMut(leaflet::Event)>,
     car_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
     car_marker: Option<leaflet::Marker>,
@@ -197,13 +196,10 @@ impl Component for MapComponent {
         let create_handler = create_handler(ctx);
         let update_handler = update_handler(ctx);
         let delete_handler = delete_handler(ctx);
-        // Hack: Required to ensure the map fit_bounds works
-        let resize_handler = resize_handler(&leaflet_map, &draw_layer);
 
         leaflet_map.on("draw:created", create_handler.as_ref());
         leaflet_map.on("draw:edited", update_handler.as_ref());
         leaflet_map.on("draw:deleted", delete_handler.as_ref());
-        // leaflet_map.on("resize", resize_handler.as_ref());
 
         add_tile_layer(&leaflet_map);
 
@@ -223,7 +219,6 @@ impl Component for MapComponent {
             _create_handler: create_handler,
             _update_handler: update_handler,
             _delete_handler: delete_handler,
-            _resize_handler: resize_handler,
             car_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
             car_marker: None,
@@ -317,10 +312,6 @@ impl Component for MapComponent {
                 {self.render_map()}
             </div>
         }
-    }
-
-    fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.map.on("resize", &JsValue::null());
     }
 }
 
@@ -442,17 +433,6 @@ fn delete_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Eve
     let delete_polygon = ctx.props().delete_polygon.clone();
     Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
         delete_polygon.emit(());
-    })
-}
-
-fn resize_handler(
-    leaflet_map: &Map,
-    draw_layer: &leaflet::FeatureGroup,
-) -> Closure<dyn FnMut(leaflet::Event)> {
-    let map = leaflet_map.clone();
-    let draw_layer = draw_layer.clone();
-    Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
-        map.fit_bounds(draw_layer.get_bounds().as_ref());
     })
 }
 
