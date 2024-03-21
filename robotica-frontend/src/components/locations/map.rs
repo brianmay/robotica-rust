@@ -141,7 +141,9 @@ impl MapComponent {
                 .add_to_layer_group(&self.draw_layer);
         }
 
-        if !locations.is_empty() {
+        if locations.is_empty() {
+            self.map.fit_world();
+        } else {
             debug!(
                 "Fitting bounds in draw_list {:?}",
                 self.draw_layer.get_bounds()
