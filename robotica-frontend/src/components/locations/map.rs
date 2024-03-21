@@ -301,10 +301,10 @@ impl Component for MapComponent {
                 self.map.remove_control(&self.draw_control);
                 self.draw_control = draw_control(&self.draw_layer, &props.object);
                 self.map.add_control(&self.draw_control);
-                self.draw_object();
             }
         }
 
+        self.draw_object();
         false
     }
 
