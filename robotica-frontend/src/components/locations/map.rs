@@ -158,6 +158,21 @@ impl MapComponent {
             MapObject::Item(location) => self.draw_item(location),
         }
     }
+
+    fn position_map(&self) {
+        match &self.object {
+            MapObject::List(locations) => {
+                if locations.is_empty() {
+                    self.map.fit_world();
+                } else {
+                    self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
+                }
+            }
+            MapObject::Item(_location) => {
+                self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
+            }
+        }
+    }
 }
 
 impl Component for MapComponent {
@@ -227,6 +242,7 @@ impl Component for MapComponent {
             car: None,
         }
         .tap(Self::draw_object)
+        .tap(Self::position_map)
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
@@ -305,6 +321,7 @@ impl Component for MapComponent {
         }
 
         self.draw_object();
+        self.position_map();
         false
     }
 
