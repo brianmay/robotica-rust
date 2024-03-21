@@ -92,12 +92,6 @@ impl MapComponent {
         leaflet::Polygon::new_with_options(&lat_lngs, &options)
             .unchecked_into::<leaflet::Layer>()
             .add_to_layer_group(&self.draw_layer);
-
-        debug!(
-            "Fitting bounds in draw_item {:?}",
-            self.draw_layer.get_bounds()
-        );
-        self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
     }
 
     fn draw_list(&self, locations: &Vec<Location>) {
@@ -139,16 +133,6 @@ impl MapComponent {
             leaflet::Polygon::new_with_options(&lat_lngs, &options)
                 .unchecked_into::<leaflet::Layer>()
                 .add_to_layer_group(&self.draw_layer);
-        }
-
-        if locations.is_empty() {
-            self.map.fit_world();
-        } else {
-            debug!(
-                "Fitting bounds in draw_list {:?}",
-                self.draw_layer.get_bounds()
-            );
-            self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
         }
     }
 
