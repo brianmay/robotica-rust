@@ -1,11 +1,18 @@
 use std::sync::Arc;
 
-use crate::robotica_wasm::draw_control;
+use crate::{
+    robotica_wasm::draw_control,
+    services::websocket::{Subscription, WebsocketService, WsEvent},
+};
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
-use robotica_common::robotica::locations::Location;
+use robotica_common::{
+    mqtt::{Json, MqttMessage},
+    robotica::locations::{Location, LocationMessage},
+    user::User,
+};
 use tap::{Pipe, Tap};
 use tracing::debug;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -14,7 +21,12 @@ use yew::prelude::*;
 
 use super::ActionLocation;
 
-pub enum Msg {}
+pub enum Msg {
+    Car(LocationMessage),
+    SubscribedCar(Subscription),
+    SubscribedEvents(Subscription),
+    MqttEvent(WsEvent),
+}
 
 #[derive(PartialEq, Clone)]
 pub enum MapObject {
@@ -22,8 +34,16 @@ pub enum MapObject {
     Item(ActionLocation),
 }
 
+enum SubscriptionStatus {
+    InProgress,
+    Subscribed(Subscription),
+    Unsubscribed,
+}
+
 pub struct MapComponent {
     map: Map,
+    user: Option<User>,
+    object: MapObject,
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
     draw_control: draw_control::DrawControl,
@@ -31,6 +51,10 @@ pub struct MapComponent {
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
     _resize_handler: Closure<dyn FnMut(leaflet::Event)>,
+    car_subscription: SubscriptionStatus,
+    event_subscription: Option<Subscription>,
+    car_marker: Option<leaflet::Marker>,
+    car: Option<LocationMessage>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -77,7 +101,7 @@ impl MapComponent {
         self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
     }
 
-    fn draw_list(&self, locations: &Arc<Vec<Location>>) {
+    fn draw_list(&self, locations: &Vec<Location>) {
         self.draw_layer.clear_layers();
 
         let options = leaflet::PolylineOptions::default();
@@ -85,9 +109,25 @@ impl MapComponent {
         options.set_opacity(0.5);
         options.set_fill(true);
 
-        for location in locations.iter() {
-            options.set_color(location.color.clone());
-            options.set_fill_color(location.color.clone());
+        let no_locations = vec![];
+        let marked_locations = self
+            .car
+            .as_ref()
+            .map_or(&no_locations, |car| &car.locations);
+
+        for location in locations {
+            let is_marked = marked_locations
+                .iter()
+                .any(|marked_location| location.id == marked_location.id);
+
+            let color = if is_marked {
+                "red"
+            } else {
+                location.color.as_str()
+            };
+
+            options.set_color(color.to_string());
+            options.set_fill_color(color.to_string());
 
             let lat_lngs = location
                 .bounds
@@ -111,8 +151,8 @@ impl MapComponent {
         }
     }
 
-    fn draw_object(&self, object: &MapObject) {
-        match object {
+    fn draw_object(&self) {
+        match &self.object {
             MapObject::List(locations) => self.draw_list(locations),
             MapObject::Item(location) => self.draw_item(location),
         }
@@ -124,6 +164,23 @@ impl Component for MapComponent {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
+        {
+            let (wss, _): (WebsocketService, _) = ctx
+                .link()
+                .context(ctx.link().batch_callback(|_| None))
+                .unwrap();
+
+            {
+                let mut wss = wss;
+                let callback = ctx.link().callback(Msg::MqttEvent);
+
+                ctx.link().send_future(async move {
+                    let s = wss.subscribe_events(callback).await;
+                    Msg::SubscribedEvents(s)
+                });
+            }
+        }
+
         let object = &ctx.props().object;
 
         let container: Element = document().create_element("div").unwrap();
@@ -158,6 +215,8 @@ impl Component for MapComponent {
 
         Self {
             map: leaflet_map,
+            user: None,
+            object: object.clone(),
             container,
             draw_layer,
             draw_control,
@@ -165,15 +224,67 @@ impl Component for MapComponent {
             _update_handler: update_handler,
             _delete_handler: delete_handler,
             _resize_handler: resize_handler,
+            car_subscription: SubscriptionStatus::Unsubscribed,
+            event_subscription: None,
+            car_marker: None,
+            car: None,
         }
-        .tap(|s| s.draw_object(object))
+        .tap(Self::draw_object)
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
         if first_render {}
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Msg::Car(location) => {
+                let position = location.position;
+                if let Some(ref marker) = self.car_marker {
+                    marker.set_lat_lng(&LatLng::new(position.y(), position.x()));
+                } else {
+                    let car_marker = leaflet::Marker::new(&LatLng::new(position.y(), position.x()));
+                    car_marker.add_to(&self.map);
+                    self.car_marker = Some(car_marker);
+                }
+                self.car = Some(location);
+                self.draw_object();
+            }
+            Msg::SubscribedCar(subscription) => {
+                // If car_subscription is unsubscribed, we lost interest in this subscription.
+                // If it is in progress, we are waiting for the user to be set.
+                // It should never be subscribed, but we handle it just in case.
+                if matches!(self.car_subscription, SubscriptionStatus::InProgress) {
+                    self.car_subscription = SubscriptionStatus::Subscribed(subscription);
+                }
+            }
+            Msg::SubscribedEvents(subscription) => {
+                self.event_subscription = Some(subscription);
+            }
+            Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
+                let is_subscribed =
+                    matches!(self.car_subscription, SubscriptionStatus::Subscribed(_));
+                let should_subscribe = user.is_admin;
+
+                if !is_subscribed && should_subscribe {
+                    subscribe_to_car(ctx);
+                    self.car_subscription = SubscriptionStatus::InProgress;
+                } else if !should_subscribe {
+                    self.car_subscription = SubscriptionStatus::Unsubscribed;
+                }
+
+                self.user = Some(user);
+            }
+            Msg::MqttEvent(WsEvent::Disconnected(_reason)) => {
+                self.user = None;
+                self.car_subscription = SubscriptionStatus::Unsubscribed;
+                self.car = None;
+                if let Some(car_marker) = &self.car_marker {
+                    car_marker.remove_from(&self.map);
+                }
+                self.car_marker = None;
+            }
+        }
         false
     }
 
@@ -183,6 +294,7 @@ impl Component for MapComponent {
         if props.object == old_props.object {
             return false;
         }
+        self.object = props.object.clone();
 
         match (&props.object, &old_props.object) {
             (MapObject::Item(_), MapObject::Item(_)) | (MapObject::List(_), MapObject::List(_)) => {
@@ -191,11 +303,11 @@ impl Component for MapComponent {
                 self.map.remove_control(&self.draw_control);
                 self.draw_control = draw_control(&self.draw_layer, &props.object);
                 self.map.add_control(&self.draw_control);
+                self.draw_object();
             }
         }
 
-        self.draw_object(&props.object);
-        true
+        false
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
@@ -209,6 +321,24 @@ impl Component for MapComponent {
     fn destroy(&mut self, _ctx: &Context<Self>) {
         self.map.on("resize", &JsValue::null());
     }
+}
+
+fn subscribe_to_car(ctx: &Context<MapComponent>) {
+    let (wss, _): (WebsocketService, _) = ctx
+        .link()
+        .context(ctx.link().batch_callback(|_| None))
+        .unwrap();
+
+    let topic = "state/Tesla/1/Locations".to_string();
+    let callback = ctx.link().callback(move |msg: MqttMessage| {
+        let Json(location): Json<LocationMessage> = msg.try_into().unwrap();
+        Msg::Car(location)
+    });
+    let mut wss = wss;
+    ctx.link().send_future(async move {
+        let s = wss.subscribe_mqtt(topic, callback).await;
+        Msg::SubscribedCar(s)
+    });
 }
 
 fn draw_control(

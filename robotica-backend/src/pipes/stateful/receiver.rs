@@ -103,7 +103,7 @@ where
     pub fn translate<U>(self) -> Receiver<U>
     where
         T: 'static,
-        U: Eq + Clone + Send + TryFrom<T> + 'static,
+        U: PartialEq + Clone + Send + TryFrom<T> + 'static,
         <U as TryFrom<T>>::Error: std::error::Error,
     {
         let name = format!("{} (translate)", self.name);
@@ -148,7 +148,7 @@ where
     pub fn map<U>(self, f: impl Fn(OldNewType<T>) -> U + Send + 'static) -> Receiver<U>
     where
         T: 'static,
-        U: Eq + Clone + Send + 'static,
+        U: PartialEq + Clone + Send + 'static,
     {
         let name = format!("{} (map_into)", self.name);
         let (tx, rx) = create_pipe(&name);

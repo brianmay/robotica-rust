@@ -21,6 +21,7 @@ use maud::{html, Markup, DOCTYPE};
 use robotica_common::config as ui_config;
 use robotica_common::version;
 use serde::Deserialize;
+use tap::Pipe;
 use thiserror::Error;
 use time::Duration;
 use tokio::fs;
@@ -251,17 +252,7 @@ async fn server(http_listener: String, app: Router) -> Result<(), HttpError> {
     Ok(())
 }
 
-async fn set_user(session: &Session, user_info: &openid::Userinfo) -> Result<(), ResponseError> {
-    let closure = || {
-        let sub = user_info.sub.clone()?;
-        let name = user_info.name.clone()?;
-        let email = user_info.email.clone()?;
-        let user = User { sub, name, email };
-        Some(user)
-    };
-
-    let user = closure().ok_or_else(|| ResponseError::bad_request("Missing user info"))?;
-
+async fn set_user(session: &Session, user: User) -> Result<(), ResponseError> {
     session
         .insert("user", user)
         .await
@@ -349,15 +340,28 @@ fn nav_bar() -> Markup {
     }
 }
 
-#[allow(clippy::unused_async)]
-async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Response {
+fn footer() -> Markup {
     let version = version::Version::get();
 
+    html! {
+        footer {
+            div {
+                div { (format!("Build Date: {}", version.build_date)) }
+                div { (format!("Version: {}", version.vcs_ref)) }
+            }
+            div {
+                "Robotica"
+            }
+        }
+    }
+}
+
+#[allow(clippy::unused_async)]
+async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Response {
     let user = get_user(&session).await;
     let backend_js = manifest.get_url("backend.js");
 
-    Html(
-        html!(
+    html!(
         (DOCTYPE)
         html {
             head {
@@ -370,22 +374,14 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
                 h1 { "Robotica" }
                 p {
                     @match user {
-                        Some(user) => ( format!("Hello, {user}!") ),
+                        Some(user) => ( format!("Hello, {user}! {}", if user.is_admin { "You are admin!"} else { "You are not admin!" })),
                         None => ( "You are not logged in!" ),
                     }
                 }
-                footer {
-                    div {
-                        div { (format!("Build Date: {}", version.build_date)) }
-                        div { (format!("Version: {}", version.vcs_ref)) }
-                    }
-                    div {
-                        "Robotica"
-                    }
-                }
+                ( footer() )
             }
         }
-    ).into_string()).into_response()
+    ).into_response()
 }
 
 async fn oidc_callback(
@@ -401,60 +397,23 @@ async fn oidc_callback(
         .cloned()
         .unwrap_or_else(|| "/".to_string());
 
-    let result = {
-        let oidc_client = oidc_client.load();
-        let Some(oidc_client) = oidc_client.as_ref() else {
-            return Err(ResponseError::OidcError());
-        };
-
-        oidc_client.request_token(&code).await
+    let oidc_client = oidc_client.load();
+    let Some(oidc_client) = oidc_client.as_ref() else {
+        return Err(ResponseError::OidcError());
     };
 
-    let response = match result {
-        Ok((_token, user_info)) => {
-            set_user(&session, &user_info).await?;
+    let user = oidc_client.login(&code).await?;
 
-            let url = http_config.generate_url_or_default(&state);
-            Redirect::to(&url).into_response()
-        }
-        Err(e) => {
-            _ = session.delete().await;
-            Html(
-                html!(
-                        html {
-                            head {
-                                title { "Robotica - Login" }
-                            }
-                            body {
-                                h1 { ( format!("Login Failed: {e}") ) }
-                            }
-                        }
-                )
-                .into_string(),
-            )
-            .into_response()
-        }
-    };
-
-    Ok(response)
+    set_user(&session, user).await?;
+    let url = http_config.generate_url_or_default(&state);
+    Redirect::to(&url).into_response().pipe(Ok)
 }
 
-async fn logout_handler(session: Session) -> Response {
-    match session.delete().await {
-        Ok(()) => Redirect::to("/").into_response(),
-        Err(e) => Html(
-            html!(
-                    html {
-                        head {
-                            title { "Robotica - Logout" }
-                        }
-                        body {
-                            h1 { ( format!("Logout Failed: {e}") ) }
-                        }
-                    }
-            )
-            .into_string(),
-        )
-        .into_response(),
-    }
+async fn logout_handler(session: Session) -> Result<Response, ResponseError> {
+    session
+        .delete()
+        .await
+        .map_err(|err| ResponseError::internal_error(format!("Failed to delete session: {err}")))?;
+
+    Redirect::to("/").into_response().pipe(Ok)
 }

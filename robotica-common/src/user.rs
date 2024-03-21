@@ -17,6 +17,9 @@ pub struct User {
 
     /// The email of the user
     pub email: String,
+
+    /// Is the user an admin?
+    pub is_admin: bool,
 }
 
 impl Display for User {
@@ -34,6 +37,7 @@ impl ProtobufIntoFrom for User {
             sub: self.sub,
             name: self.name,
             email: self.email,
+            is_admin: self.is_admin,
         }
     }
 
@@ -42,6 +46,7 @@ impl ProtobufIntoFrom for User {
             sub: user.sub,
             name: user.name,
             email: user.email,
+            is_admin: user.is_admin,
         })
     }
 }

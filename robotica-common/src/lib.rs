@@ -13,6 +13,7 @@ pub mod controllers;
 pub mod mqtt;
 pub mod robotica;
 pub mod shelly;
+pub mod teslamate;
 pub mod user;
 pub mod version;
 pub mod websocket;

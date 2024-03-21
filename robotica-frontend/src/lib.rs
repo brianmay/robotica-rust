@@ -257,6 +257,9 @@ fn nav_bar() -> Html {
                         <li class="nav-item">
                             { link(Route::Locations, "Locations") }
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/logout">{ "Logout" }</a>
+                        </li>
                     </ul>
                 </div>
             </div>

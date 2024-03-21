@@ -31,6 +31,7 @@ pub fn login() -> Html {
                     <h1>{ "Welcome " } { &user.name }</h1>
                     <div>{"sub: "} { &user.sub } </div>
                     <div>{"email: "} { &user.email } </div>
+                    <div>{if user.is_admin { "Admin" } else { "Not admin" }}</div>
                     <div class="backend">{format!("Connected to backend version {}", version)}</div>
                 </>
             )

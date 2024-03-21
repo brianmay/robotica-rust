@@ -1,7 +1,10 @@
 use axum_core::response::{IntoResponse, Response};
 use hyper::StatusCode;
+use maud::{html, DOCTYPE};
 use thiserror::Error;
 use tracing::error;
+
+use crate::services::http::{footer, nav_bar};
 
 #[derive(Debug, Error)]
 pub enum ResponseError {
@@ -37,14 +40,12 @@ impl IntoResponse for ResponseError {
     fn into_response(self) -> Response {
         match self {
             Self::AuthenticationFailed => {
-                (StatusCode::UNAUTHORIZED, "Authentication failed").into_response()
+                error_page(StatusCode::UNAUTHORIZED, "Authentication failed")
             }
-            Self::MethodNotAllowed => {
-                (StatusCode::METHOD_NOT_ALLOWED, "Invalid method").into_response()
-            }
+            Self::MethodNotAllowed => error_page(StatusCode::METHOD_NOT_ALLOWED, "Invalid method"),
             Self::InternalError(message) => {
                 error!("Internal error: {}", message);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
+                error_page(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
             }
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
             Self::OidcError() => (StatusCode::INTERNAL_SERVER_ERROR, "OIDC Error").into_response(),
@@ -54,4 +55,31 @@ impl IntoResponse for ResponseError {
             }
         }
     }
+}
+
+fn error_page(status: StatusCode, message: &str) -> Response {
+    let message = status.canonical_reason().map_or_else(
+        || format!("{status} {message}"),
+        |reason| format!("{status} {reason} {message}"),
+    );
+
+    let body = html!(
+        (DOCTYPE)
+        html {
+            head {
+                title { "Robotica - Error" }
+                meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" {}
+            }
+            body {
+                ( nav_bar() )
+                h1 { "Robotica - Error" (status) }
+                p {
+                    (message)
+                }
+                (footer() )
+            }
+        };
+    ).into_response();
+
+    (status, body).into_response()
 }

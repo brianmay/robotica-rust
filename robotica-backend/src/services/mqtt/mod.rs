@@ -165,7 +165,7 @@ impl MqttTx {
     where
         // U: Data,
         // T::Sent: Send + 'static,
-        U: TryFrom<MqttMessage> + Clone + Send + Eq + 'static,
+        U: TryFrom<MqttMessage> + Clone + Send + PartialEq + 'static,
         <U as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
         // T::Received: Send + 'static,
     {
@@ -511,7 +511,7 @@ impl Subscriptions {
     /// Add new subscription and parse incoming data as type T
     pub fn subscribe_into_stateful<T>(&mut self, topic: impl Into<String>) -> stateful::Receiver<T>
     where
-        T: TryFrom<MqttMessage> + Clone + Eq + Send + 'static,
+        T: TryFrom<MqttMessage> + Clone + PartialEq + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
         self.subscribe(topic).into_stateful().translate()

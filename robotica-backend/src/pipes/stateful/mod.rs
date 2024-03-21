@@ -23,7 +23,7 @@ use tokio::sync::mpsc;
 #[must_use]
 pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
-    T: Clone + Eq + Send + 'static,
+    T: Clone + PartialEq + Send + 'static,
 {
     let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);

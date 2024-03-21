@@ -539,6 +539,7 @@ dependencies = [
  "color-backtrace",
  "envconfig",
  "float-cmp",
+ "geo",
  "influxdb",
  "reqwest",
  "robotica-backend",

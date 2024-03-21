@@ -13,7 +13,7 @@ use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
-use robotica_common::unsafe_time_delta;
+use robotica_common::{robotica, teslamate, unsafe_time_delta};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::Add;
@@ -25,7 +25,7 @@ use tokio::time::sleep_until;
 use tracing::{debug, error, info};
 
 use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
-use robotica_backend::spawn;
+use robotica_backend::{database, spawn};
 use robotica_common::mqtt::{BoolError, Json, MqttMessage, Parsed, QoS, Retain};
 
 use super::InitState;
@@ -196,6 +196,51 @@ pub fn location_stream(state: &mut InitState, tesla: &Config) -> stateful::Recei
         |(old_location, location)| old_location.is_some() && *location != Location::Nowhere,
         DelayInputOptions::default(),
     )
+}
+
+pub fn monitor_teslamate_location(
+    state: &mut InitState,
+    postgres: sqlx::PgPool,
+    tesla: &Config,
+) -> stateful::Receiver<robotica::locations::LocationMessage> {
+    let (tx, rx) = stateful::create_pipe("teslamate_location");
+    let id = tesla.teslamate_id.to_string();
+    let mqtt = state.mqtt.clone();
+
+    let inputs = state
+        .subscriptions
+        .subscribe_into_stateful::<Json<teslamate::Location>>(&format!(
+            "teslamate/cars/{id}/location"
+        ));
+
+    spawn(async move {
+        let mut inputs = inputs.subscribe().await;
+
+        while let Ok(Json(location)) = inputs.recv().await {
+            let point = geo::Point::new(location.longitude, location.latitude);
+            let locations = database::locations::search_locations(&postgres, point)
+                .await
+                .unwrap_or_else(|err| {
+                    error!("Failed to search locations: {}", err);
+                    vec![]
+                });
+            let output = robotica::locations::LocationMessage {
+                position: point,
+                locations,
+            };
+
+            mqtt.try_serialize_send(
+                format!("state/Tesla/{id}/Locations"),
+                &Json(output.clone()),
+                Retain::Retain,
+                QoS::AtLeastOnce,
+            );
+
+            tx.try_send(output);
+        }
+    });
+
+    rx
 }
 
 pub fn monitor_tesla_location(

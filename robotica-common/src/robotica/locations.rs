@@ -40,3 +40,13 @@ pub struct CreateLocation {
     /// Should we announce when something enters this location?
     pub announce_on_exit: bool,
 }
+
+/// A location message for an object
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+pub struct LocationMessage {
+    /// The location of the object
+    pub position: geo::Point<f64>,
+
+    /// The locations that the object is in
+    pub locations: Vec<Location>,
+}

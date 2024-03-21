@@ -61,15 +61,12 @@ pub fn topic_matches(topic: &str, pattern: &str) -> bool {
 /// use robotica_backend::services::mqtt::topics::topic_matches_any;
 ///
 /// let patterns = vec!["foo/bar", "foo/baz"];
-/// let patterns = patterns.iter().map(|s| s.to_string());
-/// assert!(topic_matches_any("foo/bar", patterns.clone()));
-/// assert!(topic_matches_any("foo/baz", patterns.clone()));
-/// assert!(!topic_matches_any("foo", patterns.clone()));
-/// assert!(!topic_matches_any("foo/bar/baz", patterns));
+/// assert!(topic_matches_any("foo/bar", &patterns));
+/// assert!(topic_matches_any("foo/baz", &patterns));
+/// assert!(!topic_matches_any("foo", &patterns));
+/// assert!(!topic_matches_any("foo/bar/baz", &patterns));
 /// ```
 #[must_use]
-pub fn topic_matches_any(topic: &str, patterns: impl IntoIterator<Item = String>) -> bool {
-    patterns
-        .into_iter()
-        .any(|pattern| topic_matches(topic, &pattern))
+pub fn topic_matches_any(topic: &str, patterns: &[&str]) -> bool {
+    patterns.iter().any(|pattern| topic_matches(topic, pattern))
 }

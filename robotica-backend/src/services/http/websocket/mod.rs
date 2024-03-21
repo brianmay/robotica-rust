@@ -200,6 +200,8 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
     debug!("websocket: ending socket");
 }
 
+const ADMIN_SUBSCRIBE_TOPICS: &[&str] = &["state/Tesla/+/Locations", "state/Tesla/+/Location"];
+
 const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
     "state/#",
     "stat/#",
@@ -213,25 +215,40 @@ const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
 const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#", "zwave/#"];
 
 #[must_use]
-fn check_topic_subscribe_allowed(topic: &str, _user: &User, _config: &Config) -> bool {
-    let topics = ALLOWED_SUBSCRIBE_TOPICS
-        .iter()
-        .map(std::string::ToString::to_string);
-    if topic_matches_any(topic, topics) {
-        debug!("check_topic_subscribe_allowed: topic {} allowed", topic);
-        true
-    } else {
-        error!("check_topic_subscribe_allowed: Topic {} not allowed", topic);
-        false
+#[allow(clippy::cognitive_complexity)]
+fn check_topic_subscribe_allowed(topic: &str, user: &User, _config: &Config) -> bool {
+    let admin_required = topic_matches_any(topic, ADMIN_SUBSCRIBE_TOPICS);
+    let user_allowed = topic_matches_any(topic, ALLOWED_SUBSCRIBE_TOPICS);
+
+    match (admin_required, user_allowed) {
+        (true, _) if user.is_admin => {
+            debug!(
+                "check_topic_subscribe_allowed: Topic {} allowed as admin",
+                topic
+            );
+            true
+        }
+        (true, _) => {
+            error!(
+                "check_topic_subscribe_allowed: Topic {} not allowed as not admin",
+                topic
+            );
+            false
+        }
+        (false, true) => {
+            debug!("check_topic_subscribe_allowed: topic {} allowed", topic);
+            true
+        }
+        (false, false) => {
+            error!("check_topic_subscribe_allowed: Topic {} not allowed", topic);
+            false
+        }
     }
 }
 
 #[must_use]
 fn check_topic_send_allowed(topic: &str, _user: &User, _config: &Config) -> bool {
-    let topics = ALLOWED_SEND_TOPICS
-        .iter()
-        .map(std::string::ToString::to_string);
-    if topic_matches_any(topic, topics) {
+    if topic_matches_any(topic, ALLOWED_SEND_TOPICS) {
         debug!("check_topic_send_allowed: topic {} allowed", topic);
         true
     } else {
