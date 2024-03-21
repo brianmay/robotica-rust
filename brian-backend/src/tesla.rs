@@ -857,21 +857,18 @@ pub fn monitor_charging(
             let new_interval = match result {
                 TeslaResult::Skipped => {
                     // If we skipped, then lets just pretend we succeeded.
-                    tesla_state.last_success = Utc::now();
-                    tesla_state.notified_errors = false;
-                    tesla_state.send_left_home_commands = false;
+                    forget_errors(&mut tesla_state);
                     LONG_INTERVAL
                 }
                 TeslaResult::Tried(Ok(())) => {
                     info!("Success executing command sequence");
                     notify_success(&tesla_state, &message_sink);
-                    tesla_state.last_success = Utc::now();
-                    tesla_state.notified_errors = false;
-                    tesla_state.send_left_home_commands = false;
+                    forget_errors(&mut tesla_state);
                     LONG_INTERVAL
                 }
                 TeslaResult::Tried(Err(SequenceError::WaitRetry(duration))) => {
                     info!("Failed, retrying in {:?}", duration);
+                    notify_errors(&mut tesla_state, &message_sink);
                     duration
                 }
                 TeslaResult::Tried(Err(err)) => {
@@ -889,6 +886,12 @@ pub fn monitor_charging(
     });
 
     Ok(rx_summary)
+}
+
+fn forget_errors(tesla_state: &mut TeslaState) {
+    tesla_state.last_success = Utc::now();
+    tesla_state.notified_errors = false;
+    tesla_state.send_left_home_commands = false;
 }
 
 fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Message>) {
