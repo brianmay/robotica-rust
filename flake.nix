@@ -15,8 +15,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flockenzeit.url = "github:balsoft/flockenzeit";
-    # See https://github.com/cachix/devenv/issues/756
-    devenv.url = "github:cachix/devenv/v0.6.3";
+    devenv.url = "github:cachix/devenv";
   };
 
   outputs = inputs@{ self, nixpkgs, flake-utils, rust-overlay, crane, poetry2nix
@@ -287,22 +286,7 @@
           pkg = wrapper;
         };
 
-      in {
-        checks = {
-          robotica-slint-clippy = robotica-slint.clippy;
-          robotica-slint-coverage = robotica-slint.coverage;
-          robotica-slint = robotica-slint.pkg;
-          robotica-frontend-clippy = robotica-frontend.clippy;
-          robotica-frontend = robotica-frontend.pkg;
-          brian-backend-clippy = brian-backend.clippy;
-          brian-backend-coverage = brian-backend.coverage;
-          brian-backend = brian-backend.pkg;
-          freeswitch-clippy = freeswitch.clippy;
-          freeswitch-coverage = freeswitch.coverage;
-          freeswitch = freeswitch.pkg;
-        };
-
-        devShells.default = devenv.lib.mkShell {
+        devShell = devenv.lib.mkShell {
           inherit inputs pkgs;
           modules = [{
             packages = with pkgs; [
@@ -327,21 +311,8 @@
               sqlx-cli
             ];
             enterShell = ''
-              # kludge for https://github.com/cachix/devenv/issues/862
-              export PKG_CONFIG_PATH_FOR_TARGET="$PKG_CONFIG_PATH"
-              export LD_LIBRARY_PATH="${pkgs.fontconfig}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.freetype}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libxcb}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libX11}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXcursor}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXrandr}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.xorg.libXi}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.mesa}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.dbus}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.libGL}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
-              export LD_LIBRARY_PATH="${pkgs.libxkbcommon}/lib:$LD_LIBRARY_PATH"
               export ROBOTICA_DEBUG=true
+              export PYTHONPATH="${poetry_env}/lib/python3.11/site-packages"
               export CONFIG_FILE="$PWD/robotica-backend.yaml"
               export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
               export STATIC_PATH="${robotica-frontend-bindgen}"
@@ -366,11 +337,28 @@
             };
           }];
         };
+      in {
+        checks = {
+          robotica-slint-clippy = robotica-slint.clippy;
+          robotica-slint-coverage = robotica-slint.coverage;
+          robotica-slint = robotica-slint.pkg;
+          robotica-frontend-clippy = robotica-frontend.clippy;
+          robotica-frontend = robotica-frontend.pkg;
+          brian-backend-clippy = brian-backend.clippy;
+          brian-backend-coverage = brian-backend.coverage;
+          brian-backend = brian-backend.pkg;
+          freeswitch-clippy = freeswitch.clippy;
+          freeswitch-coverage = freeswitch.coverage;
+          freeswitch = freeswitch.pkg;
+        };
+
+        devShells.default = devShell;
         packages = {
           robotica-frontend = robotica-frontend-bindgen;
           brian-backend = brian-backend.pkg;
           robotica-slint = robotica-slint.pkg;
           freeswitch = freeswitch.pkg;
+          devenv-up = devShell.config.procfileScript;
         };
       });
 }
