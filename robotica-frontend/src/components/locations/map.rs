@@ -14,7 +14,6 @@ use robotica_common::{
     user::User,
 };
 use tap::{Pipe, Tap};
-use tracing::debug;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node};
 use yew::prelude::*;
