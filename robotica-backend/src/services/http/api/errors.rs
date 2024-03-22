@@ -10,6 +10,9 @@ pub enum ResponseError {
     #[error("Authentication failed")]
     AuthenticationFailed,
 
+    #[error("Authorization failed")]
+    AuthorizationFailed,
+
     #[error("SQL error: {0}")]
     SqlError(#[from] sqlx::Error),
 
@@ -23,6 +26,10 @@ impl IntoResponse for ResponseError {
             Self::AuthenticationFailed => {
                 let error = api_error("Authentication failed");
                 (StatusCode::UNAUTHORIZED, Json(error)).into_response()
+            }
+            Self::AuthorizationFailed => {
+                let error = api_error("Authorization failed");
+                (StatusCode::FORBIDDEN, Json(error)).into_response()
             }
             Self::SqlError(err) => {
                 error!("SQL Error: {}", err);

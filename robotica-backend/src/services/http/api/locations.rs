@@ -46,9 +46,13 @@ async fn create_handler(
     session: Session,
     Json(location): Json<CreateLocation>,
 ) -> Result<Json<ApiResponse<Location>>, ResponseError> {
-    if get_user(&session).await.is_none() {
+    let Some(user) = get_user(&session).await else {
         return Err(ResponseError::AuthenticationFailed);
     };
+
+    if !user.is_admin {
+        return Err(ResponseError::AuthorizationFailed);
+    }
 
     create_location(&postgres, &location)
         .await?
@@ -70,9 +74,13 @@ async fn delete_handler(
     session: Session,
     Path(id): Path<i32>,
 ) -> Result<Json<ApiResponse<()>>, ResponseError> {
-    if get_user(&session).await.is_none() {
+    let Some(user) = get_user(&session).await else {
         return Err(ResponseError::AuthenticationFailed);
     };
+
+    if !user.is_admin {
+        return Err(ResponseError::AuthorizationFailed);
+    }
 
     delete_location(&postgres, id)
         .await
@@ -93,9 +101,13 @@ async fn update_handler(
     session: Session,
     Json(location): Json<Location>,
 ) -> Result<Json<ApiResponse<Location>>, ResponseError> {
-    if get_user(&session).await.is_none() {
+    let Some(user) = get_user(&session).await else {
         return Err(ResponseError::AuthenticationFailed);
     };
+
+    if !user.is_admin {
+        return Err(ResponseError::AuthorizationFailed);
+    }
 
     update_location(&postgres, &location)
         .await
