@@ -18,12 +18,12 @@ impl ActionLocation {
         }
     }
 
-    fn set_bounds(&mut self, polygon: geo::Polygon) {
-        match self {
-            ActionLocation::Create(location) => location.bounds = polygon,
-            ActionLocation::Update(location) => location.bounds = polygon,
-        }
-    }
+    // fn set_bounds(&mut self, polygon: geo::Polygon) {
+    //     match self {
+    //         ActionLocation::Create(location) => location.bounds = polygon,
+    //         ActionLocation::Update(location) => location.bounds = polygon,
+    //     }
+    // }
 
     fn set_color(&mut self, color: String) {
         match self {

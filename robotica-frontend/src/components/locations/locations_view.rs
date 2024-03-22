@@ -1,7 +1,7 @@
 use super::{control::Control, ActionLocation};
 use crate::components::{
     forms::{checkbox::Checkbox, text_input::TextInput},
-    locations::map::{MapComponent, MapObject},
+    locations::map::{MapComponent, ParamObject},
 };
 use gloo_net::http::Request;
 use reqwasm::{http::Response, Error};
@@ -25,12 +25,13 @@ pub enum Msg {
     UpdateAnnounceOnExit(bool),
     Save,
     SaveSuccess(Location),
+    CreateSuccess(Location),
     SaveFailed(String),
     Cancel,
-    DeleteSuccess,
-    CreatePolygon(geo::Polygon),
-    UpdatePolygon(geo::Polygon),
-    DeletePolygon,
+    DeleteSuccess(Location),
+    CreateLocation(CreateLocation),
+    UpdateLocation(ActionLocation),
+    DeleteLocation(ActionLocation),
 }
 
 pub enum LoadingStatus {
@@ -59,13 +60,9 @@ impl LocationStatus {
     }
 }
 
-pub struct LocationState {
-    pub location: ActionLocation,
-    pub status: LocationStatus,
-}
-
 pub struct LocationsView {
-    location_state: Option<LocationState>,
+    location: Option<ActionLocation>,
+    status: LocationStatus,
     loading_status: LoadingStatus,
 }
 
@@ -100,7 +97,8 @@ impl Component for LocationsView {
         load_list(ctx);
 
         Self {
-            location_state: None,
+            location: None,
+            status: LocationStatus::Unchanged,
             loading_status: LoadingStatus::Loading,
         }
     }
@@ -114,10 +112,8 @@ impl Component for LocationsView {
                 true
             }
             Msg::SelectLocation(location) => {
-                self.location_state = Some(LocationState {
-                    location: ActionLocation::Update(location),
-                    status: LocationStatus::Unchanged,
-                });
+                self.location = Some(ActionLocation::Update(location));
+                self.status = LocationStatus::Unchanged;
                 true
             }
             Msg::Locations(locations) => {
@@ -126,94 +122,61 @@ impl Component for LocationsView {
             }
             Msg::UpdateName(name) => {
                 debug!("Updating name: {}", name);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.location.set_name(name);
-                    location_state.status = LocationStatus::Changed;
+                if let Some(location) = &mut self.location {
+                    location.set_name(name);
+                    self.status = LocationStatus::Changed;
                 }
                 true
             }
             Msg::UpdateColor(color) => {
                 debug!("Updating color: {}", color);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.location.set_color(color);
-                    location_state.status = LocationStatus::Changed;
+                if let Some(location) = &mut self.location {
+                    location.set_color(color);
+                    self.status = LocationStatus::Changed;
                 }
                 true
             }
             Msg::UpdateAnnounceOnEnter(announce_on_enter) => {
                 debug!("Updating announce_on_enter: {}", announce_on_enter);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state
-                        .location
-                        .set_announce_on_enter(announce_on_enter);
-                    location_state.status = LocationStatus::Changed;
+                if let Some(location) = &mut self.location {
+                    location.set_announce_on_enter(announce_on_enter);
+                    self.status = LocationStatus::Changed;
                 }
                 true
             }
             Msg::UpdateAnnounceOnExit(announce_on_exit) => {
                 debug!("Updating announce_on_exit: {}", announce_on_exit);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state
-                        .location
-                        .set_announce_on_exit(announce_on_exit);
-                    location_state.status = LocationStatus::Changed;
+                if let Some(location) = &mut self.location {
+                    location.set_announce_on_exit(announce_on_exit);
+                    self.status = LocationStatus::Changed;
                 }
                 true
             }
-            Msg::CreatePolygon(polygon) => {
-                debug!("Creating polygon: {:?}", polygon);
-                let location_state = if let Some(location_state) = &mut self.location_state {
-                    let name = format!("{} New", location_state.location.name());
-                    CreateLocation {
-                        bounds: polygon,
-                        name,
-                        color: location_state.location.color(),
-                        announce_on_enter: location_state.location.announce_on_enter(),
-                        announce_on_exit: location_state.location.announce_on_exit(),
-                    }
-                } else {
-                    CreateLocation {
-                        bounds: polygon,
-                        name: "New location".to_string(),
-                        color: "#000000".to_string(),
-                        announce_on_enter: false,
-                        announce_on_exit: false,
-                    }
-                }
-                .pipe(ActionLocation::Create)
-                .pipe(|x| LocationState {
-                    location: x,
-                    status: LocationStatus::Changed,
-                });
-
-                self.location_state = Some(location_state);
+            Msg::CreateLocation(location) => {
+                debug!("Creating location: {:?}", location);
+                let action_location = ActionLocation::Create(location);
+                self.status = LocationStatus::Saving;
+                save_location(&action_location, ctx);
                 true
             }
-            Msg::UpdatePolygon(polygon) => {
-                debug!("Updating polygon: {:?}", polygon);
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.location.set_bounds(polygon);
-                    location_state.status = LocationStatus::Saving;
-                    save_location(location_state, ctx);
+            Msg::UpdateLocation(location) => {
+                debug!("Updating location: {:?}", location);
+                self.status = LocationStatus::Saving;
+                save_location(&location, ctx);
+                true
+            }
+            Msg::DeleteLocation(location) => {
+                debug!("Deleting location: {:?}", location);
+                self.status = LocationStatus::Saving;
+                match &location {
+                    ActionLocation::Create(_) => self.location = None,
+                    ActionLocation::Update(location) => delete_location(location, ctx),
                 }
                 true
             }
-            Msg::DeletePolygon => {
-                debug!("Deleting polygon");
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.status = LocationStatus::Changed;
-                    match &location_state.location {
-                        ActionLocation::Create(_) => self.location_state = None,
-                        ActionLocation::Update(location) => {
-                            delete_location(location, ctx);
-                        }
-                    }
-                }
-                true
-            }
-            Msg::Save => match &mut self.location_state {
-                Some(location_state) if location_state.status.can_save() => {
-                    location_state.status = LocationStatus::Saving;
+            Msg::Save => match &mut self.location {
+                Some(location_state) if self.status.can_save() => {
+                    self.status = LocationStatus::Saving;
                     save_location(location_state, ctx);
                     true
                 }
@@ -228,18 +191,21 @@ impl Component for LocationsView {
                     false
                 }
             },
+            Msg::CreateSuccess(location) => {
+                self.location = location.pipe(ActionLocation::Update).pipe(Some);
+                self.status = LocationStatus::Unchanged;
+                load_list(ctx);
+                true
+            }
             Msg::SaveSuccess(_location) => {
-                if self.location_state.is_some() {
-                    self.location_state = None;
-                    load_list(ctx);
-                    true
-                } else {
-                    false
-                }
+                self.location = None;
+                self.status = LocationStatus::Unchanged;
+                load_list(ctx);
+                true
             }
             Msg::SaveFailed(error) => {
-                if let Some(location_state) = &mut self.location_state {
-                    location_state.status = LocationStatus::error(error);
+                if let Some(_location) = &mut self.location {
+                    self.status = LocationStatus::error(error);
                     true
                 } else {
                     false
@@ -247,11 +213,13 @@ impl Component for LocationsView {
             }
             Msg::Cancel => {
                 debug!("Cancelling");
-                self.location_state = None;
+                self.location = None;
+                self.status = LocationStatus::Unchanged;
                 true
             }
-            Msg::DeleteSuccess => {
-                self.location_state = None;
+            Msg::DeleteSuccess(_location) => {
+                self.location = None;
+                self.status = LocationStatus::Unchanged;
                 load_list(ctx);
                 true
             }
@@ -264,7 +232,14 @@ impl Component for LocationsView {
             LoadingStatus::Error(_) | LoadingStatus::Loading => Arc::new(Vec::new()),
         };
 
-        let controls = if let Some(location_state) = &self.location_state {
+        let status_msg = match &self.status {
+            LocationStatus::Unchanged => "Unchanged".to_string(),
+            LocationStatus::Changed => "Changed".to_string(),
+            LocationStatus::Saving => "Saving".to_string(),
+            LocationStatus::Error(err) => format!("Error {err}"),
+        };
+
+        let controls = if let Some(location) = &self.location {
             let save = ctx.link().callback(|e: MouseEvent| {
                 e.prevent_default();
                 Msg::Save
@@ -285,25 +260,18 @@ impl Component for LocationsView {
                 .link()
                 .callback(|x| Msg::UpdateAnnounceOnExit(x != "true"));
 
-            let disable_save = !location_state.status.can_save();
+            let disable_save = !self.status.can_save();
 
-            let msg = match &location_state.status {
-                LocationStatus::Unchanged => "Unchanged".to_string(),
-                LocationStatus::Changed => "Changed".to_string(),
-                LocationStatus::Saving => "Saving".to_string(),
-                LocationStatus::Error(err) => format!("Error {err}"),
-            };
-
-            let name = location_state.location.name();
+            let name = location.name();
 
             html! {
                 <>
                     <h1>{name.clone()}</h1>
                     <form>
                         <TextInput id="name" label="Name" value={name} on_change={update_name} />
-                        <TextInput id="color" label="Color" value={location_state.location.color()} on_change={update_color} />
-                        <Checkbox id="announce_on_enter" label="Announce on enter" value={location_state.location.announce_on_enter()} on_change={update_announce_on_enter} />
-                        <Checkbox id="announce_on_exit" label="Announce on exit" value={location_state.location.announce_on_exit()} on_change={update_announce_on_exit} />
+                        <TextInput id="color" label="Color" value={location.color()} on_change={update_color} />
+                        <Checkbox id="announce_on_enter" label="Announce on enter" value={location.announce_on_enter()} on_change={update_announce_on_enter} />
+                        <Checkbox id="announce_on_exit" label="Announce on exit" value={location.announce_on_exit()} on_change={update_announce_on_exit} />
 
                         <button onclick={save} disabled={disable_save} >
                             {"Save"}
@@ -311,7 +279,7 @@ impl Component for LocationsView {
                         <button onclick={cancel} >
                             {"Cancel"}
                         </button>
-                        <p>{msg}</p>
+                        <p>{status_msg}</p>
                     </form>
                 </>
             }
@@ -329,24 +297,25 @@ impl Component for LocationsView {
                     <h1>{"Locations"}</h1>
                     <Control select_location={select_location} locations={locations.clone()}/>
                     <p>{msg}</p>
+                    <p>{status_msg}</p>
                 </>
             }
         };
 
-        let object = if let Some(location_state) = &self.location_state {
-            MapObject::Item(location_state.location.clone())
+        let object = if let Some(location) = &self.location {
+            ParamObject::Item(location.clone())
         } else {
-            MapObject::List(locations)
+            ParamObject::List(locations)
         };
 
         {
-            let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
-            let delete_polygon = ctx.link().callback(|()| Msg::DeletePolygon);
+            let create_location = ctx.link().callback(Msg::CreateLocation);
+            let update_location = ctx.link().callback(Msg::UpdateLocation);
+            let delete_location = ctx.link().callback(Msg::DeleteLocation);
 
-            let create_polygon = ctx.link().callback(Msg::CreatePolygon);
             html! {
                 <>
-                    <MapComponent object={object} create_polygon={create_polygon} update_polygon={update_polygon} delete_polygon={delete_polygon} />
+                    <MapComponent object={object} create_location={create_location} update_location={update_location} delete_location={delete_location} />
                     {controls}
                 </>
             }
@@ -372,39 +341,37 @@ fn load_list(ctx: &Context<LocationsView>) {
     });
 }
 
-fn save_location(location_state: &LocationState, ctx: &Context<LocationsView>) {
-    debug!("Saving location: {:?}", location_state.location);
-    let location = location_state.location.clone();
+fn save_location(location: &ActionLocation, ctx: &Context<LocationsView>) {
+    debug!("Saving location: {:?}", location);
+    let location = location.clone();
     let link = ctx.link().clone();
     spawn_local(async move {
-        debug!("Sending request");
+        debug!("Sending save request");
 
         let response = match location {
-            ActionLocation::Create(location) => {
-                Request::post("/api/locations/create")
-                    .json(&location)
-                    .unwrap()
-                    .send()
-                    .await
-                    .pipe(process_response::<Location>)
-                    .await
-            }
+            ActionLocation::Create(location) => Request::post("/api/locations/create")
+                .json(&location)
+                .unwrap()
+                .send()
+                .await
+                .pipe(process_response::<Location>)
+                .await
+                .map(Msg::CreateSuccess),
 
-            ActionLocation::Update(location) => {
-                Request::put("/api/locations")
-                    .json(&location)
-                    .unwrap()
-                    .send()
-                    .await
-                    .pipe(process_response::<Location>)
-                    .await
-            }
+            ActionLocation::Update(location) => Request::put("/api/locations")
+                .json(&location)
+                .unwrap()
+                .send()
+                .await
+                .pipe(process_response::<Location>)
+                .await
+                .map(Msg::SaveSuccess),
         };
 
         let result = match response {
             Ok(response) => {
                 debug!("Location saved");
-                Msg::SaveSuccess(response)
+                response
             }
             Err(err) => {
                 debug!("Failed to save location: {err}");
@@ -417,9 +384,13 @@ fn save_location(location_state: &LocationState, ctx: &Context<LocationsView>) {
 }
 
 fn delete_location(location: &Location, ctx: &Context<LocationsView>) {
+    debug!("Deleting location: {:?}", location);
     let id = location.id;
+    let location = location.clone();
+
     let link = ctx.link().clone();
     spawn_local(async move {
+        debug!("Sending delete request");
         let response = Request::delete(&format!("/api/locations/{id}"))
             .send()
             .await
@@ -429,7 +400,7 @@ fn delete_location(location: &Location, ctx: &Context<LocationsView>) {
         let result = match response {
             Ok(()) => {
                 debug!("Location deleted");
-                Msg::DeleteSuccess
+                Msg::DeleteSuccess(location.clone())
             }
             Err(err) => {
                 debug!("Failed to delete location: {err}");

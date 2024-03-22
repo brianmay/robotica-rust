@@ -6,14 +6,16 @@ use crate::{
 };
 use geo::coord;
 use gloo_utils::document;
+use itertools::Itertools;
 use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
-    robotica::locations::{Location, LocationMessage},
+    robotica::locations::{CreateLocation, Location, LocationMessage},
     user::User,
 };
 use tap::{Pipe, Tap};
+use tracing::debug;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node};
 use yew::prelude::*;
@@ -25,12 +27,62 @@ pub enum Msg {
     SubscribedCar(Subscription),
     SubscribedEvents(Subscription),
     MqttEvent(WsEvent),
+    CreatePolygon(leaflet::Polygon),
+    UpdatePolygon(leaflet::Polygon),
+    DeletePolygon(leaflet::Polygon),
 }
 
 #[derive(PartialEq, Clone)]
-pub enum MapObject {
+pub enum ParamObject {
     List(Arc<Vec<Location>>),
     Item(ActionLocation),
+}
+
+struct MapLocation {
+    location: Location,
+    leaflet_id: i32,
+}
+
+struct MapActionLocation {
+    location: ActionLocation,
+    leaflet_id: i32,
+}
+
+enum MapObject {
+    List(Vec<MapLocation>),
+    Item(MapActionLocation),
+    None,
+}
+
+impl MapObject {
+    // fn get_location_by_id(&self, id: i32) -> Option<&Location> {
+    //     match self {
+    //         MapObject::List(locations) => locations
+    //             .iter()
+    //             .find(|location| location.leaflet_id == id)
+    //             .map(|location| &location.location),
+    //         MapObject::Item(_location) => None,
+    //         MapObject::None => None,
+    //     }
+    // }
+
+    fn get_action_location_by_id(&self, id: i32) -> Option<ActionLocation> {
+        match self {
+            MapObject::List(locations) => locations
+                .iter()
+                .find(|location| location.leaflet_id == id)
+                .map(|location| ActionLocation::Update(location.location.clone())),
+
+            MapObject::Item(location) => {
+                if location.leaflet_id == id {
+                    Some(location.location.clone())
+                } else {
+                    None
+                }
+            }
+            MapObject::None => None,
+        }
+    }
 }
 
 enum SubscriptionStatus {
@@ -57,10 +109,10 @@ pub struct MapComponent {
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
-    pub object: MapObject,
-    pub create_polygon: Callback<geo::Polygon>,
-    pub update_polygon: Callback<geo::Polygon>,
-    pub delete_polygon: Callback<()>,
+    pub object: ParamObject,
+    pub create_location: Callback<CreateLocation>,
+    pub update_location: Callback<ActionLocation>,
+    pub delete_location: Callback<ActionLocation>,
 }
 
 impl MapComponent {
@@ -69,15 +121,10 @@ impl MapComponent {
         Html::VRef(node.clone())
     }
 
-    fn draw_item(&self, location: &ActionLocation) {
+    fn set_item(&mut self, location: ActionLocation) {
         self.draw_layer.clear_layers();
-
-        let options = leaflet::PolylineOptions::default();
-        options.set_color(location.color());
-        options.set_fill_color(location.color());
-        options.set_weight(3.0);
-        options.set_opacity(0.5);
-        options.set_fill(true);
+        let marked_locations = self.get_marked_locations();
+        let options = get_action_location_options(&marked_locations, &location);
 
         self.draw_layer.clear_layers();
         let lat_lngs = location
@@ -88,62 +135,100 @@ impl MapComponent {
             .map(JsValue::from)
             .collect();
 
-        leaflet::Polygon::new_with_options(&lat_lngs, &options)
+        let id = leaflet::Polygon::new_with_options(&lat_lngs, &options)
             .unchecked_into::<leaflet::Layer>()
-            .add_to_layer_group(&self.draw_layer);
+            .add_to_layer_group(&self.draw_layer)
+            .pipe(|x| self.draw_layer.get_layer_id(&x));
+
+        self.object = MapObject::Item(MapActionLocation {
+            location,
+            leaflet_id: id,
+        });
     }
 
-    fn draw_list(&self, locations: &Vec<Location>) {
+    fn set_list(&mut self, locations: &[Location]) {
         self.draw_layer.clear_layers();
+        let marked_locations = self.get_marked_locations();
 
-        let options = leaflet::PolylineOptions::default();
-        options.set_weight(3.0);
-        options.set_opacity(0.5);
-        options.set_fill(true);
+        let list: Vec<MapLocation> = locations
+            .iter()
+            .map(|location| {
+                let options = get_location_options(&marked_locations, location);
 
+                let lat_lngs = location
+                    .bounds
+                    .exterior()
+                    .coords()
+                    .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
+                    .map(JsValue::from)
+                    .collect();
+
+                let polygon = leaflet::Polygon::new_with_options(&lat_lngs, &options)
+                    .unchecked_into::<leaflet::Layer>()
+                    .add_to_layer_group(&self.draw_layer);
+
+                let id = self.draw_layer.get_layer_id(&polygon);
+
+                MapLocation {
+                    location: location.clone(),
+                    leaflet_id: id,
+                }
+            })
+            .collect();
+
+        self.object = MapObject::List(list);
+    }
+
+    fn get_marked_locations(&self) -> Vec<&Location> {
         let no_locations = vec![];
-        let marked_locations = self
-            .car
-            .as_ref()
-            .map_or(&no_locations, |car| &car.locations);
-
-        for location in locations {
-            let is_marked = marked_locations
-                .iter()
-                .any(|marked_location| location.id == marked_location.id);
-
-            let color = if is_marked {
-                "red"
-            } else {
-                location.color.as_str()
-            };
-
-            options.set_color(color.to_string());
-            options.set_fill_color(color.to_string());
-
-            let lat_lngs = location
-                .bounds
-                .exterior()
-                .coords()
-                .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
-                .map(JsValue::from)
-                .collect();
-
-            leaflet::Polygon::new_with_options(&lat_lngs, &options)
-                .unchecked_into::<leaflet::Layer>()
-                .add_to_layer_group(&self.draw_layer);
+        if let Some(car) = &self.car {
+            car.locations.iter().collect_vec()
+        } else {
+            no_locations
         }
     }
 
-    fn draw_object(&self) {
-        match &self.object {
-            MapObject::List(locations) => self.draw_list(locations),
-            MapObject::Item(location) => self.draw_item(location),
+    fn set_object(&mut self, object: &ParamObject) {
+        match object {
+            ParamObject::List(locations) => self.set_list(locations),
+            ParamObject::Item(location) => self.set_item(location.clone()),
         }
+    }
+
+    fn iterate_over_layers(&self, f: impl Fn(&ActionLocation, leaflet::Layer)) {
+        match &self.object {
+            MapObject::List(locations) => {
+                for location in locations {
+                    let layer = self.draw_layer.get_layer(location.leaflet_id);
+                    let location = ActionLocation::Update(location.location.clone());
+                    f(&location, layer);
+                }
+            }
+            MapObject::Item(location) => {
+                let id = location.leaflet_id;
+                let layer = self.draw_layer.get_layer(id);
+                f(&location.location, layer);
+            }
+            MapObject::None => {}
+        }
+    }
+
+    fn update_location_styles(&self) {
+        let marked_locations = self.get_marked_locations();
+
+        self.iterate_over_layers(|location, layer| {
+            // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
+            let layer = layer.unchecked_into::<leaflet::Polyline>();
+            let options = get_action_location_options(&marked_locations, location);
+            layer.set_style(&options);
+        });
     }
 
     fn position_map(&self) {
         match &self.object {
+            MapObject::None => {
+                self.map.fit_world();
+            }
             MapObject::List(locations) => {
                 if locations.is_empty() {
                     self.map.fit_world();
@@ -155,6 +240,53 @@ impl MapComponent {
                 self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             }
         }
+    }
+}
+
+fn get_action_location_options(
+    marked_locations: &[&Location],
+    location: &ActionLocation,
+) -> leaflet::PolylineOptions {
+    let color = get_action_location_color(marked_locations, location);
+    let options = leaflet::PolylineOptions::default();
+    options.set_color(color.clone());
+    options.set_fill_color(color);
+    options.set_weight(3.0);
+    options.set_opacity(0.5);
+    options.set_fill(true);
+    options
+}
+
+fn get_location_options(
+    marked_locations: &[&Location],
+    location: &Location,
+) -> leaflet::PolylineOptions {
+    let color = get_location_color(marked_locations, location);
+    let options = leaflet::PolylineOptions::default();
+    options.set_color(color.clone());
+    options.set_fill_color(color);
+    options.set_weight(3.0);
+    options.set_opacity(0.5);
+    options.set_fill(true);
+    options
+}
+
+fn get_action_location_color(marked_locations: &[&Location], location: &ActionLocation) -> String {
+    match location {
+        ActionLocation::Create(_location) => "black".to_string(),
+        ActionLocation::Update(location) => get_location_color(marked_locations, location),
+    }
+}
+
+fn get_location_color(marked_locations: &[&Location], location: &Location) -> String {
+    let is_marked = marked_locations
+        .iter()
+        .any(|marked_location| location.id == marked_location.id);
+
+    if is_marked {
+        "red".to_string()
+    } else {
+        location.color.clone()
     }
 }
 
@@ -190,7 +322,7 @@ impl Component for MapComponent {
         let draw_layer = leaflet::FeatureGroup::new();
         draw_layer.add_to(&leaflet_map);
 
-        let draw_control = draw_control(&draw_layer, object);
+        let draw_control = draw_control(&draw_layer);
         leaflet_map.add_control(&draw_control);
 
         let create_handler = create_handler(ctx);
@@ -212,7 +344,7 @@ impl Component for MapComponent {
         Self {
             map: leaflet_map,
             user: None,
-            object: object.clone(),
+            object: MapObject::None,
             container,
             draw_layer,
             draw_control,
@@ -224,7 +356,7 @@ impl Component for MapComponent {
             car_marker: None,
             car: None,
         }
-        .tap(Self::draw_object)
+        .tap_mut(|s| Self::set_object(s, object))
         .tap(Self::position_map)
     }
 
@@ -232,6 +364,8 @@ impl Component for MapComponent {
         if first_render {}
     }
 
+    #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Car(location) => {
@@ -244,7 +378,7 @@ impl Component for MapComponent {
                     self.car_marker = Some(car_marker);
                 }
                 self.car = Some(location);
-                self.draw_object();
+                self.update_location_styles();
             }
             Msg::SubscribedCar(subscription) => {
                 // If car_subscription is unsubscribed, we lost interest in this subscription.
@@ -279,7 +413,81 @@ impl Component for MapComponent {
                     car_marker.remove_from(&self.map);
                 }
                 self.car_marker = None;
-                self.draw_object();
+                self.update_location_styles();
+            }
+            Msg::CreatePolygon(polygon) => {
+                let exterior = polygon
+                    .get_lat_lngs()
+                    .iter()
+                    .flat_map(|lat_lng_array| {
+                        let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                        lat_lng_array
+                            .iter()
+                            .map(|lat_lng| {
+                                let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                                coord! {x: lat_lng.lng(), y: lat_lng.lat()}
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+                    .pipe(geo::LineString::from);
+
+                let location = CreateLocation {
+                    name: "New Location".to_string(),
+                    bounds: geo::Polygon::new(exterior, vec![]),
+                    color: "black".to_string(),
+                    announce_on_enter: false,
+                    announce_on_exit: false,
+                };
+
+                ctx.props().create_location.emit(location);
+            }
+            Msg::UpdatePolygon(polygon) => {
+                let exterior = polygon
+                    .get_lat_lngs()
+                    .iter()
+                    .flat_map(|lat_lng_array| {
+                        let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                        lat_lng_array
+                            .iter()
+                            .map(|lat_lng| {
+                                let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                                coord! {x: lat_lng.lng(), y: lat_lng.lat()}
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+                    .pipe(geo::LineString::from);
+
+                let id = self.draw_layer.get_layer_id(&polygon);
+                let location = self.object.get_action_location_by_id(id);
+
+                let new_bounds = geo::Polygon::new(exterior, vec![]);
+
+                let location = match location {
+                    Some(ActionLocation::Update(location)) => {
+                        let mut location = location;
+                        location.bounds = new_bounds;
+                        ActionLocation::Update(location).pipe(Some)
+                    }
+                    Some(ActionLocation::Create(location)) => {
+                        let mut location = location;
+                        location.bounds = new_bounds;
+                        ActionLocation::Create(location).pipe(Some)
+                    }
+                    None => None,
+                };
+
+                if let Some(location) = location {
+                    ctx.props().update_location.emit(location);
+                }
+            }
+            Msg::DeletePolygon(polygon) => {
+                let id = self.draw_layer.get_layer_id(&polygon);
+                let location = self.object.get_action_location_by_id(id);
+                if let Some(location) = location {
+                    ctx.props().delete_location.emit(location);
+                }
             }
         }
         false
@@ -291,19 +499,18 @@ impl Component for MapComponent {
         if props.object == old_props.object {
             return false;
         }
-        self.object = props.object.clone();
 
         match (&props.object, &old_props.object) {
-            (MapObject::Item(_), MapObject::Item(_)) | (MapObject::List(_), MapObject::List(_)) => {
-            }
+            (ParamObject::Item(_), ParamObject::Item(_))
+            | (ParamObject::List(_), ParamObject::List(_)) => {}
             _ => {
                 self.map.remove_control(&self.draw_control);
-                self.draw_control = draw_control(&self.draw_layer, &props.object);
+                self.draw_control = draw_control(&self.draw_layer);
                 self.map.add_control(&self.draw_control);
             }
         }
 
-        self.draw_object();
+        self.set_object(&props.object);
         self.position_map();
         false
     }
@@ -335,106 +542,70 @@ fn subscribe_to_car(ctx: &Context<MapComponent>) {
     });
 }
 
-fn draw_control(
-    draw_layer: &leaflet::FeatureGroup,
-    object: &MapObject,
-) -> draw_control::DrawControl {
-    let options = match object {
-        MapObject::List(_locations) => {
-            let draw_options = draw_control::DrawOptions::new();
-            draw_options.set_polyline(false);
-            draw_options.set_polygon(true);
-            draw_options.set_rectangle(false);
-            draw_options.set_circle(false);
-            draw_options.set_marker(false);
-            draw_options.set_circle_marker(false);
+fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl {
+    let edit_options = draw_control::EditOptions::new();
+    edit_options.set_feature_group(draw_layer.clone());
 
-            let options = draw_control::DrawControlOptions::new();
-            options.set_draw(draw_options);
+    let draw_options = draw_control::DrawOptions::new();
+    draw_options.set_polyline(false);
+    draw_options.set_polygon(true);
+    draw_options.set_rectangle(false);
+    draw_options.set_circle(false);
+    draw_options.set_marker(false);
+    draw_options.set_circle_marker(false);
 
-            options
-        }
-        MapObject::Item(_location) => {
-            let edit_options = draw_control::EditOptions::new();
-            edit_options.set_feature_group(draw_layer.clone());
+    let options = draw_control::DrawControlOptions::new();
+    options.set_draw(draw_options);
+    options.set_edit(edit_options);
 
-            let draw_options = draw_control::DrawOptions::new();
-            draw_options.set_polyline(false);
-            draw_options.set_polygon(true);
-            draw_options.set_rectangle(false);
-            draw_options.set_circle(false);
-            draw_options.set_marker(false);
-            draw_options.set_circle_marker(false);
-
-            let options = draw_control::DrawControlOptions::new();
-            options.set_draw(draw_options);
-            options.set_edit(edit_options);
-
-            options
-        }
-    };
     draw_control::DrawControl::new(&options)
 }
 
 fn create_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
-    let create_polygon = ctx.props().create_polygon.clone();
-    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        let exterior = event
-            .layer()
-            .unchecked_into::<leaflet::Polyline>()
-            .get_lat_lngs()
-            .iter()
-            .flat_map(|lat_lng_array| {
-                let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
-                lat_lng_array
-                    .iter()
-                    .map(|lat_lng| {
-                        let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
-                        geo::Point(coord! {x: lat_lng.lng(), y: lat_lng.lat()})
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>()
-            .pipe(geo::LineString::from);
+    debug!("create_handler");
+    let create_polygon = ctx.link().callback(Msg::CreatePolygon);
 
-        create_polygon.emit(geo::Polygon::new(exterior, vec![]));
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        let polygon = event.layer().unchecked_into::<leaflet::Polygon>();
+        create_polygon.emit(polygon);
     })
 }
 
 fn update_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
-    let update_polygon = ctx.props().update_polygon.clone();
+    debug!("update_handler");
+    let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
+
     Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        let exterior = event
-            // .unchecked_into::<JsValue>()
+        let layers = event
             .pipe(|x| Reflect::get(&x, &"layers".into()))
             .unwrap()
             .unchecked_into::<leaflet::LayerGroup>()
-            .get_layers()
-            .get(0)
-            .unchecked_into::<leaflet::Polyline>()
-            .get_lat_lngs()
-            .iter()
-            .flat_map(|lat_lng_array| {
-                let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
-                lat_lng_array
-                    .iter()
-                    .map(|lat_lng| {
-                        let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
-                        geo::Point(coord! {x: lat_lng.lng(), y: lat_lng.lat()})
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>()
-            .pipe(geo::LineString::from);
+            .get_layers();
 
-        update_polygon.emit(geo::Polygon::new(exterior, vec![]));
+        for layer in layers {
+            // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
+            let layer: leaflet::Polygon = layer.unchecked_into();
+            update_polygon.emit(layer);
+        }
     })
 }
 
 fn delete_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
-    let delete_polygon = ctx.props().delete_polygon.clone();
-    Closure::<dyn FnMut(_)>::new(move |_event: leaflet::Event| {
-        delete_polygon.emit(());
+    debug!("delete_handler");
+    let delete_polygon = ctx.link().callback(Msg::DeletePolygon);
+
+    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
+        let layers = event
+            .pipe(|x| Reflect::get(&x, &"layers".into()))
+            .unwrap()
+            .unchecked_into::<leaflet::LayerGroup>()
+            .get_layers();
+
+        for layer in layers {
+            // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
+            let layer: leaflet::Polygon = layer.unchecked_into();
+            delete_polygon.emit(layer);
+        }
     })
 }
 
