@@ -204,7 +204,8 @@ impl Component for LocationsView {
                 true
             }
             Msg::SaveFailed(error) => {
-                if let Some(_location) = &mut self.location {
+                if let Some(location) = &mut self.location {
+                    self.location = Some(location.clone());
                     self.status = LocationStatus::error(error);
                     true
                 } else {
