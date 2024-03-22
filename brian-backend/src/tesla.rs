@@ -11,10 +11,12 @@ use robotica_backend::services::tesla::api::{
 use robotica_common::datetime::duration;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::locations::{self, LocationMessage};
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use robotica_common::{robotica, teslamate, unsafe_time_delta};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::Add;
 use std::time::Duration;
@@ -143,59 +145,10 @@ impl Display for Door {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Location {
-    String(String),
-    Nowhere,
-}
-
-impl Location {
-    pub fn from_string(s: String) -> Self {
-        if s == "not_home" {
-            Self::Nowhere
-        } else {
-            Self::String(s)
-        }
-    }
-
-    pub fn censor(&self) -> bool {
-        match self {
-            Self::String(s) => s != "home",
-            Self::Nowhere => false,
-        }
-    }
-
-    pub fn is_at_home(&self) -> bool {
-        match self {
-            Self::String(s) => s == "home",
-            Self::Nowhere => false,
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ShouldPlugin {
     ShouldPlugin,
     NoActionRequired,
-}
-
-pub fn location_stream(state: &mut InitState, tesla: &Config) -> stateful::Receiver<Location> {
-    let location = state
-        .subscriptions
-        .subscribe_into_stateful::<String>(&format!(
-            "state/Tesla/{id}/Location",
-            id = tesla.teslamate_id.to_string()
-        ))
-        .map(|(_, new)| Location::from_string(new));
-
-    let duration = Duration::from_secs(30);
-    delay_input(
-        "tesla_location",
-        duration,
-        location,
-        |(old_location, location)| old_location.is_some() && *location != Location::Nowhere,
-        DelayInputOptions::default(),
-    )
 }
 
 pub fn monitor_teslamate_location(
@@ -245,7 +198,7 @@ pub fn monitor_teslamate_location(
 
 pub fn monitor_tesla_location(
     state: &InitState,
-    location_stream: stateful::Receiver<Location>,
+    location_stream: stateful::Receiver<LocationMessage>,
     charging_info: stateful::Receiver<ChargingInformation>,
 ) -> stateful::Receiver<ShouldPlugin> {
     let message_sink = state.message_sink.clone();
@@ -261,17 +214,21 @@ pub fn monitor_tesla_location(
         };
         let mut old_is_at_home = old_location.is_at_home();
 
-        let mut old_charging_info: ChargingInformation =
-            charging_info_s.recv().await.unwrap_or(ChargingInformation {
-                battery_level: 0,
-                charge_request: ChargeRequest::ChargeTo(0),
-                charging_state: ChargingStateEnum::Disconnected,
-            });
+        let Ok(mut old_charging_info) = charging_info_s.recv().await else {
+            error!("Failed to get initial Tesla charging information");
+            return;
+        };
+
+        debug!("Initial Tesla location: {:?}", old_location);
+        debug!(
+            "Initial Tesla charging information: {:?}",
+            old_charging_info
+        );
 
         loop {
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
-                    if old_is_at_home  {
+                    if old_location.is_at_home()  {
                         announce_charging_state(&old_charging_info, &new_charging_info, &message_sink);
                     }
                     old_charging_info = new_charging_info;
@@ -279,13 +236,34 @@ pub fn monitor_tesla_location(
                 Ok(new_location) = location_s.recv() => {
                     let new_is_at_home = new_location.is_at_home();
 
-                    // Departed location message.
-                    let msg = left_location_message(&old_location);
-                    output_location_message(&old_location, msg, &message_sink);
+                    let old_map: HashMap<i32, &locations::Location> = old_location.locations.iter().map(|l| (l.id, l)).collect();
+                    let new_map: HashMap<i32, &locations::Location> = new_location.locations.iter().map(|l| (l.id, l)).collect();
+                    let old_set: HashSet<i32> = old_location.locations.iter().map(|l| l.id).collect();
+                    let new_set: HashSet<i32> = new_location.locations.iter().map(|l| l.id).collect();
 
-                    // Arrived location message.
-                    let msg = arrived_location_message(&new_location);
-                    output_location_message(&new_location, msg, &message_sink);
+                    new_set.difference(&old_set).for_each(|id| {
+                        if let Some(location) = new_map.get(id)  {
+                            let msg = format!("The Tesla entered {}", location.name);
+                            let msg = if location.announce_on_enter {
+                                new_message(msg, MessagePriority::Low)
+                            } else {
+                                new_private_message(msg, MessagePriority::Low)
+                            };
+                            message_sink.try_send(msg);
+                        }
+                    });
+
+                    old_set.difference(&new_set).for_each(|id| {
+                        if let Some(location) = old_map.get(id)  {
+                            let msg = format!("The Tesla left {}", location.name);
+                            let msg = if location.announce_on_exit {
+                                new_message(msg, MessagePriority::Low)
+                            } else {
+                                new_private_message(msg, MessagePriority::Low)
+                            };
+                            message_sink.try_send(msg);
+                        }
+                    });
 
                     if new_is_at_home {
                         let level = old_charging_info.battery_level;
@@ -344,35 +322,6 @@ pub fn plug_in_reminder(state: &InitState, should_plugin_stream: stateful::Recei
             }
         }
     });
-}
-
-fn output_location_message(
-    location: &Location,
-    msg: Option<String>,
-    message_sink: &stateless::Sender<Message>,
-) {
-    let msg = if location.censor() {
-        msg.map(|msg| new_private_message(msg, MessagePriority::Low))
-    } else {
-        msg.map(|msg| new_message(msg, MessagePriority::Low))
-    };
-    if let Some(msg) = msg {
-        message_sink.try_send(msg);
-    };
-}
-
-fn left_location_message(location: &Location) -> Option<String> {
-    match location {
-        Location::String(location) => Some(format!("The Tesla left {location}")),
-        Location::Nowhere => None,
-    }
-}
-
-fn arrived_location_message(location: &Location) -> Option<String> {
-    match location {
-        Location::String(location) => Some(format!("The Tesla arrived at {location}")),
-        Location::Nowhere => None,
-    }
 }
 
 pub fn monitor_tesla_doors(state: &mut InitState, tesla: &Config) {

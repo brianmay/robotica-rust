@@ -50,3 +50,11 @@ pub struct LocationMessage {
     /// The locations that the object is in
     pub locations: Vec<Location>,
 }
+
+impl LocationMessage {
+    /// Is the object at home?
+    #[must_use]
+    pub fn is_at_home(&self) -> bool {
+        self.locations.iter().any(|l| l.name == "home")
+    }
+}
