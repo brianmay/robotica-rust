@@ -1,8 +1,5 @@
-use super::{control::Control, ActionLocation};
-use crate::components::{
-    forms::{checkbox::Checkbox, text_input::TextInput},
-    locations::map::{MapComponent, ParamObject},
-};
+use super::ActionLocation;
+use crate::components::locations::map::{MapComponent, ParamObject};
 use gloo_net::http::Request;
 use reqwasm::{http::Response, Error};
 use robotica_common::robotica::{
@@ -17,29 +14,27 @@ use yew::{platform::spawn_local, prelude::*};
 
 pub enum Msg {
     LoadFailed(String),
-    SelectLocation(Location),
     Locations(Arc<Vec<Location>>),
-    UpdateName(String),
-    UpdateColor(String),
-    UpdateAnnounceOnEnter(bool),
-    UpdateAnnounceOnExit(bool),
-    Save,
+    SaveLocation(ActionLocation),
     SaveSuccess(Location),
     CreateSuccess(Location),
     SaveFailed(String),
-    Cancel,
     DeleteSuccess(Location),
     CreateLocation(CreateLocation),
     UpdateLocation(ActionLocation),
     DeleteLocation(ActionLocation),
+    RequestItem(Location),
+    RequestList,
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub enum LoadingStatus {
     Loading,
-    Loaded(Arc<Vec<Location>>),
+    Loaded,
     Error(String),
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub enum LocationStatus {
     Unchanged,
     Changed,
@@ -62,6 +57,7 @@ impl LocationStatus {
 
 pub struct LocationsView {
     location: Option<ActionLocation>,
+    list: Arc<Vec<Location>>,
     status: LocationStatus,
     loading_status: LoadingStatus,
 }
@@ -76,7 +72,7 @@ async fn process_response<T: DeserializeOwned + std::fmt::Debug>(
                 .await
                 .map_err(|err| error!("Error parsing server response: {err:?}"))
                 .ok();
-            debug!("api_response: {:?}", api_response);
+            // debug!("api_response: {:?}", api_response);
 
             match (response.ok(), api_response) {
                 (true, Some(ApiResponse::Success(response))) => Ok(response.data),
@@ -100,6 +96,7 @@ impl Component for LocationsView {
             location: None,
             status: LocationStatus::Unchanged,
             loading_status: LoadingStatus::Loading,
+            list: Arc::new(Vec::new()),
         }
     }
 
@@ -111,45 +108,9 @@ impl Component for LocationsView {
                 self.loading_status = LoadingStatus::Error(err);
                 true
             }
-            Msg::SelectLocation(location) => {
-                self.location = Some(ActionLocation::Update(location));
-                self.status = LocationStatus::Unchanged;
-                true
-            }
             Msg::Locations(locations) => {
-                self.loading_status = LoadingStatus::Loaded(locations);
-                true
-            }
-            Msg::UpdateName(name) => {
-                debug!("Updating name: {}", name);
-                if let Some(location) = &mut self.location {
-                    location.set_name(name);
-                    self.status = LocationStatus::Changed;
-                }
-                true
-            }
-            Msg::UpdateColor(color) => {
-                debug!("Updating color: {}", color);
-                if let Some(location) = &mut self.location {
-                    location.set_color(color);
-                    self.status = LocationStatus::Changed;
-                }
-                true
-            }
-            Msg::UpdateAnnounceOnEnter(announce_on_enter) => {
-                debug!("Updating announce_on_enter: {}", announce_on_enter);
-                if let Some(location) = &mut self.location {
-                    location.set_announce_on_enter(announce_on_enter);
-                    self.status = LocationStatus::Changed;
-                }
-                true
-            }
-            Msg::UpdateAnnounceOnExit(announce_on_exit) => {
-                debug!("Updating announce_on_exit: {}", announce_on_exit);
-                if let Some(location) = &mut self.location {
-                    location.set_announce_on_exit(announce_on_exit);
-                    self.status = LocationStatus::Changed;
-                }
+                self.loading_status = LoadingStatus::Loaded;
+                self.list = locations;
                 true
             }
             Msg::CreateLocation(location) => {
@@ -161,8 +122,8 @@ impl Component for LocationsView {
             }
             Msg::UpdateLocation(location) => {
                 debug!("Updating location: {:?}", location);
-                self.status = LocationStatus::Saving;
-                save_location(&location, ctx);
+                self.location = Some(location);
+                self.status = LocationStatus::Changed;
                 true
             }
             Msg::DeleteLocation(location) => {
@@ -174,23 +135,16 @@ impl Component for LocationsView {
                 }
                 true
             }
-            Msg::Save => match &mut self.location {
-                Some(location_state) if self.status.can_save() => {
+            Msg::SaveLocation(location) => {
+                if self.status.can_save() {
                     self.status = LocationStatus::Saving;
-                    save_location(location_state, ctx);
+                    save_location(&location, ctx);
                     true
-                }
-
-                Some(_location_state) => {
+                } else {
                     debug!("Status wrong, not saving");
                     false
                 }
-
-                None => {
-                    debug!("No location selected, not saving");
-                    false
-                }
-            },
+            }
             Msg::CreateSuccess(location) => {
                 self.location = location.pipe(ActionLocation::Update).pipe(Some);
                 self.status = LocationStatus::Unchanged;
@@ -212,96 +166,28 @@ impl Component for LocationsView {
                     false
                 }
             }
-            Msg::Cancel => {
-                debug!("Cancelling");
-                self.location = None;
-                self.status = LocationStatus::Unchanged;
-                true
-            }
             Msg::DeleteSuccess(_location) => {
                 self.location = None;
                 self.status = LocationStatus::Unchanged;
+                // self.loading_status = LoadingStatus::Loading;
                 load_list(ctx);
+                true
+            }
+            Msg::RequestItem(location) => {
+                self.location = Some(ActionLocation::Update(location));
+                self.status = LocationStatus::Unchanged;
+                true
+            }
+            Msg::RequestList => {
+                self.location = None;
+                self.status = LocationStatus::Unchanged;
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let locations = match &self.loading_status {
-            LoadingStatus::Loaded(locations) => locations.clone(),
-            LoadingStatus::Error(_) | LoadingStatus::Loading => Arc::new(Vec::new()),
-        };
-
-        let status_msg = match &self.status {
-            LocationStatus::Unchanged => "Unchanged".to_string(),
-            LocationStatus::Changed => "Changed".to_string(),
-            LocationStatus::Saving => "Saving".to_string(),
-            LocationStatus::Error(err) => format!("Error {err}"),
-        };
-
-        let controls = if let Some(location) = &self.location {
-            let save = ctx.link().callback(|e: MouseEvent| {
-                e.prevent_default();
-                Msg::Save
-            });
-
-            let cancel = ctx.link().callback(|e: MouseEvent| {
-                e.prevent_default();
-                Msg::Cancel
-            });
-
-            let update_name = ctx.link().callback(Msg::UpdateName);
-            let update_color = ctx.link().callback(Msg::UpdateColor);
-            let update_announce_on_enter = ctx.link().callback(|x| {
-                debug! {x};
-                Msg::UpdateAnnounceOnEnter(x != "true")
-            });
-            let update_announce_on_exit = ctx
-                .link()
-                .callback(|x| Msg::UpdateAnnounceOnExit(x != "true"));
-
-            let disable_save = !self.status.can_save();
-
-            let name = location.name();
-
-            html! {
-                <>
-                    <h1>{name.clone()}</h1>
-                    <form>
-                        <TextInput id="name" label="Name" value={name} on_change={update_name} />
-                        <TextInput id="color" label="Color" value={location.color()} on_change={update_color} />
-                        <Checkbox id="announce_on_enter" label="Announce on enter" value={location.announce_on_enter()} on_change={update_announce_on_enter} />
-                        <Checkbox id="announce_on_exit" label="Announce on exit" value={location.announce_on_exit()} on_change={update_announce_on_exit} />
-
-                        <button onclick={save} disabled={disable_save} >
-                            {"Save"}
-                        </button>
-                        <button onclick={cancel} >
-                            {"Cancel"}
-                        </button>
-                        <p>{status_msg}</p>
-                    </form>
-                </>
-            }
-        } else {
-            let select_location = ctx.link().callback(Msg::SelectLocation);
-
-            let msg = match &self.loading_status {
-                LoadingStatus::Loading => "Loading".to_string(),
-                LoadingStatus::Loaded(_) => "Loaded".to_string(),
-                LoadingStatus::Error(err) => format!("Error {err}"),
-            };
-
-            html! {
-                <>
-                    <h1>{"Locations"}</h1>
-                    <Control select_location={select_location} locations={locations.clone()}/>
-                    <p>{msg}</p>
-                    <p>{status_msg}</p>
-                </>
-            }
-        };
+        let locations = self.list.clone();
 
         let object = if let Some(location) = &self.location {
             ParamObject::Item(location.clone())
@@ -309,17 +195,27 @@ impl Component for LocationsView {
             ParamObject::List(locations)
         };
 
-        {
-            let create_location = ctx.link().callback(Msg::CreateLocation);
-            let update_location = ctx.link().callback(Msg::UpdateLocation);
-            let delete_location = ctx.link().callback(Msg::DeleteLocation);
+        let create_location = ctx.link().callback(Msg::CreateLocation);
+        let update_location = ctx.link().callback(Msg::UpdateLocation);
+        let delete_location = ctx.link().callback(Msg::DeleteLocation);
+        let save_location = ctx.link().callback(Msg::SaveLocation);
+        let request_item = ctx.link().callback(Msg::RequestItem);
+        let request_list = ctx.link().callback(|()| Msg::RequestList);
 
-            html! {
-                <>
-                    <MapComponent object={object} create_location={create_location} update_location={update_location} delete_location={delete_location} />
-                    {controls}
-                </>
-            }
+        html! {
+            <>
+                <MapComponent
+                    object={object}
+                    status={self.status.clone()}
+                    loading_status={self.loading_status.clone()}
+                    create_location={create_location}
+                    update_location={update_location}
+                    delete_location={delete_location}
+                    save_location={save_location}
+                    request_item={request_item}
+                    request_list={request_list}
+                    />
+            </>
         }
     }
 }

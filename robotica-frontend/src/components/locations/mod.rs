@@ -1,6 +1,7 @@
 use robotica_common::robotica::locations::{CreateLocation, Location};
 
-pub mod control;
+pub mod editor;
+pub mod list;
 pub mod locations_view;
 pub mod map;
 
@@ -18,12 +19,12 @@ impl ActionLocation {
         }
     }
 
-    // fn set_bounds(&mut self, polygon: geo::Polygon) {
-    //     match self {
-    //         ActionLocation::Create(location) => location.bounds = polygon,
-    //         ActionLocation::Update(location) => location.bounds = polygon,
-    //     }
-    // }
+    fn set_bounds(&mut self, polygon: geo::Polygon) {
+        match self {
+            ActionLocation::Create(location) => location.bounds = polygon,
+            ActionLocation::Update(location) => location.bounds = polygon,
+        }
+    }
 
     fn set_color(&mut self, color: String) {
         match self {

@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    robotica_wasm::draw_control,
+    components::locations::{editor::EditorView, list::List},
+    robotica_wasm::{
+        draw_control,
+        robotica::{Button, ButtonOptions},
+    },
     services::websocket::{Subscription, WebsocketService, WsEvent},
 };
 use geo::coord;
@@ -20,7 +24,11 @@ use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{Element, HtmlElement, Node};
 use yew::prelude::*;
 
-use super::ActionLocation;
+use super::{
+    editor::UpdateLocation,
+    locations_view::{LoadingStatus, LocationStatus},
+    ActionLocation,
+};
 
 pub enum Msg {
     Car(LocationMessage),
@@ -30,6 +38,12 @@ pub enum Msg {
     CreatePolygon(leaflet::Polygon),
     UpdatePolygon(leaflet::Polygon),
     DeletePolygon(leaflet::Polygon),
+    UpdateLocation(UpdateLocation),
+    SelectLocation(Location),
+    ShowList,
+    SaveLocation,
+    CancelLocation,
+    CancelList,
 }
 
 #[derive(PartialEq, Clone)]
@@ -49,7 +63,7 @@ struct MapActionLocation {
 }
 
 enum MapObject {
-    List(Vec<MapLocation>),
+    List(Arc<Vec<Location>>, Vec<MapLocation>, bool),
     Item(MapActionLocation),
     None,
 }
@@ -68,7 +82,7 @@ impl MapObject {
 
     fn get_action_location_by_id(&self, id: i32) -> Option<ActionLocation> {
         match self {
-            MapObject::List(locations) => locations
+            MapObject::List(_, locations, _) => locations
                 .iter()
                 .find(|location| location.leaflet_id == id)
                 .map(|location| ActionLocation::Update(location.location.clone())),
@@ -97,10 +111,10 @@ pub struct MapComponent {
     object: MapObject,
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
-    draw_control: draw_control::DrawControl,
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
+    _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
     car_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
     car_marker: Option<leaflet::Marker>,
@@ -113,6 +127,11 @@ pub struct Props {
     pub create_location: Callback<CreateLocation>,
     pub update_location: Callback<ActionLocation>,
     pub delete_location: Callback<ActionLocation>,
+    pub save_location: Callback<ActionLocation>,
+    pub request_item: Callback<Location>,
+    pub request_list: Callback<()>,
+    pub status: LocationStatus,
+    pub loading_status: LoadingStatus,
 }
 
 impl MapComponent {
@@ -146,7 +165,7 @@ impl MapComponent {
         });
     }
 
-    fn set_list(&mut self, locations: &[Location]) {
+    fn set_list(&mut self, locations: &Arc<Vec<Location>>) {
         self.draw_layer.clear_layers();
         let marked_locations = self.get_marked_locations();
 
@@ -176,7 +195,7 @@ impl MapComponent {
             })
             .collect();
 
-        self.object = MapObject::List(list);
+        self.object = MapObject::List(locations.clone(), list, false);
     }
 
     fn get_marked_locations(&self) -> Vec<&Location> {
@@ -197,7 +216,7 @@ impl MapComponent {
 
     fn iterate_over_layers(&self, f: impl Fn(&ActionLocation, leaflet::Layer)) {
         match &self.object {
-            MapObject::List(locations) => {
+            MapObject::List(_, locations, _) => {
                 for location in locations {
                     let layer = self.draw_layer.get_layer(location.leaflet_id);
                     let location = ActionLocation::Update(location.location.clone());
@@ -224,19 +243,24 @@ impl MapComponent {
         });
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn position_map(&self) {
         match &self.object {
             MapObject::None => {
+                debug!("fit_world - None");
                 self.map.fit_world();
             }
-            MapObject::List(locations) => {
+            MapObject::List(_, locations, _) => {
                 if locations.is_empty() {
+                    debug!("fit_world - List empty");
                     self.map.fit_world();
                 } else {
+                    debug!("fit_bounds - List - {:?}", self.draw_layer.get_bounds());
                     self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
                 }
             }
             MapObject::Item(_location) => {
+                debug!("fit_bounds - Item");
                 self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             }
         }
@@ -328,10 +352,20 @@ impl Component for MapComponent {
         let create_handler = create_handler(ctx);
         let update_handler = update_handler(ctx);
         let delete_handler = delete_handler(ctx);
+        let show_list_handler = {
+            let callback = ctx.link().callback(|()| Msg::ShowList);
+            Closure::<dyn FnMut(_)>::new(move |_event| {
+                debug!("show_locations_handler");
+                callback.emit(());
+            })
+        };
 
         leaflet_map.on("draw:created", create_handler.as_ref());
         leaflet_map.on("draw:edited", update_handler.as_ref());
         leaflet_map.on("draw:deleted", delete_handler.as_ref());
+        leaflet_map.on("show_locations", show_list_handler.as_ref());
+
+        Button::new(&ButtonOptions::default()).add_to(&leaflet_map);
 
         add_tile_layer(&leaflet_map);
 
@@ -347,14 +381,16 @@ impl Component for MapComponent {
             object: MapObject::None,
             container,
             draw_layer,
-            draw_control,
+            // draw_control,
             _create_handler: create_handler,
             _update_handler: update_handler,
             _delete_handler: delete_handler,
+            _show_locations_handler: show_list_handler,
             car_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
             car_marker: None,
             car: None,
+            // status: LocationStatus::Unchanged,
         }
         .tap_mut(|s| Self::set_object(s, object))
         .tap(Self::position_map)
@@ -379,6 +415,7 @@ impl Component for MapComponent {
                 }
                 self.car = Some(location);
                 self.update_location_styles();
+                false
             }
             Msg::SubscribedCar(subscription) => {
                 // If car_subscription is unsubscribed, we lost interest in this subscription.
@@ -387,9 +424,11 @@ impl Component for MapComponent {
                 if matches!(self.car_subscription, SubscriptionStatus::InProgress) {
                     self.car_subscription = SubscriptionStatus::Subscribed(subscription);
                 }
+                false
             }
             Msg::SubscribedEvents(subscription) => {
                 self.event_subscription = Some(subscription);
+                false
             }
             Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
                 let is_subscribed =
@@ -404,6 +443,7 @@ impl Component for MapComponent {
                 }
 
                 self.user = Some(user);
+                false
             }
             Msg::MqttEvent(WsEvent::Disconnected(_reason)) => {
                 self.user = None;
@@ -414,6 +454,7 @@ impl Component for MapComponent {
                 }
                 self.car_marker = None;
                 self.update_location_styles();
+                false
             }
             Msg::CreatePolygon(polygon) => {
                 let exterior = polygon
@@ -441,46 +482,37 @@ impl Component for MapComponent {
                 };
 
                 ctx.props().create_location.emit(location);
+                false
             }
             Msg::UpdatePolygon(polygon) => {
-                let exterior = polygon
-                    .get_lat_lngs()
-                    .iter()
-                    .flat_map(|lat_lng_array| {
-                        let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
-                        lat_lng_array
-                            .iter()
-                            .map(|lat_lng| {
-                                let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
-                                coord! {x: lat_lng.lng(), y: lat_lng.lat()}
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
-                    .pipe(geo::LineString::from);
-
                 let id = self.draw_layer.get_layer_id(&polygon);
                 let location = self.object.get_action_location_by_id(id);
 
-                let new_bounds = geo::Polygon::new(exterior, vec![]);
-
-                let location = match location {
-                    Some(ActionLocation::Update(location)) => {
-                        let mut location = location;
-                        location.bounds = new_bounds;
-                        ActionLocation::Update(location).pipe(Some)
-                    }
-                    Some(ActionLocation::Create(location)) => {
-                        let mut location = location;
-                        location.bounds = new_bounds;
-                        ActionLocation::Create(location).pipe(Some)
-                    }
-                    None => None,
-                };
-
                 if let Some(location) = location {
-                    ctx.props().update_location.emit(location);
+                    let exterior = polygon
+                        .get_lat_lngs()
+                        .iter()
+                        .flat_map(|lat_lng_array| {
+                            let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                            lat_lng_array
+                                .iter()
+                                .map(|lat_lng| {
+                                    let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                                    coord! {x: lat_lng.lng(), y: lat_lng.lat()}
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>()
+                        .pipe(geo::LineString::from);
+
+                    let new_bounds = geo::Polygon::new(exterior, vec![]);
+                    // let updates = UpdateLocation::Bounds(new_bounds);
+
+                    let mut location = location;
+                    location.set_bounds(new_bounds);
+                    ctx.props().save_location.emit(location.clone());
                 }
+                false
             }
             Msg::DeletePolygon(polygon) => {
                 let id = self.draw_layer.get_layer_id(&polygon);
@@ -488,37 +520,132 @@ impl Component for MapComponent {
                 if let Some(location) = location {
                     ctx.props().delete_location.emit(location);
                 }
+                false
+            }
+            Msg::UpdateLocation(updates) => {
+                if let MapObject::Item(location) = &mut self.object {
+                    let mut location = location.location.clone();
+                    updates.apply_to_location(&mut location);
+                    ctx.props().update_location.emit(location.clone());
+                }
+                false
+            }
+            Msg::ShowList => {
+                if let MapObject::List(_, _, show_locations) = &mut self.object {
+                    *show_locations = true;
+                }
+                true
+            }
+            Msg::SaveLocation => {
+                if let MapObject::Item(location) = &self.object {
+                    ctx.props().save_location.emit(location.location.clone());
+                }
+                false
+            }
+            Msg::CancelLocation => {
+                if let MapObject::Item(_) = &self.object {
+                    ctx.props().request_list.emit(());
+                }
+                false
+            }
+            Msg::CancelList => {
+                if let MapObject::List(_, _, show_locations) = &mut self.object {
+                    *show_locations = false;
+                }
+                true
+            }
+            Msg::SelectLocation(location) => {
+                ctx.props().request_item.emit(location);
+                false
             }
         }
-        false
     }
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         let props = ctx.props();
 
-        if props.object == old_props.object {
-            return false;
+        if props.object != old_props.object {
+            self.set_object(&props.object);
+            self.position_map();
         }
 
-        match (&props.object, &old_props.object) {
-            (ParamObject::Item(_), ParamObject::Item(_))
-            | (ParamObject::List(_), ParamObject::List(_)) => {}
-            _ => {
-                self.map.remove_control(&self.draw_control);
-                self.draw_control = draw_control(&self.draw_layer);
-                self.map.add_control(&self.draw_control);
-            }
-        }
-
-        self.set_object(&props.object);
-        self.position_map();
-        false
+        props.object != old_props.object
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let props = ctx.props();
+
+        let classes = classes!("map-container", "component-container");
+        let status = &ctx.props().status;
+        let update_location = ctx.link().callback(Msg::UpdateLocation);
+        let on_save = ctx.link().callback(|()| Msg::SaveLocation);
+        let on_cancel_location = ctx.link().callback(|()| Msg::CancelLocation);
+        let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
+        let select_location = ctx.link().callback(Msg::SelectLocation);
+
+        let status_msg = match (&props.status, &props.loading_status) {
+            (LocationStatus::Unchanged, LoadingStatus::Error(err)) => {
+                format!("LoadingError {err}").pipe(Some)
+            }
+            (LocationStatus::Unchanged, LoadingStatus::Loading) => "Loading".to_string().pipe(Some),
+            (LocationStatus::Unchanged, LoadingStatus::Loaded) => None,
+            (LocationStatus::Changed, _) => "Changed".to_string().pipe(Some),
+            (LocationStatus::Saving, _) => "Saving".to_string().pipe(Some),
+            (LocationStatus::Error(err), _) => format!("Error {err}").pipe(Some),
+        };
+
+        let controls = match &self.object {
+            MapObject::List(locations, _, true) => {
+                html! {
+                    <div class="list">
+                        <List
+                            select_location={select_location}
+                            locations={locations.clone()}
+                            cancel={on_cancel_list}
+                        />
+                        if let Some(status_msg) = status_msg {
+                            <div class="status">
+                                {status_msg}
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            MapObject::List(_, _, false) => {
+                html! {
+                    if let Some(status_msg) = status_msg {
+                        <div class="status">
+                            {status_msg}
+                        </div>
+                    }
+                }
+            }
+            MapObject::Item(location) => {
+                html! {
+                    <div class="editor">
+                        <EditorView
+                            location={location.location.clone()}
+                            status={status.clone()}
+                            update_location={update_location}
+                            on_save={on_save}
+                            on_cancel={on_cancel_location}
+                        />
+                    </div>
+                }
+            }
+            MapObject::None => html! {
+                if let Some(status_msg) = status_msg {
+                    <div class="status">
+                        {status_msg}
+                    </div>
+                }
+            },
+        };
+
         html! {
-            <div class="map-container component-container">
+            <div class={classes}>
                 {self.render_map()}
+                {controls}
             </div>
         }
     }

@@ -58,3 +58,30 @@ macro_rules! create_object_with_properties {
 }
 
 pub(crate) use create_object_with_properties;
+
+macro_rules! object_property_set {
+    ($a:ident, $b:ty) => {
+        $crate::paste! {
+            pub fn [<set_ $a>](&mut self, val: $b) {
+                let _ = js_sys::Reflect::set(
+                    self.as_ref(),
+                    &wasm_bindgen::JsValue::from(stringify!($a)),
+                    &wasm_bindgen::JsValue::from(val),
+                );
+            }
+        }
+    };
+    ($a:ident, $b:ident, $c:ty) => {
+        $crate::paste! {
+            pub fn [<set_ $a>](&mut self, val: $c) {
+                let _ = js_sys::Reflect::set(
+                    self.as_ref(),
+                    &wasm_bindgen::JsValue::from(stringify!($b)),
+                    &wasm_bindgen::JsValue::from(val),
+                );
+            }
+        }
+    };
+}
+
+pub(crate) use object_property_set;

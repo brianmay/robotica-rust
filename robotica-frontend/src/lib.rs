@@ -66,7 +66,7 @@ fn switch(selected_route: Route) -> Html {
         Route::Room { id } => html! { <Room id={id}/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
-        Route::Locations => html! { <LocationsView/> },
+        Route::Locations => return html! { <><NavBar/><LocationsView/></> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
