@@ -47,6 +47,7 @@ impl TryFrom<&EslConnection> for Call {
 #[derive(Debug)]
 enum OurResponse {
     Allow(Call, phone_db::Response),
+    #[allow(dead_code)]
     VoiceMail(Call, phone_db::Response),
     Error(Call),
     Unknown,

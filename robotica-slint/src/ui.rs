@@ -32,6 +32,7 @@ mod slint {
     #![allow(clippy::float_cmp)]
     #![allow(clippy::needless_pass_by_ref_mut)]
     #![allow(unused_imports)]
+    #![allow(dead_code)]
 
     slint::include_modules!();
 }
