@@ -225,11 +225,7 @@ fn get_current_price_response<'a>(
 }
 
 fn get_weighted_price(prices: &[api::PriceResponse], dt: &DateTime<Utc>) -> Option<f32> {
-    let pos = prices.iter().position(|pr| is_period_current(pr, dt));
-
-    let Some(pos) = pos else {
-        return None;
-    };
+    let pos = prices.iter().position(|pr| is_period_current(pr, dt))?;
 
     let prefix_pos = if pos > 0 { pos - 1 } else { 0 };
     let postfix_pos = if pos + 1 < prices.len() { pos + 1 } else { pos };

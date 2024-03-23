@@ -338,17 +338,22 @@
           }];
         };
       in {
+        # Disable coverage checks as broken since Rust 1.77:
+        # Mar 27 05:16:41.964 ERROR cargo_tarpaulin::test_loader: Error parsing debug information from binary: An I/O error occurred while reading.
+        # Mar 27 05:16:41.964  WARN cargo_tarpaulin::test_loader: Stripping symbol information can prevent tarpaulin from working. If you want to do this pass `--engine=llvm`
+        # Mar 27 05:16:41.965 ERROR cargo_tarpaulin: Error while parsing binary or DWARF info.
+        # Error: "Error while parsing binary or DWARF info."
         checks = {
           robotica-slint-clippy = robotica-slint.clippy;
-          robotica-slint-coverage = robotica-slint.coverage;
+          # robotica-slint-coverage = robotica-slint.coverage;
           robotica-slint = robotica-slint.pkg;
           robotica-frontend-clippy = robotica-frontend.clippy;
           robotica-frontend = robotica-frontend.pkg;
           brian-backend-clippy = brian-backend.clippy;
-          brian-backend-coverage = brian-backend.coverage;
+          # brian-backend-coverage = brian-backend.coverage;
           brian-backend = brian-backend.pkg;
           freeswitch-clippy = freeswitch.clippy;
-          freeswitch-coverage = freeswitch.coverage;
+          # freeswitch-coverage = freeswitch.coverage;
           freeswitch = freeswitch.pkg;
         };
 

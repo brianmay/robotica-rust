@@ -101,6 +101,7 @@ impl MapObject {
 
 enum SubscriptionStatus {
     InProgress,
+    #[allow(dead_code)]
     Subscribed(Subscription),
     Unsubscribed,
 }
