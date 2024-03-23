@@ -55,6 +55,6 @@ impl LocationMessage {
     /// Is the object at home?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
-        self.locations.iter().any(|l| l.name == "home")
+        self.locations.iter().any(|l| l.name == "Home")
     }
 }
