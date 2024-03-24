@@ -247,20 +247,16 @@ impl MapComponent {
     fn position_map(&self) {
         match &self.object {
             MapObject::None => {
-                debug!("fit_world - None");
                 self.map.fit_world();
             }
             MapObject::List(_, locations, _) => {
                 if locations.is_empty() {
-                    debug!("fit_world - List empty");
                     self.map.fit_world();
                 } else {
-                    debug!("fit_bounds - List - {:?}", self.draw_layer.get_bounds());
                     self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
                 }
             }
             MapObject::Item(_location) => {
-                debug!("fit_bounds - Item");
                 self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             }
         }
@@ -355,7 +351,6 @@ impl Component for MapComponent {
         let show_list_handler = {
             let callback = ctx.link().callback(|()| Msg::ShowList);
             Closure::<dyn FnMut(_)>::new(move |_event| {
-                debug!("show_locations_handler");
                 callback.emit(());
             })
         };
@@ -572,7 +567,7 @@ impl Component for MapComponent {
             self.position_map();
         }
 
-        props.object != old_props.object
+        true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

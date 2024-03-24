@@ -18,8 +18,9 @@ pub enum Msg {
     SaveLocation(ActionLocation),
     SaveSuccess(Location),
     CreateSuccess(Location),
-    SaveFailed(String),
+    SaveFailed(ActionLocation, String),
     DeleteSuccess(Location),
+    DeleteFailed(Location, String),
     CreateLocation(CreateLocation),
     UpdateLocation(ActionLocation),
     DeleteLocation(ActionLocation),
@@ -27,14 +28,14 @@ pub enum Msg {
     RequestList,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoadingStatus {
     Loading,
     Loaded,
     Error(String),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocationStatus {
     Unchanged,
     Changed,
@@ -117,7 +118,7 @@ impl Component for LocationsView {
                 debug!("Creating location: {:?}", location);
                 let action_location = ActionLocation::Create(location);
                 self.status = LocationStatus::Saving;
-                save_location(&action_location, ctx);
+                save_location(action_location, ctx);
                 true
             }
             Msg::UpdateLocation(location) => {
@@ -129,7 +130,7 @@ impl Component for LocationsView {
             Msg::DeleteLocation(location) => {
                 debug!("Deleting location: {:?}", location);
                 self.status = LocationStatus::Saving;
-                match &location {
+                match location {
                     ActionLocation::Create(_) => self.location = None,
                     ActionLocation::Update(location) => delete_location(location, ctx),
                 }
@@ -138,7 +139,7 @@ impl Component for LocationsView {
             Msg::SaveLocation(location) => {
                 if self.status.can_save() {
                     self.status = LocationStatus::Saving;
-                    save_location(&location, ctx);
+                    save_location(location, ctx);
                     true
                 } else {
                     debug!("Status wrong, not saving");
@@ -157,20 +158,20 @@ impl Component for LocationsView {
                 load_list(ctx);
                 true
             }
-            Msg::SaveFailed(error) => {
-                if let Some(location) = &mut self.location {
-                    self.location = Some(location.clone());
-                    self.status = LocationStatus::error(error);
-                    true
-                } else {
-                    false
-                }
+            Msg::SaveFailed(location, error) => {
+                self.status = LocationStatus::error(error);
+                self.location = Some(location);
+                true
             }
             Msg::DeleteSuccess(_location) => {
                 self.location = None;
                 self.status = LocationStatus::Unchanged;
-                // self.loading_status = LoadingStatus::Loading;
+                self.loading_status = LoadingStatus::Loading;
                 load_list(ctx);
+                true
+            }
+            Msg::DeleteFailed(_location, error) => {
+                self.status = LocationStatus::error(error);
                 true
             }
             Msg::RequestItem(location) => {
@@ -203,19 +204,17 @@ impl Component for LocationsView {
         let request_list = ctx.link().callback(|()| Msg::RequestList);
 
         html! {
-            <>
-                <MapComponent
-                    object={object}
-                    status={self.status.clone()}
-                    loading_status={self.loading_status.clone()}
-                    create_location={create_location}
-                    update_location={update_location}
-                    delete_location={delete_location}
-                    save_location={save_location}
-                    request_item={request_item}
-                    request_list={request_list}
-                    />
-            </>
+            <MapComponent
+                object={object}
+                status={self.status.clone()}
+                loading_status={self.loading_status.clone()}
+                create_location={create_location}
+                update_location={update_location}
+                delete_location={delete_location}
+                save_location={save_location}
+                request_item={request_item}
+                request_list={request_list}
+                />
         }
     }
 }
@@ -238,14 +237,13 @@ fn load_list(ctx: &Context<LocationsView>) {
     });
 }
 
-fn save_location(location: &ActionLocation, ctx: &Context<LocationsView>) {
+fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
     debug!("Saving location: {:?}", location);
-    let location = location.clone();
     let link = ctx.link().clone();
     spawn_local(async move {
         debug!("Sending save request");
 
-        let response = match location {
+        let response = match &location {
             ActionLocation::Create(location) => Request::post("/api/locations/create")
                 .json(&location)
                 .unwrap()
@@ -272,7 +270,7 @@ fn save_location(location: &ActionLocation, ctx: &Context<LocationsView>) {
             }
             Err(err) => {
                 debug!("Failed to save location: {err}");
-                Msg::SaveFailed(format!("Failed to save location: {err}"))
+                Msg::SaveFailed(location, format!("Failed to save location: {err}"))
             }
         };
 
@@ -280,10 +278,9 @@ fn save_location(location: &ActionLocation, ctx: &Context<LocationsView>) {
     });
 }
 
-fn delete_location(location: &Location, ctx: &Context<LocationsView>) {
+fn delete_location(location: Location, ctx: &Context<LocationsView>) {
     debug!("Deleting location: {:?}", location);
     let id = location.id;
-    let location = location.clone();
 
     let link = ctx.link().clone();
     spawn_local(async move {
@@ -301,7 +298,7 @@ fn delete_location(location: &Location, ctx: &Context<LocationsView>) {
             }
             Err(err) => {
                 debug!("Failed to delete location: {err}");
-                Msg::SaveFailed(format!("Failed to delete location: {err}"))
+                Msg::DeleteFailed(location, format!("Failed to delete location: {err}"))
             }
         };
 
