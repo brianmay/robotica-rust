@@ -119,6 +119,7 @@ pub struct MapComponent {
     event_subscription: Option<Subscription>,
     car_marker: Option<leaflet::Marker>,
     car: Option<LocationMessage>,
+    connected: bool,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -376,7 +377,6 @@ impl Component for MapComponent {
             object: MapObject::None,
             container,
             draw_layer,
-            // draw_control,
             _create_handler: create_handler,
             _update_handler: update_handler,
             _delete_handler: delete_handler,
@@ -385,7 +385,7 @@ impl Component for MapComponent {
             event_subscription: None,
             car_marker: None,
             car: None,
-            // status: LocationStatus::Unchanged,
+            connected: false,
         }
         .tap_mut(|s| Self::set_object(s, object))
         .tap(Self::position_map)
@@ -439,7 +439,8 @@ impl Component for MapComponent {
                 }
 
                 self.user = Some(user);
-                false
+                self.connected = true;
+                true
             }
             Msg::MqttEvent(WsEvent::Disconnected(_reason)) => {
                 self.user = None;
@@ -450,7 +451,8 @@ impl Component for MapComponent {
                 }
                 self.car_marker = None;
                 self.update_location_styles();
-                false
+                self.connected = false;
+                true
             }
             Msg::CreatePolygon(polygon) => {
                 let exterior = polygon
@@ -580,16 +582,22 @@ impl Component for MapComponent {
         let on_cancel_location = ctx.link().callback(|()| Msg::CancelLocation);
         let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
         let select_location = ctx.link().callback(Msg::SelectLocation);
+        let connected = self.connected | !self.user.as_ref().map_or(true, |user| user.is_admin);
 
-        let status_msg = match (&props.status, &props.loading_status) {
-            (LocationStatus::Unchanged, LoadingStatus::Error(err)) => {
+        let status_msg = match (&props.status, &props.loading_status, connected) {
+            (LocationStatus::Unchanged, LoadingStatus::Error(err), _) => {
                 format!("LoadingError {err}").pipe(Some)
             }
-            (LocationStatus::Unchanged, LoadingStatus::Loading) => "Loading".to_string().pipe(Some),
-            (LocationStatus::Unchanged, LoadingStatus::Loaded) => None,
-            (LocationStatus::Changed, _) => "Changed".to_string().pipe(Some),
-            (LocationStatus::Saving, _) => "Saving".to_string().pipe(Some),
-            (LocationStatus::Error(err), _) => format!("Error {err}").pipe(Some),
+            (LocationStatus::Unchanged, LoadingStatus::Loading, _) => {
+                "Loading".to_string().pipe(Some)
+            }
+            (LocationStatus::Unchanged, LoadingStatus::Loaded, false) => {
+                "Disconnected".to_string().pipe(Some)
+            }
+            (LocationStatus::Unchanged, LoadingStatus::Loaded, true) => None,
+            (LocationStatus::Changed, _, _) => "Changed".to_string().pipe(Some),
+            (LocationStatus::Saving, _, _) => "Saving".to_string().pipe(Some),
+            (LocationStatus::Error(err), _, _) => format!("Error {err}").pipe(Some),
         };
 
         let controls = match &self.object {
