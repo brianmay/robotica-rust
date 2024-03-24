@@ -265,7 +265,7 @@ pub fn monitor_tesla_location(
                         }
                     });
 
-                    if new_is_at_home {
+                    if !old_is_at_home && new_is_at_home {
                         let level = old_charging_info.battery_level;
                         let ChargeRequest::ChargeTo(limit) = old_charging_info.charge_request;
                         let msg = if level < limit {
