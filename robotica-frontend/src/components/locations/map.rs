@@ -403,6 +403,7 @@ impl Component for MapComponent {
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        let props = ctx.props();
         match msg {
             Msg::Car(location) => {
                 let position = location.position;
@@ -481,7 +482,7 @@ impl Component for MapComponent {
                     announce_on_exit: false,
                 };
 
-                ctx.props().create_location.emit(location);
+                props.create_location.emit(location);
                 false
             }
             Msg::UpdatePolygon(polygon) => {
@@ -510,7 +511,7 @@ impl Component for MapComponent {
 
                     let mut location = location;
                     location.set_bounds(new_bounds);
-                    ctx.props().save_location.emit(location.clone());
+                    props.save_location.emit(location.clone());
                 }
                 false
             }
@@ -518,7 +519,7 @@ impl Component for MapComponent {
                 let id = self.draw_layer.get_layer_id(&polygon);
                 let location = self.object.get_action_location_by_id(id);
                 if let Some(location) = location {
-                    ctx.props().delete_location.emit(location);
+                    props.delete_location.emit(location);
                 }
                 false
             }
@@ -526,25 +527,27 @@ impl Component for MapComponent {
                 if let MapObject::Item(location) = &mut self.object {
                     let mut location = location.location.clone();
                     updates.apply_to_location(&mut location);
-                    ctx.props().update_location.emit(location.clone());
+                    props.update_location.emit(location.clone());
                 }
                 false
             }
             Msg::ShowList => {
                 if let MapObject::List(_, _, show_locations) = &mut self.object {
-                    *show_locations = true;
+                    if props.loading_status == LoadingStatus::Loaded {
+                        *show_locations = true;
+                    }
                 }
                 true
             }
             Msg::SaveLocation => {
                 if let MapObject::Item(location) = &self.object {
-                    ctx.props().save_location.emit(location.location.clone());
+                    props.save_location.emit(location.location.clone());
                 }
                 false
             }
             Msg::CancelLocation => {
                 if let MapObject::Item(_) = &self.object {
-                    ctx.props().request_list.emit(());
+                    props.request_list.emit(());
                 }
                 false
             }
@@ -555,7 +558,7 @@ impl Component for MapComponent {
                 true
             }
             Msg::SelectLocation(location) => {
-                ctx.props().request_item.emit(location);
+                props.request_item.emit(location);
                 false
             }
         }
@@ -604,9 +607,7 @@ impl Component for MapComponent {
                             cancel={on_cancel_list}
                         />
                         if let Some(status_msg) = status_msg {
-                            <div class="status">
-                                {status_msg}
-                            </div>
+                            {status_msg}
                         }
                     </div>
                 }
