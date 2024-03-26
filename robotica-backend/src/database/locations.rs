@@ -315,6 +315,10 @@ pub async fn get_location(
 ///
 /// This function can return an error if there is a problem with the database connection or query execution.
 ///
+/// # Panics
+///
+/// Clippy says this might panic.
+///
 /// # Example
 ///
 /// ```rust
@@ -334,13 +338,15 @@ pub async fn get_location(
 pub async fn search_locations(
     postgres: &sqlx::PgPool,
     location: geo::Point<f64>,
+    distance: f64,
 ) -> Result<Vec<Location>, sqlx::Error> {
     let geometry = Geometry::Point(location);
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE ST_Intersects($1, bounds)"#,
-        geo as _
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE ST_DWithin($1, bounds, $2)"#,
+        geo as _,
+        distance,
     )
     .fetch_all(postgres)
     .await?

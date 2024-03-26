@@ -149,7 +149,7 @@ pub async fn search_handler(
         return Err(ResponseError::AuthenticationFailed);
     };
 
-    search_locations(&postgres, location)
+    search_locations(&postgres, location, 0.0)
         .await?
         .pipe(Json)
         .pipe(Ok)
