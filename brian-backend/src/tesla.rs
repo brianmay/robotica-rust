@@ -256,7 +256,7 @@ pub fn monitor_tesla_location(
 
                     new_set.difference(&old_set).for_each(|id| {
                         if let Some(location) = new_map.get(id)  {
-                            let msg = format!("The Tesla arrived in {}", location.name);
+                            let msg = format!("The Tesla arrived at {}", location.name);
                             let msg = if location.announce_on_enter {
                                 new_message(msg, MessagePriority::Low)
                             } else {
