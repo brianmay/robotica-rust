@@ -11,7 +11,7 @@ use robotica_backend::services::tesla::api::{
 use robotica_common::datetime::duration;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
-use robotica_common::robotica::locations::{self, LocationMessage};
+use robotica_common::robotica::locations::{self, LocationList};
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use robotica_common::{robotica, teslamate, unsafe_time_delta};
@@ -151,11 +151,17 @@ pub enum ShouldPlugin {
     NoActionRequired,
 }
 
+pub struct Outputs {
+    pub lat_lng: stateful::Receiver<robotica::locations::LocationMessage>,
+    pub location: stateful::Receiver<LocationList>,
+    pub is_home: stateful::Receiver<bool>,
+}
+
 pub fn monitor_teslamate_location(
     state: &mut InitState,
     postgres: sqlx::PgPool,
     tesla: &Config,
-) -> stateful::Receiver<robotica::locations::LocationMessage> {
+) -> Outputs {
     let (tx, rx) = stateful::create_pipe("teslamate_location");
     let id = tesla.teslamate_id.to_string();
     let mqtt = state.mqtt.clone();
@@ -193,12 +199,19 @@ pub fn monitor_teslamate_location(
         }
     });
 
-    rx
+    let location = rx.clone().map(|(_, l)| LocationList::new(l.locations));
+    let is_home = location.clone().map(|(_, l)| l.is_at_home());
+
+    Outputs {
+        lat_lng: rx,
+        location,
+        is_home,
+    }
 }
 
 pub fn monitor_tesla_location(
     state: &InitState,
-    location_stream: stateful::Receiver<LocationMessage>,
+    location_stream: stateful::Receiver<LocationList>,
     charging_info: stateful::Receiver<ChargingInformation>,
 ) -> stateful::Receiver<ShouldPlugin> {
     let message_sink = state.message_sink.clone();
@@ -236,10 +249,10 @@ pub fn monitor_tesla_location(
                 Ok(new_location) = location_s.recv() => {
                     let new_is_at_home = new_location.is_at_home();
 
-                    let old_map: HashMap<i32, &locations::Location> = old_location.locations.iter().map(|l| (l.id, l)).collect();
-                    let new_map: HashMap<i32, &locations::Location> = new_location.locations.iter().map(|l| (l.id, l)).collect();
-                    let old_set: HashSet<i32> = old_location.locations.iter().map(|l| l.id).collect();
-                    let new_set: HashSet<i32> = new_location.locations.iter().map(|l| l.id).collect();
+                    let old_map: HashMap<i32, &locations::Location> = old_location.into_map();
+                    let new_map: HashMap<i32, &locations::Location> = new_location.into_map();
+                    let old_set: HashSet<i32> = old_location.into_set();
+                    let new_set: HashSet<i32> = new_location.into_set();
 
                     new_set.difference(&old_set).for_each(|id| {
                         if let Some(location) = new_map.get(id)  {

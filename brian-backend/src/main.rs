@@ -282,7 +282,8 @@ async fn setup_pipes(
                 panic!("Error running tesla charging monitor: {e}");
             });
         let locations = tesla::monitor_teslamate_location(&mut state, postgres.clone(), &tesla);
-        let should_plugin_stream = tesla::monitor_tesla_location(&state, locations, charging_info);
+        let should_plugin_stream =
+            tesla::monitor_tesla_location(&state, locations.location, charging_info);
         tesla::monitor_tesla_doors(&mut state, &tesla);
         tesla::plug_in_reminder(&state, should_plugin_stream);
     }
