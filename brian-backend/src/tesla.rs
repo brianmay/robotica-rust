@@ -177,7 +177,7 @@ pub fn monitor_teslamate_location(
 
         while let Ok(Json(location)) = inputs.recv().await {
             let point = geo::Point::new(location.longitude, location.latitude);
-            let locations = database::locations::search_locations(&postgres, point, 500.0)
+            let locations = database::locations::search_locations(&postgres, point, 0.0)
                 .await
                 .unwrap_or_else(|err| {
                     error!("Failed to search locations: {}", err);
