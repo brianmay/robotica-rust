@@ -24,7 +24,7 @@ gethostname = "0.4.3"
 thiserror = "1.0.57"
 chrono = "0.4.35"
 lalrpop-util = { version = "0.20.2", features = ["lexer"], optional = true }
-regex = "1.10.3"
+regex = "1.10.4"
 field-ref = "0.2.1"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
