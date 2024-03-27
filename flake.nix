@@ -315,7 +315,7 @@
               export PYTHONPATH="${poetry_env}/lib/python3.11/site-packages"
               export CONFIG_FILE="$PWD/robotica-backend.yaml"
               export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
-              export STATIC_PATH="${robotica-frontend-bindgen}"
+              export STATIC_PATH="robotica-frontend/dist"
               export DATABASE_URL="postgresql://robotica:your_secure_password_here@localhost/robotica"
             '';
             processes.mqtt = {
