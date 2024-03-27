@@ -347,7 +347,7 @@ pub fn monitor_tesla_location(
 
             let should_plugin = if old_location.is_at_home()
                 && !old_charging_info.charging_state.is_plugged_in()
-                && !old_charging_info.battery_level <= 80
+                && old_charging_info.battery_level <= 80
             {
                 ShouldPlugin::ShouldPlugin
             } else {
