@@ -11,12 +11,11 @@ use robotica_backend::services::tesla::api::{
 use robotica_common::datetime::duration;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
-use robotica_common::robotica::locations::{self, LocationList};
+use robotica_common::robotica::locations::LocationList;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
 use robotica_common::{robotica, teslamate, unsafe_time_delta};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::Add;
 use std::time::Duration;
@@ -209,6 +208,62 @@ pub fn monitor_teslamate_location(
     }
 }
 
+mod state {
+    use std::collections::{HashMap, HashSet};
+
+    use robotica_common::robotica::locations;
+
+    pub struct State<'a> {
+        // is_home: bool,
+        is_near_home: bool,
+        set: HashSet<i32>,
+        map: HashMap<i32, &'a locations::Location>,
+    }
+
+    impl<'a> State<'a> {
+        pub fn new(list: &'a locations::LocationList) -> Self {
+            let set = list.into_set();
+            let map = list.into_map();
+            // let is_home = list.is_at_home();
+            let is_near_home = list.is_near_home();
+            Self {
+                // is_home,
+                is_near_home,
+                set,
+                map,
+            }
+        }
+
+        // pub const fn is_at_home(&self) -> bool {
+        //     self.is_home
+        // }
+
+        pub const fn is_near_home(&self) -> bool {
+            self.is_near_home
+        }
+
+        pub fn get(&self, id: i32) -> Option<&'a locations::Location> {
+            self.map.get(&id).copied()
+        }
+
+        // pub fn into_set(self) -> HashSet<i32> {
+        //     self.set
+        // }
+
+        // pub fn into_map(self) -> HashMap<i32, &'a locations::Location> {
+        //     self.map
+        // }
+
+        pub fn difference(&self, other: &Self) -> HashSet<i32> {
+            self.set.difference(&other.set).copied().collect()
+        }
+
+        // pub fn iter(&self) -> impl Iterator<Item = &locations::Location> {
+        //     self.map.values().copied()
+        // }
+    }
+}
+
 pub fn monitor_tesla_location(
     state: &InitState,
     location_stream: stateful::Receiver<LocationList>,
@@ -225,7 +280,6 @@ pub fn monitor_tesla_location(
             error!("Failed to get initial Tesla location");
             return;
         };
-        let mut old_is_at_home = old_location.is_at_home();
 
         let Ok(mut old_charging_info) = charging_info_s.recv().await else {
             error!("Failed to get initial Tesla charging information");
@@ -247,15 +301,11 @@ pub fn monitor_tesla_location(
                     old_charging_info = new_charging_info;
                 },
                 Ok(new_location) = location_s.recv() => {
-                    let new_is_at_home = new_location.is_at_home();
+                    let old = state::State::new(&old_location);
+                    let new = state::State::new(&new_location);
 
-                    let old_map: HashMap<i32, &locations::Location> = old_location.into_map();
-                    let new_map: HashMap<i32, &locations::Location> = new_location.into_map();
-                    let old_set: HashSet<i32> = old_location.into_set();
-                    let new_set: HashSet<i32> = new_location.into_set();
-
-                    new_set.difference(&old_set).for_each(|id| {
-                        if let Some(location) = new_map.get(id)  {
+                    new.difference(&old).into_iter().for_each(|id| {
+                        if let Some(location) = new.get(id)  {
                             let msg = format!("The Tesla arrived at {}", location.name);
                             let msg = if location.announce_on_enter {
                                 new_message(msg, MessagePriority::Low)
@@ -266,8 +316,8 @@ pub fn monitor_tesla_location(
                         }
                     });
 
-                    old_set.difference(&new_set).for_each(|id| {
-                        if let Some(location) = old_map.get(id)  {
+                    old.difference(&new).into_iter().for_each(|id| {
+                        if let Some(location) = old.get(id)  {
                             let msg = format!("The Tesla left {}", location.name);
                             let msg = if location.announce_on_exit {
                                 new_message(msg, MessagePriority::Low)
@@ -278,7 +328,7 @@ pub fn monitor_tesla_location(
                         }
                     });
 
-                    if !old_is_at_home && new_is_at_home {
+                    if !old.is_near_home() && new.is_near_home() {
                         let level = old_charging_info.battery_level;
                         let ChargeRequest::ChargeTo(limit) = old_charging_info.charge_request;
                         let msg = if level < limit {
@@ -291,12 +341,11 @@ pub fn monitor_tesla_location(
                     }
 
                     old_location = new_location;
-                    old_is_at_home = new_is_at_home;
                 }
                 else => break,
             }
 
-            let should_plugin = if old_is_at_home
+            let should_plugin = if old_location.is_at_home()
                 && !old_charging_info.charging_state.is_plugged_in()
                 && !old_charging_info.battery_level <= 80
             {

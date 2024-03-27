@@ -23,10 +23,16 @@ pub struct Location {
 }
 
 impl Location {
-    #[must_use]
     /// Is the location the home location?
+    #[must_use]
     pub fn is_at_home(&self) -> bool {
         self.name == "Home"
+    }
+
+    /// Is the location near the home location?
+    #[must_use]
+    pub fn is_near_home(&self) -> bool {
+        self.name == "Near Home"
     }
 }
 
@@ -41,10 +47,16 @@ impl LocationList {
         Self(list)
     }
 
-    /// Get the home location
+    /// Is the location at home?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
         self.0.iter().any(Location::is_at_home)
+    }
+
+    /// Is the location near home?
+    #[must_use]
+    pub fn is_near_home(&self) -> bool {
+        self.0.iter().any(Location::is_near_home)
     }
 
     /// Turn the list into a map
