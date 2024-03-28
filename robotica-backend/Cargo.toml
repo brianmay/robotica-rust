@@ -22,7 +22,7 @@ reqwest = "0.11.26"
 # serde_path_to_error = "0.1.11"
 gethostname = "0.4.3"
 thiserror = "1.0.57"
-chrono = "0.4.35"
+chrono = "0.4.37"
 lalrpop-util = { version = "0.20.2", features = ["lexer"], optional = true }
 regex = "1.10.4"
 field-ref = "0.2.1"
