@@ -276,12 +276,12 @@ async fn setup_pipes(
     }
 
     for tesla in config.teslas {
+        let locations = tesla::monitor_teslamate_location(&mut state, postgres.clone(), &tesla);
         let charge_request = amber::car::run(prices.clone());
-        let charging_info =
-            monitor_charging(&mut state, &tesla, charge_request).unwrap_or_else(|e| {
+        let charging_info = monitor_charging(&mut state, &tesla, charge_request, locations.is_home)
+            .unwrap_or_else(|e| {
                 panic!("Error running tesla charging monitor: {e}");
             });
-        let locations = tesla::monitor_teslamate_location(&mut state, postgres.clone(), &tesla);
         let should_plugin_stream =
             tesla::monitor_tesla_location(&state, locations.location, charging_info);
         tesla::monitor_tesla_doors(&mut state, &tesla);

@@ -684,6 +684,7 @@ pub fn monitor_charging(
     state: &mut InitState,
     config: &Config,
     charge_request_rx: stateful::Receiver<ChargeRequest>,
+    is_home_rx: stateful::Receiver<bool>,
 ) -> Result<stateful::Receiver<ChargingInformation>, MonitorChargingError> {
     let id = config.teslamate_id.to_string();
 
@@ -716,16 +717,6 @@ pub fn monitor_charging(
                 }
                 cmd
             })
-    };
-
-    let is_home_rx = {
-        state
-            .subscriptions
-            .subscribe_into_stateful::<String>(&format!(
-                "state/Tesla/{id}/Location",
-                id = config.teslamate_id.to_string()
-            ))
-            .map(move |(_, location)| location == "home")
     };
 
     let charging_state_rx = state
