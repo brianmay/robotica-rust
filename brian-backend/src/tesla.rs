@@ -4,6 +4,7 @@ use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
 use chrono::{DateTime, TimeDelta, Timelike, Utc};
+use reqwest::Url;
 use robotica_backend::services::persistent_state::{self, PersistentStateRow};
 use robotica_backend::services::tesla::api::{
     ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError, VehicleId,
@@ -40,10 +41,30 @@ impl ToString for TeslamateId {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(tag = "type")]
+pub enum TeslamateAuth {
+    #[default]
+    None,
+    Basic {
+        username: String,
+        password: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TeslamateConfig {
+    pub url: Url,
+
+    #[serde(default)]
+    pub auth: TeslamateAuth,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
     pub teslamate_id: TeslamateId,
     pub tesla_id: VehicleId,
+    pub teslamate: TeslamateConfig,
 }
 
 fn new_message(message: impl Into<String>, priority: MessagePriority) -> Message {
@@ -661,10 +682,10 @@ pub struct ChargingInformation {
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &mut InitState,
-    tesla: &Config,
+    config: &Config,
     charge_request_rx: stateful::Receiver<ChargeRequest>,
 ) -> Result<stateful::Receiver<ChargingInformation>, MonitorChargingError> {
-    let id = tesla.teslamate_id.to_string();
+    let id = config.teslamate_id.to_string();
 
     let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
 
@@ -680,7 +701,7 @@ pub fn monitor_charging(
 
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
-        let teslamate_id = tesla.teslamate_id;
+        let teslamate_id = config.teslamate_id;
 
         state
             .subscriptions
@@ -702,7 +723,7 @@ pub fn monitor_charging(
             .subscriptions
             .subscribe_into_stateful::<String>(&format!(
                 "state/Tesla/{id}/Location",
-                id = tesla.teslamate_id.to_string()
+                id = config.teslamate_id.to_string()
             ))
             .map(move |(_, location)| location == "home")
     };
@@ -723,7 +744,7 @@ pub fn monitor_charging(
 
     let mut token = Token::get(&tesla_secret)?;
 
-    let tesla = tesla.clone();
+    let config = config.clone();
     spawn(async move {
         match check_token(&mut token, &tesla_secret).await {
             Ok(()) => {}
@@ -732,7 +753,7 @@ pub fn monitor_charging(
             }
         }
 
-        if let Err(err) = test_tesla_api(&token, tesla.tesla_id).await {
+        if let Err(err) = test_tesla_api(&token, config.tesla_id).await {
             error!("Failed to talk to Tesla API: {}", err);
         };
 
@@ -802,7 +823,7 @@ pub fn monitor_charging(
                             error!("Error saving persistent state: {}", e);
                         });
                         info!("Auto charge: {}", ps.auto_charge);
-                        update_auto_charge(ps.auto_charge,tesla.teslamate_id, &tesla_state, &mqtt);
+                        update_auto_charge(ps.auto_charge,config.teslamate_id, &tesla_state, &mqtt);
                     } else {
                         info!("Ignoring invalid auto_charge command: {cmd:?}");
                     }
@@ -845,11 +866,17 @@ pub fn monitor_charging(
 
                 // Send the commands.
                 info!("Sending left home commands: {sequence:?}");
-                let result = sequence.execute(&token, tesla.tesla_id).await;
+                let result = sequence.execute(&token, config.tesla_id).await;
                 TeslaResult::Tried(result)
             } else if is_at_home && ps.auto_charge {
-                let result =
-                    check_charge(tesla.tesla_id, &token, &tesla_state, charge_request).await;
+                let result = check_charge(
+                    config.tesla_id,
+                    &token,
+                    &tesla_state,
+                    charge_request,
+                    &config,
+                )
+                .await;
                 TeslaResult::Tried(result)
             } else {
                 info!(
@@ -892,7 +919,7 @@ pub fn monitor_charging(
             info!("Next poll {}", duration::to_string(&new_interval));
             timer = tokio::time::Instant::now().add(new_interval);
 
-            update_auto_charge(ps.auto_charge, tesla.teslamate_id, &tesla_state, &mqtt);
+            update_auto_charge(ps.auto_charge, config.teslamate_id, &tesla_state, &mqtt);
         }
     });
 
@@ -988,6 +1015,7 @@ async fn check_charge(
     token: &Token,
     tesla_state: &TeslaState,
     charge_request: ChargeRequest,
+    config: &Config,
 ) -> Result<(), SequenceError> {
     info!("Checking charge");
 
@@ -1058,8 +1086,36 @@ async fn check_charge(
         err
     });
 
+    // If we attempted to change anything, ensure teslamate is logging so we get updates.
+    if !sequence.is_empty() {
+        // Any errors here should be logged and forgotten.
+        if let Err(err) = enable_teslamate_logging(config).await {
+            error!("Failed to enable teslamate logging: {}", err);
+        }
+    }
+
     info!("All done. {result:?}");
     result
+}
+
+#[derive(Debug, Error)]
+enum TeslamateError {
+    #[error("Failed to enable logging: {0}")]
+    Error(#[from] reqwest::Error),
+
+    #[error("Failed to parse teslamate url: {0}")]
+    ParseError(#[from] url::ParseError),
+}
+
+async fn enable_teslamate_logging(config: &Config) -> Result<(), TeslamateError> {
+    let url = config.teslamate.url.join("/api/car/1/logging/resume")?;
+    let client = reqwest::Client::new().put(url);
+    let client = match &config.teslamate.auth {
+        TeslamateAuth::Basic { username, password } => client.basic_auth(username, Some(password)),
+        TeslamateAuth::None => client,
+    };
+    client.send().await?.error_for_status()?;
+    Ok(())
 }
 
 #[derive(Debug, Eq, PartialEq)]
