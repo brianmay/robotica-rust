@@ -201,7 +201,7 @@ pub async fn run(
                 match new_client {
                     Ok(new_client) => {
                         client.store(Arc::new(Some(new_client)));
-                        tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_secs(10 * 60)).await;
                     }
                     Err(e) => {
                         tracing::error!("failed to refresh oidc client: {}", e);
