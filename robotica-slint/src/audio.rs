@@ -356,7 +356,9 @@ async fn process_command(
 
         let do_actions = || async {
             if let Some(msg) = &command.message {
-                pre_say(&msg.body, &config.programs).await?;
+                // If any errors occur in pre_say, they should already have been logged.
+                // Just ignore them. The say call should still work regardless.
+                _ = pre_say(&msg.body, &config.programs).await;
             }
 
             let paused = is_music_paused(&config.programs).await?;
