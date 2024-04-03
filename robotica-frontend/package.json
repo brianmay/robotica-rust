@@ -10,7 +10,7 @@
   "devDependencies": {
     "autoprefixer": "^10.4.16",
     "copy-webpack-plugin": "^12.0.1",
-    "css-loader": "^6.8.1",
+    "css-loader": "^6.11.0",
     "html-webpack-plugin": "^5.5.4",
     "postcss-loader": "^8.0.0",
     "rimraf": "^5.0.5",
