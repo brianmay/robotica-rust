@@ -104,7 +104,7 @@ pub(crate) fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result<Calen
     let py_app = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/python/robotica.py"));
 
     Python::with_gil(|py| {
-        let app = PyModule::from_code(py, py_app, "robotica.py", "robotica")?;
+        let app = PyModule::from_code_bound(py, py_app, "robotica.py", "robotica")?;
         let args = (url, start, stop);
         let calendar: Calendar = app.getattr("read_calendar")?.call1(args)?.extract()?;
         Ok(calendar)
