@@ -314,6 +314,16 @@ pub fn monitor_tesla_location(
         );
 
         loop {
+            let should_plugin = if old_location.is_at_home()
+                && !old_charging_info.charging_state.is_plugged_in()
+                && old_charging_info.battery_level <= 80
+            {
+                ShouldPlugin::ShouldPlugin
+            } else {
+                ShouldPlugin::NoActionRequired
+            };
+            tx.try_send(should_plugin);
+
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
                     if old_location.is_at_home()  {
@@ -365,16 +375,6 @@ pub fn monitor_tesla_location(
                 }
                 else => break,
             }
-
-            let should_plugin = if old_location.is_at_home()
-                && !old_charging_info.charging_state.is_plugged_in()
-                && old_charging_info.battery_level <= 80
-            {
-                ShouldPlugin::ShouldPlugin
-            } else {
-                ShouldPlugin::NoActionRequired
-            };
-            tx.try_send(should_plugin);
         }
     });
 
