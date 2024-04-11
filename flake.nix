@@ -309,6 +309,8 @@
               prefetch-npm-deps
               gcc
               sqlx-cli
+              influxdb
+              mosquitto
             ];
             enterShell = ''
               export ROBOTICA_DEBUG=true

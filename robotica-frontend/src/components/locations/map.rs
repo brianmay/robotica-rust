@@ -402,11 +402,11 @@ impl Component for MapComponent {
         let props = ctx.props();
         match msg {
             Msg::Car(location) => {
-                let position = location.position;
+                let lat_lng = LatLng::new(location.latitude, location.longitude);
                 if let Some(ref marker) = self.car_marker {
-                    marker.set_lat_lng(&LatLng::new(position.y(), position.x()));
+                    marker.set_lat_lng(&lat_lng);
                 } else {
-                    let car_marker = leaflet::Marker::new(&LatLng::new(position.y(), position.x()));
+                    let car_marker = leaflet::Marker::new(&lat_lng);
                     car_marker.add_to(&self.map);
                     self.car_marker = Some(car_marker);
                 }

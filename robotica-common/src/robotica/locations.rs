@@ -61,14 +61,32 @@ impl LocationList {
 
     /// Turn the list into a map
     #[must_use]
-    pub fn into_map(&self) -> std::collections::HashMap<i32, &Location> {
-        self.0.iter().map(|l| (l.id, l)).collect()
+    pub fn into_map(self) -> std::collections::HashMap<i32, Location> {
+        self.0.into_iter().map(|l| (l.id, l)).collect()
     }
 
     /// Turn the list into a set of ids
     #[must_use]
-    pub fn into_set(&self) -> std::collections::HashSet<i32> {
+    pub fn to_set(&self) -> std::collections::HashSet<i32> {
         self.0.iter().map(|l| l.id).collect()
+    }
+
+    /// Turn the list into a sorted list
+    // #[must_use]
+    // pub fn to_vec(&self) -> Vec<Location> {
+    //     let mut list = self.0.clone();
+    //     list.sort_by_key(|k| k.id);
+    //     list
+    // }
+
+    /// Filter out items from list
+    pub fn retain(&mut self, f: impl Fn(&Location) -> bool) {
+        self.0.retain(f);
+    }
+
+    /// Extend the list with another list
+    pub fn extend(&mut self, other: impl IntoIterator<Item = Location>) {
+        self.0.extend(other);
     }
 }
 
@@ -94,8 +112,11 @@ pub struct CreateLocation {
 /// A location message for an object
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct LocationMessage {
-    /// The location of the object
-    pub position: geo::Point<f64>,
+    /// The latitude of the object
+    pub latitude: f64,
+
+    /// The longitude of the object
+    pub longitude: f64,
 
     /// The locations that the object is in
     pub locations: Vec<Location>,
