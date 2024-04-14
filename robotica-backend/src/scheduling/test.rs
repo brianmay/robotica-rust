@@ -84,7 +84,7 @@ fn test_parser_not() {
 }
 
 #[test]
-fn test_parser_in() {
+fn test_parser_in_single_quotes() {
     let fields = get_fields();
     let expr = conditions::BooleanParser::new()
         .parse(&fields, "'food' in dog")
@@ -99,10 +99,40 @@ fn test_parser_in() {
 }
 
 #[test]
-fn test_parser_not_in() {
+fn test_parser_not_in_single_quotes() {
     let fields = get_fields();
     let expr = conditions::BooleanParser::new()
         .parse(&fields, "'food' not in dog")
+        .unwrap();
+    assert_eq!(
+        expr,
+        Boolean::Cond(Condition::NotIn(
+            "food".to_string(),
+            field_ref_of!(Context => dog)
+        ))
+    );
+}
+
+#[test]
+fn test_parser_in_double_quotes() {
+    let fields = get_fields();
+    let expr = conditions::BooleanParser::new()
+        .parse(&fields, "\"food\" in dog")
+        .unwrap();
+    assert_eq!(
+        expr,
+        Boolean::Cond(Condition::In(
+            "food".to_string(),
+            field_ref_of!(Context => dog)
+        ))
+    );
+}
+
+#[test]
+fn test_parser_not_in_double_quotes() {
+    let fields = get_fields();
+    let expr = conditions::BooleanParser::new()
+        .parse(&fields, "\"food\" not in dog")
         .unwrap();
     assert_eq!(
         expr,
@@ -223,10 +253,28 @@ fn test_parser_expression() {
 }
 
 #[test]
-fn test_parser_string() {
+fn test_parser_string_single_quotes() {
     let fields = get_fields();
     let expr = conditions::BooleanParser::new()
         .parse(&fields, "text == 'string'")
+        .unwrap();
+    assert_eq!(
+        expr,
+        Boolean::Cond(Condition::Op(
+            Box::new(Expr::Variable(Reference::String(
+                field_ref_of!(Context => text)
+            ))),
+            ConditionOpcode::Eq,
+            Box::new(Expr::String("string".to_string())),
+        ))
+    );
+}
+
+#[test]
+fn test_parser_string_double_quotes() {
+    let fields = get_fields();
+    let expr = conditions::BooleanParser::new()
+        .parse(&fields, "text == \"string\"")
         .unwrap();
     assert_eq!(
         expr,

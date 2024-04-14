@@ -34,10 +34,8 @@ Condition: Condition<T> = {
         let result = f();
         result.map_err(|e| e.into())
     },
-    "'" <ConstantString> "'" "in" <SetVariable> => Condition::<T>::In(<>),
-    "\"" <ConstantString> "\"" "in" <SetVariable>  => Condition::<T>::In(<>),
-    "'" <ConstantString> "'" "not in" <SetVariable> => Condition::<T>::NotIn(<>),
-    "\"" <ConstantString> "\"" "not in" <SetVariable> => Condition::<T>::NotIn(<>),
+    <ConstantString> "in" <SetVariable> => Condition::<T>::In(<>),
+    <ConstantString> "not in" <SetVariable> => Condition::<T>::NotIn(<>),
 };
 
 ConditionOpcode: ConditionOpcode = {
@@ -72,8 +70,7 @@ FactorOp: Opcode = {
 
 Term: Box<Expr<T>> = {
     Num => Box::new(Expr::<T>::Number(<>)),
-    "'" <ConstantString> "'" => Box::new(Expr::<T>::String(<>)),
-    "\"" <ConstantString> "\"" => Box::new(Expr::<T>::String(<>)),
+    <ConstantString> => Box::new(Expr::<T>::String(<>)),
     <Variable> => Box::new(Expr::<T>::Variable(<>)),
     "(" <Expr> ")"
 };
@@ -83,7 +80,8 @@ Num: i32 = {
 };
 
 ConstantString: String = {
-    r"[a-zA-Z_][a-zA-Z0-9_]*" => String::from(<>),
+    <l:r"'[a-zA-Z_][a-zA-Z0-9_:]*'"> => l[1..l.len()-1].into(),
+    <l:r#""[a-zA-Z_][a-zA-Z0-9_:]*""#> => l[1..l.len()-1].into(),
 };
 
 Variable: Reference<T> = {
