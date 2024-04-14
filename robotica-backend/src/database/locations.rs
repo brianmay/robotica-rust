@@ -331,7 +331,7 @@ pub async fn get_location(
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
 ///     let location = Point::new(1.0, 2.0);
-///     let result = search_locations(&postgres, location).await;
+///     let result = search_locations(&postgres, location, 0.0).await;
 ///     println!("Locations: {:?}", result);
 /// }
 /// ```
