@@ -27,6 +27,8 @@ def read_calendar(url, start_date, end_date):
                 json_data[i] = event[i]
             elif isinstance(event[i], int):
                 json_data[i] = event[i]
+            elif isinstance(event[i], str):
+                json_data[i] = event[i]
             else:
                 raise RuntimeError(f"Unknown type for {i}")
 
