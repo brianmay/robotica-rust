@@ -2,7 +2,7 @@ use std::time::Duration;
 
 // use tracing::debug;
 use robotica_backend::{
-    pipes::{stateful, Subscriber},
+    pipes::{stateful, stateless, Subscriber},
     spawn,
 };
 use tokio::{
@@ -94,6 +94,7 @@ where
     rx_out
 }
 
+#[derive(Debug)]
 pub enum DelayRepeatState<T> {
     Idle,
     Delaying(Interval, T),
@@ -116,11 +117,11 @@ pub fn delay_repeat<T>(
     duration: Duration,
     rx: stateful::Receiver<T>,
     is_active: impl Fn(&stateful::OldNewType<T>) -> bool + Send + 'static,
-) -> stateful::Receiver<T>
+) -> stateless::Receiver<T>
 where
     T: Clone + Eq + Send + 'static,
 {
-    let (tx_out, rx_out) = stateful::create_pipe(name);
+    let (tx_out, rx_out) = stateless::create_pipe(name);
     spawn(async move {
         let mut state = DelayRepeatState::Idle;
         let mut s = rx.subscribe().await;
