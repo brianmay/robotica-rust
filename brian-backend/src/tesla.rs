@@ -227,7 +227,7 @@ pub fn monitor_teslamate_location(
                 }
             };
 
-            let outer_locations = state::State::search_locations(&postgres, &location, 50.0).await;
+            let outer_locations = state::State::search_locations(&postgres, &location, 10.0).await;
             let outer_locations = match outer_locations {
                 Ok(locations) => locations,
                 Err(err) => {
