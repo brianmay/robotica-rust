@@ -389,8 +389,8 @@ mod state {
         }
 
         pub fn reject(&mut self, hs: &HashSet<i32>) {
-            self.set.retain(|x| hs.contains(x));
-            self.map.retain(|k, _v| hs.contains(k));
+            self.set.retain(|x| !hs.contains(x));
+            self.map.retain(|k, _v| !hs.contains(k));
         }
     }
 }
