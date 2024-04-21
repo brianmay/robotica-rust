@@ -248,7 +248,7 @@ pub fn monitor_teslamate_location(
             let left: Vec<_> = left_set
                 .iter()
                 .copied()
-                .filter_map(|id| inner_locations.get(id))
+                .filter_map(|id| locations.get(id))
                 .collect();
 
             if !first_time {
