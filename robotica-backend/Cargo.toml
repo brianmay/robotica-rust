@@ -37,7 +37,7 @@ axum-core = "0.4.3"
 axum = { version = "0.7.5", features = ["ws", "macros"] }
 openid = "0.13.0"
 maud = { version = "0.26.0", features = ["axum"] }
-base64 = "0.22.0"
+base64 = "0.22.1"
 url = "2.5.0"
 futures = "0.3.30"
 tower = "0.4.13"
