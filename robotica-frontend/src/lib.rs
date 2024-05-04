@@ -12,6 +12,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::option_if_let_else)]
+#![allow(clippy::empty_docs)]
 
 mod components;
 mod robotica_wasm;

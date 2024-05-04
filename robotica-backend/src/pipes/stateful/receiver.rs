@@ -89,13 +89,10 @@ where
             error!("{}: get/send failed: {}", self.name, err);
             return None;
         };
-        rx.await.map_or_else(
-            |_| {
-                error!("{}: get/await failed", self.name);
-                None
-            },
-            |v| v,
-        )
+        rx.await.unwrap_or_else(|_| {
+            error!("{}: get/await failed", self.name);
+            None
+        })
     }
 
     /// Translate this receiver into a another type using a stateless receiver.

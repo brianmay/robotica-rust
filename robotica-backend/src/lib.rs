@@ -6,6 +6,7 @@
 #![deny(clippy::expect_used)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::use_self)]
+#![allow(clippy::to_string_trait_impl)]
 
 #[cfg(feature = "scheduler")]
 #[macro_use]

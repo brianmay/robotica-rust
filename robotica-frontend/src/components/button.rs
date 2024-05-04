@@ -309,10 +309,10 @@ pub enum Message {
     /// Button has been clicked
     Click,
 
-    /// Button was received MQTT message
+    /// Button has received MQTT message
     Receive((Label, MqttMessage)),
 
-    /// Button was received a WebSocket event
+    /// Button has received a `WsEvent`
     Event(WsEvent),
 
     /// We have subscribed to a topic

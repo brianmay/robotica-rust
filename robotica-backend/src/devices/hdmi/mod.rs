@@ -202,15 +202,12 @@ async fn send_command(
     })
     .await;
 
-    let in_bytes = result.map_or_else(
-        |_| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "Data timed out",
-            ))
-        },
-        |in_bytes| in_bytes,
-    )?;
+    let in_bytes = result.unwrap_or_else(|_| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Data timed out",
+        ))
+    })?;
 
     if !check_checksum(in_bytes.as_ref()) {
         return Err(std::io::Error::new(

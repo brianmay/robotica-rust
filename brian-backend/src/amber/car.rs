@@ -56,7 +56,8 @@ fn prices_to_charge_request<T: TimeZone>(
     };
 
     info!(
-        "Charge request ({time:?},{force:?},{category:?}): {result:?}",
+        "Charge request
+        ({time:?},{force:?},{category:?}): {result:?}",
         category = prices.category
     );
     result
