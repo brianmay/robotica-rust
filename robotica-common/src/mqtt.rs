@@ -108,7 +108,7 @@ pub struct MqttMessage {
     /// Was/Is this message retained?
     pub retain: Retain,
 
-    /// What is the QoS of this message?
+    /// What is the `QoS` of this message?
     pub qos: QoS,
 }
 
@@ -122,7 +122,7 @@ fn truncate(s: &str, max_chars: usize) -> &str {
 impl std::fmt::Debug for MqttMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let payload = String::from_utf8(self.payload.clone())
-            .map_or_else(|_| format!("{:?}", self.payload), |payload| payload);
+            .unwrap_or_else(|_| format!("{:?}", self.payload));
         let payload = truncate(&payload, 40);
 
         f.debug_struct("MqttMessage")

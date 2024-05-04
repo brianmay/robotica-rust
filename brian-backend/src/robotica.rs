@@ -1,6 +1,3 @@
-use robotica_common::robotica::switch::DevicePower;
-use serde::Serialize;
-
 #[derive(Clone)]
 pub struct Id {
     pub location: String,
@@ -26,21 +23,4 @@ impl Id {
             params => format!("command/{}/{}/{params}", self.location, self.device),
         }
     }
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct AutoColorOut {
-    pub hue: Option<u16>,
-    pub saturation: Option<u16>,
-    pub brightness: Option<u16>,
-    pub kelvin: Option<u16>,
-    pub alpha: Option<u16>,
-}
-
-#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct AutoColor {
-    pub power: Option<DevicePower>,
-    pub color: AutoColorOut,
 }

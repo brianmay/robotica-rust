@@ -5,6 +5,7 @@
 #![deny(clippy::nursery)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
+#![allow(clippy::to_string_trait_impl)]
 
 mod amber;
 pub(crate) mod audience;

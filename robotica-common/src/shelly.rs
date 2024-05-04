@@ -26,7 +26,7 @@ pub struct Notify {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
 pub enum Params {
-    /// NotifyStatus message
+    /// `NotifyStatus` message
     #[serde(rename = "NotifyStatus")]
     NotifyStatus {
         /// The timestamp of the message
@@ -40,7 +40,7 @@ pub enum Params {
         // emdata_0: Option<Em0Data>,
     },
 
-    /// NotifyEvent message
+    /// `NotifyEvent` message
     #[serde(rename = "NotifyEvent")]
     NotifyEvent {
         /// The timestamp of the message

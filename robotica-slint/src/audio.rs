@@ -347,7 +347,7 @@ async fn process_command(
             });
     } else {
         if let Some(music) = &command.music {
-            state.play_list = music.play_list.clone();
+            state.play_list.clone_from(&music.play_list);
         };
 
         let play_action = actions
