@@ -195,25 +195,6 @@ pub fn monitor_teslamate_location(
 
     spawn(async move {
         let mut inputs = inputs.subscribe().await;
-
-        // let mut locations = {
-        //     let locations = match inputs.recv().await {
-        //         Ok(Json(location)) => state::State::search_locations(&postgres, &location, 0.0)
-        //             .await
-        //             .map_err(|err| format!("Cannot load search location: {err}")),
-        //         Err(err) => Err(format!("Cannot get initial location: {err}")),
-        //     };
-
-        //     match locations {
-        //         Ok(locations) => locations,
-        //         Err(err) => {
-        //             error!("{}", err);
-        //             return;
-        //         }
-        //     }
-        // };
-
-        // debug!("Initial Tesla location: {:?}", locations.to_vec());
         let mut locations = state::State::new(LocationList::new(vec![]));
         let mut first_time = true;
 
