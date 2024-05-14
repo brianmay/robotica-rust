@@ -636,7 +636,7 @@ enum ChargingMessage {
 
 impl ChargingMessage {
     const fn get(charging_info: &ChargingInformation) -> Self {
-        let ChargeRequest::ChargeTo(limit) = charging_info.charge_request;
+        let limit = charging_info.charge_limit;
 
         match charging_info.charging_state {
             ChargingStateEnum::Disconnected => Self::Disconnected,
@@ -739,6 +739,7 @@ enum TeslaResult {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChargingInformation {
     battery_level: u8,
+    charge_limit: u8,
     charge_request: ChargeRequest,
     charging_state: ChargingStateEnum,
 }
@@ -843,6 +844,7 @@ pub fn monitor_charging(
         tx_summary.try_send(ChargingInformation {
             battery_level: tesla_state.battery_level,
             charging_state: tesla_state.charging_state,
+            charge_limit: tesla_state.charge_limit,
             charge_request,
         });
 
@@ -943,6 +945,7 @@ pub fn monitor_charging(
 
             tx_summary.try_send(ChargingInformation {
                 battery_level: tesla_state.battery_level,
+                charge_limit: tesla_state.charge_limit,
                 charging_state: tesla_state.charging_state,
                 charge_request,
             });
