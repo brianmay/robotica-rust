@@ -15,6 +15,7 @@ use tracing::info;
 pub enum ChargeRequest {
     ChargeTo(u8),
     //DoNotCharge,
+    Manual,
 }
 
 pub fn run(rx: Receiver<Arc<Prices>>) -> Receiver<ChargeRequest> {

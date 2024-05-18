@@ -425,11 +425,14 @@ pub fn monitor_tesla_location(
                 Ok(new_location) = location_s.recv() => {
                     if !old_location.is_near_home() && new_location.is_near_home() {
                         let level = old_charging_info.battery_level;
-                        let ChargeRequest::ChargeTo(limit) = old_charging_info.charge_request;
+                        let (limit_type, limit) = match old_charging_info.charge_request_at_home {
+                            ChargeRequest::ChargeTo(limit) => ("auto", limit),
+                            ChargeRequest::Manual => ("manual", old_charging_info.charge_limit),
+                        };
                         let msg = if level < limit {
-                            format!("The Tesla is at {level}% and would charge to {limit}%")
+                            format!("The Tesla is at {level}% and would charge to {limit_type} {limit}%")
                         } else {
-                            format!("The Tesla is at {level}% and the limit is {limit}%")
+                            format!("The Tesla is at {level}% and the limit is {limit_type} {limit}%")
                         };
                         let msg = new_message(msg, MessagePriority::DaytimeOnly);
                         message_sink.try_send(msg);
@@ -732,7 +735,7 @@ pub async fn check_token(
 }
 
 enum TeslaResult {
-    Skipped,
+    // Skipped,
     Tried(Result<(), SequenceError>),
 }
 
@@ -740,7 +743,8 @@ enum TeslaResult {
 pub struct ChargingInformation {
     battery_level: u8,
     charge_limit: u8,
-    charge_request: ChargeRequest,
+    charge_request_at_home: ChargeRequest,
+    // charge_request: ChargeRequest,
     charging_state: ChargingStateEnum,
 }
 
@@ -820,7 +824,7 @@ pub fn monitor_charging(
         let mut charge_limit_s = charge_limit.subscribe().await;
         let mut charging_state_s = charging_state_rx.subscribe().await;
 
-        let mut charge_request: ChargeRequest = charge_request_s
+        let mut amber_charge_request: ChargeRequest = charge_request_s
             .recv()
             .await
             .unwrap_or(ChargeRequest::ChargeTo(0));
@@ -845,7 +849,12 @@ pub fn monitor_charging(
             battery_level: tesla_state.battery_level,
             charging_state: tesla_state.charging_state,
             charge_limit: tesla_state.charge_limit,
-            charge_request,
+            charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
+            // charge_request: should_charge_maybe_at_home(
+            //     tesla_state.is_at_home,
+            //     &ps,
+            //     amber_charge_request,
+            // ),
         });
 
         let mut timer = {
@@ -868,7 +877,7 @@ pub fn monitor_charging(
                 }
                 Ok(new_charge_request) = charge_request_s.recv() => {
                     info!("New price summary: {:?}", new_charge_request);
-                    charge_request = new_charge_request;
+                    amber_charge_request = new_charge_request;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Command::Device(cmd) = cmd {
@@ -913,6 +922,8 @@ pub fn monitor_charging(
                 tesla_state.send_left_home_commands = false;
             }
 
+            let charge_request = should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
+
             let result = if tesla_state.send_left_home_commands {
                 // Construct sequence of commands to send to Tesla.
                 let mut sequence = CommandSequence::new();
@@ -925,7 +936,7 @@ pub fn monitor_charging(
                 info!("Sending left home commands: {sequence:?}");
                 let result = sequence.execute(&token, config.tesla_id).await;
                 TeslaResult::Tried(result)
-            } else if is_at_home && ps.auto_charge {
+            } else {
                 let result = check_charge(
                     config.tesla_id,
                     &token,
@@ -935,27 +946,22 @@ pub fn monitor_charging(
                 )
                 .await;
                 TeslaResult::Tried(result)
-            } else {
-                info!(
-                    "Skipping charge check, is_at_home={is_at_home:?}, auto_charge={auto_charge:?}",
-                    auto_charge = ps.auto_charge
-                );
-                TeslaResult::Skipped
             };
 
             tx_summary.try_send(ChargingInformation {
                 battery_level: tesla_state.battery_level,
                 charge_limit: tesla_state.charge_limit,
                 charging_state: tesla_state.charging_state,
-                charge_request,
+                charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
+                // charge_request,
             });
 
             let new_interval = match result {
-                TeslaResult::Skipped => {
-                    // If we skipped, then lets just pretend we succeeded.
-                    forget_errors(&mut tesla_state);
-                    LONG_INTERVAL
-                }
+                // TeslaResult::Skipped => {
+                //     // If we skipped, then lets just pretend we succeeded.
+                //     forget_errors(&mut tesla_state);
+                //     LONG_INTERVAL
+                // }
                 TeslaResult::Tried(Ok(())) => {
                     info!("Success executing command sequence");
                     notify_success(&tesla_state, &message_sink);
@@ -982,6 +988,29 @@ pub fn monitor_charging(
     });
 
     Ok(rx_summary)
+}
+
+const fn should_charge_maybe_at_home(
+    is_at_home: bool,
+    ps: &PersistentState,
+    amber_charge_request: ChargeRequest,
+) -> ChargeRequest {
+    if is_at_home && ps.auto_charge {
+        amber_charge_request
+    } else {
+        ChargeRequest::Manual
+    }
+}
+
+const fn should_charge_at_home(
+    ps: &PersistentState,
+    amber_charge_request: ChargeRequest,
+) -> ChargeRequest {
+    if ps.auto_charge {
+        amber_charge_request
+    } else {
+        ChargeRequest::Manual
+    }
 }
 
 fn forget_errors(tesla_state: &mut TeslaState) {
@@ -1090,7 +1119,8 @@ async fn check_charge(
     info!("Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
-    let set_charge_limit = tesla_state.charge_limit != charge_limit;
+    let set_charge_limit =
+        should_charge != ShouldCharge::DontTouch && tesla_state.charge_limit != charge_limit;
 
     // Construct sequence of commands to send to Tesla.
     let mut sequence = CommandSequence::new();
@@ -1180,13 +1210,14 @@ async fn enable_teslamate_logging(config: &Config) -> Result<(), TeslamateError>
 enum ShouldCharge {
     DoCharge,
     DoNotCharge,
-    // DontTouch,
+    DontTouch,
 }
 
 fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (ShouldCharge, u8) {
     let (should_charge, charge_limit) = match charge_request {
         // RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
         ChargeRequest::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
+        ChargeRequest::Manual => (ShouldCharge::DontTouch, tesla_state.charge_limit),
     };
 
     #[allow(clippy::match_same_arms)]
@@ -1199,7 +1230,7 @@ fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (Sh
             }
         }
         (sc @ ShouldCharge::DoNotCharge, _) => sc,
-        // (sc @ ShouldCharge::DontTouch, _) => sc,
+        (sc @ ShouldCharge::DontTouch, _) => sc,
     };
 
     let charge_limit = charge_limit.clamp(50, 90);
