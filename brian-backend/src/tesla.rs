@@ -734,11 +734,6 @@ pub async fn check_token(
     Ok(())
 }
 
-enum TeslaResult {
-    // Skipped,
-    Tried(Result<(), SequenceError>),
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChargingInformation {
     battery_level: u8,
@@ -934,18 +929,16 @@ pub fn monitor_charging(
 
                 // Send the commands.
                 info!("Sending left home commands: {sequence:?}");
-                let result = sequence.execute(&token, config.tesla_id).await;
-                TeslaResult::Tried(result)
+                sequence.execute(&token, config.tesla_id).await
             } else {
-                let result = check_charge(
+                check_charge(
                     config.tesla_id,
                     &token,
                     &tesla_state,
                     charge_request,
                     &config,
                 )
-                .await;
-                TeslaResult::Tried(result)
+                .await
             };
 
             tx_summary.try_send(ChargingInformation {
@@ -957,23 +950,18 @@ pub fn monitor_charging(
             });
 
             let new_interval = match result {
-                // TeslaResult::Skipped => {
-                //     // If we skipped, then lets just pretend we succeeded.
-                //     forget_errors(&mut tesla_state);
-                //     LONG_INTERVAL
-                // }
-                TeslaResult::Tried(Ok(())) => {
+                Ok(()) => {
                     info!("Success executing command sequence");
                     notify_success(&tesla_state, &message_sink);
                     forget_errors(&mut tesla_state);
                     LONG_INTERVAL
                 }
-                TeslaResult::Tried(Err(SequenceError::WaitRetry(duration))) => {
+                Err(SequenceError::WaitRetry(duration)) => {
                     info!("Failed, retrying in {:?}", duration);
                     notify_errors(&mut tesla_state, &message_sink);
                     duration
                 }
-                TeslaResult::Tried(Err(err)) => {
+                Err(err) => {
                     info!("Error executing command sequence: {}", err);
                     notify_errors(&mut tesla_state, &message_sink);
                     SHORT_INTERVAL
