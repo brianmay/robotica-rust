@@ -1,3 +1,5 @@
+use crate::delays::rate_limit;
+
 use super::{PriceCategory, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 use robotica_backend::{
@@ -9,6 +11,7 @@ use robotica_backend::{
 };
 use robotica_common::unsafe_naive_time_hms;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -30,7 +33,7 @@ pub fn run(rx: Receiver<Arc<Prices>>) -> Receiver<ChargeRequest> {
         }
     });
 
-    rx_out
+    rate_limit("amber/car/ratelimit", Duration::from_secs(300), rx_out)
 }
 
 const START_TIME: NaiveTime = unsafe_naive_time_hms!(3, 0, 0);

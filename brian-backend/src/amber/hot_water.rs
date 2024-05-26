@@ -1,4 +1,4 @@
-use crate::InitState;
+use crate::{delays::rate_limit, InitState};
 
 use super::{
     api::{IntervalType, PriceResponse},
@@ -19,6 +19,7 @@ use robotica_common::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -212,7 +213,11 @@ pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
         }
     });
 
-    rx_out
+    rate_limit(
+        "amber/hot_water/ratelimit",
+        Duration::from_secs(300),
+        rx_out,
+    )
 }
 
 #[cfg(test)]

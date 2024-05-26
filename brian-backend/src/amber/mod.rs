@@ -74,9 +74,9 @@ pub enum Error {
 
 const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
 const RETRY_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
-const MIN_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
-const MAX_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 30);
-const DEFAULT_INTERVAL: Duration = unsafe_duration!(minutes: 30);
+const MIN_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
+const MAX_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
+const DEFAULT_INTERVAL: Duration = unsafe_duration!(minutes: 5);
 
 type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
 
@@ -206,15 +206,8 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
     Ok((rx_prices, rx_usage))
 }
 
-fn is_period_current(pr: &api::PriceResponse, _dt: &DateTime<Utc>) -> bool {
-    // Amber intervals are weird, for example:
-    // start_time: 2024-01-24T05:00:01Z, end_time: 2024-01-24T05:30:00Z,
-    // start_time: 2024-01-24T05:30:01Z, end_time: 2024-01-24T06:00:00Z
-    // start_time: 2024-01-24T06:00:01Z, end_time: 2024-01-24T06:30:00Z
-    // which means that there is a 1 second gap between intervals.
-    // pr.start_time <= *dt && pr.end_time > *dt
-    // Just use the Amber declared current interval for now.
-    pr.interval_type == api::IntervalType::CurrentInterval
+fn is_period_current(pr: &api::PriceResponse, dt: &DateTime<Utc>) -> bool {
+    pr.start_time <= *dt && pr.end_time > *dt
 }
 
 fn get_current_price_response<'a>(
