@@ -137,7 +137,7 @@ impl DayState {
 }
 
 fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
-    let time_2hr_cheap: NaiveTime = NaiveTime::from_hms_opt(5, 0, 0).unwrap_or_default();
+    let time_2hr_cheap: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
     let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
     (start_day, end_day)
 }
