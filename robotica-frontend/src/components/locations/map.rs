@@ -46,6 +46,12 @@ pub enum Msg {
     CancelList,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Connected {
+    Connected,
+    Disconnected { reason: String },
+}
+
 #[derive(PartialEq, Clone)]
 pub enum ParamObject {
     List(Arc<Vec<Location>>),
@@ -120,7 +126,7 @@ pub struct MapComponent {
     event_subscription: Option<Subscription>,
     car_marker: Option<leaflet::Marker>,
     car: Option<LocationMessage>,
-    connected: bool,
+    connected: Connected,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -386,7 +392,9 @@ impl Component for MapComponent {
             event_subscription: None,
             car_marker: None,
             car: None,
-            connected: false,
+            connected: Connected::Disconnected {
+                reason: "Loading...".to_string(),
+            },
         }
         .tap_mut(|s| Self::set_object(s, object))
         .tap(Self::position_map)
@@ -440,10 +448,10 @@ impl Component for MapComponent {
                 }
 
                 self.user = Some(user);
-                self.connected = true;
+                self.connected = Connected::Connected;
                 true
             }
-            Msg::MqttEvent(WsEvent::Disconnected(_reason)) => {
+            Msg::MqttEvent(WsEvent::Disconnected(reason)) => {
                 self.user = None;
                 self.car_subscription = SubscriptionStatus::Unsubscribed;
                 self.car = None;
@@ -452,7 +460,7 @@ impl Component for MapComponent {
                 }
                 self.car_marker = None;
                 self.update_location_styles();
-                self.connected = false;
+                self.connected = Connected::Disconnected { reason };
                 true
             }
             Msg::CreatePolygon(polygon) => {
@@ -583,22 +591,38 @@ impl Component for MapComponent {
         let on_cancel_location = ctx.link().callback(|()| Msg::CancelLocation);
         let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
         let select_location = ctx.link().callback(Msg::SelectLocation);
-        let connected = self.connected | !self.user.as_ref().map_or(true, |user| user.is_admin);
 
-        let status_msg = match (&props.status, &props.loading_status, connected) {
-            (LocationStatus::Unchanged, LoadingStatus::Error(err), _) => {
-                format!("LoadingError {err}").pipe(Some)
+        // Don't show connection error if user is not admin.
+        let is_admin = self.user.as_ref().map_or(true, |user| user.is_admin);
+
+        let mut messages = vec![];
+
+        match &props.loading_status {
+            LoadingStatus::Error(err) => messages.push(err.clone()),
+            LoadingStatus::Loading => messages.push("Loading locations...".to_string()),
+            LoadingStatus::Loaded => {}
+        }
+
+        match &props.status {
+            LocationStatus::Unchanged => {}
+            LocationStatus::Changed => messages.push("Changed".to_string()),
+            LocationStatus::Saving => messages.push("Saving".to_string()),
+            LocationStatus::Error(err) => messages.push(format!("Error: {err}")),
+        }
+
+        #[allow(clippy::match_same_arms)]
+        match (&self.connected, is_admin) {
+            (Connected::Disconnected { reason }, true) => {
+                messages.push(format!("Disconnected: {reason}"));
             }
-            (LocationStatus::Unchanged, LoadingStatus::Loading, _) => {
-                "Loading".to_string().pipe(Some)
-            }
-            (LocationStatus::Unchanged, LoadingStatus::Loaded, false) => {
-                "Disconnected".to_string().pipe(Some)
-            }
-            (LocationStatus::Unchanged, LoadingStatus::Loaded, true) => None,
-            (LocationStatus::Changed, _, _) => "Changed".to_string().pipe(Some),
-            (LocationStatus::Saving, _, _) => "Saving".to_string().pipe(Some),
-            (LocationStatus::Error(err), _, _) => format!("Error {err}").pipe(Some),
+            (Connected::Disconnected { .. }, false) => {}
+            (Connected::Connected, _) => {}
+        }
+
+        let status_msg = if messages.is_empty() {
+            None
+        } else {
+            Some(messages.join(", "))
         };
 
         let controls = match &self.object {
