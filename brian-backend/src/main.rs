@@ -320,7 +320,7 @@ async fn setup_pipes(
 
     fake_switch(&mut state, "Twins/Messages");
 
-    fake_switch(&mut state, "Extension/Messages");
+    fake_switch(&mut state, "Living/Messages");
 
     fake_switch(&mut state, "Akira/Messages");
 

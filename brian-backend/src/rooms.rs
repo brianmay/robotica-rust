@@ -305,7 +305,7 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
         }],
         music: vec![MusicConfig {
             title: "Music".to_string(),
-            topic_substr: "Extension/Robotica".to_string(),
+            topic_substr: "Living/Robotica".to_string(),
             ..Default::default()
         }],
         switches: vec![ButtonRowConfig {
@@ -317,7 +317,7 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
                 icon: Icon::Trumpet,
                 controller: ControllerConfig::Switch(switch::Config {
                     action: Action::Toggle,
-                    topic_substr: "Extension/Messages".to_string(),
+                    topic_substr: "Living/Messages".to_string(),
                 }),
             }],
         }],
