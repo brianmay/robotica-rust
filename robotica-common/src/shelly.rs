@@ -40,7 +40,15 @@ pub enum Params {
         // emdata_0: Option<Em0Data>,
     },
 
-    /// `NotifyEvent` message
+    /// NotifyFullStatus message
+    #[serde(rename = "NotifyFullStatus")]
+    NotifyFullStatus {
+        /// The timestamp of the message
+        ts: f64,
+        // TODO: Add the rest of the fields
+    },
+
+    /// NotifyEvent message
     #[serde(rename = "NotifyEvent")]
     NotifyEvent {
         /// The timestamp of the message
@@ -55,7 +63,9 @@ impl Params {
     #[must_use]
     pub fn get_datetime(&self) -> Option<DateTime<Utc>> {
         let ts = match self {
-            Params::NotifyEvent { ts, .. } | Params::NotifyStatus { ts, .. } => *ts,
+            Params::NotifyEvent { ts, .. }
+            | Params::NotifyStatus { ts, .. }
+            | Params::NotifyFullStatus { ts } => *ts,
         };
         #[allow(clippy::cast_possible_truncation)]
         DateTime::from_timestamp_millis((ts * 1000.0) as i64)
