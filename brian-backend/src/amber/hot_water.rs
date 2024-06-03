@@ -221,7 +221,7 @@ mod tests {
 
     use test_log::test;
 
-    use chrono::{FixedOffset, Local};
+    use chrono::FixedOffset;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
 
@@ -251,7 +251,8 @@ mod tests {
                 };
 
                 let pr = |start_time: DateTime<Utc>, price| {
-                    let date = start_time.with_timezone(&Local).date_naive();
+                    let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+                    let date = start_time.with_timezone(&timezone).date_naive();
                     let end_time = start_time + INTERVAL;
                     PriceResponse {
                         date,
@@ -332,6 +333,7 @@ mod tests {
         // Arrange
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
@@ -341,7 +343,7 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&Local).date_naive();
+            let date = start_time.with_timezone(&timezone).date_naive();
             let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
@@ -360,8 +362,6 @@ mod tests {
         };
 
         let now = "2020-01-01T00:30:00Z".parse().unwrap();
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -417,6 +417,7 @@ mod tests {
         use IntervalType::ActualInterval;
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
@@ -426,7 +427,7 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&Local).date_naive();
+            let date = start_time.with_timezone(&timezone).date_naive();
             let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
@@ -460,8 +461,6 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -502,6 +501,7 @@ mod tests {
         use IntervalType::ActualInterval;
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
@@ -511,7 +511,7 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&Local).date_naive();
+            let date = start_time.with_timezone(&timezone).date_naive();
             let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
@@ -545,8 +545,6 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -587,6 +585,7 @@ mod tests {
         use IntervalType::ActualInterval;
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
@@ -596,7 +595,7 @@ mod tests {
         };
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&Local).date_naive();
+            let date = start_time.with_timezone(&timezone).date_naive();
             let end_time = start_time + INTERVAL;
             PriceResponse {
                 date,
@@ -630,8 +629,6 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T02:00:00Z");
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
