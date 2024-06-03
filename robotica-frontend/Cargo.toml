@@ -35,7 +35,7 @@ gloo-utils = "0.2.0"
 tap = "1.0.1"
 geo = "0.28.0"
 paste = "1.0.15"
-js-sys = "0.3.68"
+js-sys = "0.3.69"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
