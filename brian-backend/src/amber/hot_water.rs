@@ -40,8 +40,8 @@ const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 2);
 const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
 
 impl DayState {
-    fn new(now: &DateTime<Utc>) -> Self {
-        let (start_day, end_day) = get_2hr_day(now);
+    fn new<T: TimeZone>(now: &DateTime<Utc>, timezone: &T) -> Self {
+        let (start_day, end_day) = get_2hr_day(now, timezone);
         Self {
             start: start_day,
             end: end_day,
@@ -60,27 +60,28 @@ impl DayState {
     pub fn load(psr: &PersistentStateRow<Self>, now: &DateTime<Utc>) -> Self {
         psr.load().unwrap_or_else(|err| {
             error!("Failed to load day state, using defaults: {}", err);
-            Self::new(now)
+            Self::new(now, &Local)
         })
     }
 
     // FIXME: is this too complicated?
     #[allow(clippy::cognitive_complexity)]
-    fn prices_to_hot_water_request(
+    fn prices_to_hot_water_request<T: TimeZone>(
         &mut self,
         prices: &Prices,
         now: DateTime<Utc>,
+        timezone: &T,
     ) -> Option<Request> {
         let Some(current_price) = prices.current(&now) else {
             error!("No current price found in prices: {prices:?}");
             return None;
         };
 
-        let (_start_day, end_day) = get_2hr_day(&now);
+        let (_start_day, end_day) = get_2hr_day(&now, timezone);
 
         // If the date has changed, reset the cheap power for the day.
         if now < self.start || now >= self.end {
-            *self = Self::new(&now);
+            *self = Self::new(&now, timezone);
         };
 
         // Add recent time to total cheap_power_for_day
@@ -133,9 +134,9 @@ impl DayState {
     }
 }
 
-fn get_2hr_day(now: &DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
+fn get_2hr_day<T: TimeZone>(now: &DateTime<Utc>, local: &T) -> (DateTime<Utc>, DateTime<Utc>) {
     let time_2hr_cheap: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
-    let (start_day, end_day) = get_day(now, time_2hr_cheap, &Local);
+    let (start_day, end_day) = get_day(now, time_2hr_cheap, local);
     (start_day, end_day)
 }
 
@@ -198,7 +199,7 @@ pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
         let mut s = rx.subscribe().await;
 
         while let Ok(prices) = s.recv().await {
-            let cr = day.prices_to_hot_water_request(&prices, Utc::now());
+            let cr = day.prices_to_hot_water_request(&prices, Utc::now(), &Local);
             if let Some(cr) = cr {
                 tx_out.try_send(cr);
             }
@@ -312,7 +313,8 @@ mod tests {
     #[test]
     fn test_day_state_new() {
         let now = "2020-01-01T00:00:00Z".parse().unwrap();
-        let ds = DayState::new(&now);
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+        let ds = DayState::new(&now, &timezone);
         assert_eq!(
             ds,
             DayState {
@@ -358,6 +360,8 @@ mod tests {
         };
 
         let now = "2020-01-01T00:30:00Z".parse().unwrap();
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -389,7 +393,9 @@ mod tests {
         };
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+        let request = ds
+            .prices_to_hot_water_request(&prices, now, &timezone)
+            .unwrap();
 
         // Assert
         assert!(matches!(request, Request::Heat));
@@ -454,6 +460,8 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -470,7 +478,9 @@ mod tests {
         };
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+        let request = ds
+            .prices_to_hot_water_request(&prices, now, &timezone)
+            .unwrap();
 
         // Assert
         assert!(matches!(request, Request::Heat));
@@ -535,6 +545,8 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -551,7 +563,9 @@ mod tests {
         };
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+        let request = ds
+            .prices_to_hot_water_request(&prices, now, &timezone)
+            .unwrap();
 
         // Assert
         assert!(matches!(request, Request::DoNotHeat));
@@ -616,6 +630,8 @@ mod tests {
         ];
 
         let now: DateTime<Utc> = dt("2020-01-01T02:00:00Z");
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -632,7 +648,9 @@ mod tests {
         };
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+        let request = ds
+            .prices_to_hot_water_request(&prices, now, &timezone)
+            .unwrap();
 
         // Assert
         assert!(matches!(request, Request::Heat));
