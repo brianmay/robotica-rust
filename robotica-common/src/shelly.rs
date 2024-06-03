@@ -40,7 +40,7 @@ pub enum Params {
         // emdata_0: Option<Em0Data>,
     },
 
-    /// NotifyFullStatus message
+    /// `NotifyFullStatus` message
     #[serde(rename = "NotifyFullStatus")]
     NotifyFullStatus {
         /// The timestamp of the message
@@ -48,7 +48,7 @@ pub enum Params {
         // TODO: Add the rest of the fields
     },
 
-    /// NotifyEvent message
+    /// `NotifyEvent` message
     #[serde(rename = "NotifyEvent")]
     NotifyEvent {
         /// The timestamp of the message
