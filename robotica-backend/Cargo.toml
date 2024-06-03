@@ -11,7 +11,7 @@ scheduler = ["pyo3", "lalrpop-util"]
 
 [dependencies]
 bytes = "1.6.0"
-rumqttc = "0.23.0"
+rumqttc = "0.24.0"
 rustls-native-certs = "0.7.0"
 tokio = { version = "1.38.0", features = ["full"] }
 serde = { version = "1.0.203", features = ["derive"] }
@@ -35,7 +35,7 @@ pyo3 = { version = "0.21.2", features = ["auto-initialize", "chrono"], optional 
 # http server
 axum-core = "0.4.3"
 axum = { version = "0.7.5", features = ["ws", "macros"] }
-openid = "0.13.0"
+openid = "0.14.0"
 maud = { version = "0.26.0", features = ["axum"] }
 base64 = "0.22.1"
 url = "2.5.0"
@@ -56,4 +56,4 @@ tap = "1.0.1"
 lalrpop = "0.20.2"
 
 [dev-dependencies]
-env_logger = "0.10.2"
+env_logger = "0.11.3"

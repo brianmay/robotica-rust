@@ -247,7 +247,6 @@ pub fn run_client(
 
     let root_store = get_root_store();
     let client_config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
@@ -357,12 +356,11 @@ fn get_root_store() -> RootCertStore {
         }
     };
 
+    // Add all certificates to the root store.
     for cert in certs {
-        _ = root_store
-            .add(&rustls::Certificate(cert.as_ref().to_vec()))
-            .map_err(|err| {
-                error!("Failed to add certificate: {:?}", err);
-            });
+        _ = root_store.add(cert).map_err(|err| {
+            error!("Failed to add certificate: {:?}", err);
+        });
     }
 
     root_store
