@@ -277,7 +277,7 @@
           } // common // build_env);
 
           wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
-            export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.libxkbcommon}/lib:${pkgs.dbus.lib}/lib:$LD_LIBRARY_PATH"
             exec ${pkg}/bin/robotica-slint "$@"
           '';
         in {
