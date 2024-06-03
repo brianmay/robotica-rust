@@ -57,10 +57,14 @@ impl DayState {
         });
     }
 
-    pub fn load(psr: &PersistentStateRow<Self>, now: &DateTime<Utc>) -> Self {
+    pub fn load<T: TimeZone>(
+        psr: &PersistentStateRow<Self>,
+        now: &DateTime<Utc>,
+        timezone: &T,
+    ) -> Self {
         psr.load().unwrap_or_else(|err| {
             error!("Failed to load day state, using defaults: {}", err);
-            Self::new(now, &Local)
+            Self::new(now, timezone)
         })
     }
 
@@ -188,18 +192,19 @@ fn get_price_for_cheapest_period(
 
 pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
     let (tx_out, rx_out) = create_pipe("amber/hot_water");
+    let timezone = &Local;
 
     let psr = state
         .persistent_state_database
         .for_name::<DayState>("amber");
 
-    let mut day = DayState::load(&psr, &utc_now());
+    let mut day = DayState::load(&psr, &utc_now(), timezone);
 
     spawn(async move {
         let mut s = rx.subscribe().await;
 
         while let Ok(prices) = s.recv().await {
-            let cr = day.prices_to_hot_water_request(&prices, Utc::now(), &Local);
+            let cr = day.prices_to_hot_water_request(&prices, Utc::now(), timezone);
             if let Some(cr) = cr {
                 tx_out.try_send(cr);
             }
