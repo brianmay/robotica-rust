@@ -2,7 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -129,7 +129,7 @@
           src = ./robotica-frontend;
 
           buildPhase = ''
-            ${pkgs_unstable.wasm-bindgen-cli}/bin/wasm-bindgen \
+            ${pkgs.wasm-bindgen-cli}/bin/wasm-bindgen \
               --target bundler \
               --out-dir pkg \
               --omit-default-module-path \
@@ -300,7 +300,7 @@
               freetype
               nodejs
               wasm-pack
-              pkgs_unstable.wasm-bindgen-cli
+              wasm-bindgen-cli
               slint-lsp
               rustPlatform
               # https://github.com/NixOS/nixpkgs/issues/156890
