@@ -13,7 +13,7 @@ eyre = "0.6.12"
 futures = "0.3.30"
 gloo-net = "0.5.0"
 gloo-timers = "0.3.0"
-itertools = "0.12.1"
+itertools = "0.13.0"
 # See https://github.com/hamza1311/reqwasm/issues/35
 reqwasm = { git = "https://github.com/brianmay/reqwasm.git", branch = "patch-1"}
 serde = "1.0.203"

@@ -81,7 +81,7 @@ pub fn schedule(props: &Props) -> Html {
     html! {
         <div class={classes}>
         {
-            sequence_list.iter().group_by(|s| get_local_date_for_sequence(s)).into_iter().map(|(date, sequence_list)| {
+            sequence_list.iter().chunk_by(|s| get_local_date_for_sequence(s)).into_iter().map(|(date, sequence_list)| {
                 let date_string = date.format("%A, %e %B, %Y").to_string();
                 html! {
                     <>
