@@ -1,9 +1,6 @@
 use crate::{delays::rate_limit, InitState};
 
-use super::{
-    api::{IntervalType, PriceResponse},
-    Prices,
-};
+use super::{api::PriceResponse, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use robotica_backend::{
     pipes::{
@@ -228,7 +225,7 @@ mod tests {
     use std::time::Duration;
 
     use crate::amber::{
-        api::{ChannelType, PeriodType, TariffInformation},
+        api::{ChannelType, IntervalType, PeriodType, TariffInformation},
         PriceCategory,
     };
 

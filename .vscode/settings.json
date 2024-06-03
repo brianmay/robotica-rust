@@ -74,6 +74,7 @@
         "postgis",
         "protobuf",
         "protos",
+        "ratelimit",
         "renewables",
         "reqwasm",
         "reqwest",
