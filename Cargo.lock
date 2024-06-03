@@ -667,7 +667,7 @@ dependencies = [
  "bitflags 2.5.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -2011,7 +2011,7 @@ dependencies = [
  "envconfig",
  "freeswitch-esl",
  "futures",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "openssl",
  "reqwest 0.12.4",
  "robotica-backend",
@@ -3627,6 +3627,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4875,7 +4884,7 @@ checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
  "heck 0.5.0",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -4895,7 +4904,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.66",
@@ -5388,7 +5397,7 @@ dependencies = [
  "gloo-net 0.5.0",
  "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "js-sys",
  "leaflet",
  "paste",
@@ -5418,7 +5427,7 @@ dependencies = [
  "color-backtrace",
  "envconfig",
  "futures",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "openssl",
  "robotica-backend",
  "robotica-common",

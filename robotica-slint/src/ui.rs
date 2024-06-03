@@ -390,7 +390,7 @@ fn monitor_schedule(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWin
                     let Json(schedule) = msg.as_ref();
                     let schedule = schedule
                         .iter()
-                        .group_by(|s| get_local_date_for_sequence(s))
+                        .chunk_by(|s| get_local_date_for_sequence(s))
                         .into_iter()
                         .map(|(date, sequences)| {
                             let date = date.format("%A, %e %B, %Y").to_string();
