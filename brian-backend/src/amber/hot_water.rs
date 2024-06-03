@@ -28,7 +28,7 @@ pub enum Request {
     DoNotHeat,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct DayState {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
@@ -79,7 +79,7 @@ impl DayState {
             return None;
         };
 
-        let (start_day, end_day) = get_2hr_day(&now);
+        let (_start_day, end_day) = get_2hr_day(&now);
 
         // If the date has changed, reset the cheap power for the day.
         if now < self.start || now >= self.end {
@@ -117,7 +117,7 @@ impl DayState {
         );
 
         self.cheapest_price =
-            get_price_for_cheapest_period(&prices.list, number_of_intervals, &start_day, &end_day)
+            get_price_for_cheapest_period(&prices.list, number_of_intervals, &now, &end_day)
                 .unwrap_or(self.cheapest_price);
 
         let is_cheap = current_price.per_kwh <= self.cheapest_price;
@@ -175,11 +175,7 @@ fn get_price_for_cheapest_period(
 
     let mut prices: Vec<_> = prices
         .iter()
-        .filter(|p| {
-            p.start_time >= *start_time
-                && p.start_time < *end_time
-                && p.interval_type != IntervalType::ActualInterval
-        })
+        .filter(|p| p.start_time >= *start_time && p.end_time <= *end_time)
         .map(|p| p.per_kwh)
         .collect();
 
@@ -224,6 +220,9 @@ pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
 mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
+
+    use test_log::test;
+
     use chrono::{FixedOffset, Local};
     use robotica_common::unsafe_duration;
     use std::time::Duration;
@@ -241,106 +240,97 @@ mod tests {
 
     const INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
-    #[test]
-    fn test_get_price_for_cheapest_period() {
-        let tariff_information = TariffInformation {
-            period: PeriodType::Peak,
-            season: None,
-            block: None,
-            demand_window: None,
-        };
+    macro_rules! cheapest_price_tests {
+        ($($name:ident: $start_time:expr, $end_time:expr, $number_of_intervals:expr, $expected:expr)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let tariff_information = TariffInformation {
+                    period: PeriodType::Peak,
+                    season: None,
+                    block: None,
+                    demand_window: None,
+                };
 
-        let pr = |start_time: DateTime<Utc>, price| {
-            let date = start_time.with_timezone(&Local).date_naive();
-            let end_time = start_time + INTERVAL;
-            PriceResponse {
-                date,
-                start_time,
-                end_time,
-                per_kwh: price,
-                spot_per_kwh: price,
-                interval_type: IntervalType::CurrentInterval,
-                renewables: 0.0,
-                duration: 0,
-                channel_type: ChannelType::General,
-                estimate: Some(false),
-                spike_status: "None".to_string(),
-                tariff_information: tariff_information.clone(),
+                let pr = |start_time: DateTime<Utc>, price| {
+                    let date = start_time.with_timezone(&Local).date_naive();
+                    let end_time = start_time + INTERVAL;
+                    PriceResponse {
+                        date,
+                        start_time,
+                        end_time,
+                        per_kwh: price,
+                        spot_per_kwh: price,
+                        interval_type: IntervalType::CurrentInterval,
+                        renewables: 0.0,
+                        duration: 0,
+                        channel_type: ChannelType::General,
+                        estimate: Some(false),
+                        spike_status: "None".to_string(),
+                        tariff_information: tariff_information.clone(),
+                    }
+                };
+
+                let prices = vec![
+                    pr(dt("2020-01-01T00:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T01:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T01:30:00Z"), 10.0),
+                    pr(dt("2020-01-01T02:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T02:30:00Z"), 0.0),
+                    pr(dt("2020-01-01T03:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T04:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T04:30:00Z"), 0.0),
+                    pr(dt("2020-01-01T05:00:00Z"), 10.0),
+                    pr(dt("2020-01-01T05:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T06:00:00Z"), -10.0),
+                ];
+
+                assert_eq!(
+                    get_price_for_cheapest_period(&prices, $number_of_intervals, &$start_time, &$end_time),
+                    $expected
+                );
             }
-        };
+        )*
+        }
+    }
 
-        let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), -10.0),
-            pr(dt("2020-01-01T01:00:00Z"), 0.0),
-            pr(dt("2020-01-01T01:30:00Z"), 10.0),
-            pr(dt("2020-01-01T02:00:00Z"), 0.0),
-            pr(dt("2020-01-01T02:30:00Z"), 0.0),
-            pr(dt("2020-01-01T03:30:00Z"), -10.0),
-            pr(dt("2020-01-01T04:00:00Z"), 0.0),
-            pr(dt("2020-01-01T04:30:00Z"), 0.0),
-            pr(dt("2020-01-01T05:00:00Z"), 10.0),
-            pr(dt("2020-01-01T05:30:00Z"), -10.0),
-            pr(dt("2020-01-01T06:00:00Z"), -10.0),
-        ];
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 1, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 2, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 3, Some(-10.0));
 
-        let start_time: DateTime<Utc> = "2020-01-01T00:00:00Z".parse().unwrap();
-        let end_time: DateTime<Utc> = "2020-01-01T06:30:00Z".parse().unwrap();
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 0, &start_time, &end_time),
-            None
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 1, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 2, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 3, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 4, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 5, &start_time, &end_time),
-            Some(0.0)
-        );
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 4, Some(-10.0));
 
-        let start_time: DateTime<Utc> = dt("2020-01-01T00:00:00Z");
-        let end_time: DateTime<Utc> = dt("2020-01-01T06:00:00Z");
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 5, Some(0.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 1, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 2, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 3, Some(-10.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 4, Some(0.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 5, Some(0.0));
+
+    #[test]
+    fn test_day_state_new() {
+        let now = "2020-01-01T00:00:00Z".parse().unwrap();
+        let ds = DayState::new(&now);
         assert_eq!(
-            get_price_for_cheapest_period(&prices, 0, &start_time, &end_time),
-            None
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 1, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 2, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 3, &start_time, &end_time),
-            Some(-10.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 4, &start_time, &end_time),
-            Some(0.0)
-        );
-        assert_eq!(
-            get_price_for_cheapest_period(&prices, 5, &start_time, &end_time),
-            Some(-0.0)
+            ds,
+            DayState {
+                start: dt("2019-12-31T04:00:00Z"),
+                end: dt("2020-01-01T04:00:00Z"),
+                cheap_power_for_day: TimeDelta::minutes(0),
+                last_cheap_update: None,
+                cheapest_price: 10.0,
+            }
         );
     }
 
     #[test]
-    fn test_prices_to_hot_water_request() {
-        use IntervalType::ActualInterval;
+    fn test_prices_to_hot_water_request_1() {
+        // Arrange
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
 
@@ -371,7 +361,13 @@ mod tests {
         };
 
         let now = "2020-01-01T00:30:00Z".parse().unwrap();
-        let mut ds = DayState::new(&now);
+        let mut ds = DayState {
+            start: dt("2019-12-31T04:00:00Z"),
+            end: dt("2020-01-01T04:00:00Z"),
+            cheap_power_for_day: TimeDelta::zero(),
+            last_cheap_update: Some(dt("2020-01-01T00:00:00Z")),
+            cheapest_price: 10.0,
+        };
 
         let prices = vec![
             pr(dt("2020-01-01T00:30:00Z"), 0.0, CurrentInterval),
@@ -380,6 +376,7 @@ mod tests {
             pr(dt("2020-01-01T01:30:00Z"), 10.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 0.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), -10.0, ForecastInterval),
             pr(dt("2020-01-01T03:30:00Z"), -10.0, ForecastInterval),
             pr(dt("2020-01-01T04:00:00Z"), -10.0, ForecastInterval),
             pr(dt("2020-01-01T04:30:00Z"), 0.0, ForecastInterval),
@@ -394,11 +391,55 @@ mod tests {
             interval: INTERVAL,
         };
 
+        // Act
         let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+
+        // Assert
         assert!(matches!(request, Request::Heat));
-        assert_eq!(ds.cheap_power_for_day, TimeDelta::zero());
-        let cp = ds.last_cheap_update.unwrap();
-        assert_eq!(cp, now);
+        assert_eq!(
+            ds,
+            DayState {
+                start: dt("2019-12-31T04:00:00Z"),
+                end: dt("2020-01-01T04:00:00Z"),
+                cheap_power_for_day: TimeDelta::minutes(30),
+                last_cheap_update: Some(dt("2020-01-01T00:30:00Z")),
+                cheapest_price: 0.0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_prices_to_hot_water_request_2() {
+        // Arrange
+        use IntervalType::ActualInterval;
+        use IntervalType::CurrentInterval;
+        use IntervalType::ForecastInterval;
+
+        let tariff_information = TariffInformation {
+            period: PeriodType::Peak,
+            season: None,
+            block: None,
+            demand_window: None,
+        };
+
+        let pr = |start_time: DateTime<Utc>, price, interval_type| {
+            let date = start_time.with_timezone(&Local).date_naive();
+            let end_time = start_time + INTERVAL;
+            PriceResponse {
+                date,
+                start_time,
+                end_time,
+                per_kwh: price,
+                spot_per_kwh: price,
+                interval_type,
+                renewables: 0.0,
+                duration: 0,
+                channel_type: ChannelType::General,
+                estimate: Some(false),
+                spike_status: "None".to_string(),
+                tariff_information: tariff_information.clone(),
+            }
+        };
 
         let prices = vec![
             pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
@@ -406,6 +447,7 @@ mod tests {
             pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T03:30:00Z"), -30.0, ForecastInterval),
             pr(dt("2020-01-01T04:00:00Z"), -30.0, ForecastInterval),
             pr(dt("2020-01-01T04:30:00Z"), -30.0, ForecastInterval),
@@ -414,6 +456,15 @@ mod tests {
             pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
         ];
 
+        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
+        let mut ds = DayState {
+            start: dt("2019-12-31T04:00:00Z"),
+            end: dt("2020-01-01T04:00:00Z"),
+            cheap_power_for_day: TimeDelta::minutes(30),
+            last_cheap_update: Some(dt("2020-01-01T00:30:00Z")),
+            cheapest_price: 10.0,
+        };
+
         let prices = Prices {
             list: prices,
             category: PriceCategory::SuperCheap,
@@ -421,12 +472,183 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
+        // Act
         let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+
+        // Assert
+        assert!(matches!(request, Request::Heat));
+        assert_eq!(
+            ds,
+            DayState {
+                start: dt("2019-12-31T04:00:00Z"),
+                end: dt("2020-01-01T04:00:00Z"),
+                cheap_power_for_day: TimeDelta::minutes(30 + 45),
+                last_cheap_update: Some(now),
+                cheapest_price: 0.0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_prices_to_hot_water_request_2_cheaper_after_wait() {
+        // Arrange
+        use IntervalType::ActualInterval;
+        use IntervalType::CurrentInterval;
+        use IntervalType::ForecastInterval;
+
+        let tariff_information = TariffInformation {
+            period: PeriodType::Peak,
+            season: None,
+            block: None,
+            demand_window: None,
+        };
+
+        let pr = |start_time: DateTime<Utc>, price, interval_type| {
+            let date = start_time.with_timezone(&Local).date_naive();
+            let end_time = start_time + INTERVAL;
+            PriceResponse {
+                date,
+                start_time,
+                end_time,
+                per_kwh: price,
+                spot_per_kwh: price,
+                interval_type,
+                renewables: 0.0,
+                duration: 0,
+                channel_type: ChannelType::General,
+                estimate: Some(false),
+                spike_status: "None".to_string(),
+                tariff_information: tariff_information.clone(),
+            }
+        };
+
+        let prices = vec![
+            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), -30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
+            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
+        ];
+
+        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
+        let mut ds = DayState {
+            start: dt("2019-12-31T04:00:00Z"),
+            end: dt("2020-01-01T04:00:00Z"),
+            cheap_power_for_day: TimeDelta::minutes(30),
+            last_cheap_update: Some(dt("2020-01-01T00:30:00Z")),
+            cheapest_price: 10.0,
+        };
+
+        let prices = Prices {
+            list: prices,
+            category: PriceCategory::SuperCheap,
+            dt: now,
+            interval: INTERVAL,
+        };
+
+        // Act
+        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+
+        // Assert
         assert!(matches!(request, Request::DoNotHeat));
-        assert_eq!(ds.cheap_power_for_day, TimeDelta::try_minutes(45).unwrap());
-        let cp = ds.last_cheap_update;
-        assert_eq!(cp, None);
+        assert_eq!(
+            ds,
+            DayState {
+                start: dt("2019-12-31T04:00:00Z"),
+                end: dt("2020-01-01T04:00:00Z"),
+                cheap_power_for_day: TimeDelta::minutes(30 + 45),
+                last_cheap_update: None,
+                cheapest_price: -30.0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_prices_to_hot_water_request_3_force_end_day() {
+        // Arrange
+        use IntervalType::ActualInterval;
+        use IntervalType::CurrentInterval;
+        use IntervalType::ForecastInterval;
+
+        let tariff_information = TariffInformation {
+            period: PeriodType::Peak,
+            season: None,
+            block: None,
+            demand_window: None,
+        };
+
+        let pr = |start_time: DateTime<Utc>, price, interval_type| {
+            let date = start_time.with_timezone(&Local).date_naive();
+            let end_time = start_time + INTERVAL;
+            PriceResponse {
+                date,
+                start_time,
+                end_time,
+                per_kwh: price,
+                spot_per_kwh: price,
+                interval_type,
+                renewables: 0.0,
+                duration: 0,
+                channel_type: ChannelType::General,
+                estimate: Some(false),
+                spike_status: "None".to_string(),
+                tariff_information: tariff_information.clone(),
+            }
+        };
+
+        let prices = vec![
+            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 15.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), 10.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), 5.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), -5.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
+            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
+        ];
+
+        let now: DateTime<Utc> = dt("2020-01-01T02:00:00Z");
+        let mut ds = DayState {
+            start: dt("2019-12-31T04:00:00Z"),
+            end: dt("2020-01-01T04:00:00Z"),
+            cheap_power_for_day: TimeDelta::minutes(0),
+            last_cheap_update: None,
+            cheapest_price: 10.0,
+        };
+
+        let prices = Prices {
+            list: prices,
+            category: PriceCategory::SuperCheap,
+            dt: now,
+            interval: INTERVAL,
+        };
+
+        // Act
+        let request = ds.prices_to_hot_water_request(&prices, now).unwrap();
+
+        // Assert
+        assert!(matches!(request, Request::Heat));
+        assert_eq!(
+            ds,
+            DayState {
+                start: dt("2019-12-31T04:00:00Z"),
+                end: dt("2020-01-01T04:00:00Z"),
+                cheap_power_for_day: TimeDelta::minutes(0),
+                last_cheap_update: Some(now),
+                cheapest_price: 20.0,
+            }
+        );
     }
 
     #[test]
