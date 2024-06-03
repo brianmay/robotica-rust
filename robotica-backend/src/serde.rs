@@ -1,5 +1,5 @@
 //! Serde utilities
-use serde_yaml::{Mapping, Value};
+use serde_yml::{Mapping, Value};
 use thiserror::Error;
 
 /// An error merging YAML values.
@@ -41,8 +41,8 @@ pub fn merge_yaml(a: Value, b: Value) -> Result<Value, Error> {
         (Value::Null, b) => Ok(b),
         (_, b @ Value::Null) => Ok(b),
         (a, b) => Err(Error::InvalidTypes(
-            serde_yaml::to_string(&a).unwrap_or_default(),
-            serde_yaml::to_string(&b).unwrap_or_default(),
+            serde_yml::to_string(&a).unwrap_or_default(),
+            serde_yml::to_string(&b).unwrap_or_default(),
         )),
     }
 }
@@ -51,7 +51,7 @@ pub fn merge_yaml(a: Value, b: Value) -> Result<Value, Error> {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    use serde_yaml::Value;
+    use serde_yml::Value;
 
     #[test]
     fn test_merge_yaml_simple() {
@@ -73,9 +73,9 @@ b: 3
 c: 3
 ";
 
-        let a = serde_yaml::from_str::<Value>(a).unwrap();
-        let b = serde_yaml::from_str::<Value>(b).unwrap();
-        let c = serde_yaml::from_str::<Value>(c).unwrap();
+        let a = serde_yml::from_str::<Value>(a).unwrap();
+        let b = serde_yml::from_str::<Value>(b).unwrap();
+        let c = serde_yml::from_str::<Value>(c).unwrap();
         let r = merge_yaml(a, b).unwrap();
         assert_eq!(r, c);
     }
@@ -113,9 +113,9 @@ third:
     c: 3
 ";
 
-        let a = serde_yaml::from_str::<Value>(a).unwrap();
-        let b = serde_yaml::from_str::<Value>(b).unwrap();
-        let c = serde_yaml::from_str::<Value>(c).unwrap();
+        let a = serde_yml::from_str::<Value>(a).unwrap();
+        let b = serde_yml::from_str::<Value>(b).unwrap();
+        let c = serde_yml::from_str::<Value>(c).unwrap();
         let r = merge_yaml(a, b).unwrap();
         assert_eq!(r, c);
     }

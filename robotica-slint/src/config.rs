@@ -14,10 +14,10 @@ pub struct Environment {
     pub secrets_file: Option<PathBuf>,
 }
 
-fn load_file(filename: &Path) -> Result<serde_yaml::Value, Error> {
+fn load_file(filename: &Path) -> Result<serde_yml::Value, Error> {
     let f = std::fs::File::open(filename).map_err(|e| Error::File(filename.to_path_buf(), e))?;
-    let config: serde_yaml::Value =
-        serde_yaml::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
+    let config: serde_yml::Value =
+        serde_yml::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
 
     Ok(config)
 }
@@ -34,7 +34,7 @@ impl Environment {
         };
 
         let config: Config =
-            serde_yaml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
+            serde_yml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         Ok(config)
     }
@@ -61,7 +61,7 @@ pub enum Error {
 
     /// Error reading the file
     #[error("Error parsing file {0}: {1}")]
-    Yaml(PathBuf, serde_yaml::Error),
+    Yaml(PathBuf, serde_yml::Error),
 
     /// Error merging the files
     #[error("Error merging files: {0}")]
