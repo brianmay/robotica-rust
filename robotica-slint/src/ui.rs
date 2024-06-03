@@ -6,34 +6,7 @@ use itertools::Itertools;
 use std::{sync::Arc, time::Duration};
 
 mod slint {
-    #![allow(clippy::wildcard_imports)]
-    #![allow(clippy::use_self)]
-    #![allow(clippy::unused_self)]
-    #![allow(clippy::used_underscore_binding)]
-    #![allow(clippy::cast_possible_truncation)]
-    #![allow(clippy::cast_sign_loss)]
-    #![allow(clippy::cast_lossless)]
-    #![allow(clippy::if_not_else)]
-    #![allow(clippy::needless_pass_by_value)]
-    #![allow(clippy::too_many_lines)]
-    #![allow(clippy::unreadable_literal)]
-    #![allow(clippy::semicolon_if_nothing_returned)]
-    #![allow(clippy::redundant_else)]
-    #![allow(clippy::no_effect_underscore_binding)]
-    #![allow(clippy::uninlined_format_args)]
-    #![allow(clippy::default_trait_access)]
-    #![allow(clippy::redundant_clone)]
-    #![allow(clippy::cmp_owned)]
-    #![allow(clippy::missing_const_for_fn)]
-    #![allow(clippy::match_same_arms)]
-    #![allow(clippy::similar_names)]
-    #![allow(clippy::items_after_statements)]
-    #![allow(clippy::cast_possible_wrap)]
-    #![allow(clippy::float_cmp)]
-    #![allow(clippy::needless_pass_by_ref_mut)]
-    #![allow(unused_imports)]
-    #![allow(dead_code)]
-
+    #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
     slint::include_modules!();
 }
 
