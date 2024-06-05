@@ -281,6 +281,7 @@ impl TryFrom<MqttMessage> for ChargingStateEnum {
             Ok("NoPower") => Ok(Self::NoPower),
             Ok("Complete") => Ok(Self::Complete),
             Ok("Stopped") => Ok(Self::Stopped),
+            Ok("Starting") => Ok(Self::Starting),
             Ok(state) => Err(ChargingStateError::InvalidChargingState(state.to_string())),
             Err(err) => Err(err.into()),
         }
