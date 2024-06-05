@@ -427,10 +427,6 @@ impl<T: TimeZone + Copy> State<T> {
                     );
                     false
                 } else if now > sequence.latest_time {
-                    debug!(
-                        "Skipping starting {sequence:?} because it is too late",
-                        sequence = sequence.id
-                    );
                     self.all_status.insert(sequence, Status::InProgress);
                     true
                 } else {
@@ -449,7 +445,6 @@ impl<T: TimeZone + Copy> State<T> {
                 let sequence = &self.sequences[event.sequence_index];
                 let status = self.get_status_for_sequence(sequence);
                 if status == Status::InProgress {
-                    debug!("Stopping {sequence:?}", sequence = sequence.id);
                     self.all_status.insert(sequence, Status::Completed);
                     true
                 } else {
