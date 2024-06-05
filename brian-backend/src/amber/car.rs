@@ -185,6 +185,15 @@ fn prices_to_charge_request<T: TimeZone>(
         ChargeRequest::Manual => None,
     };
 
+    let estimated_charge_time_to_90 = estimate_charge_time(battery_level, 90);
+    if let Some(estimated_charge_time_to_90) = estimated_charge_time_to_90 {
+        info!(
+            "{id}: Estimated charge time to 90% is {time}",
+            id = id,
+            time = time_delta::to_string(&estimated_charge_time_to_90)
+        );
+    }
+
     State {
         time: dt,
         battery_level,
@@ -196,6 +205,7 @@ fn prices_to_charge_request<T: TimeZone>(
         result,
         estimated_charge_time_to_min,
         estimated_charge_time_to_limit,
+        estimated_charge_time_to_90,
     }
 }
 
@@ -215,6 +225,9 @@ struct State {
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_charge_time_to_limit: Option<TimeDelta>,
+
+    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
+    estimated_charge_time_to_90: Option<TimeDelta>,
 }
 
 fn publish_state(
@@ -338,7 +351,8 @@ mod tests {
                 normal: ChargeRequest::ChargeTo(90),
                 result: ChargeRequest::ChargeTo(90),
                 estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(8580))
+                estimated_charge_time_to_limit: Some(TimeDelta::seconds(8580)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
             }
         );
     }
@@ -377,6 +391,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(80),
                 estimated_charge_time_to_min: None,
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
             }
         );
     }
@@ -415,6 +430,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(50),
                 estimated_charge_time_to_min: None,
                 estimated_charge_time_to_limit: None,
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
             }
         );
     }
@@ -452,7 +468,8 @@ mod tests {
                 normal: ChargeRequest::ChargeTo(20),
                 result: ChargeRequest::ChargeTo(20),
                 estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: None
+                estimated_charge_time_to_limit: None,
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
             }
         );
     }
@@ -492,6 +509,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(72),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(26700)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -531,6 +549,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(72),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(26700)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -570,6 +589,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(20),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -609,6 +629,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(20),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -648,6 +669,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(90),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -686,7 +708,8 @@ mod tests {
                 normal: ChargeRequest::ChargeTo(90),
                 result: ChargeRequest::ChargeTo(90),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440))
+                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440))
             }
         );
     }
@@ -726,6 +749,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(90),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
@@ -765,6 +789,7 @@ mod tests {
                 result: ChargeRequest::ChargeTo(90),
                 estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
                 estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
+                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
             }
         );
     }
