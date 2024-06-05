@@ -15,6 +15,7 @@ pub mod api;
 pub mod car;
 pub mod hot_water;
 pub mod logging;
+mod private;
 
 #[derive(Copy, Debug, Clone, Eq, PartialEq)]
 pub enum PriceCategory {
@@ -43,6 +44,34 @@ impl Eq for Prices {}
 impl Prices {
     pub fn current(&self, dt: &DateTime<Utc>) -> Option<&api::PriceResponse> {
         get_current_price_response(&self.list, dt)
+    }
+
+    fn get_cheapest_price_for_time_delta(
+        &self,
+        time_delta: TimeDelta,
+        start_time: &DateTime<Utc>,
+        end_time: &DateTime<Utc>,
+    ) -> Option<f32> {
+        let number_of_intervals =
+            private::time_delta_to_number_intervals(time_delta, self.interval);
+
+        if number_of_intervals == 0 {
+            return None;
+        }
+
+        let mut prices: Vec<_> = self
+            .list
+            .iter()
+            .filter(|p| p.start_time >= *start_time && p.end_time <= *end_time)
+            .map(|p| p.per_kwh)
+            .collect();
+
+        prices.sort_by(f32::total_cmp);
+
+        prices
+            .get(number_of_intervals - 1)
+            .or_else(|| prices.last())
+            .copied()
     }
 }
 
@@ -302,10 +331,16 @@ fn fix_amber_weirdness(prices: &mut [api::PriceResponse]) {
 mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
+    use crate::amber::{
+        api::{ChannelType, IntervalType, PeriodType, TariffInformation},
+        PriceCategory,
+    };
+    use chrono::FixedOffset;
     use chrono::Local;
     use float_cmp::assert_approx_eq;
-
-    use crate::amber::api::IntervalType;
+    use robotica_common::unsafe_duration;
+    use std::time::Duration;
+    use test_log::test;
 
     use super::*;
 
@@ -632,4 +667,88 @@ mod tests {
         assert_eq!(prices[2].start_time, dt("2020-01-01T01:00:00Z"));
         assert_eq!(prices[2].end_time, dt("2020-01-01T01:30:00Z"));
     }
+
+    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+
+    macro_rules! cheapest_price_tests {
+        ($($name:ident: $start_time:expr, $end_time:expr, $period:expr, $expected:expr)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let tariff_information = TariffInformation {
+                    period: PeriodType::Peak,
+                    season: None,
+                    block: None,
+                    demand_window: None,
+                };
+
+                let pr = |start_time: DateTime<Utc>, price| {
+                    let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+                    let date = start_time.with_timezone(&timezone).date_naive();
+                    let end_time = start_time + INTERVAL;
+                    api::PriceResponse {
+                        date,
+                        start_time,
+                        end_time,
+                        per_kwh: price,
+                        spot_per_kwh: price,
+                        interval_type: IntervalType::CurrentInterval,
+                        renewables: 0.0,
+                        duration: 0,
+                        channel_type: ChannelType::General,
+                        estimate: Some(false),
+                        spike_status: "None".to_string(),
+                        tariff_information: tariff_information.clone(),
+                    }
+                };
+
+                let prices = vec![
+                    pr(dt("2020-01-01T00:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T01:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T01:30:00Z"), 10.0),
+                    pr(dt("2020-01-01T02:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T02:30:00Z"), 0.0),
+                    pr(dt("2020-01-01T03:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T04:00:00Z"), 0.0),
+                    pr(dt("2020-01-01T04:30:00Z"), 0.0),
+                    pr(dt("2020-01-01T05:00:00Z"), 10.0),
+                    pr(dt("2020-01-01T05:30:00Z"), -10.0),
+                    pr(dt("2020-01-01T06:00:00Z"), -10.0),
+                ];
+
+                let time_delta = TimeDelta::minutes($period);
+
+                let prices = Prices {
+                    list: prices,
+                    category: PriceCategory::Normal,
+                    dt: dt("2020-01-01T00:00:00Z"),
+                    interval: INTERVAL,
+                };
+
+                assert_eq!(
+                    prices.get_cheapest_price_for_time_delta(time_delta, &$start_time, &$end_time),
+                    $expected
+                );
+            }
+        )*
+        }
+    }
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 30, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 60, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 90, Some(-10.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 120, Some(-10.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 150, Some(0.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 30, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 60, Some(-10.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 90, Some(-10.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 120, Some(0.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 150, Some(0.0));
 }

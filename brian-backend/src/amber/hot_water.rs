@@ -1,6 +1,6 @@
 use crate::{delays::rate_limit, InitState};
 
-use super::{api::PriceResponse, Prices};
+use super::Prices;
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use robotica_backend::{
     pipes::{
@@ -98,29 +98,19 @@ impl DayState {
             self.cheap_power_for_day += duration;
         }
 
-        let interval_duration = prices.interval;
-        // Something is seriously messed up if conversion from u64 to i64 fails.
-        let interval_minutes: i64 = (interval_duration.as_secs() / 60).try_into().unwrap_or(30);
-
         let duration = CHEAP_TIME
             .checked_sub(&self.cheap_power_for_day)
             .unwrap_or_else(TimeDelta::zero);
 
-        let number_of_intervals = divide_round_up(duration.num_minutes(), interval_minutes);
-        let number_of_intervals: usize = number_of_intervals.try_into().unwrap_or_default();
-
         info!(
-            "Cheap power for day: {}, time left: {}, number of intervals: {}/{}={}",
+            "Cheap power for day: {}, time left: {}",
             time_delta::to_string(&self.cheap_power_for_day),
             time_delta::to_string(&duration),
-            duration.num_minutes(),
-            interval_minutes,
-            number_of_intervals
         );
 
-        self.cheapest_price =
-            get_price_for_cheapest_period(&prices.list, number_of_intervals, &now, &end_day)
-                .unwrap_or(self.cheapest_price);
+        self.cheapest_price = prices
+            .get_cheapest_price_for_time_delta(duration, &now, &end_day)
+            .unwrap_or(self.cheapest_price);
 
         let is_cheap = current_price.per_kwh <= self.cheapest_price;
         info!(
@@ -160,36 +150,6 @@ fn get_day<T: TimeZone>(
     (start_day, end_day)
 }
 
-/// Divide two numbers and round up
-const fn divide_round_up(dividend: i64, divisor: i64) -> i64 {
-    (dividend + divisor - 1) / divisor
-}
-
-fn get_price_for_cheapest_period(
-    prices: &[PriceResponse],
-    number_of_intervals: usize,
-    start_time: &DateTime<Utc>,
-    end_time: &DateTime<Utc>,
-) -> Option<f32> {
-    if number_of_intervals == 0 {
-        return None;
-    }
-
-    let mut prices: Vec<_> = prices
-        .iter()
-        .filter(|p| p.start_time >= *start_time && p.end_time <= *end_time)
-        .map(|p| p.per_kwh)
-        .collect();
-
-    prices.sort_by(f32::total_cmp);
-    // println!("Prices: {prices:?} {number_of_intervals}");
-
-    prices
-        .get(number_of_intervals - 1)
-        .or_else(|| prices.last())
-        .copied()
-}
-
 pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
     let (tx_out, rx_out) = create_pipe("amber/hot_water");
     let timezone = &Local;
@@ -224,16 +184,14 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
 
-    use test_log::test;
-
+    use crate::amber::{
+        api::{ChannelType, IntervalType, PeriodType, PriceResponse, TariffInformation},
+        PriceCategory,
+    };
     use chrono::FixedOffset;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
-
-    use crate::amber::{
-        api::{ChannelType, IntervalType, PeriodType, TariffInformation},
-        PriceCategory,
-    };
+    use test_log::test;
 
     use super::*;
 
@@ -242,79 +200,6 @@ mod tests {
     }
 
     const INTERVAL: Duration = unsafe_duration!(minutes: 30);
-
-    macro_rules! cheapest_price_tests {
-        ($($name:ident: $start_time:expr, $end_time:expr, $number_of_intervals:expr, $expected:expr)*) => {
-        $(
-            #[test]
-            fn $name() {
-                let tariff_information = TariffInformation {
-                    period: PeriodType::Peak,
-                    season: None,
-                    block: None,
-                    demand_window: None,
-                };
-
-                let pr = |start_time: DateTime<Utc>, price| {
-                    let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-                    let date = start_time.with_timezone(&timezone).date_naive();
-                    let end_time = start_time + INTERVAL;
-                    PriceResponse {
-                        date,
-                        start_time,
-                        end_time,
-                        per_kwh: price,
-                        spot_per_kwh: price,
-                        interval_type: IntervalType::CurrentInterval,
-                        renewables: 0.0,
-                        duration: 0,
-                        channel_type: ChannelType::General,
-                        estimate: Some(false),
-                        spike_status: "None".to_string(),
-                        tariff_information: tariff_information.clone(),
-                    }
-                };
-
-                let prices = vec![
-                    pr(dt("2020-01-01T00:30:00Z"), -10.0),
-                    pr(dt("2020-01-01T01:00:00Z"), 0.0),
-                    pr(dt("2020-01-01T01:30:00Z"), 10.0),
-                    pr(dt("2020-01-01T02:00:00Z"), 0.0),
-                    pr(dt("2020-01-01T02:30:00Z"), 0.0),
-                    pr(dt("2020-01-01T03:30:00Z"), -10.0),
-                    pr(dt("2020-01-01T04:00:00Z"), 0.0),
-                    pr(dt("2020-01-01T04:30:00Z"), 0.0),
-                    pr(dt("2020-01-01T05:00:00Z"), 10.0),
-                    pr(dt("2020-01-01T05:30:00Z"), -10.0),
-                    pr(dt("2020-01-01T06:00:00Z"), -10.0),
-                ];
-
-                assert_eq!(
-                    get_price_for_cheapest_period(&prices, $number_of_intervals, &$start_time, &$end_time),
-                    $expected
-                );
-            }
-        )*
-        }
-    }
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 0, None);
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 1, Some(-10.0));
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 2, Some(-10.0));
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 3, Some(-10.0));
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 4, Some(-10.0));
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 5, Some(0.0));
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 0, None);
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 1, Some(-10.0));
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 2, Some(-10.0));
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 3, Some(-10.0));
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 4, Some(0.0));
-
-    cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 5, Some(0.0));
 
     #[test]
     fn test_day_state_new() {
@@ -666,16 +551,6 @@ mod tests {
                 cheapest_price: 20.0,
             }
         );
-    }
-
-    #[test]
-    fn test_divide_round_up() {
-        assert_eq!(divide_round_up(0, 4), 0);
-        assert_eq!(divide_round_up(1, 4), 1);
-        assert_eq!(divide_round_up(2, 4), 1);
-        assert_eq!(divide_round_up(3, 4), 1);
-        assert_eq!(divide_round_up(4, 4), 1);
-        assert_eq!(divide_round_up(5, 4), 2);
     }
 
     #[test]
