@@ -21,6 +21,15 @@ pub enum ChargeRequest {
     Manual,
 }
 
+impl ChargeRequest {
+    pub const fn is_auto(self) -> bool {
+        match self {
+            Self::ChargeTo(_) => true,
+            Self::Manual => false,
+        }
+    }
+}
+
 pub fn run(rx: Receiver<Arc<Prices>>) -> Receiver<ChargeRequest> {
     let (tx_out, rx_out) = create_pipe("amber/car");
 

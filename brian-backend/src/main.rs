@@ -276,18 +276,7 @@ async fn setup_pipes(
         });
     }
 
-    for tesla in config.teslas {
-        let locations = tesla::monitor_teslamate_location(&mut state, postgres.clone(), &tesla);
-        let charge_request = amber::car::run(prices.clone());
-        let charging_info = monitor_charging(&mut state, &tesla, charge_request, locations.is_home)
-            .unwrap_or_else(|e| {
-                panic!("Error running tesla charging monitor: {e}");
-            });
-        let should_plugin_stream =
-            tesla::monitor_tesla_location(&state, locations.location, charging_info);
-        tesla::monitor_tesla_doors(&mut state, &tesla);
-        tesla::plug_in_reminder(&state, should_plugin_stream);
-    }
+    monitor_teslas(&config.teslas, &mut state, &postgres, &prices);
 
     let rooms = rooms::get();
     http::run(state.mqtt.clone(), rooms, config.http, postgres.clone())
@@ -329,6 +318,41 @@ async fn setup_pipes(
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
     });
+}
+
+fn monitor_teslas(
+    teslas: &[tesla::Config],
+    state: &mut InitState,
+    postgres: &sqlx::Pool<sqlx::Postgres>,
+    prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+) {
+    for tesla in teslas {
+        let receivers = tesla::Receivers::new(tesla, state);
+
+        let locations = tesla::monitor_teslamate_location(
+            &*state,
+            receivers.location.clone(),
+            postgres.clone(),
+            tesla,
+        );
+
+        let charge_request = amber::car::run(prices.clone());
+        let monitor_charging_receivers = tesla::MonitorChargingReceivers::from_receivers(
+            &receivers,
+            charge_request,
+            locations.is_home,
+        );
+        let charging_info = monitor_charging(&*state, tesla, monitor_charging_receivers)
+            .unwrap_or_else(|e| {
+                panic!("Error running tesla charging monitor: {e}");
+            });
+        let should_plugin_stream =
+            tesla::monitor_tesla_location(tesla, &*state, locations.location, charging_info);
+
+        let monitor_doors_receivers = tesla::MonitorDoorsReceivers::from_receivers(&receivers);
+        tesla::monitor_doors(&*state, tesla, monitor_doors_receivers);
+        tesla::plug_in_reminder(&*state, tesla, should_plugin_stream);
+    }
 }
 
 fn fake_switch(state: &mut InitState, topic_substr: &str) {
