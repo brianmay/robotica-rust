@@ -330,13 +330,19 @@ fn monitor_teslas(
         let receivers = tesla::Receivers::new(tesla, state);
 
         let locations = tesla::monitor_teslamate_location(
-            &*state,
+            state,
             receivers.location.clone(),
             postgres.clone(),
             tesla,
         );
 
-        let charge_request = amber::car::run(prices.clone());
+        let charge_request = amber::car::run(
+            state,
+            tesla.teslamate_id,
+            prices.clone(),
+            receivers.battery_level.clone(),
+            receivers.min_charge_tomorrow.clone(),
+        );
         let monitor_charging_receivers = tesla::MonitorChargingReceivers::from_receivers(
             &receivers,
             charge_request,

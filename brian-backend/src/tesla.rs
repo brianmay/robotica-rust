@@ -35,6 +35,13 @@ use super::InitState;
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TeslamateId(u32);
 
+impl TeslamateId {
+    #[cfg(test)]
+    pub const fn testing_value() -> Self {
+        Self(99)
+    }
+}
+
 impl ToString for TeslamateId {
     fn to_string(&self) -> String {
         self.0.to_string()
@@ -52,6 +59,7 @@ pub struct Receivers {
     pub windows: stateful::Receiver<DoorState>,
     pub user_present: stateful::Receiver<UserIsPresent>,
     pub auto_charge: stateless::Receiver<Json<Command>>,
+    pub min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
 }
 
 impl Receivers {
@@ -97,6 +105,12 @@ impl Receivers {
         let auto_charge = state
             .subscriptions
             .subscribe_into_stateless::<Json<Command>>(&format!("command/Tesla/{id}/AutoCharge"));
+        let min_charge_tomorrow =
+            state
+                .subscriptions
+                .subscribe_into_stateless::<Parsed<u8>>(&format!(
+                    "teslamate/cars/{id}/min_charge_tomorrow"
+                ));
 
         Self {
             location,
@@ -109,6 +123,7 @@ impl Receivers {
             windows,
             user_present,
             auto_charge,
+            min_charge_tomorrow,
         }
     }
 }
@@ -461,12 +476,12 @@ pub fn monitor_tesla_location(
         let name = &tesla.name;
 
         let Ok(mut old_location) = location_s.recv().await else {
-            error!("Failed to get initial Tesla location");
+            error!("{name}: Failed to get initial Tesla location");
             return;
         };
 
         let Ok(mut old_charging_info) = charging_info_s.recv().await else {
-            error!("Failed to get initial Tesla charging information");
+            error!("{name}: Failed to get initial Tesla charging information");
             return;
         };
 

@@ -55,6 +55,7 @@ impl Prices {
         let number_of_intervals =
             private::time_delta_to_number_intervals(time_delta, self.interval);
 
+        info!("Number of intervals: {number_of_intervals}");
         if number_of_intervals == 0 {
             return None;
         }
@@ -62,7 +63,7 @@ impl Prices {
         let mut prices: Vec<_> = self
             .list
             .iter()
-            .filter(|p| p.start_time >= *start_time && p.end_time <= *end_time)
+            .filter(|p| p.is_within_range(*start_time, *end_time))
             .map(|p| p.per_kwh)
             .collect();
 
@@ -703,6 +704,7 @@ mod tests {
                 };
 
                 let prices = vec![
+                    pr(dt("2020-01-01T00:00:00Z"), 20.0),
                     pr(dt("2020-01-01T00:30:00Z"), -10.0),
                     pr(dt("2020-01-01T01:00:00Z"), 0.0),
                     pr(dt("2020-01-01T01:30:00Z"), 10.0),
@@ -751,4 +753,22 @@ mod tests {
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 120, Some(0.0));
 
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 150, Some(0.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 30, Some(20.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 60, Some(20.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 90, Some(20.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 120, Some(20.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 150, Some(20.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_0: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 0, None);
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_1: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 30, Some(20.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_2: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 60, Some(20.0));
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_3: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 90, Some(20.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_4: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 120, Some(20.0));
+
+    cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_5: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 150, Some(20.0));
 }

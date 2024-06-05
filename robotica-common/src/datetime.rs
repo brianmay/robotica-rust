@@ -179,6 +179,48 @@ pub mod with_option_duration {
     }
 }
 
+/// Serde serialization deserialization for a option duration.
+pub mod with_option_time_delta {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct OptionTimeDeltaWrapper(#[serde(with = "super::with_time_delta")] super::TimeDelta);
+
+    /// Deserialize a duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is invalid.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<super::TimeDelta>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<OptionTimeDeltaWrapper>::deserialize(deserializer).map(
+            |opt_wrapped: Option<OptionTimeDeltaWrapper>| {
+                opt_wrapped.map(|wrapped: OptionTimeDeltaWrapper| wrapped.0)
+            },
+        )
+    }
+
+    /// Serialize a duration.
+    ///
+    /// # Errors
+    ///
+    /// If the duration is negative.
+    pub fn serialize<S>(
+        duration: &Option<super::TimeDelta>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Option::<OptionTimeDeltaWrapper>::serialize(
+            &duration.map(OptionTimeDeltaWrapper),
+            serializer,
+        )
+    }
+}
+
 /// Convert a Date and a Time to a Utc `DateTime`.
 ///
 /// # Errors
@@ -840,6 +882,45 @@ mod tests {
         let OptionDurationWrapper {
             my_duration: duration,
         }: OptionDurationWrapper = serde_json::from_str(json).unwrap();
+        assert!(duration.is_none());
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct OptionTimeDeltaWrapper {
+        #[serde(with = "super::with_option_time_delta")]
+        duration: Option<TimeDelta>,
+    }
+
+    #[test]
+    fn test_option_time_delta_serialize() {
+        let duration = OptionTimeDeltaWrapper {
+            duration: Some(time_delta::from_str("1:2:3").unwrap()),
+        };
+        let json = serde_json::to_string(&duration).unwrap();
+        assert_eq!(json, "{\"duration\":\"01:02:03\"}");
+    }
+
+    #[test]
+    fn test_option_time_delta_serialize_null() {
+        let duration = OptionTimeDeltaWrapper { duration: None };
+        let json = serde_json::to_string(&duration).unwrap();
+        assert_eq!(json, "{\"duration\":null}");
+    }
+
+    #[test]
+    fn test_option_time_delta_deserialize() {
+        let json = "{\"duration\": \"01:02:03\"}";
+        let OptionTimeDeltaWrapper { duration } = serde_json::from_str(json).unwrap();
+        let duration = duration.unwrap();
+        assert_eq!(duration.num_seconds(), (60 + 2) * 60 + 3);
+        assert_eq!(duration.num_minutes(), 60 + 2);
+        assert_eq!(duration.num_hours(), 1);
+    }
+
+    #[test]
+    fn test_option_time_delta_deserialize_null() {
+        let json = "{\"duration\": null}";
+        let OptionTimeDeltaWrapper { duration } = serde_json::from_str(json).unwrap();
         assert!(duration.is_none());
     }
 

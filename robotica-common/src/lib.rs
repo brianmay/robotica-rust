@@ -32,6 +32,11 @@ pub mod datetime;
 #[cfg(feature = "chrono")]
 pub mod scheduler;
 
+#[cfg(feature = "chrono")]
 pub use chrono::NaiveTime;
+
+#[cfg(feature = "chrono")]
 pub use chrono::TimeDelta;
+
+#[cfg(feature = "chrono")]
 pub use std::time::Duration;
