@@ -1257,7 +1257,7 @@ async fn check_charge(
                 sequence.add_charge_start();
             }
             ChargingSummary::NotCharging => {}
-            ChargingSummary::Disconnected => info!("Car is disconnected"),
+            ChargingSummary::Disconnected => info!("{name}: is disconnected"),
         }
     }
 

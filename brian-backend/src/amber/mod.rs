@@ -55,7 +55,6 @@ impl Prices {
         let number_of_intervals =
             private::time_delta_to_number_intervals(time_delta, self.interval);
 
-        info!("Number of intervals: {number_of_intervals}");
         if number_of_intervals == 0 {
             return None;
         }
