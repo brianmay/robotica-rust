@@ -4,7 +4,7 @@ pub mod topics;
 use rumqttc::tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
-use rumqttc::{Outgoing, Transport};
+use rumqttc::Transport;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::num::ParseIntError;
@@ -290,10 +290,7 @@ pub fn run_client(
                         Ok(Event::Incoming(i)) => {
                             incoming_event(&client, i, &subscriptions);
                         },
-                        Ok(Event::Outgoing(o)) => {
-                            if let Outgoing::Publish(p) = o {
-                                    debug!("Published message: {:?}.", p);
-                            }
+                        Ok(Event::Outgoing(_)) => {
                         },
                         Err(err) => {
                             error!("MQTT Error: {:?}", err);
@@ -304,12 +301,6 @@ pub fn run_client(
                 Some(msg) = rx.recv() => {
                     match msg {
                         MqttCommand::MqttOut(msg) => {
-                            debug!(
-                                "Outgoing mqtt {:?} {}.",
-                                msg.retain,
-                                msg.topic
-                            );
-
                             if let Some(subscription) = subscriptions.get(&msg.topic) {
                                 debug!("Looping message: {:?}", msg);
                                 subscription.tx.try_send(msg.clone());
