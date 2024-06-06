@@ -142,18 +142,7 @@ fn prices_to_charge_request<T: TimeZone>(
             );
 
             let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
-            let cheapest_price = prices.get_cheapest_price_for_time_delta(
-                estimated_charge_time_to_min,
-                &dt,
-                &end_time,
-            );
-            info!(
-                "{dt} - {end_time}: Cheapest price is {cheapest_price:?}",
-                dt = dt,
-                end_time = end_time,
-                cheapest_price = cheapest_price
-            );
-            cheapest_price
+            prices.get_cheapest_price_for_time_delta(estimated_charge_time_to_min, &dt, &end_time)
         },
     );
 
