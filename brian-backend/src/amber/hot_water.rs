@@ -167,9 +167,8 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
 
-    use crate::amber::{
-        api::{ChannelType, IntervalType, PeriodType, PriceResponse, TariffInformation},
-        PriceCategory,
+    use crate::amber::api::{
+        ChannelType, IntervalType, PeriodType, PriceResponse, TariffInformation,
     };
     use chrono::FixedOffset;
     use robotica_common::unsafe_duration;
@@ -260,7 +259,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
@@ -344,7 +342,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
@@ -428,7 +425,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
@@ -512,7 +508,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };

@@ -1,6 +1,9 @@
 use crate::{delays::rate_limit, tesla::TeslamateId, InitState};
 
-use super::{PriceCategory, Prices};
+use super::{
+    price_category::{get_weighted_price_category, PriceCategory},
+    Prices,
+};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use robotica_backend::{
     pipes::{
@@ -39,12 +42,14 @@ impl ChargeRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct PersistentState {
     min_charge_tomorrow: u8,
+    category: Option<PriceCategory>,
 }
 
 impl Default for PersistentState {
     fn default() -> Self {
         Self {
             min_charge_tomorrow: 70,
+            category: None,
         }
     }
 }
@@ -79,7 +84,11 @@ pub fn run(
             return;
         };
 
+        ps.category = get_weighted_price_category(&v_prices.list, &Utc::now(), ps.category);
+        save_state(teslamate_id, &psr, &ps);
+
         loop {
+            info!("{id}: Persistent State: {:?}", ps);
             let cr = prices_to_charge_request(
                 teslamate_id,
                 &v_prices,
@@ -96,6 +105,9 @@ pub fn run(
             select! {
                 Ok(prices) = s.recv() => {
                     v_prices = prices;
+                    ps.category = get_weighted_price_category(&v_prices.list, &Utc::now(), ps.category);
+                    save_state(teslamate_id, &psr, &ps);
+
                 },
                 Ok(battery_level) = s_battery_level.recv() => {
                     v_battery_level = *battery_level;
@@ -103,9 +115,8 @@ pub fn run(
                 Ok(min_charge_tomorrow) = s_min_charge_tomorrow.recv() => {
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
-                    psr.save(&ps).unwrap_or_else(|e| {
-                        error!("{id}: Failed to save persistent state: {:?}", e);
-                    });
+                    save_state(teslamate_id, &psr, &ps);
+
                 },
                 else => break,
             }
@@ -113,6 +124,17 @@ pub fn run(
     });
 
     rate_limit("amber/car/ratelimit", Duration::from_secs(300), rx_out)
+}
+
+fn save_state(
+    teslamate_id: TeslamateId,
+    psr: &robotica_backend::services::persistent_state::PersistentStateRow<PersistentState>,
+    ps: &PersistentState,
+) {
+    psr.save(ps).unwrap_or_else(|e| {
+        let id = teslamate_id.to_string();
+        error!("{id}: Failed to save persistent state: {:?}", e);
+    });
 }
 
 const END_TIME: NaiveTime = unsafe_naive_time_hms!(6, 30, 0);
@@ -156,11 +178,12 @@ fn prices_to_charge_request<T: TimeZone>(
     };
 
     #[allow(clippy::match_same_arms)]
-    let normal = match prices.category {
-        PriceCategory::SuperCheap => ChargeRequest::ChargeTo(90),
-        PriceCategory::Cheap => ChargeRequest::ChargeTo(80),
-        PriceCategory::Normal => ChargeRequest::ChargeTo(50),
-        PriceCategory::Expensive => ChargeRequest::ChargeTo(20),
+    let normal = match ps.category {
+        Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
+        Some(PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
+        Some(PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
+        Some(PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
+        None => ChargeRequest::ChargeTo(50),
     };
 
     // get the largest value out of force and normal
@@ -326,12 +349,12 @@ mod tests {
         let now = dt("2020-01-01T00:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 0,
+            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 70u8;
         let cr = prices_to_charge_request(
@@ -365,12 +388,12 @@ mod tests {
         let now = dt("2020-01-01T00:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Cheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 0,
+            category: Some(PriceCategory::Cheap),
         };
         let battery_level = 70u8;
         let cr = prices_to_charge_request(
@@ -404,12 +427,12 @@ mod tests {
         let now = dt("2020-01-01T00:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Normal,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 0,
+            category: Some(PriceCategory::Normal),
         };
         let battery_level = 70u8;
         let cr = prices_to_charge_request(
@@ -443,12 +466,12 @@ mod tests {
         let now = dt("2020-01-01T00:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Expensive,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 0,
+            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 70u8;
         let cr = prices_to_charge_request(
@@ -483,12 +506,12 @@ mod tests {
         let now = dt("2020-01-01T03:30:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Expensive,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
+            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -523,12 +546,12 @@ mod tests {
         let now = dt("2020-01-01T06:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Expensive,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
+            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -563,12 +586,12 @@ mod tests {
         let now = dt("2020-01-01T06:30:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Expensive,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 70,
+            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -603,12 +626,12 @@ mod tests {
         let now = dt("2020-01-01T07:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::Expensive,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 70,
+            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -643,12 +666,12 @@ mod tests {
         let now = dt("2020-01-01T03:30:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
+            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -683,12 +706,12 @@ mod tests {
         let now = dt("2020-01-01T06:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
+            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -723,12 +746,12 @@ mod tests {
         let now = dt("2020-01-01T06:30:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 70,
+            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
@@ -763,12 +786,12 @@ mod tests {
         let now = dt("2020-01-01T07:00:30Z");
         let summary = Prices {
             list: pr_list(),
-            category: PriceCategory::SuperCheap,
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 70,
+            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(

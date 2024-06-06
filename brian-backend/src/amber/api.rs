@@ -110,6 +110,10 @@ impl PriceResponse {
         let stop_ok_2 = self.start_time < end_time && end_time < self.end_time;
         (start_ok_1 || start_ok_2) && (stop_ok_1 || stop_ok_2)
     }
+
+    pub fn is_current(&self, dt: &DateTime<Utc>) -> bool {
+        self.start_time <= *dt && self.end_time > *dt
+    }
 }
 
 /// Amber usage response
@@ -187,6 +191,7 @@ pub async fn get_usage(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
+    #![allow(clippy::bool_assert_comparison)]
 
     use super::*;
     use rstest::rstest;
@@ -229,5 +234,66 @@ mod tests {
         };
 
         assert_eq!(expected, price.is_within_range(start_time, end_time));
+    }
+
+    #[test]
+    fn test_is_current() {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  interval_type: IntervalType| PriceResponse {
+            date: start_time.with_timezone(&Utc).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: 0.0,
+            spot_per_kwh: 0.0,
+            interval_type,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: TariffInformation {
+                period: PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let now = dt("2020-01-01T00:00:00Z");
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:30:00Z"),
+            IntervalType::CurrentInterval,
+        );
+        assert_eq!(p.is_current(&now), true);
+
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:00:00Z"),
+            IntervalType::ActualInterval,
+        );
+        assert_eq!(p.is_current(&now), false);
+
+        let p = pr(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T00:00:01Z"),
+            IntervalType::CurrentInterval,
+        );
+        assert_eq!(p.is_current(&now), true);
+
+        let p = pr(
+            dt("2019-01-01T23:59:59Z"),
+            dt("2020-01-01T00:00:00Z"),
+            IntervalType::ActualInterval,
+        );
+        assert_eq!(p.is_current(&now), false);
+
+        let p = pr(
+            dt("2019-01-01T23:59:59Z"),
+            dt("2020-01-01T00:00:01Z"),
+            IntervalType::CurrentInterval,
+        );
+        assert_eq!(p.is_current(&now), true);
     }
 }
