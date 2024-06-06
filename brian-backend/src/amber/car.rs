@@ -251,7 +251,7 @@ const fn estimate_charge_time(battery_level: u8, min_charge_tomorrow: u8) -> Opt
     let battery_level = battery_level as i64;
 
     let diff = min_charge_tomorrow - battery_level;
-    if diff <= 2 {
+    if diff <= 0 {
         None
     } else {
         let charge_time = diff * 280 / 39;
