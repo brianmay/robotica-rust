@@ -134,9 +134,11 @@ fn prices_to_charge_request<T: TimeZone>(
             None
         },
         |estimated_charge_time_to_min| {
+            let estimated_finish = dt + estimated_charge_time_to_min;
             info!(
-                "{id}: Estimated charge time to min is {}",
-                time_delta::to_string(&estimated_charge_time_to_min)
+                "{id}: Estimated charge time to min is {}, should finish at {:?}",
+                time_delta::to_string(&estimated_charge_time_to_min),
+                estimated_finish.with_timezone(tz).to_rfc3339()
             );
 
             let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
@@ -185,12 +187,24 @@ fn prices_to_charge_request<T: TimeZone>(
         ChargeRequest::Manual => None,
     };
 
+    if let Some(estimated_charge_time_to_limit) = estimated_charge_time_to_limit {
+        let estimated_finish = dt + estimated_charge_time_to_limit;
+        info!(
+            "{id}: Estimated charge time to limit is {time}, should finish at {finish:?}",
+            id = id,
+            time = time_delta::to_string(&estimated_charge_time_to_limit),
+            finish = estimated_finish.with_timezone(tz).to_rfc3339()
+        );
+    }
+
     let estimated_charge_time_to_90 = estimate_charge_time(battery_level, 90);
     if let Some(estimated_charge_time_to_90) = estimated_charge_time_to_90 {
+        let estimated_finish = dt + estimated_charge_time_to_90;
         info!(
-            "{id}: Estimated charge time to 90% is {time}",
+            "{id}: Estimated charge time to 90% is {time}, should finish at {finish:?}",
             id = id,
-            time = time_delta::to_string(&estimated_charge_time_to_90)
+            time = time_delta::to_string(&estimated_charge_time_to_90),
+            finish = estimated_finish.with_timezone(tz).to_rfc3339()
         );
     }
 
