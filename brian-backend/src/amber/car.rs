@@ -440,7 +440,6 @@ mod tests {
         #[case] forced: bool,
     ) {
         let summary = Prices {
-            // SuperCheap
             list: pr_list_descending(50.0),
             dt: now,
             interval: INTERVAL,
@@ -485,7 +484,6 @@ mod tests {
         #[case] forced: bool,
     ) {
         let summary = Prices {
-            // SuperCheap
             list: pr_list_descending(0.0),
             dt: now,
             interval: INTERVAL,
