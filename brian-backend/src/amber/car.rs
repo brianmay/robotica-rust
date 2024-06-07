@@ -127,7 +127,6 @@ pub fn run(
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
                     save_state(teslamate_id, &psr, &ps);
-
                 },
                 else => break,
             }
