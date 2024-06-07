@@ -342,6 +342,7 @@ fn monitor_teslas(
             prices.clone(),
             receivers.battery_level.clone(),
             receivers.min_charge_tomorrow.clone(),
+            receivers.is_charging.clone(),
         );
         let monitor_charging_receivers = tesla::MonitorChargingReceivers::from_receivers(
             &receivers,

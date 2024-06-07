@@ -37,19 +37,26 @@ impl ChargeRequest {
             Self::Manual => false,
         }
     }
+
+    pub fn max(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::ChargeTo(a), Self::ChargeTo(b)) => Self::ChargeTo(a.max(b)),
+            (Self::ChargeTo(a), Self::Manual) => Self::ChargeTo(a),
+            (Self::Manual, Self::ChargeTo(b)) => Self::ChargeTo(b),
+            (Self::Manual, Self::Manual) => Self::Manual,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PersistentState {
     min_charge_tomorrow: u8,
-    category: Option<PriceCategory>,
 }
 
 impl Default for PersistentState {
     fn default() -> Self {
         Self {
             min_charge_tomorrow: 70,
-            category: None,
         }
     }
 }
@@ -60,6 +67,7 @@ pub fn run(
     rx: Receiver<Arc<Prices>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
+    is_charging: stateful::Receiver<bool>,
 ) -> Receiver<ChargeRequest> {
     let (tx_out, rx_out) = create_pipe("amber/car");
     let id = teslamate_id.to_string();
@@ -74,6 +82,7 @@ pub fn run(
         let mut s = rx.subscribe().await;
         let mut s_min_charge_tomorrow = min_charge_tomorrow.subscribe().await;
         let mut s_battery_level = battery_level.subscribe().await;
+        let mut s_is_charging = is_charging.subscribe().await;
 
         let Ok(mut v_prices) = s.recv().await else {
             error!("{id}: Failed to get initial prices");
@@ -83,8 +92,11 @@ pub fn run(
             error!("{id}: Failed to get initial battery level");
             return;
         };
+        let Ok(mut v_is_charging) = s_is_charging.recv().await else {
+            error!("{id}: Failed to get initial charging state");
+            return;
+        };
 
-        ps.category = get_weighted_price_category(&v_prices.list, &Utc::now(), ps.category);
         save_state(teslamate_id, &psr, &ps);
 
         loop {
@@ -93,6 +105,7 @@ pub fn run(
                 teslamate_id,
                 &v_prices,
                 v_battery_level,
+                v_is_charging,
                 &ps,
                 Utc::now(),
                 &Local,
@@ -105,12 +118,12 @@ pub fn run(
             select! {
                 Ok(prices) = s.recv() => {
                     v_prices = prices;
-                    ps.category = get_weighted_price_category(&v_prices.list, &Utc::now(), ps.category);
-                    save_state(teslamate_id, &psr, &ps);
-
                 },
                 Ok(battery_level) = s_battery_level.recv() => {
                     v_battery_level = *battery_level;
+                },
+                Ok(is_charging) = s_is_charging.recv() => {
+                    v_is_charging = is_charging;
                 },
                 Ok(min_charge_tomorrow) = s_min_charge_tomorrow.recv() => {
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
@@ -143,82 +156,76 @@ fn prices_to_charge_request<T: TimeZone>(
     teslamate_id: TeslamateId,
     prices: &Prices,
     battery_level: u8,
+    is_charging: bool,
     ps: &PersistentState,
     dt: DateTime<Utc>,
     tz: &T,
 ) -> State {
     let id = teslamate_id.to_string();
 
-    let estimated_charge_time_to_min = estimate_charge_time(battery_level, ps.min_charge_tomorrow);
-    let cheapest_price = estimated_charge_time_to_min.map_or_else(
-        || {
-            info!("{id}: Battery level is already at or above min charge",);
-            None
-        },
-        |estimated_charge_time_to_min| {
-            let estimated_finish = dt + estimated_charge_time_to_min;
-            info!(
-                "{id}: Estimated charge time to min is {}, should finish at {:?}",
-                time_delta::to_string(&estimated_charge_time_to_min),
-                estimated_finish.with_timezone(tz).to_rfc3339()
-            );
+    // How long should car take to charge to min_charge_tomorrow?
+    let estimated_charge_time_to_min =
+        estimate_to_limit(teslamate_id, battery_level, dt, ps.min_charge_tomorrow, tz);
 
-            let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
-            prices.get_cheapest_price_for_time_delta(estimated_charge_time_to_min, &dt, &end_time)
-        },
+    // Get the cheapest price for the estimated charge time
+    let cheapest_price = estimated_charge_time_to_min.and_then(|estimated_charge_time_to_min| {
+        let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
+        prices.get_cheapest_price_for_time_delta(estimated_charge_time_to_min, &dt, &end_time)
+    });
+
+    // If car is charging we raise the threshold for the cheapest price.
+    // To try to prevent cycling with fluctuating prices.
+    let threshold_price = match (is_charging, cheapest_price) {
+        (true, Some(cheapest_price)) => Some(cheapest_price * 1.1),
+        (false, Some(cheapest_price)) => Some(cheapest_price),
+        _ => None,
+    };
+
+    // What is the current price?
+    let current_price = prices.current(&dt).map(|p| p.per_kwh);
+    info!(
+        "{id}: Is charging: {is_charging}, cheapest price is {cheapest_price:?}, threshold price is {threshold_price:?}, current price is {current_price:?}",
     );
 
-    let current_price = prices.current(&dt).map(|p| p.per_kwh);
-
-    let force = match (cheapest_price, current_price) {
+    // Should we force a charge?
+    let force = match (threshold_price, current_price) {
         (Some(cheapest_price), Some(current_price)) if current_price <= cheapest_price => {
             Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
         }
         _ => None,
     };
 
+    // Get the normal charge request based on category
+    let category = get_weighted_price_category(is_charging, &prices.list, &dt);
     #[allow(clippy::match_same_arms)]
-    let normal = match ps.category {
+    let normal = match category {
         Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
         Some(PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
         Some(PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
         Some(PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
         None => ChargeRequest::ChargeTo(50),
     };
+    info!(
+        "{id}: Price Category: {category:?}, Normal charge request: {normal:?}",
+        category = category,
+        normal = normal
+    );
 
     // get the largest value out of force and normal
+    let result = force.map_or(normal, |force| {
+        let result = normal.max(force);
+        info!("{id}: Forcing charge to {force:?}, now {result:?}");
+        result
+    });
 
-    let result = match (force, normal) {
-        (Some(force @ ChargeRequest::ChargeTo(f)), ChargeRequest::ChargeTo(n)) if f > n => force,
-        (Some(ChargeRequest::Manual), _) | (_, ChargeRequest::Manual) => ChargeRequest::Manual,
-        (_, normal) => normal,
-    };
-
+    // Get some more stats
     let estimated_charge_time_to_limit = match result {
-        ChargeRequest::ChargeTo(limit) => estimate_charge_time(battery_level, limit),
+        ChargeRequest::ChargeTo(limit) => {
+            estimate_to_limit(teslamate_id, battery_level, dt, limit, tz)
+        }
         ChargeRequest::Manual => None,
     };
-
-    if let Some(estimated_charge_time_to_limit) = estimated_charge_time_to_limit {
-        let estimated_finish = dt + estimated_charge_time_to_limit;
-        info!(
-            "{id}: Estimated charge time to limit is {time}, should finish at {finish:?}",
-            id = id,
-            time = time_delta::to_string(&estimated_charge_time_to_limit),
-            finish = estimated_finish.with_timezone(tz).to_rfc3339()
-        );
-    }
-
-    let estimated_charge_time_to_90 = estimate_charge_time(battery_level, 90);
-    if let Some(estimated_charge_time_to_90) = estimated_charge_time_to_90 {
-        let estimated_finish = dt + estimated_charge_time_to_90;
-        info!(
-            "{id}: Estimated charge time to 90% is {time}, should finish at {finish:?}",
-            id = id,
-            time = time_delta::to_string(&estimated_charge_time_to_90),
-            finish = estimated_finish.with_timezone(tz).to_rfc3339()
-        );
-    }
+    let estimated_charge_time_to_90 = estimate_to_limit(teslamate_id, battery_level, dt, 90, tz);
 
     State {
         time: dt,
@@ -233,6 +240,32 @@ fn prices_to_charge_request<T: TimeZone>(
         estimated_charge_time_to_limit,
         estimated_charge_time_to_90,
     }
+}
+
+fn estimate_to_limit<T: TimeZone>(
+    teslamate_id: TeslamateId,
+    battery_level: u8,
+    dt: DateTime<Utc>,
+    limit: u8,
+    tz: &T,
+) -> Option<TimeDelta> {
+    let estimated_charge_time = estimate_charge_time(battery_level, limit);
+    let id = teslamate_id.to_string();
+    if let Some(estimated_charge_time) = estimated_charge_time {
+        let estimated_finish = dt + estimated_charge_time;
+        info!(
+            "{id}: Estimated charge time to {limit} is {time}, should finish at {finish:?}",
+            id = id,
+            time = time_delta::to_string(&estimated_charge_time),
+            finish = estimated_finish.with_timezone(tz).to_rfc3339()
+        );
+    } else {
+        info!(
+            "{id}: Battery level is already at or above {limit}",
+            limit = limit
+        );
+    }
+    estimated_charge_time
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -292,7 +325,6 @@ mod tests {
     use super::*;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
-    use test_log::test;
 
     const INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
@@ -327,7 +359,23 @@ mod tests {
         }
     }
 
-    fn pr_list() -> Vec<api::PriceResponse> {
+    fn pr_list_fixed(cost: f32) -> Vec<api::PriceResponse> {
+        let time = dt("2020-01-01T00:00:00Z");
+
+        (0i8..48i8)
+            .map(|i| {
+                let i64 = i64::from(i);
+                pr(
+                    time + TimeDelta::minutes(i64 * 30),
+                    time + TimeDelta::minutes((i64 + 1) * 30),
+                    IntervalType::ForecastInterval,
+                    cost,
+                )
+            })
+            .collect::<Vec<api::PriceResponse>>()
+    }
+
+    fn pr_list_descending(cost: f32) -> Vec<api::PriceResponse> {
         let time = dt("2020-01-01T00:00:00Z");
 
         (0i8..48i8)
@@ -338,486 +386,138 @@ mod tests {
                     time + TimeDelta::minutes(i64 * 30),
                     time + TimeDelta::minutes((i64 + 1) * 30),
                     IntervalType::ForecastInterval,
-                    f32.mul_add(-0.5, 50.0),
+                    f32.mul_add(-0.5, cost),
                 )
             })
+            // .map(|p| {
+            //     debug!("{:?}", p);
+            //     p
+            // })
             .collect::<Vec<api::PriceResponse>>()
     }
 
-    #[test]
-    fn test_prices_to_charge_request_normal_1() {
+    #[test_log::test(rstest::rstest)]
+    #[case(5.0, ChargeRequest::ChargeTo(90))]
+    #[case(12.5, ChargeRequest::ChargeTo(80))]
+    #[case(20.0, ChargeRequest::ChargeTo(50))]
+    #[case(35.0, ChargeRequest::ChargeTo(20))]
+    fn test_prices_to_charge_request_normal(#[case] price: f32, #[case] expected: ChargeRequest) {
         let now = dt("2020-01-01T00:00:30Z");
         let summary = Prices {
-            list: pr_list(),
+            list: pr_list_fixed(price),
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 0,
-            category: Some(PriceCategory::SuperCheap),
         };
         let battery_level = 70u8;
         let cr = prices_to_charge_request(
             TeslamateId::testing_value(),
             &summary,
             battery_level,
+            false,
             &ps,
             now,
             &Utc,
         );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 0,
-                cheapest_price: None,
-                current_price: Some(50.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(90),
-                result: ChargeRequest::ChargeTo(90),
-                estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(8580)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
-            }
-        );
+        assert_eq!(cr.time, now);
+        assert_eq!(cr.battery_level, battery_level);
+        assert_eq!(cr.min_charge_tomorrow, 0);
+        assert_eq!(cr.cheapest_price, None);
+        assert_eq!(cr.current_price, Some(price));
+        assert_eq!(cr.force, None);
+        assert_eq!(cr.normal, expected);
+        assert_eq!(cr.result, expected);
     }
 
-    #[test]
-    fn test_prices_to_charge_request_normal_2() {
-        let now = dt("2020-01-01T00:00:30Z");
+    #[test_log::test(rstest::rstest)]
+    #[case(dt("2020-01-01T03:30:30Z"), Some(46.5), Some(46.5), true)]
+    #[case(dt("2020-01-01T06:00:30Z"), Some(44.0), Some(44.0), true)]
+    #[case(dt("2020-01-01T06:30:30Z"), Some(33.5), Some(43.5), false)]
+    #[case(dt("2020-01-01T07:00:30Z"), Some(33.5), Some(43.0), false)]
+    fn test_prices_to_charge_request_forced(
+        #[case] now: DateTime<Utc>,
+        #[case] expected_price: Option<f32>,
+        #[case] expected_current_price: Option<f32>,
+        #[case] forced: bool,
+    ) {
         let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 0,
-            category: Some(PriceCategory::Cheap),
-        };
-        let battery_level = 70u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 0,
-                cheapest_price: None,
-                current_price: Some(50.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(80),
-                result: ChargeRequest::ChargeTo(80),
-                estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_prices_to_charge_request_normal_3() {
-        let now = dt("2020-01-01T00:00:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 0,
-            category: Some(PriceCategory::Normal),
-        };
-        let battery_level = 70u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 0,
-                cheapest_price: None,
-                current_price: Some(50.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(50),
-                result: ChargeRequest::ChargeTo(50),
-                estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: None,
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_prices_to_charge_request_normal_4() {
-        let now = dt("2020-01-01T00:00:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 0,
-            category: Some(PriceCategory::Expensive),
-        };
-        let battery_level = 70u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 0,
-                cheapest_price: None,
-                current_price: Some(50.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(20),
-                result: ChargeRequest::ChargeTo(20),
-                estimated_charge_time_to_min: None,
-                estimated_charge_time_to_limit: None,
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(8580)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_1() {
-        // threshold is 6:30am, this happens before that
-        let now = dt("2020-01-01T03:30:30Z");
-        let summary = Prices {
-            list: pr_list(),
+            // SuperCheap
+            list: pr_list_descending(50.0),
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
-            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
             TeslamateId::testing_value(),
             &summary,
             battery_level,
+            false,
             &ps,
             now,
             &Utc,
         );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 72,
-                cheapest_price: Some(46.5),
-                current_price: Some(46.5),
-                force: Some(ChargeRequest::ChargeTo(72)),
-                normal: ChargeRequest::ChargeTo(20),
-                result: ChargeRequest::ChargeTo(72),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
+        assert_eq!(cr.time, now);
+        assert_eq!(cr.battery_level, battery_level);
+        assert_eq!(cr.min_charge_tomorrow, 72);
+        assert_eq!(cr.cheapest_price, expected_price);
+        assert_eq!(cr.current_price, expected_current_price);
+        if forced {
+            assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
+            assert_eq!(cr.result, ChargeRequest::ChargeTo(72));
+        } else {
+            assert_eq!(cr.force, None);
+            assert_eq!(cr.result, ChargeRequest::ChargeTo(20));
+        }
+        assert_eq!(cr.normal, ChargeRequest::ChargeTo(20));
     }
 
-    #[test]
-    fn test_summary_to_charge_request_forced_2() {
-        // threshold is 6:30am, this happens before that
-        let now = dt("2020-01-01T06:00:30Z");
+    #[test_log::test(rstest::rstest)]
+    #[case(dt("2020-01-01T03:30:30Z"), Some(-3.5), Some(-3.5), true)]
+    #[case(dt("2020-01-01T06:00:30Z"), Some(-6.0), Some(-6.0), true)]
+    #[case(dt("2020-01-01T06:30:30Z"), Some(-16.5), Some(-6.5), false)]
+    #[case(dt("2020-01-01T07:00:30Z"), Some(-16.5), Some(-7.0), false)]
+    fn test_prices_to_charge_request_combined_forced_and_cheap(
+        #[case] now: DateTime<Utc>,
+        #[case] expected_price: Option<f32>,
+        #[case] expected_current_price: Option<f32>,
+        #[case] forced: bool,
+    ) {
         let summary = Prices {
-            list: pr_list(),
+            // SuperCheap
+            list: pr_list_descending(0.0),
             dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
-            category: Some(PriceCategory::Expensive),
         };
         let battery_level = 10u8;
         let cr = prices_to_charge_request(
             TeslamateId::testing_value(),
             &summary,
             battery_level,
+            false,
             &ps,
             now,
             &Utc,
         );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 72,
-                cheapest_price: Some(44.0),
-                current_price: Some(44.0),
-                force: Some(ChargeRequest::ChargeTo(72)),
-                normal: ChargeRequest::ChargeTo(20),
-                result: ChargeRequest::ChargeTo(72),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_3() {
-        // threshold is 6:30am, this happens at after that
-        let now = dt("2020-01-01T06:30:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 70,
-            category: Some(PriceCategory::Expensive),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 70,
-                cheapest_price: Some(33.5),
-                current_price: Some(43.5),
-                force: None,
-                normal: ChargeRequest::ChargeTo(20),
-                result: ChargeRequest::ChargeTo(20),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_4() {
-        // threshold is 6:30am, this happens at after that
-        let now = dt("2020-01-01T07:00:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 70,
-            category: Some(PriceCategory::Expensive),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 70,
-                cheapest_price: Some(33.5),
-                current_price: Some(43.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(20),
-                result: ChargeRequest::ChargeTo(20),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(4260)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_1_but_cheap() {
-        // threshold is 6:30am, this happens at before that
-        let now = dt("2020-01-01T03:30:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 72,
-            category: Some(PriceCategory::SuperCheap),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 72,
-                cheapest_price: Some(46.5),
-                current_price: Some(46.5),
-                force: Some(ChargeRequest::ChargeTo(72)),
-                normal: ChargeRequest::ChargeTo(90),
-                result: ChargeRequest::ChargeTo(90),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_2_but_cheap() {
-        // threshold is 6:30am, this happens at before that
-        let now = dt("2020-01-01T06:00:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 72,
-            category: Some(PriceCategory::SuperCheap),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 72,
-                cheapest_price: Some(44.0),
-                current_price: Some(44.0),
-                force: Some(ChargeRequest::ChargeTo(72)),
-                normal: ChargeRequest::ChargeTo(90),
-                result: ChargeRequest::ChargeTo(90),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(26700)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440))
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_3_but_cheap() {
-        // threshold is 6:30am, this happens at after that
-        let now = dt("2020-01-01T06:30:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 70,
-            category: Some(PriceCategory::SuperCheap),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 70,
-                cheapest_price: Some(33.5),
-                current_price: Some(43.5),
-                force: None,
-                normal: ChargeRequest::ChargeTo(90),
-                result: ChargeRequest::ChargeTo(90),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_summary_to_charge_request_forced_4_but_cheap() {
-        // threshold is 6:30am, this happens at after that
-        let now = dt("2020-01-01T07:00:30Z");
-        let summary = Prices {
-            list: pr_list(),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 70,
-            category: Some(PriceCategory::SuperCheap),
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(
-            cr,
-            State {
-                time: now,
-                battery_level,
-                min_charge_tomorrow: 70,
-                cheapest_price: Some(33.5),
-                current_price: Some(43.0),
-                force: None,
-                normal: ChargeRequest::ChargeTo(90),
-                result: ChargeRequest::ChargeTo(90),
-                estimated_charge_time_to_min: Some(TimeDelta::seconds(25800)),
-                estimated_charge_time_to_limit: Some(TimeDelta::seconds(34440)),
-                estimated_charge_time_to_90: Some(TimeDelta::seconds(34440)),
-            }
-        );
+        assert_eq!(cr.time, now);
+        assert_eq!(cr.battery_level, battery_level);
+        assert_eq!(cr.min_charge_tomorrow, 72);
+        assert_eq!(cr.cheapest_price, expected_price);
+        assert_eq!(cr.current_price, expected_current_price);
+        if forced {
+            assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
+        } else {
+            assert_eq!(cr.force, None);
+        }
+        assert_eq!(cr.result, ChargeRequest::ChargeTo(90));
+        assert_eq!(cr.normal, ChargeRequest::ChargeTo(90));
     }
 
     #[test]

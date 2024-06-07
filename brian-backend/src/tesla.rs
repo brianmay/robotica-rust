@@ -51,6 +51,7 @@ impl ToString for TeslamateId {
 pub struct Receivers {
     pub location: stateful::Receiver<Json<teslamate::Location>>,
     pub charging_state: stateful::Receiver<ChargingStateEnum>,
+    pub is_charging: stateful::Receiver<bool>,
     pub battery_level: stateful::Receiver<Parsed<u8>>,
     pub charge_limit: stateful::Receiver<Parsed<u8>>,
     pub frunk: stateful::Receiver<DoorState>,
@@ -112,9 +113,12 @@ impl Receivers {
                     "teslamate/cars/{id}/min_charge_tomorrow"
                 ));
 
+        let is_charging = charging_state.clone().map(|(_, c)| c.is_charging());
+
         Self {
             location,
             charging_state,
+            is_charging,
             battery_level,
             charge_limit,
             frunk,
