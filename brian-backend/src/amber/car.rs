@@ -97,8 +97,6 @@ pub fn run(
             return;
         };
 
-        save_state(teslamate_id, &psr, &ps);
-
         loop {
             info!("{id}: Persistent State: {:?}", ps);
             let cr = prices_to_charge_request(
