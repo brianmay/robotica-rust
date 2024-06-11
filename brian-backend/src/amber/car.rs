@@ -164,32 +164,14 @@ fn prices_to_charge_request<T: TimeZone>(
     let estimated_charge_time_to_min =
         estimate_to_limit(teslamate_id, battery_level, dt, ps.min_charge_tomorrow, tz);
 
-    // Get the cheapest price for the estimated charge time
-    let cheapest_price = estimated_charge_time_to_min.and_then(|estimated_charge_time_to_min| {
-        let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
-        prices.get_cheapest_price_for_time_delta(estimated_charge_time_to_min, &dt, &end_time)
-    });
+    let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
+    let do_force =
+        prices.should_power_now(&id, estimated_charge_time_to_min, dt, end_time, is_charging);
 
-    // If car is charging we raise the threshold for the cheapest price.
-    // To try to prevent cycling with fluctuating prices.
-    let threshold_price = match (is_charging, cheapest_price) {
-        (true, Some(cheapest_price)) => Some(cheapest_price * 1.1),
-        (false, Some(cheapest_price)) => Some(cheapest_price),
-        _ => None,
-    };
-
-    // What is the current price?
-    let current_price = prices.current(&dt).map(|p| p.per_kwh);
-    info!(
-        "{id}: Is charging: {is_charging}, cheapest price is {cheapest_price:?}, threshold price is {threshold_price:?}, current price is {current_price:?}",
-    );
-
-    // Should we force a charge?
-    let force = match (threshold_price, current_price) {
-        (Some(cheapest_price), Some(current_price)) if current_price <= cheapest_price => {
-            Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
-        }
-        _ => None,
+    let force = if do_force {
+        Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
+    } else {
+        None
     };
 
     // Get the normal charge request based on category
@@ -228,8 +210,6 @@ fn prices_to_charge_request<T: TimeZone>(
         time: dt,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
-        cheapest_price,
-        current_price,
         force,
         normal,
         result,
@@ -270,8 +250,6 @@ struct State {
     time: DateTime<Utc>,
     battery_level: u8,
     min_charge_tomorrow: u8,
-    cheapest_price: Option<f32>,
-    current_price: Option<f32>,
     force: Option<ChargeRequest>,
     normal: ChargeRequest,
     result: ChargeRequest,
@@ -421,24 +399,17 @@ mod tests {
         assert_eq!(cr.time, now);
         assert_eq!(cr.battery_level, battery_level);
         assert_eq!(cr.min_charge_tomorrow, 0);
-        assert_eq!(cr.cheapest_price, None);
-        assert_eq!(cr.current_price, Some(price));
         assert_eq!(cr.force, None);
         assert_eq!(cr.normal, expected);
         assert_eq!(cr.result, expected);
     }
 
     #[test_log::test(rstest::rstest)]
-    #[case(dt("2020-01-01T03:30:30Z"), Some(46.5), Some(46.5), true)]
-    #[case(dt("2020-01-01T06:00:30Z"), Some(44.0), Some(44.0), true)]
-    #[case(dt("2020-01-01T06:30:30Z"), Some(33.5), Some(43.5), false)]
-    #[case(dt("2020-01-01T07:00:30Z"), Some(33.5), Some(43.0), false)]
-    fn test_prices_to_charge_request_forced(
-        #[case] now: DateTime<Utc>,
-        #[case] expected_price: Option<f32>,
-        #[case] expected_current_price: Option<f32>,
-        #[case] forced: bool,
-    ) {
+    #[case(dt("2020-01-01T03:30:30Z"), true)]
+    #[case(dt("2020-01-01T06:00:30Z"), true)]
+    #[case(dt("2020-01-01T06:30:30Z"), false)]
+    #[case(dt("2020-01-01T07:00:30Z"), false)]
+    fn test_prices_to_charge_request_forced(#[case] now: DateTime<Utc>, #[case] forced: bool) {
         let summary = Prices {
             list: pr_list_descending(50.0),
             dt: now,
@@ -460,8 +431,6 @@ mod tests {
         assert_eq!(cr.time, now);
         assert_eq!(cr.battery_level, battery_level);
         assert_eq!(cr.min_charge_tomorrow, 72);
-        assert_eq!(cr.cheapest_price, expected_price);
-        assert_eq!(cr.current_price, expected_current_price);
         if forced {
             assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
             assert_eq!(cr.result, ChargeRequest::ChargeTo(72));
@@ -473,14 +442,12 @@ mod tests {
     }
 
     #[test_log::test(rstest::rstest)]
-    #[case(dt("2020-01-01T03:30:30Z"), Some(-3.5), Some(-3.5), true)]
-    #[case(dt("2020-01-01T06:00:30Z"), Some(-6.0), Some(-6.0), true)]
-    #[case(dt("2020-01-01T06:30:30Z"), Some(-16.5), Some(-6.5), false)]
-    #[case(dt("2020-01-01T07:00:30Z"), Some(-16.5), Some(-7.0), false)]
+    #[case(dt("2020-01-01T03:30:30Z"), true)]
+    #[case(dt("2020-01-01T06:00:30Z"), true)]
+    #[case(dt("2020-01-01T06:30:30Z"), false)]
+    #[case(dt("2020-01-01T07:00:30Z"), false)]
     fn test_prices_to_charge_request_combined_forced_and_cheap(
         #[case] now: DateTime<Utc>,
-        #[case] expected_price: Option<f32>,
-        #[case] expected_current_price: Option<f32>,
         #[case] forced: bool,
     ) {
         let summary = Prices {
@@ -504,8 +471,6 @@ mod tests {
         assert_eq!(cr.time, now);
         assert_eq!(cr.battery_level, battery_level);
         assert_eq!(cr.min_charge_tomorrow, 72);
-        assert_eq!(cr.cheapest_price, expected_price);
-        assert_eq!(cr.current_price, expected_current_price);
         if forced {
             assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
         } else {

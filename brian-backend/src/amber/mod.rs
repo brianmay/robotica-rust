@@ -40,7 +40,7 @@ impl Prices {
     fn get_cheapest_price_for_time_delta(
         &self,
         time_delta: TimeDelta,
-        start_time: &DateTime<Utc>,
+        now: &DateTime<Utc>,
         end_time: &DateTime<Utc>,
     ) -> Option<f32> {
         let number_of_intervals =
@@ -53,16 +53,49 @@ impl Prices {
         let mut prices: Vec<_> = self
             .list
             .iter()
-            .filter(|p| p.is_within_range(*start_time, *end_time))
-            .map(|p| p.per_kwh)
+            .filter(|p| p.is_within_range(*now, *end_time))
             .collect();
 
-        prices.sort_by(f32::total_cmp);
+        prices.sort_by(|a, b| f32::total_cmp(&a.per_kwh, &b.per_kwh));
 
         prices
-            .get(number_of_intervals - 1)
-            .or_else(|| prices.last())
-            .copied()
+            .iter()
+            .take(number_of_intervals)
+            .last()
+            .map(|p| p.per_kwh)
+    }
+
+    fn should_power_now(
+        &self,
+        label: &str,
+        time_delta: Option<TimeDelta>,
+        now: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        is_on: bool,
+    ) -> bool {
+        let do_force = time_delta.map_or(false, |estimated_charge_time_to_min| {
+            let cheapest_price = self.get_cheapest_price_for_time_delta(
+                estimated_charge_time_to_min,
+                &now,
+                &end_time,
+            );
+
+            // If currently on we raise the threshold for the cheapest price.
+            // To try to prevent cycling with fluctuating prices.
+            let threshold_price = match (is_on, cheapest_price) {
+                (true, Some(cheapest_price)) => Some(cheapest_price * 1.1),
+                (false, Some(cheapest_price)) => Some(cheapest_price),
+                _ => None,
+            };
+
+            // What is the current price?
+            let current_price = self.current(&now).map(|p| p.per_kwh);
+            info!("{label}: Is charging, cheapest price is {cheapest_price:?}, threshold price is {threshold_price:?}, current price is {current_price:?}");
+
+            // Should we force charging?
+            matches!((threshold_price, current_price), (Some(cheapest_price), Some(current_price)) if current_price <= cheapest_price)
+        });
+        do_force
     }
 }
 
@@ -242,7 +275,6 @@ mod tests {
     use chrono::Local;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
-    use test_log::test;
 
     use super::*;
 
@@ -393,7 +425,7 @@ mod tests {
     const INTERVAL: Duration = unsafe_duration!(minutes: 30);
 
     macro_rules! cheapest_price_tests {
-        ($($name:ident: $start_time:expr, $end_time:expr, $period:expr, $expected:expr)*) => {
+        ($($name:ident: $start_time:expr, $end_time:expr, $period:expr, $expected_price:expr)*) => {
         $(
             #[test]
             fn $name() {
@@ -447,9 +479,10 @@ mod tests {
                     interval: INTERVAL,
                 };
 
+                let price = prices.get_cheapest_price_for_time_delta(time_delta, &$start_time, &$end_time);
                 assert_eq!(
-                    prices.get_cheapest_price_for_time_delta(time_delta, &$start_time, &$end_time),
-                    $expected
+                    price,
+                    $expected_price,
                 );
             }
         )*
@@ -460,35 +493,164 @@ mod tests {
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 30, Some(-10.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 60, Some(-10.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 90, Some(-10.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 120, Some(-10.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_1_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:30:00Z"), 150, Some(0.0));
 
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 0, None);
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 30, Some(-10.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 60, Some(-10.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 90, Some(-10.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 120, Some(0.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_2_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T06:00:00Z"), 150, Some(0.0));
 
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_0: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 0, None);
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_1: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 30, Some(20.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_2: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 60, Some(20.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_3: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 90, Some(20.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_4: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 120, Some(20.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_3_intervals_5: dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"), 150, Some(20.0));
 
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_0: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 0, None);
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_1: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 30, Some(20.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_2: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 60, Some(20.0));
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_3: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 90, Some(20.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_4: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 120, Some(20.0));
-
     cheapest_price_tests!(test_get_price_for_cheapest_period_test_4_intervals_5: dt("2020-01-01T00:00:30Z"), dt("2020-01-01T00:29:30Z"), 150, Some(20.0));
+
+    fn pr(
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        interval_type: IntervalType,
+        cost: f32,
+    ) -> api::PriceResponse {
+        api::PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: cost,
+            spot_per_kwh: 0.0,
+            interval_type,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: api::ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: api::TariffInformation {
+                period: api::PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        }
+    }
+
+    fn pr_list_descending(cost: f32) -> Vec<api::PriceResponse> {
+        let time = dt("2020-01-01T00:00:00Z");
+
+        (0i8..48i8)
+            .map(|i| {
+                let i64 = i64::from(i);
+                let f32 = f32::from(i);
+                pr(
+                    time + TimeDelta::minutes(i64 * 30),
+                    time + TimeDelta::minutes((i64 + 1) * 30),
+                    IntervalType::ForecastInterval,
+                    f32.mul_add(-0.5, cost),
+                )
+            })
+            // .map(|p| {
+            //     debug!("{:?}", p);
+            //     p
+            // })
+            .collect::<Vec<api::PriceResponse>>()
+    }
+
+    // test prices.should_power_now
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        TimeDelta::minutes(30),
+        false,
+        false
+    )]
+    #[case(
+        dt("2020-01-01T01:30:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        TimeDelta::minutes(30),
+        false,
+        true
+    )]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        TimeDelta::minutes(30),
+        true,
+        true
+    )]
+    #[case(
+        dt("2020-01-01T01:30:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        TimeDelta::minutes(30),
+        true,
+        true
+    )]
+    fn test_should_power_now(
+        #[case] now: DateTime<Utc>,
+        #[case] end_time: DateTime<Utc>,
+        #[case] time_delta: TimeDelta,
+        #[case] is_on: bool,
+        #[case] expected: bool,
+    ) {
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            // list: vec![
+            //     api::PriceResponse {
+            //         date: NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            //         start_time: dt("2020-01-01T00:00:00Z"),
+            //         end_time: dt("2020-01-01T00:30:00Z"),
+            //         per_kwh: 20.0,
+            //         spot_per_kwh: 20.0,
+            //         interval_type: IntervalType::CurrentInterval,
+            //         renewables: 0.0,
+            //         duration: 0,
+            //         channel_type: ChannelType::General,
+            //         estimate: Some(false),
+            //         spike_status: "None".to_string(),
+            //         tariff_information: TariffInformation {
+            //             period: PeriodType::Peak,
+            //             season: None,
+            //             block: None,
+            //             demand_window: None,
+            //         },
+            //     },
+            //     api::PriceResponse {
+            //         date: NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            //         start_time: dt("2020-01-01T00:30:00Z"),
+            //         end_time: dt("2020-01-01T01:00:00Z"),
+            //         per_kwh: -10.0,
+            //         spot_per_kwh: -10.0,
+            //         interval_type: IntervalType::CurrentInterval,
+            //         renewables: 0.0,
+            //         duration: 0,
+            //         channel_type: ChannelType::General,
+            //         estimate: Some(false),
+            //         spike_status: "None".to_string(),
+            //         tariff_information: TariffInformation {
+            //             period: PeriodType::Peak,
+            //             season: None,
+            //             block: None,
+            //             demand_window: None,
+            //         },
+            //     },
+            // ],
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        assert_eq!(
+            prices.should_power_now("test", Some(time_delta), now, end_time, is_on),
+            expected
+        );
+    }
 }
