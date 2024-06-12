@@ -196,6 +196,7 @@ where
 
         while let Ok(Json(data)) = s.recv().await {
             for query in data.get_queries(&influx_topic) {
+                tracing::debug!("Writing to influxdb: {:?}", query);
                 if let Err(e) = client.query(&query).await {
                     error!("Failed to write to influxdb: {}", e);
                 }

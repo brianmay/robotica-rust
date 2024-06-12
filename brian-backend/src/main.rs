@@ -28,23 +28,25 @@ use delays::rate_limit;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
-use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
+use robotica_backend::pipes::{stateful, stateless, Subscriber};
 use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_backend::scheduling::executor::executor;
 use robotica_backend::scheduling::sequencer::Sequence;
 use robotica_backend::services::persistent_state::PersistentStateDatabase;
 use robotica_backend::spawn;
-use robotica_common::mqtt::{Json, QoS, Retain};
+use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::lights::LightCommand;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
-use robotica_common::version;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
+use robotica_common::{shelly, version};
 use tap::Pipe;
 use tracing::{debug, error, info};
+
+use crate::amber::hot_water;
 
 use self::tesla::monitor_charging;
 use robotica_backend::services::http;
@@ -204,77 +206,9 @@ async fn setup_pipes(
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
 
-    let hot_water_request = amber::hot_water::run(&state, prices.clone());
-    spawn(async move {
-        let mut s = hot_water_request.subscribe().await;
+    monitor_hot_water(&state, &prices);
 
-        while let Ok(request) = s.recv().await {
-            info!("Hot water request: {request:?}");
-            //     let payload = match request {
-            //         amber::hot_water::HotWaterRequest::On => Payload::Command(Command::HotWaterOn),
-            //         amber::hot_water::HotWaterRequest::Off => Payload::Command(Command::HotWaterOff),
-            //     };
-            //     state
-            //         .message_sink
-            //         .try_send(Message::new(
-            //             "Hot Water",
-            //             &format!("{:?}", request),
-            //             MessagePriority::Low,
-            //             audience::everyone(),
-            //         ))
-            //         .unwrap_or_else(|e| {
-            //             error!("Error sending hot water message: {e}");
-            //         });
-            //     state
-            //         .subscriptions
-            //         .publish("ha/event/message", payload)
-            //         .unwrap_or_else(|e| {
-            //             error!("Error sending hot water message: {e}");
-            //         });
-        }
-    });
-
-    let bathroom_door: stateful::Receiver<DoorState> = state
-        .subscriptions
-        .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
-        .map(|(_, json)| json.into())
-        .pipe(|rx| rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30), rx));
-    {
-        let mqtt = state.mqtt.clone();
-        let message_sink = state.message_sink.clone();
-        spawn(async move {
-            let mut s = bathroom_door.subscribe().await;
-
-            while let Ok((old, door)) = s.recv_old_new().await {
-                if old.is_some() {
-                    info!("Bathroom door state: {door:?}");
-                    let action = match door {
-                        DoorState::Open => LightCommand::TurnOff,
-                        DoorState::Closed => LightCommand::TurnOn {
-                            scene: "busy".to_string(),
-                        },
-                    };
-                    let command = Command::Light(action);
-                    let message = match door {
-                        DoorState::Open => "The bathroom is vacant",
-                        DoorState::Closed => "The bathroom is occupied",
-                    };
-                    mqtt.try_serialize_send(
-                        "command/Passage/Light/split/bathroom",
-                        &Json(command),
-                        Retain::NoRetain,
-                        QoS::ExactlyOnce,
-                    );
-                    message_sink.try_send(Message::new(
-                        "Bathroom Door",
-                        message,
-                        MessagePriority::DaytimeOnly,
-                        audience::dining_room(),
-                    ));
-                }
-            }
-        });
-    }
+    monitor_bathroom_door(&mut state);
 
     monitor_teslas(&config.teslas, &mut state, &postgres, &prices);
 
@@ -317,6 +251,87 @@ async fn setup_pipes(
 
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
+    });
+}
+
+fn monitor_bathroom_door(state: &mut InitState) {
+    let bathroom_door: stateful::Receiver<DoorState> = state
+        .subscriptions
+        .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
+        .map(|(_, json)| json.into())
+        .pipe(|rx| rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30), rx));
+
+    let mqtt = state.mqtt.clone();
+    let message_sink = state.message_sink.clone();
+    spawn(async move {
+        let mut s = bathroom_door.subscribe().await;
+
+        while let Ok((old, door)) = s.recv_old_new().await {
+            if old.is_some() {
+                info!("Bathroom door state: {door:?}");
+                let action = match door {
+                    DoorState::Open => LightCommand::TurnOff,
+                    DoorState::Closed => LightCommand::TurnOn {
+                        scene: "busy".to_string(),
+                    },
+                };
+                let command = Command::Light(action);
+                let message = match door {
+                    DoorState::Open => "The bathroom is vacant",
+                    DoorState::Closed => "The bathroom is occupied",
+                };
+                mqtt.try_serialize_send(
+                    "command/Passage/Light/split/bathroom",
+                    &Json(command),
+                    Retain::NoRetain,
+                    QoS::ExactlyOnce,
+                );
+                message_sink.try_send(Message::new(
+                    "Bathroom Door",
+                    message,
+                    MessagePriority::DaytimeOnly,
+                    audience::dining_room(),
+                ));
+            }
+        }
+    });
+}
+
+fn monitor_hot_water(
+    state: &InitState,
+    prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+) {
+    let mqtt_clone = state.mqtt.clone();
+    let hot_water_request = amber::hot_water::run(state, prices.clone());
+    let message_sink = state.message_sink.clone();
+    hot_water_request.for_each(move |(old, current)| {
+        if old.is_some() {
+            return;
+        }
+
+        let command = match current {
+            hot_water::Request::Heat => shelly::SwitchCommand::On(None),
+            hot_water::Request::DoNotHeat => shelly::SwitchCommand::Off(None),
+        };
+        info!("Setting hot water to {:?}", command);
+        let msg = MqttMessage::new(
+            "hotwater/command/switch:0",
+            command,
+            Retain::NoRetain,
+            QoS::ExactlyOnce,
+        );
+        mqtt_clone.try_send(msg);
+
+        let message = match current {
+            hot_water::Request::Heat => "Turning hot water on",
+            hot_water::Request::DoNotHeat => "Turning hot water off",
+        };
+        message_sink.try_send(Message::new(
+            "Hot Water",
+            message,
+            MessagePriority::Low,
+            audience::everyone(),
+        ));
     });
 }
 

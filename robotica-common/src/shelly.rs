@@ -177,6 +177,39 @@ pub struct SwitchStatus {
     pub temperature: Temperature,
 }
 
+/// A command for the Shelly Switch
+#[derive(Debug)]
+pub enum SwitchCommand {
+    /// Causes the status of the corresponding component to be published.
+    StatusUpdate,
+
+    /// Turns the switch on, optional `toggle_after` parameter.
+    On(Option<u8>),
+
+    /// Turns the switch off, optional `toggle_after` parameter.
+    Off(Option<u8>),
+
+    /// Toggles the switch.
+    Toggle,
+}
+
+impl From<SwitchCommand> for String {
+    fn from(val: SwitchCommand) -> Self {
+        match val {
+            SwitchCommand::StatusUpdate => "status_update".to_string(),
+            SwitchCommand::On(toggle_after) => toggle_after.as_ref().map_or_else(
+                || "on".to_string(),
+                |toggle_after| format!("on,{toggle_after}"),
+            ),
+            SwitchCommand::Off(toggle_after) => toggle_after.as_ref().map_or_else(
+                || "off".to_string(),
+                |toggle_after| format!("off,{toggle_after}"),
+            ),
+            SwitchCommand::Toggle => "toggle".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
