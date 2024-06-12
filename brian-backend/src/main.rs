@@ -329,7 +329,7 @@ fn monitor_hot_water(
         message_sink.try_send(Message::new(
             "Hot Water",
             message,
-            MessagePriority::Low,
+            MessagePriority::DaytimeOnly,
             audience::everyone(),
         ));
     });
