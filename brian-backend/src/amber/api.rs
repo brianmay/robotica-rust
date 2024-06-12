@@ -111,8 +111,8 @@ impl PriceResponse {
         (start_ok_1 || start_ok_2) && (stop_ok_1 || stop_ok_2)
     }
 
-    pub fn is_current(&self, dt: &DateTime<Utc>) -> bool {
-        self.start_time <= *dt && self.end_time > *dt
+    pub fn is_current(&self, dt: DateTime<Utc>) -> bool {
+        self.start_time <= dt && self.end_time > dt
     }
 }
 
@@ -266,34 +266,34 @@ mod tests {
             dt("2020-01-01T00:30:00Z"),
             IntervalType::CurrentInterval,
         );
-        assert_eq!(p.is_current(&now), true);
+        assert_eq!(p.is_current(now), true);
 
         let p = pr(
             dt("2020-01-01T00:00:00Z"),
             dt("2020-01-01T00:00:00Z"),
             IntervalType::ActualInterval,
         );
-        assert_eq!(p.is_current(&now), false);
+        assert_eq!(p.is_current(now), false);
 
         let p = pr(
             dt("2020-01-01T00:00:00Z"),
             dt("2020-01-01T00:00:01Z"),
             IntervalType::CurrentInterval,
         );
-        assert_eq!(p.is_current(&now), true);
+        assert_eq!(p.is_current(now), true);
 
         let p = pr(
             dt("2019-01-01T23:59:59Z"),
             dt("2020-01-01T00:00:00Z"),
             IntervalType::ActualInterval,
         );
-        assert_eq!(p.is_current(&now), false);
+        assert_eq!(p.is_current(now), false);
 
         let p = pr(
             dt("2019-01-01T23:59:59Z"),
             dt("2020-01-01T00:00:01Z"),
             IntervalType::CurrentInterval,
         );
-        assert_eq!(p.is_current(&now), true);
+        assert_eq!(p.is_current(now), true);
     }
 }

@@ -36,11 +36,11 @@ struct DayState {
     is_on: bool,
 }
 
-const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 2);
+const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
 
 impl DayState {
     fn new<T: TimeZone>(now: &DateTime<Utc>, timezone: &T) -> Self {
-        let (start_day, end_day) = get_2hr_day(now, timezone);
+        let (start_day, end_day) = get_cheap_day(now, timezone);
         Self {
             start: start_day,
             end: end_day,
@@ -71,9 +71,10 @@ impl DayState {
         &mut self,
         prices: &Prices,
         now: DateTime<Utc>,
+        cheap_time: TimeDelta,
         timezone: &T,
     ) -> Request {
-        let (_start_day, end_time) = get_2hr_day(&now, timezone);
+        let (_start_day, end_time) = get_cheap_day(&now, timezone);
 
         // If the date has changed, reset the cheap power for the day.
         if now < self.start || now >= self.end {
@@ -90,7 +91,7 @@ impl DayState {
             self.cheap_power_for_day += duration;
         }
 
-        let duration = CHEAP_TIME
+        let duration = cheap_time
             .checked_sub(&self.cheap_power_for_day)
             .unwrap_or_else(TimeDelta::zero);
 
@@ -102,7 +103,17 @@ impl DayState {
 
         let is_cheap =
             prices.should_power_now("hotwater", Some(duration), now, end_time, self.is_on);
-        if is_cheap {
+
+        let current_price = prices.get_weighted_price(now);
+        let threshold = if self.is_on { 14.0 } else { 12.0 };
+
+        let should_be_on = match (is_cheap, current_price) {
+            (true, _) => true,
+            (false, Some(price)) if price < threshold => true,
+            _ => false,
+        };
+
+        if should_be_on {
             self.last_cheap_update = Some(now);
             self.is_on = true;
             Request::Heat
@@ -114,9 +125,9 @@ impl DayState {
     }
 }
 
-fn get_2hr_day<T: TimeZone>(now: &DateTime<Utc>, local: &T) -> (DateTime<Utc>, DateTime<Utc>) {
-    let time_2hr_cheap: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
-    let (start_day, end_day) = super::private::get_day(now, time_2hr_cheap, local);
+fn get_cheap_day<T: TimeZone>(now: &DateTime<Utc>, local: &T) -> (DateTime<Utc>, DateTime<Utc>) {
+    let end_time: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
+    let (start_day, end_day) = super::private::get_day(now, end_time, local);
     (start_day, end_day)
 }
 
@@ -134,7 +145,7 @@ pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
         let mut s = rx.subscribe().await;
 
         while let Ok(prices) = s.recv().await {
-            let cr = day.prices_to_hot_water_request(&prices, Utc::now(), timezone);
+            let cr = day.prices_to_hot_water_request(&prices, Utc::now(), CHEAP_TIME, timezone);
             tx_out.try_send(cr);
             day.save(&psr);
         }
@@ -228,18 +239,18 @@ mod tests {
         };
 
         let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 0.0, CurrentInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T01:10:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 10.0, ForecastInterval),
-            pr(dt("2020-01-01T02:00:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T02:30:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T03:00:00Z"), -10.0, ForecastInterval),
-            pr(dt("2020-01-01T03:30:00Z"), -10.0, ForecastInterval),
-            pr(dt("2020-01-01T04:00:00Z"), -10.0, ForecastInterval),
-            pr(dt("2020-01-01T04:30:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T05:00:00Z"), 10.0, ForecastInterval),
-            pr(dt("2020-01-01T05:30:00Z"), -10.0, ForecastInterval),
+            pr(dt("2020-01-01T00:30:00Z"), 30.0, CurrentInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T01:10:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 40.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), 30.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 40.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), 20.0, ForecastInterval),
         ];
 
         let prices = Prices {
@@ -247,9 +258,10 @@ mod tests {
             dt: now,
             interval: INTERVAL,
         };
+        let delta = TimeDelta::minutes(120);
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now, &timezone);
+        let request = ds.prices_to_hot_water_request(&prices, now, delta, &timezone);
 
         // Assert
         assert!(matches!(request, Request::Heat));
@@ -300,9 +312,9 @@ mod tests {
         };
 
         let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T00:30:00Z"), 15.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 15.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 15.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T03:00:00Z"), 20.0, ForecastInterval),
@@ -328,9 +340,10 @@ mod tests {
             dt: now,
             interval: INTERVAL,
         };
+        let delta = TimeDelta::minutes(120);
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now, &timezone);
+        let request = ds.prices_to_hot_water_request(&prices, now, delta, &timezone);
 
         // Assert
         assert!(matches!(request, Request::Heat));
@@ -381,9 +394,9 @@ mod tests {
         };
 
         let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T00:30:00Z"), 15.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 15.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 15.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T03:00:00Z"), -30.0, ForecastInterval),
@@ -409,9 +422,10 @@ mod tests {
             dt: now,
             interval: INTERVAL,
         };
+        let delta = TimeDelta::minutes(120);
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now, &timezone);
+        let request = ds.prices_to_hot_water_request(&prices, now, delta, &timezone);
 
         // Assert
         assert!(matches!(request, Request::DoNotHeat));
@@ -462,9 +476,9 @@ mod tests {
         };
 
         let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 0.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 0.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 0.0, ForecastInterval),
+            pr(dt("2020-01-01T00:30:00Z"), 15.0, ActualInterval),
+            pr(dt("2020-01-01T01:00:00Z"), 15.0, CurrentInterval),
+            pr(dt("2020-01-01T01:30:00Z"), 15.0, ForecastInterval),
             pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
             pr(dt("2020-01-01T02:30:00Z"), 15.0, ForecastInterval),
             pr(dt("2020-01-01T03:00:00Z"), 10.0, ForecastInterval),
@@ -490,9 +504,10 @@ mod tests {
             dt: now,
             interval: INTERVAL,
         };
+        let delta = TimeDelta::minutes(120);
 
         // Act
-        let request = ds.prices_to_hot_water_request(&prices, now, &timezone);
+        let request = ds.prices_to_hot_water_request(&prices, now, delta, &timezone);
 
         // Assert
         assert!(matches!(request, Request::Heat));
@@ -506,5 +521,14 @@ mod tests {
                 is_on: true,
             }
         );
+    }
+
+    #[test]
+    fn test_get_cheap_day() {
+        let timezone = FixedOffset::east_opt(60 * 60 * 11).unwrap();
+        let now = dt("2020-01-02T00:00:00Z");
+        let (start, stop) = get_cheap_day(&now, &timezone);
+        assert_eq!(start, dt("2020-01-01T04:00:00Z"));
+        assert_eq!(stop, dt("2020-01-02T04:00:00Z"));
     }
 }

@@ -175,7 +175,7 @@ fn prices_to_charge_request<T: TimeZone>(
     };
 
     // Get the normal charge request based on category
-    let category = get_weighted_price_category(is_charging, &prices.list, &dt);
+    let category = get_weighted_price_category(is_charging, prices, dt);
     #[allow(clippy::match_same_arms)]
     let normal = match category {
         Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
