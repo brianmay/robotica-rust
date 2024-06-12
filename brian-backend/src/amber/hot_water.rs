@@ -141,11 +141,23 @@ pub fn run(state: &InitState, rx: Receiver<Arc<Prices>>) -> Receiver<Request> {
 
     let mut day = DayState::load(&psr, &utc_now(), timezone);
 
+    // Send initial state.
+    {
+        let initial = if day.is_on {
+            Request::Heat
+        } else {
+            Request::DoNotHeat
+        };
+        info!("Sending initial state: {:?}", initial);
+        tx_out.try_send(initial);
+    }
+
     spawn(async move {
         let mut s = rx.subscribe().await;
 
         while let Ok(prices) = s.recv().await {
             let cr = day.prices_to_hot_water_request(&prices, Utc::now(), CHEAP_TIME, timezone);
+            info!("Sending request: {:?}", cr);
             tx_out.try_send(cr);
             day.save(&psr);
         }

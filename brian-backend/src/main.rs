@@ -305,7 +305,7 @@ fn monitor_hot_water(
     let hot_water_request = amber::hot_water::run(state, prices.clone());
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
-        if old.is_some() {
+        if old.is_none() {
             return;
         }
 

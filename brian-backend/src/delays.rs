@@ -189,6 +189,8 @@ where
     T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
 {
     let (tx_out, rx_out) = stateful::create_pipe(name);
+    let name = name.to_string();
+
     spawn(async move {
         let mut state = RateLimitState::Idle;
         let mut s = rx.subscribe().await;
@@ -198,7 +200,7 @@ where
                 v = s.recv_old_new() => {
                     let Ok((old, v)) = v else { break};
 
-                    debug!("rate_limit received: {:?}", v);
+                    debug!("{name}: rate_limit received: {old:?}->{v:?} {state:?}");
                     state =
                     {
                         #[allow(clippy::match_same_arms)]
@@ -222,7 +224,7 @@ where
                     };
                 },
                 Some(()) = state.maybe_sleep_until() => {
-                    debug!("rate_limit timer: {:?}", state);
+                    debug!("{name}: rate_limit timer: {:?}", state);
                     state = {
                         #[allow(clippy::match_same_arms)]
                         match state {

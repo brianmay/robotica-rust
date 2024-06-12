@@ -91,7 +91,7 @@ impl Prices {
 
             // What is the current price?
             let current_price = self.current(&now).map(|p| p.per_kwh);
-            info!("{label}: Is charging, cheapest price is {cheapest_price:?}, threshold price is {threshold_price:?}, current price is {current_price:?}");
+            info!("{label}: cheapest price is {cheapest_price:?}, threshold price is {threshold_price:?}, current price is {current_price:?}");
 
             // Should we force charging?
             matches!((threshold_price, current_price), (Some(cheapest_price), Some(current_price)) if current_price <= cheapest_price)
