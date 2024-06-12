@@ -97,6 +97,8 @@ async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
     let client = influxdb_config.get_client();
 
     for data in &usage.list {
+        let channel = &data.channel_identifier;
+
         let reading = UsageReading {
             duration: data.duration,
             per_kwh: data.per_kwh,
@@ -105,7 +107,7 @@ async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
             cost: data.cost,
             time: data.start_time,
         }
-        .into_query("amber/usage");
+        .into_query(format!("amber/usage/{channel}"));
 
         if let Err(e) = client.query(&reading).await {
             error!("Failed to write to influxdb: {}", e);
