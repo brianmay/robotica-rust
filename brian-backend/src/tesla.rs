@@ -1033,9 +1033,7 @@ pub fn monitor_charging(
                 tesla_state.send_left_home_commands = false;
             }
 
-            let charge_request = should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
-
-            let result = if tesla_state.send_left_home_commands && charge_request.is_auto() {
+            let result = if tesla_state.send_left_home_commands && amber_charge_request.is_auto() {
                 // Construct sequence of commands to send to Tesla.
                 let mut sequence = CommandSequence::new();
 
@@ -1047,6 +1045,8 @@ pub fn monitor_charging(
                 info!("{name}: Sending left home commands: {sequence:?}");
                 sequence.execute(&token, config.tesla_id).await
             } else {
+                let charge_request =
+                    should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
                 check_charge(&config, &token, &tesla_state, charge_request).await
             };
 
