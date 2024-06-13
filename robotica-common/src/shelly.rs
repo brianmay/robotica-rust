@@ -149,7 +149,7 @@ pub struct Em0 {
 }
 
 /// The temperature field of `SwitchStatus`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Temperature {
     /// The temperature in degrees Celsius
@@ -162,7 +162,7 @@ pub struct Temperature {
 /// The status of the Shelly Switch
 ///
 /// See <https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Switch>
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SwitchStatus {
     /// The id of the message
     pub id: i64,

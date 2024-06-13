@@ -164,7 +164,7 @@ fn prices_to_charge_request<T: TimeZone>(
     let estimated_charge_time_to_min =
         estimate_to_limit(teslamate_id, battery_level, dt, ps.min_charge_tomorrow, tz);
 
-    let (_start_time, end_time) = super::private::get_day(&dt, END_TIME, tz);
+    let (_start_time, end_time) = super::private::get_day(dt, END_TIME, tz);
     let do_force =
         prices.should_power_now(&id, estimated_charge_time_to_min, dt, end_time, is_charging);
 

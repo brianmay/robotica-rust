@@ -206,7 +206,7 @@ async fn setup_pipes(
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
 
-    monitor_hot_water(&state, &prices);
+    monitor_hot_water(&mut state, &prices);
 
     monitor_bathroom_door(&mut state);
 
@@ -298,11 +298,16 @@ fn monitor_bathroom_door(state: &mut InitState) {
 }
 
 fn monitor_hot_water(
-    state: &InitState,
+    state: &mut InitState,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
+    let is_on = state
+        .subscriptions
+        .subscribe_into_stateful::<Json<shelly::SwitchStatus>>("hotwater/status/switch:0")
+        .map(|(_, json)| json.0.output);
+
     let mqtt_clone = state.mqtt.clone();
-    let hot_water_request = amber::hot_water::run(state, prices.clone());
+    let hot_water_request = amber::hot_water::run(state, prices.clone(), is_on);
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
         if old.is_none() {
