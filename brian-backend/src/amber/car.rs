@@ -49,10 +49,16 @@ impl ChargeRequest {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+struct ChargePlanState {
+    plan: Plan,
+    charge_limit: u8,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct PersistentState {
     min_charge_tomorrow: u8,
-    charge_plan: Option<Plan>,
+    charge_plan: Option<ChargePlanState>,
 }
 
 impl Default for PersistentState {
@@ -178,8 +184,9 @@ fn prices_to_charge_request<T: TimeZone>(
             end_time,
             is_charging,
             estimated_charge_time_to_min,
+            battery_level,
         );
-        let is_current = charge_plan.is_current(now);
+        let is_current = charge_plan.plan.is_current(now);
         ps.charge_plan = Some(charge_plan);
         if is_current {
             Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
@@ -272,7 +279,7 @@ struct State {
     force: Option<ChargeRequest>,
     normal: ChargeRequest,
     result: ChargeRequest,
-    charge_plan: Option<Plan>,
+    charge_plan: Option<ChargePlanState>,
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_charge_time_to_min: Option<TimeDelta>,
@@ -286,45 +293,62 @@ struct State {
 
 #[allow(clippy::cognitive_complexity)]
 fn update_charge_plan(
-    plan: Option<Plan>,
+    plan: Option<ChargePlanState>,
     prices: &Prices,
     now: DateTime<Utc>,
     end_time: DateTime<Utc>,
     is_on: bool,
     required_time_left: TimeDelta,
-) -> Plan {
+    charge_limit: u8,
+) -> ChargePlanState {
     let (new_plan, new_cost) = get_cheapest(7.68, now, end_time, required_time_left, prices);
 
     if let Some(plan) = plan {
-        let cost = plan.get_forecast_cost(now, prices);
+        let cost = plan.plan.get_forecast_cost(now, prices);
         info!("Old Plan: {plan:?} {cost}");
         info!("New Plan: {new_plan:?} {new_cost}");
 
+        let has_changed = plan.charge_limit != charge_limit;
+
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (is_on, plan.is_current(now), new_cost < cost * 0.9) {
+        let use_new_plan = match (
+            is_on,
+            plan.plan.is_current(now),
+            new_cost < cost * 0.9,
+            has_changed,
+        ) {
+            // Charge limit has changed.
+            (_, _, _, true) => true,
+
             // new cost meets threshold, use new plan
-            (_, _, true) => true,
+            (_, _, true, false) => true,
 
             // Turning off but not meeting threshold, don't change
-            (true, false, false) => false,
+            (true, false, false, false) => false,
 
             // Already off, use new plan
-            (false, _, _) => true,
+            (false, _, _, false) => true,
 
             // Already on and staying on, use new plan
-            (true, true, false) => true,
+            (true, true, false, false) => true,
         };
 
         if use_new_plan {
             info!("Using new plan");
-            new_plan
+            ChargePlanState {
+                plan: new_plan,
+                charge_limit,
+            }
         } else {
             info!("Using old plan");
             plan
         }
     } else {
         info!("No old plan; Using new Plan: {:?}", plan);
-        new_plan
+        ChargePlanState {
+            plan: new_plan,
+            charge_limit,
+        }
     }
 }
 
@@ -538,12 +562,13 @@ mod tests {
             end_time,
             false,
             required_duration,
+            10,
         );
-        let cost = plan.get_forecast_cost(start_time, &prices);
+        let cost = plan.plan.get_forecast_cost(start_time, &prices);
 
-        assert_approx_eq!(f32, plan.get_kw(), 7.680);
-        assert_eq!(plan.get_start_time(), expected_start_time);
-        assert_eq!(plan.get_end_time(), expected_end_time);
+        assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);
+        assert_eq!(plan.plan.get_start_time(), expected_start_time);
+        assert_eq!(plan.plan.get_end_time(), expected_end_time);
         assert_approx_eq!(f32, cost, expected_cost);
     }
 
@@ -594,10 +619,10 @@ mod tests {
         assert_eq!(new_ps.min_charge_tomorrow, 72);
 
         let charge_plan = new_ps.charge_plan.unwrap();
-        let cost = charge_plan.get_forecast_cost(now, &summary);
-        approx_eq!(f32, charge_plan.get_kw(), 7.68);
-        assert_eq!(charge_plan.get_start_time(), expected_start_time);
-        assert_eq!(charge_plan.get_end_time(), expected_end_time);
+        let cost = charge_plan.plan.get_forecast_cost(now, &summary);
+        approx_eq!(f32, charge_plan.plan.get_kw(), 7.68);
+        assert_eq!(charge_plan.plan.get_start_time(), expected_start_time);
+        assert_eq!(charge_plan.plan.get_end_time(), expected_end_time);
         approx_eq!(f32, cost, expected_cost);
     }
 
