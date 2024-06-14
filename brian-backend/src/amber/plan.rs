@@ -1,0 +1,453 @@
+use std::cmp::{max, min};
+
+use chrono::{TimeDelta, Utc};
+use serde::{Deserialize, Serialize};
+use tracing::error;
+
+use super::Prices;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct Plan {
+    kw: f32,
+    start_time: chrono::DateTime<Utc>,
+    end_time: chrono::DateTime<Utc>,
+}
+
+impl Plan {
+    const fn new(
+        kw: f32,
+        start_time: chrono::DateTime<Utc>,
+        end_time: chrono::DateTime<Utc>,
+    ) -> Self {
+        Self {
+            kw,
+            start_time,
+            end_time,
+        }
+    }
+
+    #[cfg(test)]
+    pub const fn new_test(
+        kw: f32,
+        start_time: chrono::DateTime<Utc>,
+        end_time: chrono::DateTime<Utc>,
+    ) -> Self {
+        Self {
+            kw,
+            start_time,
+            end_time,
+        }
+    }
+
+    #[cfg(test)]
+    pub const fn get_kw(&self) -> f32 {
+        self.kw
+    }
+
+    #[cfg(test)]
+    pub const fn get_start_time(&self) -> chrono::DateTime<Utc> {
+        self.start_time
+    }
+
+    #[cfg(test)]
+    pub const fn get_end_time(&self) -> chrono::DateTime<Utc> {
+        self.end_time
+    }
+
+    pub fn is_current(&self, dt: chrono::DateTime<Utc>) -> bool {
+        self.start_time <= dt && self.end_time > dt
+    }
+
+    pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> f32 {
+        // Ensure now is within the requested period.
+        let now = max(self.start_time, now);
+        let now = min(self.end_time, now);
+
+        prices
+            .list
+            .iter()
+            .filter_map(|p| {
+                if p.is_within_range(self.start_time, self.end_time) {
+                    // Ensure now is within the price period.
+                    let now = max(p.start_time, now);
+                    let now = min(p.end_time, now);
+                    // Ensure end_time is within the requested period.
+                    let end_time = p.end_time;
+                    let end_time = max(self.start_time, end_time);
+                    let end_time = min(self.end_time, end_time);
+                    // Calculate the remaining time for this period.
+                    let duration = end_time - now;
+
+                    #[allow(clippy::cast_precision_loss)]
+                    Some(p.per_kwh * self.kw * duration.num_seconds() as f32 / 3600.0)
+                } else {
+                    None
+                }
+            })
+            .sum::<f32>()
+    }
+
+    fn get_duration(&self) -> TimeDelta {
+        self.end_time - self.start_time
+    }
+}
+
+pub fn get_cheapest(
+    kw: f32,
+    start_search: chrono::DateTime<Utc>,
+    end_search: chrono::DateTime<Utc>,
+    required_duration: chrono::TimeDelta,
+    prices: &Prices,
+) -> (Plan, f32) {
+    let interval = prices.interval;
+
+    // Get the time of the next 30 minute interval from now
+    #[allow(clippy::cast_possible_wrap)]
+    let next_interval = start_search + interval
+        - TimeDelta::seconds(start_search.timestamp() % interval.as_secs() as i64);
+
+    let now_time = {
+        let end_time = min(start_search + required_duration, end_search);
+        std::iter::once(Plan::new(kw, start_search, end_time))
+    };
+
+    let rest_times = (0..48) // 48 intervals in a day
+        .map(|i| {
+            let start_time = next_interval + interval * i;
+            let end_time = min(start_time + required_duration, end_search);
+            Plan::new(kw, start_time, end_time)
+        })
+        .take_while(|plan| plan.start_time < end_search);
+
+    now_time
+        .chain(rest_times)
+        .map(|plan| {
+            let price = plan.get_forecast_cost(start_search, prices);
+            // We need the largest value, hence we get the negative duration.
+            let duration = -plan.get_duration();
+            (plan, duration, price)
+        })
+        .min_by(|(_, da, a), (_, db, b)| {
+            (da, a)
+                .partial_cmp(&(db, b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map_or_else(
+            || {
+                // This should never happen.
+                error!("No plans found, using stupid default");
+                let plan = Plan {
+                    kw,
+                    start_time: start_search,
+                    end_time: end_search,
+                };
+                let price = plan.get_forecast_cost(start_search, prices);
+                (plan, price)
+            },
+            |(plan, _, price)| (plan, price),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use crate::amber::api::{self, IntervalType};
+
+    use super::*;
+    use chrono::{DateTime, FixedOffset, TimeDelta};
+    use float_cmp::assert_approx_eq;
+    use robotica_common::unsafe_duration;
+    use std::time::Duration;
+
+    fn dt(dt: impl Into<String>) -> DateTime<Utc> {
+        dt.into().parse().unwrap()
+    }
+
+    #[rstest::rstest]
+    #[case(
+        dt("2021-01-01T00:15:00Z"),
+        TimeDelta::minutes(30),
+        dt("2021-01-01T00:14:59Z"),
+        false
+    )]
+    #[case(
+        dt("2021-01-01T00:15:00Z"),
+        TimeDelta::minutes(30),
+        dt("2021-01-01T00:15:00Z"),
+        true
+    )]
+    #[case(
+        dt("2021-01-01T00:15:00Z"),
+        TimeDelta::minutes(30),
+        dt("2021-01-01T00:44:59Z"),
+        true
+    )]
+    #[case(
+        dt("2021-01-01T00:15:00Z"),
+        TimeDelta::minutes(30),
+        dt("2021-01-01T00:45:00Z"),
+        false
+    )]
+    #[case(
+        dt("2021-01-01T00:15:00Z"),
+        TimeDelta::minutes(30),
+        dt("2021-01-01T00:45:01Z"),
+        false
+    )]
+
+    fn test_is_current(
+        #[case] start_time: chrono::DateTime<Utc>,
+        #[case] duration: chrono::TimeDelta,
+        #[case] dt: chrono::DateTime<Utc>,
+        #[case] expected: bool,
+    ) {
+        let plan = Plan::new(1.0, start_time, start_time + duration);
+        assert_eq!(plan.is_current(dt), expected);
+    }
+
+    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+
+    fn pr(
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        interval_type: IntervalType,
+        cost: f32,
+    ) -> api::PriceResponse {
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
+        api::PriceResponse {
+            date: start_time.with_timezone(&timezone).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: cost,
+            spot_per_kwh: 0.0,
+            interval_type,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: api::ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: api::TariffInformation {
+                period: api::PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        }
+    }
+
+    fn pr_list_descending(cost: f32) -> Vec<api::PriceResponse> {
+        let time = dt("2020-01-01T00:00:00Z");
+        #[allow(clippy::cast_possible_wrap)]
+        let interval_minutes = (INTERVAL.as_secs() / 60) as i64;
+
+        (0i8..48i8)
+            .map(|i| {
+                let i64 = i64::from(i);
+                let f32 = f32::from(i);
+                pr(
+                    time + TimeDelta::minutes(i64 * interval_minutes),
+                    time + TimeDelta::minutes((i64 + 1) * interval_minutes),
+                    IntervalType::ForecastInterval,
+                    f32.mul_add(-0.5, cost),
+                )
+            })
+            // .map(|p| {
+            //     debug!("{:?}", p);
+            //     p
+            // })
+            .collect::<Vec<api::PriceResponse>>()
+    }
+
+    // test single period with different now times
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:00:00Z"),
+        20.0 * 0.5 * 50.0 * 1.0
+    )]
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:00:00Z"),
+        20.0 * 0.5 * 50.0 * 1.0
+    )]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:15:00Z"),
+        20.0 * 0.5 * 50.0 * 0.5
+    )]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:18:00Z"),
+        20.0 * 0.5 * 50.0 * 0.4
+    )]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:30:00Z"),
+        20.0 * 0.5 * 50.0 * 0.0
+    )]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T01:30:00Z"),
+        20.0 * 0.5 * 50.0 * 0.0
+    )]
+    // test twin period with different now times
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(60),
+        dt("2020-01-01T00:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 1.0) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(60),
+        dt("2020-01-01T00:18:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.4) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(60),
+        dt("2020-01-01T00:30:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.0) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(60),
+        dt("2020-01-01T00:48:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.0) + (20.0 * 0.5 * 49.5 * 0.4)
+    )]
+    // Test start_time starts is start of second period
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:30:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.0) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    // Test end_time ends is end of first period
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 1.0) + (20.0 * 0.5 * 49.5 * 0.0)
+    )]
+    // Test required period overlaps first and second periods
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:18:00Z"),
+        TimeDelta::minutes(30),
+        dt("2020-01-01T00:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.4) + (20.0 * 0.5 * 49.5 * 0.6)
+    )]
+    fn test_forecast_price(
+        #[case] start_time: chrono::DateTime<Utc>,
+        #[case] duration: chrono::TimeDelta,
+        #[case] now: chrono::DateTime<Utc>,
+        #[case] expected: f32,
+    ) {
+        use tracing::debug;
+
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
+        let plan = Plan::new(20.0, start_time, start_time + duration);
+        let price = plan.get_forecast_cost(now, &prices);
+        assert_approx_eq!(f32, price, expected);
+    }
+
+    #[rstest::rstest]
+    // Search scope one period only, look for one period, must return the same period.
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T00:30:00Z"),
+        TimeDelta::minutes(30),
+        20.0,
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T00:30:00Z"),
+        20.0 * 0.5 * 50.0 * 1.0
+    )]
+    // Search scope two periods, look for one period, should return second.
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        TimeDelta::minutes(30),
+        20.0,
+        dt("2020-01-01T00:30:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.0) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    // Search scope two periods, look for two periods, should return both.
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        TimeDelta::minutes(60),
+        20.0,
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 1.0) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    // Search scope two periods, look for four periods, should return only 2.
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T01:00:00Z"),
+            TimeDelta::minutes(120),
+            20.0,
+            dt("2020-01-01T00:00:00Z"),
+            dt("2020-01-01T01:00:00Z"),
+            (20.0 * 0.5 * 50.0 * 1.0) + (20.0 * 0.5 * 49.5 * 1.0)
+        )]
+    // Search scope two periods but late start, look for two periods.
+    // This also tests that the end time is not later then the search end time.
+    #[allow(clippy::suboptimal_flops)]
+    #[case(
+        dt("2020-01-01T00:18:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        TimeDelta::minutes(60),
+        20.0,
+        dt("2020-01-01T00:18:00Z"),
+        dt("2020-01-01T01:00:00Z"),
+        (20.0 * 0.5 * 50.0 * 0.4) + (20.0 * 0.5 * 49.5 * 1.0)
+    )]
+    fn test_get_cheapest_plan(
+        #[case] start_search: chrono::DateTime<Utc>,
+        #[case] end_search: chrono::DateTime<Utc>,
+        #[case] required_duration: chrono::TimeDelta,
+        #[case] kw: f32,
+        #[case] expected_start_time: chrono::DateTime<Utc>,
+        #[case] expected_end_time: chrono::DateTime<Utc>,
+        #[case] expected_price: f32,
+    ) {
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        let (plan, cost) = get_cheapest(kw, start_search, end_search, required_duration, &prices);
+        assert_approx_eq!(f32, plan.kw, kw);
+        assert_eq!(plan.start_time, expected_start_time);
+        assert_eq!(plan.end_time, expected_end_time);
+        assert!(plan.start_time >= start_search);
+        assert!(plan.end_time <= end_search);
+        assert_approx_eq!(f32, cost, expected_price);
+    }
+}

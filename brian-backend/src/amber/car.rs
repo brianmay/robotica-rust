@@ -1,6 +1,7 @@
 use crate::{delays::rate_limit, tesla::TeslamateId, InitState};
 
 use super::{
+    plan::{get_cheapest, Plan},
     price_category::{get_weighted_price_category, PriceCategory},
     Prices,
 };
@@ -51,12 +52,14 @@ impl ChargeRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct PersistentState {
     min_charge_tomorrow: u8,
+    charge_plan: Option<Plan>,
 }
 
 impl Default for PersistentState {
     fn default() -> Self {
         Self {
             min_charge_tomorrow: 70,
+            charge_plan: None,
         }
     }
 }
@@ -99,15 +102,17 @@ pub fn run(
 
         loop {
             info!("{id}: Persistent State: {:?}", ps);
-            let cr = prices_to_charge_request(
+            let (cr, new_ps) = prices_to_charge_request(
                 teslamate_id,
                 &v_prices,
                 v_battery_level,
                 v_is_charging,
-                &ps,
+                ps,
                 Utc::now(),
                 &Local,
             );
+            ps = new_ps;
+            save_state(teslamate_id, &psr, &ps);
 
             info!("{id}: Charging request: {:#?}", cr);
             publish_state(teslamate_id, &cr, &mqtt);
@@ -154,28 +159,39 @@ fn prices_to_charge_request<T: TimeZone>(
     prices: &Prices,
     battery_level: u8,
     is_charging: bool,
-    ps: &PersistentState,
-    dt: DateTime<Utc>,
+    mut ps: PersistentState,
+    now: DateTime<Utc>,
     tz: &T,
-) -> State {
+) -> (State, PersistentState) {
     let id = teslamate_id.to_string();
 
     // How long should car take to charge to min_charge_tomorrow?
     let estimated_charge_time_to_min =
-        estimate_to_limit(teslamate_id, battery_level, dt, ps.min_charge_tomorrow, tz);
+        estimate_to_limit(teslamate_id, battery_level, now, ps.min_charge_tomorrow, tz);
 
-    let (_start_time, end_time) = super::private::get_day(dt, END_TIME, tz);
-    let do_force =
-        prices.should_power_now(&id, estimated_charge_time_to_min, dt, end_time, is_charging);
-
-    let force = if do_force {
-        Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
+    let force = if let Some(estimated_charge_time_to_min) = estimated_charge_time_to_min {
+        let (_start_time, end_time) = super::private::get_day(now, END_TIME, tz);
+        let charge_plan = update_charge_plan(
+            ps.charge_plan,
+            prices,
+            now,
+            end_time,
+            is_charging,
+            estimated_charge_time_to_min,
+        );
+        let is_current = charge_plan.is_current(now);
+        ps.charge_plan = Some(charge_plan);
+        if is_current {
+            Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
+        } else {
+            None
+        }
     } else {
         None
     };
 
     // Get the normal charge request based on category
-    let category = get_weighted_price_category(is_charging, prices, dt);
+    let category = get_weighted_price_category(is_charging, prices, now);
     #[allow(clippy::match_same_arms)]
     let normal = match category {
         Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
@@ -200,23 +216,26 @@ fn prices_to_charge_request<T: TimeZone>(
     // Get some more stats
     let estimated_charge_time_to_limit = match result {
         ChargeRequest::ChargeTo(limit) => {
-            estimate_to_limit(teslamate_id, battery_level, dt, limit, tz)
+            estimate_to_limit(teslamate_id, battery_level, now, limit, tz)
         }
         ChargeRequest::Manual => None,
     };
-    let estimated_charge_time_to_90 = estimate_to_limit(teslamate_id, battery_level, dt, 90, tz);
+    let estimated_charge_time_to_90 = estimate_to_limit(teslamate_id, battery_level, now, 90, tz);
 
-    State {
-        time: dt,
+    let state = State {
+        time: now,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
         force,
         normal,
         result,
+        charge_plan: ps.charge_plan.clone(),
         estimated_charge_time_to_min,
         estimated_charge_time_to_limit,
         estimated_charge_time_to_90,
-    }
+    };
+
+    (state, ps)
 }
 
 fn estimate_to_limit<T: TimeZone>(
@@ -253,6 +272,7 @@ struct State {
     force: Option<ChargeRequest>,
     normal: ChargeRequest,
     result: ChargeRequest,
+    charge_plan: Option<Plan>,
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_charge_time_to_min: Option<TimeDelta>,
@@ -262,6 +282,50 @@ struct State {
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_charge_time_to_90: Option<TimeDelta>,
+}
+
+#[allow(clippy::cognitive_complexity)]
+fn update_charge_plan(
+    plan: Option<Plan>,
+    prices: &Prices,
+    now: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    is_on: bool,
+    required_time_left: TimeDelta,
+) -> Plan {
+    let (new_plan, new_cost) = get_cheapest(7.68, now, end_time, required_time_left, prices);
+
+    if let Some(plan) = plan {
+        let cost = plan.get_forecast_cost(now, prices);
+        info!("Old Plan: {plan:?} {cost}");
+        info!("New Plan: {new_plan:?} {new_cost}");
+
+        #[allow(clippy::match_same_arms)]
+        let use_new_plan = match (is_on, plan.is_current(now), new_cost < cost * 0.9) {
+            // new cost meets threshold, use new plan
+            (_, _, true) => true,
+
+            // Turning off but not meeting threshold, don't change
+            (true, false, false) => false,
+
+            // Already off, use new plan
+            (false, _, _) => true,
+
+            // Already on and staying on, use new plan
+            (true, true, false) => true,
+        };
+
+        if use_new_plan {
+            info!("Using new plan");
+            new_plan
+        } else {
+            info!("Using old plan");
+            plan
+        }
+    } else {
+        info!("No old plan; Using new Plan: {:?}", plan);
+        new_plan
+    }
 }
 
 fn publish_state(
@@ -298,6 +362,7 @@ mod tests {
     use crate::amber::api::{self, IntervalType};
 
     use super::*;
+    use float_cmp::approx_eq;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
 
@@ -334,22 +399,6 @@ mod tests {
         }
     }
 
-    fn pr_list_fixed(cost: f32) -> Vec<api::PriceResponse> {
-        let time = dt("2020-01-01T00:00:00Z");
-
-        (0i8..48i8)
-            .map(|i| {
-                let i64 = i64::from(i);
-                pr(
-                    time + TimeDelta::minutes(i64 * 30),
-                    time + TimeDelta::minutes((i64 + 1) * 30),
-                    IntervalType::ForecastInterval,
-                    cost,
-                )
-            })
-            .collect::<Vec<api::PriceResponse>>()
-    }
-
     fn pr_list_descending(cost: f32) -> Vec<api::PriceResponse> {
         let time = dt("2020-01-01T00:00:00Z");
 
@@ -370,85 +419,148 @@ mod tests {
             // })
             .collect::<Vec<api::PriceResponse>>()
     }
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T05:30:00Z"),
+        TimeDelta::minutes(120),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T04:00:00Z"),
+        307.19995
+    )]
+    fn test_update_charge_plan(
+        #[case] start_time: DateTime<Utc>,
+        #[case] end_time: DateTime<Utc>,
+        #[case] required_duration: TimeDelta,
+        #[case] expected_start_time: DateTime<Utc>,
+        #[case] expected_end_time: DateTime<Utc>,
+        #[case] expected_cost: f32,
+    ) {
+        use chrono::FixedOffset;
+        use float_cmp::assert_approx_eq;
 
-    #[test_log::test(rstest::rstest)]
-    #[case(5.0, ChargeRequest::ChargeTo(90))]
-    #[case(12.5, ChargeRequest::ChargeTo(80))]
-    #[case(20.0, ChargeRequest::ChargeTo(50))]
-    #[case(35.0, ChargeRequest::ChargeTo(20))]
-    fn test_prices_to_charge_request_normal(#[case] price: f32, #[case] expected: ChargeRequest) {
-        let now = dt("2020-01-01T00:00:30Z");
-        let summary = Prices {
-            list: pr_list_fixed(price),
-            dt: now,
+        use crate::amber::api::{ChannelType, PeriodType, PriceResponse, TariffInformation};
+
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
+        let pr = |start_time: DateTime<Utc>, price, interval_type| {
+            let date = start_time.with_timezone(&timezone).date_naive();
+            let end_time = start_time + INTERVAL;
+            PriceResponse {
+                date,
+                start_time,
+                end_time,
+                per_kwh: price,
+                spot_per_kwh: price,
+                interval_type,
+                renewables: 0.0,
+                duration: 0,
+                channel_type: ChannelType::General,
+                estimate: Some(false),
+                spike_status: "None".to_string(),
+                tariff_information: TariffInformation {
+                    period: PeriodType::Peak,
+                    season: None,
+                    block: None,
+                    demand_window: None,
+                },
+            }
+        };
+
+        let prices = vec![
+            pr(
+                dt("2020-01-01T00:00:00Z"),
+                30.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T00:30:00Z"),
+                30.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T01:00:00Z"),
+                30.0,
+                IntervalType::CurrentInterval,
+            ),
+            pr(
+                dt("2020-01-01T01:30:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T02:00:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T02:30:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T03:00:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T03:30:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T04:00:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T04:30:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T05:00:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+        ];
+
+        let prices = Prices {
+            list: prices,
+            dt: start_time,
             interval: INTERVAL,
         };
-        let ps = PersistentState {
-            min_charge_tomorrow: 0,
-        };
-        let battery_level = 70u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
+
+        let plan = update_charge_plan(
+            None,
+            &prices,
+            start_time,
+            end_time,
             false,
-            &ps,
-            now,
-            &Utc,
+            required_duration,
         );
-        assert_eq!(cr.time, now);
-        assert_eq!(cr.battery_level, battery_level);
-        assert_eq!(cr.min_charge_tomorrow, 0);
-        assert_eq!(cr.force, None);
-        assert_eq!(cr.normal, expected);
-        assert_eq!(cr.result, expected);
+        let cost = plan.get_forecast_cost(start_time, &prices);
+
+        assert_approx_eq!(f32, plan.get_kw(), 7.680);
+        assert_eq!(plan.get_start_time(), expected_start_time);
+        assert_eq!(plan.get_end_time(), expected_end_time);
+        assert_approx_eq!(f32, cost, expected_cost);
     }
 
-    #[test_log::test(rstest::rstest)]
-    #[case(dt("2020-01-01T03:30:30Z"), true)]
-    #[case(dt("2020-01-01T06:00:30Z"), true)]
-    #[case(dt("2020-01-01T06:30:30Z"), false)]
-    #[case(dt("2020-01-01T07:00:30Z"), false)]
-    fn test_prices_to_charge_request_forced(#[case] now: DateTime<Utc>, #[case] forced: bool) {
-        let summary = Prices {
-            list: pr_list_descending(50.0),
-            dt: now,
-            interval: INTERVAL,
-        };
-        let ps = PersistentState {
-            min_charge_tomorrow: 72,
-        };
-        let battery_level = 10u8;
-        let cr = prices_to_charge_request(
-            TeslamateId::testing_value(),
-            &summary,
-            battery_level,
-            false,
-            &ps,
-            now,
-            &Utc,
-        );
-        assert_eq!(cr.time, now);
-        assert_eq!(cr.battery_level, battery_level);
-        assert_eq!(cr.min_charge_tomorrow, 72);
-        if forced {
-            assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
-            assert_eq!(cr.result, ChargeRequest::ChargeTo(72));
-        } else {
-            assert_eq!(cr.force, None);
-            assert_eq!(cr.result, ChargeRequest::ChargeTo(20));
-        }
-        assert_eq!(cr.normal, ChargeRequest::ChargeTo(20));
-    }
-
-    #[test_log::test(rstest::rstest)]
-    #[case(dt("2020-01-01T03:30:30Z"), true)]
-    #[case(dt("2020-01-01T06:00:30Z"), true)]
-    #[case(dt("2020-01-01T06:30:30Z"), false)]
-    #[case(dt("2020-01-01T07:00:30Z"), false)]
-    fn test_prices_to_charge_request_combined_forced_and_cheap(
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        true,
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T06:30:00Z"),
+        22.0
+    )]
+    fn test_prices_to_charge_request(
         #[case] now: DateTime<Utc>,
         #[case] forced: bool,
+        #[case] expected_start_time: DateTime<Utc>,
+        #[case] expected_end_time: DateTime<Utc>,
+        #[case] expected_cost: f32,
     ) {
         let summary = Prices {
             list: pr_list_descending(0.0),
@@ -457,27 +569,36 @@ mod tests {
         };
         let ps = PersistentState {
             min_charge_tomorrow: 72,
+            charge_plan: None,
         };
         let battery_level = 10u8;
-        let cr = prices_to_charge_request(
+        let (state, new_ps) = prices_to_charge_request(
             TeslamateId::testing_value(),
             &summary,
             battery_level,
             false,
-            &ps,
+            ps,
             now,
             &Utc,
         );
-        assert_eq!(cr.time, now);
-        assert_eq!(cr.battery_level, battery_level);
-        assert_eq!(cr.min_charge_tomorrow, 72);
+        assert_eq!(state.time, now);
+        assert_eq!(state.battery_level, battery_level);
+        assert_eq!(state.min_charge_tomorrow, 72);
         if forced {
-            assert_eq!(cr.force, Some(ChargeRequest::ChargeTo(72)));
+            assert_eq!(state.force, Some(ChargeRequest::ChargeTo(72)));
         } else {
-            assert_eq!(cr.force, None);
+            assert_eq!(state.force, None);
         }
-        assert_eq!(cr.result, ChargeRequest::ChargeTo(90));
-        assert_eq!(cr.normal, ChargeRequest::ChargeTo(90));
+        assert_eq!(state.result, ChargeRequest::ChargeTo(90));
+        assert_eq!(state.normal, ChargeRequest::ChargeTo(90));
+        assert_eq!(new_ps.min_charge_tomorrow, 72);
+
+        let charge_plan = new_ps.charge_plan.unwrap();
+        let cost = charge_plan.get_forecast_cost(now, &summary);
+        approx_eq!(f32, charge_plan.get_kw(), 7.68);
+        assert_eq!(charge_plan.get_start_time(), expected_start_time);
+        assert_eq!(charge_plan.get_end_time(), expected_end_time);
+        approx_eq!(f32, cost, expected_cost);
     }
 
     #[test]

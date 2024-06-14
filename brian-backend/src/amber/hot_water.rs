@@ -1,7 +1,11 @@
 use crate::{delays::rate_limit, InitState};
 
-use super::Prices;
+use super::{
+    plan::{self, get_cheapest},
+    Prices,
+};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
+use plan::Plan;
 use robotica_backend::{
     pipes::{
         stateful::{create_pipe, Receiver},
@@ -26,7 +30,7 @@ pub enum Request {
     DoNotHeat,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct DayState {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
@@ -35,6 +39,7 @@ struct DayState {
     cheap_power_for_day: TimeDelta,
     last_cheap_update: DateTime<Utc>,
     is_on: bool,
+    plan: Option<Plan>,
 }
 
 const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
@@ -48,6 +53,7 @@ impl DayState {
             cheap_power_for_day: TimeDelta::zero(),
             last_cheap_update: now,
             is_on: false,
+            plan: None,
         }
     }
 
@@ -104,17 +110,57 @@ impl DayState {
     }
 }
 
-fn prices_to_hot_water_request<T: TimeZone>(
-    is_on: bool,
+#[allow(clippy::cognitive_complexity)]
+fn update_plan(
+    plan: Option<Plan>,
     prices: &Prices,
     now: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    is_on: bool,
     required_time_left: TimeDelta,
-    timezone: &T,
-) -> Request {
-    let (_start_day, end_time) = get_cheap_day(now, timezone);
+) -> Plan {
+    let (new_plan, new_cost) = get_cheapest(3.6, now, end_time, required_time_left, prices);
 
-    let is_cheap =
-        prices.should_power_now("hotwater", Some(required_time_left), now, end_time, is_on);
+    if let Some(plan) = plan {
+        let cost = plan.get_forecast_cost(now, prices);
+        info!("Old Plan: {plan:?} {cost}");
+        info!("New Plan: {new_plan:?} {new_cost}");
+
+        #[allow(clippy::match_same_arms)]
+        let use_new_plan = match (is_on, plan.is_current(now), new_cost < cost * 0.9) {
+            // new cost meets threshold, use new plan
+            (_, _, true) => true,
+
+            // Turning off but not meeting threshold, don't change
+            (true, false, false) => false,
+
+            // Already off, use new plan
+            (false, _, _) => true,
+
+            // Already on and staying on, use new plan
+            (true, true, false) => true,
+        };
+
+        if use_new_plan {
+            info!("Using new plan");
+            new_plan
+        } else {
+            info!("Using old plan");
+            plan
+        }
+    } else {
+        info!("No old plan; Using new Plan: {:?}", new_plan);
+        new_plan
+    }
+}
+
+fn prices_to_hot_water_request(
+    is_on: bool,
+    plan: &Plan,
+    prices: &Prices,
+    now: DateTime<Utc>,
+) -> Request {
+    let is_cheap = plan.is_current(now);
 
     let current_price = prices.get_weighted_price(now);
     let threshold = if is_on { 14.0 } else { 12.0 };
@@ -176,9 +222,11 @@ pub fn run(
                 },
                 Ok(prices) = s.recv() => {
                     let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
-                    let cr = prices_to_hot_water_request(day.is_on, &prices, Utc::now(), required_time_left, timezone);
+                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, day.is_on, required_time_left);
+                    let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());
                     info!("Sending request: {:?}", cr);
                     tx_out.try_send(cr);
+                    day.plan = Some(plan);
                     day.save(&psr);
                 }
                 else => break,
@@ -202,6 +250,7 @@ mod tests {
         ChannelType, IntervalType, PeriodType, PriceResponse, TariffInformation,
     };
     use chrono::FixedOffset;
+    use float_cmp::assert_approx_eq;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
 
@@ -226,6 +275,7 @@ mod tests {
                 cheap_power_for_day: TimeDelta::minutes(0),
                 last_cheap_update: now,
                 is_on: false,
+                plan: None
             }
         );
     }
@@ -278,6 +328,7 @@ mod tests {
             last_cheap_update,
             cheap_power_for_day,
             is_on,
+            plan: None,
         };
 
         let cheap_time = TimeDelta::minutes(180);
@@ -287,8 +338,193 @@ mod tests {
         assert_eq!(actual, expected_time_left);
     }
 
-    #[test]
-    fn test_prices_to_hot_water_request_1() {
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T05:30:00Z"),
+        TimeDelta::minutes(120),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T04:00:00Z"),
+        144.0
+    )]
+    fn test_update_plan(
+        #[case] start_time: DateTime<Utc>,
+        #[case] end_time: DateTime<Utc>,
+        #[case] required_duration: TimeDelta,
+        #[case] expected_start_time: DateTime<Utc>,
+        #[case] expected_end_time: DateTime<Utc>,
+        #[case] expected_cost: f32,
+    ) {
+        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+
+        let pr = |start_time: DateTime<Utc>, price, interval_type| {
+            let date = start_time.with_timezone(&timezone).date_naive();
+            let end_time = start_time + INTERVAL;
+            PriceResponse {
+                date,
+                start_time,
+                end_time,
+                per_kwh: price,
+                spot_per_kwh: price,
+                interval_type,
+                renewables: 0.0,
+                duration: 0,
+                channel_type: ChannelType::General,
+                estimate: Some(false),
+                spike_status: "None".to_string(),
+                tariff_information: TariffInformation {
+                    period: PeriodType::Peak,
+                    season: None,
+                    block: None,
+                    demand_window: None,
+                },
+            }
+        };
+
+        let prices = vec![
+            pr(
+                dt("2020-01-01T00:00:00Z"),
+                30.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T00:30:00Z"),
+                30.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T01:00:00Z"),
+                30.0,
+                IntervalType::CurrentInterval,
+            ),
+            pr(
+                dt("2020-01-01T01:30:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T02:00:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T02:30:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T03:00:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T03:30:00Z"),
+                20.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T04:00:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T04:30:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+            pr(
+                dt("2020-01-01T05:00:00Z"),
+                30.0,
+                IntervalType::ForecastInterval,
+            ),
+        ];
+
+        let prices = Prices {
+            list: prices,
+            dt: start_time,
+            interval: INTERVAL,
+        };
+
+        let plan = update_plan(
+            None,
+            &prices,
+            start_time,
+            end_time,
+            false,
+            required_duration,
+        );
+        let cost = plan.get_forecast_cost(start_time, &prices);
+
+        assert_approx_eq!(f32, plan.get_kw(), 3.6);
+        assert_eq!(plan.get_start_time(), expected_start_time);
+        assert_eq!(plan.get_end_time(), expected_end_time);
+        assert_approx_eq!(f32, cost, expected_cost);
+    }
+
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T00:30:00Z"),
+        false,
+        Request::DoNotHeat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T01:30:00Z"),
+        false,
+        Request::Heat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T04:00:00Z"),
+        false,
+        Request::DoNotHeat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T03:00:00Z"),
+        false,
+        Request::Heat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T04:00:00Z"),
+        false,
+        Request::DoNotHeat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T03:00:00Z"),
+        true,
+        Request::Heat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T05:00:00Z"),
+        false,
+        Request::DoNotHeat
+    )]
+    #[case(
+        dt("2020-01-01T01:00:00Z"),
+        dt("2020-01-01T02:00:00Z"),
+        dt("2020-01-01T04:00:00Z"),
+        true,
+        Request::Heat
+    )]
+    fn test_prices_to_hot_water_request(
+        #[case] start_time: DateTime<Utc>,
+        #[case] end_time: DateTime<Utc>,
+        #[case] now: DateTime<Utc>,
+        #[case] is_on: bool,
+        #[case] expected: Request,
+    ) {
         // Arrange
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
@@ -320,20 +556,19 @@ mod tests {
             }
         };
 
-        let now = "2020-01-01T00:30:00Z".parse().unwrap();
         let prices = vec![
             pr(dt("2020-01-01T00:30:00Z"), 30.0, CurrentInterval),
             pr(dt("2020-01-01T01:00:00Z"), 30.0, ForecastInterval),
             pr(dt("2020-01-01T01:10:00Z"), 30.0, ForecastInterval),
             pr(dt("2020-01-01T01:30:00Z"), 40.0, ForecastInterval),
-            pr(dt("2020-01-01T02:00:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T02:30:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T03:00:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T03:30:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T04:00:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T04:30:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:00:00Z"), 40.0, ForecastInterval),
-            pr(dt("2020-01-01T05:30:00Z"), 20.0, ForecastInterval),
+            pr(dt("2020-01-01T02:00:00Z"), 9.0, ForecastInterval),
+            pr(dt("2020-01-01T02:30:00Z"), 10.0, ForecastInterval),
+            pr(dt("2020-01-01T03:00:00Z"), 11.0, ForecastInterval),
+            pr(dt("2020-01-01T03:30:00Z"), 12.0, ForecastInterval),
+            pr(dt("2020-01-01T04:00:00Z"), 13.0, ForecastInterval),
+            pr(dt("2020-01-01T04:30:00Z"), 14.0, ForecastInterval),
+            pr(dt("2020-01-01T05:00:00Z"), 15.0, ForecastInterval),
+            pr(dt("2020-01-01T05:30:00Z"), 16.0, ForecastInterval),
         ];
 
         let prices = Prices {
@@ -341,205 +576,14 @@ mod tests {
             dt: now,
             interval: INTERVAL,
         };
-        let delta = TimeDelta::minutes(120);
+
+        let plan = Plan::new_test(3.6, start_time, end_time);
 
         // Act
-        let request = prices_to_hot_water_request(false, &prices, now, delta, &timezone);
+        let request = prices_to_hot_water_request(is_on, &plan, &prices, now);
 
         // Assert
-        assert!(matches!(request, Request::Heat));
-    }
-
-    #[test]
-    fn test_prices_to_hot_water_request_2() {
-        // Arrange
-        use IntervalType::ActualInterval;
-        use IntervalType::CurrentInterval;
-        use IntervalType::ForecastInterval;
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
-        let tariff_information = TariffInformation {
-            period: PeriodType::Peak,
-            season: None,
-            block: None,
-            demand_window: None,
-        };
-
-        let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&timezone).date_naive();
-            let end_time = start_time + INTERVAL;
-            PriceResponse {
-                date,
-                start_time,
-                end_time,
-                per_kwh: price,
-                spot_per_kwh: price,
-                interval_type,
-                renewables: 0.0,
-                duration: 0,
-                channel_type: ChannelType::General,
-                estimate: Some(false),
-                spike_status: "None".to_string(),
-                tariff_information: tariff_information.clone(),
-            }
-        };
-
-        let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 15.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 15.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T02:30:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T03:00:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T03:30:00Z"), -30.0, ForecastInterval),
-            pr(dt("2020-01-01T04:00:00Z"), -30.0, ForecastInterval),
-            pr(dt("2020-01-01T04:30:00Z"), -30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
-            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
-        ];
-
-        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        let prices = Prices {
-            list: prices,
-            dt: now,
-            interval: INTERVAL,
-        };
-        let delta = TimeDelta::minutes(120);
-
-        // Act
-        let request = prices_to_hot_water_request(false, &prices, now, delta, &timezone);
-
-        // Assert
-        assert!(matches!(request, Request::Heat));
-    }
-
-    #[test]
-    fn test_prices_to_hot_water_request_2_cheaper_after_wait() {
-        // Arrange
-        use IntervalType::ActualInterval;
-        use IntervalType::CurrentInterval;
-        use IntervalType::ForecastInterval;
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
-        let tariff_information = TariffInformation {
-            period: PeriodType::Peak,
-            season: None,
-            block: None,
-            demand_window: None,
-        };
-
-        let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&timezone).date_naive();
-            let end_time = start_time + INTERVAL;
-            PriceResponse {
-                date,
-                start_time,
-                end_time,
-                per_kwh: price,
-                spot_per_kwh: price,
-                interval_type,
-                renewables: 0.0,
-                duration: 0,
-                channel_type: ChannelType::General,
-                estimate: Some(false),
-                spike_status: "None".to_string(),
-                tariff_information: tariff_information.clone(),
-            }
-        };
-
-        let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 20.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 20.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T02:00:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T02:30:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T03:00:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T03:30:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T04:00:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T04:30:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
-            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
-        ];
-
-        let now: DateTime<Utc> = dt("2020-01-01T01:15:00Z");
-        let prices = Prices {
-            list: prices,
-            dt: now,
-            interval: INTERVAL,
-        };
-        let delta = TimeDelta::minutes(120);
-
-        // Act
-        let request = prices_to_hot_water_request(false, &prices, now, delta, &timezone);
-
-        // Assert
-        assert!(matches!(request, Request::DoNotHeat));
-    }
-
-    #[test]
-    fn test_prices_to_hot_water_request_3_force_end_day() {
-        // Arrange
-        use IntervalType::ActualInterval;
-        use IntervalType::CurrentInterval;
-        use IntervalType::ForecastInterval;
-        let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-
-        let tariff_information = TariffInformation {
-            period: PeriodType::Peak,
-            season: None,
-            block: None,
-            demand_window: None,
-        };
-
-        let pr = |start_time: DateTime<Utc>, price, interval_type| {
-            let date = start_time.with_timezone(&timezone).date_naive();
-            let end_time = start_time + INTERVAL;
-            PriceResponse {
-                date,
-                start_time,
-                end_time,
-                per_kwh: price,
-                spot_per_kwh: price,
-                interval_type,
-                renewables: 0.0,
-                duration: 0,
-                channel_type: ChannelType::General,
-                estimate: Some(false),
-                spike_status: "None".to_string(),
-                tariff_information: tariff_information.clone(),
-            }
-        };
-
-        let prices = vec![
-            pr(dt("2020-01-01T00:30:00Z"), 15.0, ActualInterval),
-            pr(dt("2020-01-01T01:00:00Z"), 15.0, CurrentInterval),
-            pr(dt("2020-01-01T01:30:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T02:00:00Z"), 20.0, ForecastInterval),
-            pr(dt("2020-01-01T02:30:00Z"), 15.0, ForecastInterval),
-            pr(dt("2020-01-01T03:00:00Z"), 10.0, ForecastInterval),
-            pr(dt("2020-01-01T03:30:00Z"), 5.0, ForecastInterval),
-            pr(dt("2020-01-01T04:00:00Z"), 0.0, ForecastInterval),
-            pr(dt("2020-01-01T04:30:00Z"), -5.0, ForecastInterval),
-            pr(dt("2020-01-01T05:00:00Z"), 30.0, ForecastInterval),
-            pr(dt("2020-01-01T05:30:00Z"), 40.0, ForecastInterval),
-            pr(dt("2020-01-01T06:00:00Z"), 40.0, ForecastInterval),
-        ];
-
-        let now: DateTime<Utc> = dt("2020-01-01T02:00:00Z");
-        let prices = Prices {
-            list: prices,
-            dt: now,
-            interval: INTERVAL,
-        };
-        let delta = TimeDelta::minutes(120);
-
-        // Act
-        let request = prices_to_hot_water_request(false, &prices, now, delta, &timezone);
-
-        // Assert
-        assert!(matches!(request, Request::Heat));
+        assert_eq!(request, expected);
     }
 
     #[test]
