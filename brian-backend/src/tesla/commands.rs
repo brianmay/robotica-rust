@@ -145,13 +145,15 @@ pub fn run_command_processor(
                     check_token(&mut token, &tesla_secret).await;
                 }
                 Some(try_command) = sleep_until(&mut maybe_try_command) => {
+                    info!("{name}: Trying command: {:?}", try_command.command);
                     match try_send(&try_command, &tesla, &token).await {
                         Ok(()) => {
-                            info!("{name}: Command succeeded");
                             maybe_try_command = if try_command.command.is_nil() {
+                                info!("{name}: Nil command succeeded.");
                                 // If we didn't actually have a command, don't rate limit.
                                 None
                             } else {
+                                info!("{name}: Command succeeded.");
                                 // If we did have a command, rate limit next command to 5 minutes.
                                 Some(TryCommand {
                                     command: try_command.command,
@@ -181,6 +183,7 @@ pub fn run_command_processor(
                 }
                 Ok(command) = s.recv() => {
                     if command.is_nil() {
+                        info!("{name}: Received empty command: {:?}, forgetting errors.", command);
                         errors.forget_errors();
                     }
 
@@ -198,14 +201,14 @@ pub fn run_command_processor(
 
 
                     if let Some(retry_time) = retry_time {
-                        info!("{name}: Received command: {:?}, trying at {:?}", command, retry_time - Instant::now());
+                        info!("{name}: Received command: {:?}, trying at {:?}.", command, retry_time - Instant::now());
 
                         maybe_try_command = Some(TryCommand {
                             command,
                             next_try_instant: retry_time,
                         });
                     } else {
-                        info!("{name}: Received empty command: {:?}, ignoring", command);
+                        info!("{name}: Received empty command: {:?}, ignoring.", command);
                     }
                 }
             }
