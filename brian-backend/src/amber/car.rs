@@ -303,6 +303,11 @@ fn update_charge_plan(
 ) -> ChargePlanState {
     let (new_plan, new_cost) = get_cheapest(7.68, now, end_time, required_time_left, prices);
 
+    let new_plan = ChargePlanState {
+        plan: new_plan,
+        charge_limit,
+    };
+
     if let Some(plan) = plan {
         let cost = plan.plan.get_forecast_cost(now, prices);
         info!("Old Plan: {plan:?} {cost}");
@@ -335,20 +340,14 @@ fn update_charge_plan(
 
         if use_new_plan {
             info!("Using new plan");
-            ChargePlanState {
-                plan: new_plan,
-                charge_limit,
-            }
+            new_plan
         } else {
             info!("Using old plan");
             plan
         }
     } else {
-        info!("No old plan; Using new Plan: {:?}", plan);
-        ChargePlanState {
-            plan: new_plan,
-            charge_limit,
-        }
+        info!("No old plan; Using new Plan: {:?}", new_plan);
+        new_plan
     }
 }
 
