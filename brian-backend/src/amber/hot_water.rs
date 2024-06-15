@@ -140,7 +140,7 @@ fn update_plan(
     };
 
     if let Some((plan, cost)) = plan_cost {
-        let threshold_reached = new_cost < cost * 0.9;
+        let threshold_reached = new_cost < cost * 0.8;
 
         info!("Old Plan: {plan:?} {cost}");
         info!("New Plan: {new_plan:?} {new_cost}");

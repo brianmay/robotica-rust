@@ -331,7 +331,7 @@ fn update_charge_plan(
     };
 
     if let Some((plan, cost)) = plan_cost {
-        let threshold_reached = new_cost < cost * 0.9;
+        let threshold_reached = new_cost < cost * 0.8;
         let has_changed = plan.charge_limit != charge_limit;
 
         info!("Old Plan: {plan:?} {cost}");
