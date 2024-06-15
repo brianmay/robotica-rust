@@ -125,19 +125,22 @@ fn update_plan(
         return plan;
     };
 
-    let plan_cost = if let Some(plan) = plan {
-        info!("Old Plan: {plan:?}, checking cost");
-        match plan.get_forecast_cost(now, prices) {
-            Some(cost) => Some((plan, cost)),
-            None => {
-                info!("Old plan available but cannot get cost");
-                None
-            }
-        }
-    } else {
-        info!("No old plan available");
-        None
-    };
+    let plan_cost = plan.map_or_else(
+        || {
+            info!("No old plan available");
+            None
+        },
+        |plan| {
+            info!("Old Plan: {plan:?}, checking cost");
+            plan.get_forecast_cost(now, prices).map_or_else(
+                || {
+                    info!("Old plan available but cannot get cost");
+                    None
+                },
+                |cost| Some((plan, cost)),
+            )
+        },
+    );
 
     if let Some((plan, cost)) = plan_cost {
         let threshold_reached = new_cost < cost * 0.8;

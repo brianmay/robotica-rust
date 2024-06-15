@@ -318,13 +318,13 @@ fn update_charge_plan(
 
     let plan_cost = if let Some(plan) = plan {
         info!("Old Plan: {plan:?}, checking cost");
-        match plan.plan.get_forecast_cost(now, prices) {
-            Some(cost) => Some((plan, cost)),
-            None => {
+        plan.plan.get_forecast_cost(now, prices).map_or_else(
+            || {
                 info!("Old plan available but cannot get cost");
                 None
-            }
-        }
+            },
+            |cost| Some((plan, cost)),
+        )
     } else {
         info!("No old plan available");
         None
@@ -350,7 +350,7 @@ fn update_charge_plan(
             (_, _, _, true) => true,
 
             // new cost meets threshold, use new plan
-            (_, _, true, false) => true,
+            (_, _, true, _) => true,
 
             // Turning off but not meeting threshold, don't change
             (true, false, false, false) => false,

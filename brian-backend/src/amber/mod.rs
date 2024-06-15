@@ -41,7 +41,10 @@ impl Prices {
 
     fn get_next_period(&self, now: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
         let interval = self.interval;
-        now + interval - TimeDelta::seconds(now.timestamp() % interval.as_secs() as i64)
+        #[allow(clippy::cast_possible_wrap)]
+        let value =
+            now + interval - TimeDelta::seconds(now.timestamp() % interval.as_secs() as i64);
+        value
     }
 
     fn get_weighted_price(&self, dt: DateTime<Utc>) -> Option<f32> {
@@ -299,7 +302,7 @@ mod tests {
         };
 
         let result = prices.get_next_period(now);
-        assert_eq!(result, expected)
+        assert_eq!(result, expected);
     }
 
     #[rstest::rstest]

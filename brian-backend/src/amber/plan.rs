@@ -80,7 +80,7 @@ impl Plan {
                 p.per_kwh * self.kw * duration.num_seconds() as f32 / 3600.0
             };
 
-            total = total + new_cost;
+            total += new_cost;
             now = prices.get_next_period(now);
         }
 
@@ -122,13 +122,11 @@ pub fn get_cheapest(
         .chain(rest_times)
         .filter_map(|plan| {
             let price = plan.get_forecast_cost(start_search, prices);
-            if let Some(xprice) = price {
+            price.map(|price| {
                 // We need the largest value, hence we get the negative duration.
                 let duration = -plan.get_duration();
-                Some((plan, duration, xprice))
-            } else {
-                None
-            }
+                (plan, duration, price)
+            })
         })
         .min_by(|(_, da, a), (_, db, b)| {
             (da, a)
