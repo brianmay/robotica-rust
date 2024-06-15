@@ -183,6 +183,7 @@ fn prices_to_charge_request<T: TimeZone>(
             end_time,
             estimated_charge_time_to_min,
             battery_level,
+            is_charging
         );
         let is_current = charge_plan
             .as_ref()
@@ -301,6 +302,7 @@ fn update_charge_plan(
     end_time: DateTime<Utc>,
     required_time_left: TimeDelta,
     charge_limit: u8,
+    is_on:  bool,
 ) -> Option<ChargePlanState> {
     let Some((new_plan, new_cost)) = get_cheapest(7.68, now, end_time, required_time_left, prices)
     else {
@@ -334,13 +336,14 @@ fn update_charge_plan(
         let plan_is_on = plan.plan.is_current(now);
         let new_plan_is_on = new_plan.plan.is_current(now);
 
+        info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
         info!("Has changed: {has_changed}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached, has_changed) {
+        let use_new_plan = match (is_on, new_plan_is_on, threshold_reached, has_changed) {
             // Charge limit has changed.
             (_, _, _, true) => true,
 
@@ -574,7 +577,7 @@ mod tests {
         };
 
         let plan =
-            update_charge_plan(None, &prices, start_time, end_time, required_duration, 10).unwrap();
+            update_charge_plan(None, &prices, start_time, end_time, required_duration, 10, false).unwrap();
         let cost = plan.plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);

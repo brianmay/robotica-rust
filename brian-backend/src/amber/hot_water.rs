@@ -117,6 +117,7 @@ fn update_plan(
     now: DateTime<Utc>,
     end_time: DateTime<Utc>,
     required_time_left: TimeDelta,
+    is_on: bool,
 ) -> Option<Plan> {
     let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
     else {
@@ -147,12 +148,13 @@ fn update_plan(
         let plan_is_on = plan.is_current(now);
         let new_plan_is_on = new_plan.is_current(now);
 
+        info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached) {
+        let use_new_plan = match (is_on, new_plan_is_on, threshold_reached) {
             // new cost meets threshold, use new plan
             (_, _, true) => true,
 
@@ -247,7 +249,7 @@ pub fn run(
                 },
                 Ok(prices) = s.recv() => {
                     let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
-                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, required_time_left);
+                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, required_time_left, day.is_on);
                     let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());
                     info!("Sending request: {:?}", cr);
                     tx_out.try_send(cr);
@@ -470,7 +472,7 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_plan(None, &prices, start_time, end_time, required_duration).unwrap();
+        let plan = update_plan(None, &prices, start_time, end_time, required_duration, false).unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
