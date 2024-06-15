@@ -118,16 +118,37 @@ fn update_plan(
     end_time: DateTime<Utc>,
     is_on: bool,
     required_time_left: TimeDelta,
-) -> Plan {
-    let (new_plan, new_cost) = get_cheapest(3.6, now, end_time, required_time_left, prices);
+) -> Option<Plan> {
+    let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
+    else {
+        error!("Can't get new plan");
+        return plan;
+    };
 
-    if let Some(plan) = plan {
-        let cost = plan.get_forecast_cost(now, prices);
+    let plan_cost = if let Some(plan) = plan {
+        info!("Old Plan: {plan:?}, checking cost");
+        match plan.get_forecast_cost(now, prices) {
+            Some(cost) => Some((plan, cost)),
+            None => {
+                info!("Old plan available but cannot get cost");
+                None
+            }
+        }
+    } else {
+        info!("No old plan available");
+        None
+    };
+
+    if let Some((plan, cost)) = plan_cost {
+        let threshold_reached = new_cost < cost * 0.9;
+
         info!("Old Plan: {plan:?} {cost}");
         info!("New Plan: {new_plan:?} {new_cost}");
+        info!("Is On: {is_on}");
+        info!("Threshold reached: {threshold_reached}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (is_on, plan.is_current(now), new_cost < cost * 0.9) {
+        let use_new_plan = match (is_on, plan.is_current(now), threshold_reached) {
             // new cost meets threshold, use new plan
             (_, _, true) => true,
 
@@ -143,24 +164,24 @@ fn update_plan(
 
         if use_new_plan {
             info!("Using new plan");
-            new_plan
+            Some(new_plan)
         } else {
             info!("Using old plan");
-            plan
+            Some(plan)
         }
     } else {
         info!("No old plan; Using new Plan: {:?}", new_plan);
-        new_plan
+        Some(new_plan)
     }
 }
 
 fn prices_to_hot_water_request(
     is_on: bool,
-    plan: &Plan,
+    plan: &Option<Plan>,
     prices: &Prices,
     now: DateTime<Utc>,
 ) -> Request {
-    let is_cheap = plan.is_current(now);
+    let is_cheap = plan.as_ref().map_or(false, |plan| plan.is_current(now));
 
     let current_price = prices.get_weighted_price(now);
     let threshold = if is_on { 14.0 } else { 12.0 };
@@ -226,7 +247,7 @@ pub fn run(
                     let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());
                     info!("Sending request: {:?}", cr);
                     tx_out.try_send(cr);
-                    day.plan = Some(plan);
+                    day.plan = plan;
                     day.save(&psr);
                 }
                 else => break,
@@ -452,8 +473,9 @@ mod tests {
             end_time,
             false,
             required_duration,
-        );
-        let cost = plan.get_forecast_cost(start_time, &prices);
+        )
+        .unwrap();
+        let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
         assert_eq!(plan.get_start_time(), expected_start_time);
@@ -580,7 +602,7 @@ mod tests {
         let plan = Plan::new_test(3.6, start_time, end_time);
 
         // Act
-        let request = prices_to_hot_water_request(is_on, &plan, &prices, now);
+        let request = prices_to_hot_water_request(is_on, &Some(plan), &prices, now);
 
         // Assert
         assert_eq!(request, expected);

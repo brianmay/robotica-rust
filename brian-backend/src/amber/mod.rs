@@ -39,6 +39,11 @@ impl Prices {
         get_current_price_response(&self.list, dt)
     }
 
+    fn get_next_period(&self, now: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
+        let interval = self.interval;
+        now + interval - TimeDelta::seconds(now.timestamp() % interval.as_secs() as i64)
+    }
+
     fn get_weighted_price(&self, dt: DateTime<Utc>) -> Option<f32> {
         let prices = &self.list;
         let pos = prices.iter().position(|pr| pr.is_current(dt))?;
@@ -63,6 +68,10 @@ impl Prices {
 
         info!("Get Weighted Price: {values:?} {weights:?} --> {result}");
         Some(result)
+    }
+
+    fn find(&self, now: chrono::DateTime<Utc>) -> Option<&api::PriceResponse> {
+        self.list.iter().find(|pr| pr.is_current(now))
     }
 }
 
@@ -275,6 +284,96 @@ mod tests {
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
+    }
+
+    #[rstest::rstest]
+    #[case(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"))]
+    #[case(dt("2020-01-01T00:10:00Z"), dt("2020-01-01T00:30:00Z"))]
+    #[case(dt("2020-01-01T00:29:00Z"), dt("2020-01-01T00:30:00Z"))]
+    #[case(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z"))]
+    fn test_get_next_period(#[case] now: DateTime<Utc>, #[case] expected: DateTime<Utc>) {
+        let prices = Prices {
+            list: vec![],
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        let result = prices.get_next_period(now);
+        assert_eq!(result, expected)
+    }
+
+    #[rstest::rstest]
+    #[case(dt("2020-01-01T00:00:00Z"), 1.0)]
+    #[case(dt("2020-01-01T00:10:00Z"), 1.0)]
+    #[case(dt("2020-01-01T00:29:00Z"), 1.0)]
+    #[case(dt("2020-01-01T00:30:00Z"), 2.0)]
+    fn test_find(#[case] now: DateTime<Utc>, #[case] expected: f32) {
+        let pr = |start_time: DateTime<Utc>,
+                  end_time: DateTime<Utc>,
+                  price,
+                  interval_type: IntervalType| api::PriceResponse {
+            date: start_time.with_timezone(&Local).date_naive(),
+            start_time,
+            end_time,
+            per_kwh: price,
+            spot_per_kwh: price,
+            interval_type,
+            renewables: 0.0,
+            duration: 0,
+            channel_type: api::ChannelType::General,
+            estimate: Some(false),
+            spike_status: "None".to_string(),
+            tariff_information: api::TariffInformation {
+                period: api::PeriodType::Peak,
+                season: None,
+                block: None,
+                demand_window: None,
+            },
+        };
+
+        let prices = vec![
+            pr(
+                dt("2020-01-01T00:00:00Z"),
+                dt("2020-01-01T00:30:00Z"),
+                1.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T00:30:00Z"),
+                dt("2020-01-01T01:00:00Z"),
+                2.0,
+                IntervalType::ActualInterval,
+            ),
+            pr(
+                dt("2020-01-01T01:00:00Z"),
+                dt("2020-01-01T01:30:00Z"),
+                4.0,
+                IntervalType::ActualInterval,
+            ),
+        ];
+        let prices = Prices {
+            list: prices,
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        let result = prices.find(now).unwrap().per_kwh;
+        assert_approx_eq!(f32, result, expected);
+    }
+
+    #[rstest::rstest]
+    #[case(dt("2020-01-01T00:00:00Z"))]
+    #[case(dt("2020-01-01T00:10:00Z"))]
+    #[case(dt("2020-01-01T00:29:00Z"))]
+    fn test_find_none(#[case] now: DateTime<Utc>) {
+        let prices = Prices {
+            list: vec![],
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        let result = prices.find(now);
+        assert!(result.is_none());
     }
 
     #[test]

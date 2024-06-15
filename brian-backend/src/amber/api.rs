@@ -103,14 +103,6 @@ pub struct PriceResponse {
 }
 
 impl PriceResponse {
-    pub fn is_within_range(&self, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> bool {
-        let start_ok_1 = start_time <= self.start_time;
-        let start_ok_2 = self.start_time <= start_time && start_time < self.end_time;
-        let stop_ok_1 = self.end_time <= end_time;
-        let stop_ok_2 = self.start_time < end_time && end_time < self.end_time;
-        (start_ok_1 || start_ok_2) && (stop_ok_1 || stop_ok_2)
-    }
-
     pub fn is_current(&self, dt: DateTime<Utc>) -> bool {
         self.start_time <= dt && self.end_time > dt
     }
@@ -194,46 +186,9 @@ mod tests {
     #![allow(clippy::bool_assert_comparison)]
 
     use super::*;
-    use rstest::rstest;
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
-    }
-
-    #[test_log::test(rstest)]
-    #[case(dt("2021-01-01T00:00:00Z"), dt("2021-01-02T00:00:00Z"), true)]
-    #[case(dt("2021-01-01T00:30:00Z"), dt("2021-01-01T01:00:00Z"), true)]
-    #[case(dt("2021-01-01T00:30:01Z"), dt("2021-01-01T00:59:59Z"), true)]
-    #[case(dt("2021-01-01T00:00:00Z"), dt("2021-01-01T00:30:00Z"), false)]
-    #[case(dt("2021-01-01T01:00:00Z"), dt("2021-01-01T01:30:00Z"), false)]
-    #[case(dt("2021-01-01T00:00:00Z"), dt("2021-01-01T00:30:01Z"), true)]
-    #[case(dt("2021-01-01T00:59:59Z"), dt("2021-01-01T01:30:00Z"), true)]
-    fn test_is_within_range(
-        #[case] start_time: DateTime<Utc>,
-        #[case] end_time: DateTime<Utc>,
-        #[case] expected: bool,
-    ) {
-        let price = PriceResponse {
-            interval_type: IntervalType::ActualInterval,
-            duration: 30,
-            spot_per_kwh: 0.0,
-            per_kwh: 0.0,
-            date: NaiveDate::from_ymd_opt(2021, 1, 1).unwrap(),
-            start_time: dt("2021-01-01T00:30:00Z"),
-            end_time: dt("2021-01-01T01:00:00Z"),
-            renewables: 0.0,
-            channel_type: ChannelType::General,
-            tariff_information: TariffInformation {
-                period: PeriodType::OffPeak,
-                season: None,
-                block: None,
-                demand_window: None,
-            },
-            spike_status: "none".to_string(),
-            estimate: None,
-        };
-
-        assert_eq!(expected, price.is_within_range(start_time, end_time));
     }
 
     #[test]

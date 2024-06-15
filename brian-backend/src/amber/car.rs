@@ -186,14 +186,18 @@ fn prices_to_charge_request<T: TimeZone>(
             estimated_charge_time_to_min,
             battery_level,
         );
-        let is_current = charge_plan.plan.is_current(now);
-        ps.charge_plan = Some(charge_plan);
+        let is_current = charge_plan
+            .as_ref()
+            .map_or(false, |plan| plan.plan.is_current(now));
+        ps.charge_plan = charge_plan;
         if is_current {
             Some(ChargeRequest::ChargeTo(ps.min_charge_tomorrow))
         } else {
             None
         }
     } else {
+        info!("{id}: No need to charge to {:?}", ps.min_charge_tomorrow);
+        ps.charge_plan = None;
         None
     };
 
@@ -300,26 +304,46 @@ fn update_charge_plan(
     is_on: bool,
     required_time_left: TimeDelta,
     charge_limit: u8,
-) -> ChargePlanState {
-    let (new_plan, new_cost) = get_cheapest(7.68, now, end_time, required_time_left, prices);
+) -> Option<ChargePlanState> {
+    let Some((new_plan, new_cost)) = get_cheapest(7.68, now, end_time, required_time_left, prices)
+    else {
+        error!("Can't get new plan");
+        return plan;
+    };
 
     let new_plan = ChargePlanState {
         plan: new_plan,
         charge_limit,
     };
 
-    if let Some(plan) = plan {
-        let cost = plan.plan.get_forecast_cost(now, prices);
+    let plan_cost = if let Some(plan) = plan {
+        info!("Old Plan: {plan:?}, checking cost");
+        match plan.plan.get_forecast_cost(now, prices) {
+            Some(cost) => Some((plan, cost)),
+            None => {
+                info!("Old plan available but cannot get cost");
+                None
+            }
+        }
+    } else {
+        info!("No old plan available");
+        None
+    };
+
+    if let Some((plan, cost)) = plan_cost {
+        let threshold_reached = new_cost < cost * 0.9;
+        let has_changed = plan.charge_limit != charge_limit;
+
         info!("Old Plan: {plan:?} {cost}");
         info!("New Plan: {new_plan:?} {new_cost}");
-
-        let has_changed = plan.charge_limit != charge_limit;
+        info!("Is On: {is_on}");
+        info!("Threshold reached: {threshold_reached}");
 
         #[allow(clippy::match_same_arms)]
         let use_new_plan = match (
             is_on,
             plan.plan.is_current(now),
-            new_cost < cost * 0.9,
+            threshold_reached,
             has_changed,
         ) {
             // Charge limit has changed.
@@ -340,14 +364,14 @@ fn update_charge_plan(
 
         if use_new_plan {
             info!("Using new plan");
-            new_plan
+            Some(new_plan)
         } else {
             info!("Using old plan");
-            plan
+            Some(plan)
         }
     } else {
         info!("No old plan; Using new Plan: {:?}", new_plan);
-        new_plan
+        Some(new_plan)
     }
 }
 
@@ -562,8 +586,9 @@ mod tests {
             false,
             required_duration,
             10,
-        );
-        let cost = plan.plan.get_forecast_cost(start_time, &prices);
+        )
+        .unwrap();
+        let cost = plan.plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);
         assert_eq!(plan.plan.get_start_time(), expected_start_time);
@@ -618,7 +643,7 @@ mod tests {
         assert_eq!(new_ps.min_charge_tomorrow, 72);
 
         let charge_plan = new_ps.charge_plan.unwrap();
-        let cost = charge_plan.plan.get_forecast_cost(now, &summary);
+        let cost = charge_plan.plan.get_forecast_cost(now, &summary).unwrap();
         approx_eq!(f32, charge_plan.plan.get_kw(), 7.68);
         assert_eq!(charge_plan.plan.get_start_time(), expected_start_time);
         assert_eq!(charge_plan.plan.get_end_time(), expected_end_time);

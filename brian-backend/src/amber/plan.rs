@@ -58,33 +58,33 @@ impl Plan {
         self.start_time <= dt && self.end_time > dt
     }
 
-    pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> f32 {
+    pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> Option<f32> {
         // Ensure now is within the requested period.
         let now = max(self.start_time, now);
         let now = min(self.end_time, now);
+        let mut total = 0.0f32;
 
-        prices
-            .list
-            .iter()
-            .filter_map(|p| {
-                if p.is_within_range(self.start_time, self.end_time) {
-                    // Ensure now is within the price period.
-                    let now = max(p.start_time, now);
-                    let now = min(p.end_time, now);
-                    // Ensure end_time is within the requested period.
-                    let end_time = p.end_time;
-                    let end_time = max(self.start_time, end_time);
-                    let end_time = min(self.end_time, end_time);
-                    // Calculate the remaining time for this period.
-                    let duration = end_time - now;
+        let mut now = now;
+        while now < self.end_time {
+            let Some(p) = prices.find(now) else {
+                error!("Cannot find price for {now}");
+                return None;
+            };
 
-                    #[allow(clippy::cast_precision_loss)]
-                    Some(p.per_kwh * self.kw * duration.num_seconds() as f32 / 3600.0)
-                } else {
-                    None
-                }
-            })
-            .sum::<f32>()
+            #[allow(clippy::cast_precision_loss)]
+            let new_cost = {
+                let end_time = min(self.end_time, p.end_time);
+                // Calculate the remaining time for this period.
+                let duration = end_time - now;
+
+                p.per_kwh * self.kw * duration.num_seconds() as f32 / 3600.0
+            };
+
+            total = total + new_cost;
+            now = prices.get_next_period(now);
+        }
+
+        Some(total)
     }
 
     fn get_duration(&self) -> TimeDelta {
@@ -98,13 +98,12 @@ pub fn get_cheapest(
     end_search: chrono::DateTime<Utc>,
     required_duration: chrono::TimeDelta,
     prices: &Prices,
-) -> (Plan, f32) {
+) -> Option<(Plan, f32)> {
     let interval = prices.interval;
 
     // Get the time of the next 30 minute interval from now
     #[allow(clippy::cast_possible_wrap)]
-    let next_interval = start_search + interval
-        - TimeDelta::seconds(start_search.timestamp() % interval.as_secs() as i64);
+    let next_interval = prices.get_next_period(start_search);
 
     let now_time = {
         let end_time = min(start_search + required_duration, end_search);
@@ -121,31 +120,22 @@ pub fn get_cheapest(
 
     now_time
         .chain(rest_times)
-        .map(|plan| {
+        .filter_map(|plan| {
             let price = plan.get_forecast_cost(start_search, prices);
-            // We need the largest value, hence we get the negative duration.
-            let duration = -plan.get_duration();
-            (plan, duration, price)
+            if let Some(xprice) = price {
+                // We need the largest value, hence we get the negative duration.
+                let duration = -plan.get_duration();
+                Some((plan, duration, xprice))
+            } else {
+                None
+            }
         })
         .min_by(|(_, da, a), (_, db, b)| {
             (da, a)
                 .partial_cmp(&(db, b))
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map_or_else(
-            || {
-                // This should never happen.
-                error!("No plans found, using stupid default");
-                let plan = Plan {
-                    kw,
-                    start_time: start_search,
-                    end_time: end_search,
-                };
-                let price = plan.get_forecast_cost(start_search, prices);
-                (plan, price)
-            },
-            |(plan, _, price)| (plan, price),
-        )
+        .map(|(plan, _, price)| (plan, price))
 }
 
 #[cfg(test)]
@@ -158,6 +148,7 @@ mod tests {
     use float_cmp::assert_approx_eq;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
+    use tracing::debug;
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
@@ -259,8 +250,8 @@ mod tests {
             .collect::<Vec<api::PriceResponse>>()
     }
 
+    #[test_log::test(rstest::rstest)]
     // test single period with different now times
-    #[rstest::rstest]
     #[case(
         dt("2020-01-01T00:00:00Z"),
         TimeDelta::minutes(30),
@@ -357,8 +348,6 @@ mod tests {
         #[case] now: chrono::DateTime<Utc>,
         #[case] expected: f32,
     ) {
-        use tracing::debug;
-
         let prices = Prices {
             list: pr_list_descending(50.0),
             dt: dt("2020-01-01T00:00:00Z"),
@@ -367,11 +356,37 @@ mod tests {
 
         debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
         let plan = Plan::new(20.0, start_time, start_time + duration);
-        let price = plan.get_forecast_cost(now, &prices);
+        let price = plan.get_forecast_cost(now, &prices).unwrap();
         assert_approx_eq!(f32, price, expected);
     }
 
-    #[rstest::rstest]
+    #[test_log::test(rstest::rstest)]
+    // test single period with different now times
+    #[case(
+        dt("2020-01-01T00:00:00Z"),
+        TimeDelta::minutes(25*60*60),
+        dt("2020-01-01T00:00:00Z"),
+        20.0 * 0.5 * 50.0 * 1.0
+    )]
+    fn test_forecast_price_no_prices(
+        #[case] start_time: chrono::DateTime<Utc>,
+        #[case] duration: chrono::TimeDelta,
+        #[case] now: chrono::DateTime<Utc>,
+        #[case] expected: f32,
+    ) {
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
+        let plan = Plan::new(20.0, start_time, start_time + duration);
+        let result = plan.get_forecast_cost(now, &prices);
+        assert!(result.is_none());
+    }
+
+    #[test_log::test(rstest::rstest)]
     // Search scope one period only, look for one period, must return the same period.
     #[case(
         dt("2020-01-01T00:00:00Z"),
@@ -442,12 +457,36 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let (plan, cost) = get_cheapest(kw, start_search, end_search, required_duration, &prices);
+        let (plan, cost) =
+            get_cheapest(kw, start_search, end_search, required_duration, &prices).unwrap();
         assert_approx_eq!(f32, plan.kw, kw);
         assert_eq!(plan.start_time, expected_start_time);
         assert_eq!(plan.end_time, expected_end_time);
         assert!(plan.start_time >= start_search);
         assert!(plan.end_time <= end_search);
         assert_approx_eq!(f32, cost, expected_price);
+    }
+
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-31T00:00:00Z"),
+        dt("2020-01-31T00:30:00Z"),
+        TimeDelta::minutes(30),
+        20.0
+    )]
+    fn test_get_cheapest_plan_no_prices(
+        #[case] start_search: chrono::DateTime<Utc>,
+        #[case] end_search: chrono::DateTime<Utc>,
+        #[case] required_duration: chrono::TimeDelta,
+        #[case] kw: f32,
+    ) {
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            dt: dt("2020-01-01T00:00:00Z"),
+            interval: INTERVAL,
+        };
+
+        let result = get_cheapest(kw, start_search, end_search, required_duration, &prices);
+        assert!(result.is_none());
     }
 }
