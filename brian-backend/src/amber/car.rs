@@ -181,7 +181,6 @@ fn prices_to_charge_request<T: TimeZone>(
             prices,
             now,
             end_time,
-            is_charging,
             estimated_charge_time_to_min,
             battery_level,
         );
@@ -300,7 +299,6 @@ fn update_charge_plan(
     prices: &Prices,
     now: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    is_on: bool,
     required_time_left: TimeDelta,
     charge_limit: u8,
 ) -> Option<ChargePlanState> {
@@ -333,18 +331,16 @@ fn update_charge_plan(
         let threshold_reached = new_cost < cost * 0.8;
         let has_changed = plan.charge_limit != charge_limit;
 
-        info!("Old Plan: {plan:?} {cost}");
-        info!("New Plan: {new_plan:?} {new_cost}");
-        info!("Is On: {is_on}");
+        let plan_is_on = plan.plan.is_current(now);
+        let new_plan_is_on = new_plan.plan.is_current(now);
+
+        info!("Old Plan: {plan:?} {cost} {plan_is_on}");
+        info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
+        info!("Has changed: {has_changed}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (
-            is_on,
-            plan.plan.is_current(now),
-            threshold_reached,
-            has_changed,
-        ) {
+        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached, has_changed) {
             // Charge limit has changed.
             (_, _, _, true) => true,
 
@@ -577,16 +573,8 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_charge_plan(
-            None,
-            &prices,
-            start_time,
-            end_time,
-            false,
-            required_duration,
-            10,
-        )
-        .unwrap();
+        let plan =
+            update_charge_plan(None, &prices, start_time, end_time, required_duration, 10).unwrap();
         let cost = plan.plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);

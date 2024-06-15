@@ -116,7 +116,6 @@ fn update_plan(
     prices: &Prices,
     now: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    is_on: bool,
     required_time_left: TimeDelta,
 ) -> Option<Plan> {
     let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
@@ -145,13 +144,15 @@ fn update_plan(
     if let Some((plan, cost)) = plan_cost {
         let threshold_reached = new_cost < cost * 0.8;
 
-        info!("Old Plan: {plan:?} {cost}");
-        info!("New Plan: {new_plan:?} {new_cost}");
-        info!("Is On: {is_on}");
+        let plan_is_on = plan.is_current(now);
+        let new_plan_is_on = new_plan.is_current(now);
+
+        info!("Old Plan: {plan:?} {cost} {plan_is_on}");
+        info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (is_on, plan.is_current(now), threshold_reached) {
+        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached) {
             // new cost meets threshold, use new plan
             (_, _, true) => true,
 
@@ -246,7 +247,7 @@ pub fn run(
                 },
                 Ok(prices) = s.recv() => {
                     let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
-                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, day.is_on, required_time_left);
+                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, required_time_left);
                     let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());
                     info!("Sending request: {:?}", cr);
                     tx_out.try_send(cr);
@@ -469,15 +470,7 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_plan(
-            None,
-            &prices,
-            start_time,
-            end_time,
-            false,
-            required_duration,
-        )
-        .unwrap();
+        let plan = update_plan(None, &prices, start_time, end_time, required_duration).unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
