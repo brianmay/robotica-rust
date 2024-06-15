@@ -365,17 +365,27 @@ fn monitor_teslas(
             receivers.min_charge_tomorrow.clone(),
             receivers.is_charging.clone(),
         );
-        let monitor_charging_receivers = tesla::MonitorChargingReceivers::from_receivers(
+        let monitor_charging_receivers = tesla::MonitorChargingInputs::from_receivers(
             &receivers,
             charge_request,
             locations.is_home,
         );
-        let charging_info = monitor_charging(&*state, tesla, monitor_charging_receivers)
-            .unwrap_or_else(|e| {
+        let outputs =
+            monitor_charging(&*state, tesla, monitor_charging_receivers).unwrap_or_else(|e| {
                 panic!("Error running tesla charging monitor: {e}");
             });
-        let should_plugin_stream =
-            tesla::monitor_tesla_location(tesla, &*state, locations.location, charging_info);
+        let should_plugin_stream = tesla::monitor_tesla_location(
+            tesla,
+            &*state,
+            locations.location,
+            outputs.charging_information,
+        );
+
+        tesla::commands::run_command_processor(state, tesla, outputs.commands).unwrap_or_else(
+            |e| {
+                panic!("Error running tesla command processor: {e}");
+            },
+        );
 
         let monitor_doors_receivers = tesla::MonitorDoorsReceivers::from_receivers(&receivers);
         tesla::monitor_doors(&*state, tesla, monitor_doors_receivers);

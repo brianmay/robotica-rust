@@ -1,4 +1,4 @@
-use crate::{delays::rate_limit, tesla::TeslamateId, InitState};
+use crate::{tesla::TeslamateId, InitState};
 
 use super::{
     plan::{get_cheapest, Plan},
@@ -20,7 +20,6 @@ use robotica_common::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::select;
 use tracing::{debug, error, info};
 
@@ -144,7 +143,7 @@ pub fn run(
         }
     });
 
-    rate_limit("amber/car/ratelimit", Duration::from_secs(300), rx_out)
+    rx_out
 }
 
 fn save_state(

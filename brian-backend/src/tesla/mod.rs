@@ -1,29 +1,26 @@
+pub mod commands;
+
 use crate::amber::car::ChargeRequest;
 use crate::audience;
 use crate::delays::{delay_input, delay_repeat, DelayInputOptions};
 
 use anyhow::Result;
-use chrono::{DateTime, TimeDelta, Timelike, Utc};
+use chrono::Timelike;
 use reqwest::Url;
-use robotica_backend::services::persistent_state::{self, PersistentStateRow};
-use robotica_backend::services::tesla::api::{
-    ChargingStateEnum, CommandSequence, SequenceError, Token, TokenError, VehicleId,
-};
-use robotica_common::datetime::duration;
+use robotica_backend::services::persistent_state;
+use robotica_backend::services::tesla::api::{ChargingStateEnum, VehicleId};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::locations::LocationList;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::switch::{DeviceAction, DevicePower};
-use robotica_common::{robotica, teslamate, unsafe_time_delta};
+use robotica_common::{robotica, teslamate};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::ops::Add;
 use std::time::Duration;
 use tap::Pipe;
 use thiserror::Error;
 use tokio::select;
-use tokio::time::sleep_until;
 use tracing::{debug, error, info};
 
 use robotica_backend::pipes::{stateful, stateless, Subscriber, Subscription};
@@ -715,9 +712,6 @@ fn doors_to_message(tesla: &Config, open: &[Door]) -> String {
     msg
 }
 
-const SHORT_INTERVAL: Duration = Duration::from_secs(30);
-const LONG_INTERVAL: Duration = Duration::from_secs(5 * 60);
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct PersistentState {
     auto_charge: bool,
@@ -819,25 +813,15 @@ struct TeslaState {
     battery_level: u8,
     charging_state: ChargingStateEnum,
     is_at_home: bool,
-    last_success: DateTime<Utc>,
-    notified_errors: bool,
-    send_left_home_commands: bool,
+    // last_success: DateTime<Utc>,
+    // notified_errors: bool,
+    // send_left_home_commands: bool,
 }
 
 impl TeslaState {
     const fn is_charging(&self) -> bool {
         self.charging_state.is_charging()
     }
-}
-
-pub async fn check_token(
-    token: &mut Token,
-    tesla_secret: &PersistentStateRow<Token>,
-) -> Result<(), TokenError> {
-    info!("Refreshing state, token expiration: {:?}", token.expires_at);
-    token.check(tesla_secret).await?;
-    info!("Token expiration: {:?}", token.expires_at);
-    Ok(())
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -849,7 +833,7 @@ pub struct ChargingInformation {
     charging_state: ChargingStateEnum,
 }
 
-pub struct MonitorChargingReceivers {
+pub struct MonitorChargingInputs {
     pub charge_request: stateful::Receiver<ChargeRequest>,
     pub is_home: stateful::Receiver<bool>,
     pub auto_charge: stateless::Receiver<Json<Command>>,
@@ -858,7 +842,7 @@ pub struct MonitorChargingReceivers {
     pub charge_limit: stateful::Receiver<Parsed<u8>>,
 }
 
-impl MonitorChargingReceivers {
+impl MonitorChargingInputs {
     pub fn from_receivers(
         receivers: &Receivers,
         charge_request: stateful::Receiver<ChargeRequest>,
@@ -875,17 +859,21 @@ impl MonitorChargingReceivers {
     }
 }
 
+pub struct MonitorChargingOutputs {
+    pub charging_information: stateful::Receiver<ChargingInformation>,
+    pub commands: stateless::Receiver<commands::Command>,
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
     state: &InitState,
     config: &Config,
-    receivers: MonitorChargingReceivers,
-) -> Result<stateful::Receiver<ChargingInformation>, MonitorChargingError> {
+    receivers: MonitorChargingInputs,
+) -> Result<MonitorChargingOutputs, MonitorChargingError> {
     let id = config.teslamate_id.to_string();
 
     let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
-
-    let tesla_secret = state.persistent_state_database.for_name("tesla_token");
+    let (tx_command, rx_command) = stateless::create_pipe("tesla_charging_command");
 
     let psr = state
         .persistent_state_database
@@ -893,7 +881,6 @@ pub fn monitor_charging(
     let ps = psr.load().unwrap_or_default();
 
     let mqtt = state.mqtt.clone();
-    let message_sink = state.message_sink.clone();
 
     let auto_charge_rx = {
         let mqtt = mqtt.clone();
@@ -911,23 +898,11 @@ pub fn monitor_charging(
         })
     };
 
-    let mut token = Token::get(&tesla_secret)?;
+    // let mut token = Token::get(&tesla_secret)?;
 
     let config = config.clone();
     spawn(async move {
         let name = &config.name;
-
-        match check_token(&mut token, &tesla_secret).await {
-            Ok(()) => {}
-            Err(err) => {
-                error!("{name}: Failed to check token: {}", err);
-            }
-        }
-
-        if let Err(err) = test_tesla_api(&token, config.tesla_id).await {
-            error!("{name}: Failed to talk to Tesla API: {err}");
-        };
-
         let mut charge_request_s = receivers.charge_request.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut is_home_s = receivers.is_home.subscribe().await;
@@ -949,9 +924,6 @@ pub fn monitor_charging(
                 .await
                 .unwrap_or(ChargingStateEnum::Disconnected),
             is_at_home: is_home_s.recv().await.unwrap_or(false),
-            last_success: Utc::now(),
-            notified_errors: false,
-            send_left_home_commands: false,
         };
 
         info!("{name}: Initial Tesla state: {:?}", tesla_state);
@@ -961,31 +933,12 @@ pub fn monitor_charging(
             charging_state: tesla_state.charging_state,
             charge_limit: tesla_state.charge_limit,
             charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
-            // charge_request: should_charge_maybe_at_home(
-            //     tesla_state.is_at_home,
-            //     &ps,
-            //     amber_charge_request,
-            // ),
         });
-
-        let mut timer = {
-            let new_interval = SHORT_INTERVAL;
-            info!("{name}: Next poll {}", duration::to_string(&new_interval));
-            tokio::time::Instant::now().add(new_interval)
-        };
 
         loop {
             let was_at_home = tesla_state.is_at_home;
 
             select! {
-                () = sleep_until(timer) => {
-                    match check_token(&mut token, &tesla_secret).await {
-                        Ok(()) => {}
-                        Err(err) => {
-                            error!("{name}: Failed to check token: {}", err);
-                        }
-                    }
-                }
                 Ok(new_charge_request) = charge_request_s.recv() => {
                     info!("{name}: New price summary: {:?}", new_charge_request);
                     amber_charge_request = new_charge_request;
@@ -1025,29 +978,16 @@ pub fn monitor_charging(
             }
 
             let is_at_home = tesla_state.is_at_home;
-            if was_at_home && !is_at_home {
-                info!("{name}: left home - sending left home commands");
-                tesla_state.send_left_home_commands = true;
-            } else if is_at_home && tesla_state.send_left_home_commands {
-                info!("{name}: at home - cancelling left home commands");
-                tesla_state.send_left_home_commands = false;
-            }
+            let send_left_home_commands =
+                was_at_home && !is_at_home && amber_charge_request.is_auto();
 
-            let result = if tesla_state.send_left_home_commands && amber_charge_request.is_auto() {
-                // Construct sequence of commands to send to Tesla.
-                let mut sequence = CommandSequence::new();
-
-                // Set charging limit to 90% when car leaves home.
-                sequence.add_wake_up();
-                sequence.add_set_chart_limit(90);
-
-                // Send the commands.
-                info!("{name}: Sending left home commands: {sequence:?}");
-                sequence.execute(&token, config.tesla_id).await
+            if send_left_home_commands {
+                let command = commands::Command::new().set_charge_limit(90);
+                tx_command.try_send(command);
             } else {
                 let charge_request =
                     should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
-                check_charge(&config, &token, &tesla_state, charge_request).await
+                check_charge(&config, &tx_command, &tesla_state, charge_request);
             };
 
             tx_summary.try_send(ChargingInformation {
@@ -1055,36 +995,17 @@ pub fn monitor_charging(
                 charge_limit: tesla_state.charge_limit,
                 charging_state: tesla_state.charging_state,
                 charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
-                // charge_request,
             });
-
-            let new_interval = match result {
-                Ok(()) => {
-                    info!("{name}: Success executing command sequence");
-                    notify_success(&tesla_state, &message_sink);
-                    forget_errors(&mut tesla_state);
-                    LONG_INTERVAL
-                }
-                Err(SequenceError::WaitRetry(duration)) => {
-                    info!("{name}: Failed, retrying in {:?}", duration);
-                    notify_errors(&mut tesla_state, &message_sink);
-                    duration
-                }
-                Err(err) => {
-                    info!("{name}: Error executing command sequence: {}", err);
-                    notify_errors(&mut tesla_state, &message_sink);
-                    SHORT_INTERVAL
-                }
-            };
-
-            info!("{name}: Next poll {}", duration::to_string(&new_interval));
-            timer = tokio::time::Instant::now().add(new_interval);
 
             update_auto_charge(ps.auto_charge, config.teslamate_id, &tesla_state, &mqtt);
         }
     });
 
-    Ok(rx_summary)
+    MonitorChargingOutputs {
+        charging_information: rx_summary,
+        commands: rx_command,
+    }
+    .pipe(Ok)
 }
 
 const fn should_charge_maybe_at_home(
@@ -1110,46 +1031,13 @@ const fn should_charge_at_home(
     }
 }
 
-fn forget_errors(tesla_state: &mut TeslaState) {
-    tesla_state.last_success = Utc::now();
-    tesla_state.notified_errors = false;
-    tesla_state.send_left_home_commands = false;
-}
-
-fn notify_success(tesla_state: &TeslaState, message_sink: &stateless::Sender<Message>) {
-    if tesla_state.notified_errors {
-        let msg = new_message(
-            "I am on talking terms with the Tesla again",
-            MessagePriority::Urgent,
-        );
-        message_sink.try_send(msg);
-    }
-}
-
-const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = unsafe_time_delta!(minutes: 30);
-
-fn notify_errors(tesla_state: &mut TeslaState, message_sink: &stateless::Sender<Message>) {
-    if !tesla_state.notified_errors
-        && tesla_state.last_success.add(FAILURE_NOTIFICATION_INTERVAL) < Utc::now()
-    {
-        let msg = new_message(
-            "The Tesla and I have not been talking to each other for 30 minutes",
-            MessagePriority::Urgent,
-        );
-        message_sink.try_send(msg);
-        tesla_state.notified_errors = true;
-        // If we have been trying to send left home commands for 30 minutes, then give up.
-        tesla_state.send_left_home_commands = false;
-    }
-}
-
 fn update_auto_charge(
     auto_charge: bool,
     teslamate_id: TeslamateId,
     tesla_state: &TeslaState,
     mqtt: &robotica_backend::services::mqtt::MqttTx,
 ) {
-    let notified_errors = tesla_state.notified_errors;
+    let notified_errors = false;
     let is_charging = tesla_state.is_charging();
     let status = match (notified_errors, auto_charge, is_charging) {
         (true, _, _) => DevicePower::DeviceError,
@@ -1175,18 +1063,6 @@ fn publish_auto_charge(
     mqtt.try_send(msg);
 }
 
-async fn test_tesla_api(token: &Token, tesla_id: VehicleId) -> Result<()> {
-    let data = token.get_vehicles().await?;
-
-    data.into_iter()
-        .find(|vehicle| vehicle.id == tesla_id)
-        .ok_or_else(|| {
-            anyhow::anyhow!("Tesla vehicle {id} not found", id = tesla_id.to_string())
-        })?;
-
-    Ok(())
-}
-
 enum ChargingSummary {
     Charging,
     NotCharging,
@@ -1194,14 +1070,14 @@ enum ChargingSummary {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn check_charge(
+#[allow(clippy::cognitive_complexity)]
+fn check_charge(
     tesla: &Config,
-    token: &Token,
+    tx: &stateless::Sender<commands::Command>,
     tesla_state: &TeslaState,
     charge_request: ChargeRequest,
-) -> Result<(), SequenceError> {
+) {
     info!("Checking charge");
-    let tesla_id = tesla.tesla_id;
     let name = &tesla.name;
 
     let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
@@ -1210,10 +1086,7 @@ async fn check_charge(
     let charging_state = tesla_state.charging_state;
     let can_start_charge = charging_state != ChargingStateEnum::Complete;
 
-    info!(
-        "{name}: Current data: {charge_request:?}, {tesla_state:?}, notified_errors: {}",
-        tesla_state.notified_errors
-    );
+    info!("{name}: Current data: {charge_request:?}, {tesla_state:?}",);
     info!("{name}: Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
@@ -1221,17 +1094,12 @@ async fn check_charge(
         should_charge != ShouldCharge::DontTouch && tesla_state.charge_limit != charge_limit;
 
     // Construct sequence of commands to send to Tesla.
-    let mut sequence = CommandSequence::new();
-
-    // Wake up the car if it's not already awake.
-    sequence.add_wake_up();
+    let mut sequence = commands::Command::new();
 
     // Set the charge limit if required.
-    // Or if we are in error state
-    // - we need to keep checking to find out when the car is awake.
-    if set_charge_limit || tesla_state.notified_errors {
+    if set_charge_limit {
         info!("{name}: Setting charge limit to {}", charge_limit);
-        sequence.add_set_chart_limit(charge_limit);
+        sequence = sequence.set_charge_limit(charge_limit);
     }
 
     // Get charging state
@@ -1253,12 +1121,12 @@ async fn check_charge(
         match charging_summary {
             ChargingSummary::Charging if should_charge == DoNotCharge => {
                 info!("{name}: Stopping charge");
-                sequence.add_charge_stop();
+                sequence = sequence.set_should_charge(false);
             }
             ChargingSummary::Charging => {}
             ChargingSummary::NotCharging if should_charge == DoCharge && can_start_charge => {
                 info!("{name}: Starting charge");
-                sequence.add_charge_start();
+                sequence = sequence.set_should_charge(true);
             }
             ChargingSummary::NotCharging => {}
             ChargingSummary::Disconnected => info!("{name}: is disconnected"),
@@ -1267,21 +1135,9 @@ async fn check_charge(
 
     // Send the commands.
     info!("{name}: Sending commands: {sequence:?}");
-    let result = sequence.execute(token, tesla_id).await.map_err(|err| {
-        info!("{name}: Error executing command sequence: {}", err);
-        err
-    });
+    tx.try_send(sequence);
 
-    // If we attempted to change anything, ensure teslamate is logging so we get updates.
-    if !sequence.is_empty() {
-        // Any errors here should be logged and forgotten.
-        if let Err(err) = enable_teslamate_logging(tesla).await {
-            error!("{name}: Failed to enable teslamate logging: {}", err);
-        }
-    }
-
-    info!("{name}: All done. {result:?}");
-    result
+    info!("{name}: All done.");
 }
 
 #[derive(Debug, Error)]
@@ -1291,17 +1147,6 @@ enum TeslamateError {
 
     #[error("Failed to parse teslamate url: {0}")]
     ParseError(#[from] url::ParseError),
-}
-
-async fn enable_teslamate_logging(config: &Config) -> Result<(), TeslamateError> {
-    let url = config.teslamate.url.join("/api/car/1/logging/resume")?;
-    let client = reqwest::Client::new().put(url);
-    let client = match &config.teslamate.auth {
-        TeslamateAuth::Basic { username, password } => client.basic_auth(username, Some(password)),
-        TeslamateAuth::None => client,
-    };
-    client.send().await?.error_for_status()?;
-    Ok(())
 }
 
 #[derive(Debug, Eq, PartialEq)]
