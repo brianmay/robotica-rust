@@ -183,7 +183,7 @@ fn prices_to_charge_request<T: TimeZone>(
             end_time,
             estimated_charge_time_to_min,
             battery_level,
-            is_charging
+            is_charging,
         );
         let is_current = charge_plan
             .as_ref()
@@ -302,8 +302,18 @@ fn update_charge_plan(
     end_time: DateTime<Utc>,
     required_time_left: TimeDelta,
     charge_limit: u8,
-    is_on:  bool,
+    is_on: bool,
 ) -> Option<ChargePlanState> {
+    // Expire old plan
+    let plan = plan.and_then(|plan| {
+        if plan.plan.is_expired(now) {
+            info!("Old plan expired");
+            None
+        } else {
+            Some(plan)
+        }
+    });
+
     let Some((new_plan, new_cost)) = get_cheapest(7.68, now, end_time, required_time_left, prices)
     else {
         error!("Can't get new plan");
@@ -577,8 +587,16 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan =
-            update_charge_plan(None, &prices, start_time, end_time, required_duration, 10, false).unwrap();
+        let plan = update_charge_plan(
+            None,
+            &prices,
+            start_time,
+            end_time,
+            required_duration,
+            10,
+            false,
+        )
+        .unwrap();
         let cost = plan.plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);

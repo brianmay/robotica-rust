@@ -58,6 +58,10 @@ impl Plan {
         self.start_time <= dt && self.end_time > dt
     }
 
+    pub fn is_expired(&self, dt: chrono::DateTime<Utc>) -> bool {
+        self.end_time <= dt
+    }
+
     pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> Option<f32> {
         // Ensure now is within the requested period.
         let now = max(self.start_time, now);

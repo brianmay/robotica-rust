@@ -119,6 +119,16 @@ fn update_plan(
     required_time_left: TimeDelta,
     is_on: bool,
 ) -> Option<Plan> {
+    // Expire old plan
+    let plan = plan.and_then(|plan| {
+        if plan.is_expired(now) {
+            info!("Old plan expired");
+            None
+        } else {
+            Some(plan)
+        }
+    });
+
     let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
     else {
         error!("Can't get new plan");
@@ -473,7 +483,15 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_plan(None, &prices, start_time, end_time, required_duration, false).unwrap();
+        let plan = update_plan(
+            None,
+            &prices,
+            start_time,
+            end_time,
+            required_duration,
+            false,
+        )
+        .unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
