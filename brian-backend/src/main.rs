@@ -306,7 +306,7 @@ fn monitor_hot_water(
         .subscribe_into_stateful::<Json<shelly::SwitchStatus>>("hotwater/status/switch:0")
         .map(|(_, json)| json.0.output);
 
-    let _mqtt_clone = state.mqtt.clone();
+    let mqtt_clone = state.mqtt.clone();
     let hot_water_request = amber::hot_water::run(state, prices.clone(), is_on);
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
@@ -319,14 +319,13 @@ fn monitor_hot_water(
             hot_water::Request::DoNotHeat => shelly::SwitchCommand::Off(None),
         };
         info!("Setting hot water to {:?}", command);
-        let _msg = MqttMessage::new(
+        let msg = MqttMessage::new(
             "hotwater/command/switch:0",
             command,
             Retain::NoRetain,
             QoS::ExactlyOnce,
         );
-        // Comment out for now until confidence reached.
-        // mqtt_clone.try_send(msg);
+        mqtt_clone.try_send(msg);
 
         let message = match current {
             hot_water::Request::Heat => "Turning hot water on",
