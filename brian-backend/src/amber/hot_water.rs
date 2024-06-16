@@ -147,6 +147,7 @@ fn update_plan(
 
         let plan_is_on = plan.is_current(now);
         let new_plan_is_on = new_plan.is_current(now);
+        let is_on = is_on && plan_is_on;
 
         info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
