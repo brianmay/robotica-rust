@@ -22,7 +22,6 @@ mod private;
 #[derive(Debug)]
 pub struct Prices {
     pub list: Vec<api::PriceResponse>,
-    pub dt: DateTime<Utc>,
     pub interval: Duration,
 }
 
@@ -80,7 +79,6 @@ impl Prices {
 
 pub struct Usage {
     pub list: Vec<api::UsageResponse>,
-    pub dt: DateTime<Utc>,
 }
 
 impl PartialEq for Usage {
@@ -200,7 +198,6 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
 
                             tx_prices.try_send(Arc::new(Prices {
                                 list: prices,
-                                dt: now,
                                 interval,
                             }));
 
@@ -238,7 +235,6 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                         Ok(usage) => {
                             tx_usage.try_send(Arc::new(Usage {
                                 list: usage,
-                                dt: now,
                             }));
                         }
                         Err(err) => {
@@ -297,7 +293,6 @@ mod tests {
     fn test_get_next_period(#[case] now: DateTime<Utc>, #[case] expected: DateTime<Utc>) {
         let prices = Prices {
             list: vec![],
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -356,7 +351,6 @@ mod tests {
         ];
         let prices = Prices {
             list: prices,
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -371,7 +365,6 @@ mod tests {
     fn test_find_none(#[case] now: DateTime<Utc>) {
         let prices = Prices {
             list: vec![],
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -575,7 +568,6 @@ mod tests {
             ];
             Prices {
                 list: prices,
-                dt: dt("2020-01-01T00:00:00Z"),
                 interval: INTERVAL,
             }
         };

@@ -360,7 +360,6 @@ mod tests {
     ) {
         let prices = Prices {
             list: pr_list_descending(50.0),
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -394,7 +393,6 @@ mod tests {
     ) {
         let prices = Prices {
             list: pr_list_descending(50.0),
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -471,7 +469,6 @@ mod tests {
     ) {
         let prices = Prices {
             list: pr_list_descending(50.0),
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 
@@ -506,7 +503,6 @@ mod tests {
     ) {
         let prices = Prices {
             list: pr_list_descending(50.0),
-            dt: dt("2020-01-01T00:00:00Z"),
             interval: INTERVAL,
         };
 

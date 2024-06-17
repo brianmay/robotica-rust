@@ -261,7 +261,7 @@ pub enum ShouldPlugin {
 }
 
 pub struct Outputs {
-    pub lat_lng: stateful::Receiver<robotica::locations::LocationMessage>,
+    // pub lat_lng: stateful::Receiver<robotica::locations::LocationMessage>,
     pub location: stateful::Receiver<LocationList>,
     pub is_home: stateful::Receiver<bool>,
 }
@@ -358,11 +358,11 @@ pub fn monitor_teslamate_location(
         }
     });
 
-    let location = rx.clone().map(|(_, l)| LocationList::new(l.locations));
+    let location = rx.map(|(_, l)| LocationList::new(l.locations));
     let is_home = location.clone().map(|(_, l)| l.is_at_home());
 
     Outputs {
-        lat_lng: rx,
+        // lat_lng: rx,
         location,
         is_home,
     }

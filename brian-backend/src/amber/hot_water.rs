@@ -550,7 +550,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            dt: start_time,
             interval: INTERVAL,
         };
 
@@ -683,7 +682,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            dt: now,
             interval: INTERVAL,
         };
 

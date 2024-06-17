@@ -626,7 +626,6 @@ mod tests {
 
         let prices = Prices {
             list: prices,
-            dt: start_time,
             interval: INTERVAL,
         };
 
@@ -665,7 +664,6 @@ mod tests {
     ) {
         let summary = Prices {
             list: pr_list_descending(0.0),
-            dt: now,
             interval: INTERVAL,
         };
         let ps = PersistentState {

@@ -676,7 +676,7 @@ mod tests {
         let duration = duration::try_hms(1, 2, 60);
         assert!(matches!(duration, Err(duration::HmsError::SecondsOverflow)));
 
-        let duration = duration::try_hms(u64::max_value(), 2, 3);
+        let duration = duration::try_hms(u64::MAX, 2, 3);
         assert!(matches!(
             duration,
             Err(duration::HmsError::TotalSecondsOverflow)
@@ -764,7 +764,7 @@ mod tests {
             Err(time_delta::HmsError::SecondsOverflow)
         ));
 
-        let duration = time_delta::try_hms(true, u64::max_value(), 2, 3);
+        let duration = time_delta::try_hms(true, u64::MAX, 2, 3);
         assert!(matches!(
             duration,
             Err(time_delta::HmsError::TotalSecondsOverflow)
