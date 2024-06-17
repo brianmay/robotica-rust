@@ -21,7 +21,10 @@ use robotica_common::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::select;
+use tokio::{
+    select,
+    time::{sleep_until, Instant},
+};
 use tracing::{error, info};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -222,6 +225,25 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
     (start_day, end_day)
 }
 
+async fn sleep_until_plan_end(plan: &Option<Plan>) -> Option<()> {
+    let end_time = plan.as_ref().and_then(|plan| {
+        (plan.get_end_time() - Utc::now())
+            .to_std()
+            .map_err(|err| {
+                error!("Failed to convert time delta to std duration: {}", err);
+                err
+            })
+            .ok()
+    });
+
+    if let Some(end_time) = end_time {
+        sleep_until(Instant::now() + end_time).await;
+        Some(())
+    } else {
+        None
+    }
+}
+
 pub fn run(
     state: &InitState,
     rx: Receiver<Arc<Prices>>,
@@ -250,6 +272,10 @@ pub fn run(
     spawn(async move {
         let mut s = rx.subscribe().await;
         let mut s_is_on = is_on.subscribe().await;
+        let Ok(mut prices) = s.recv().await else {
+            error!("Failed to get initial prices");
+            return;
+        };
 
         loop {
             select! {
@@ -258,7 +284,19 @@ pub fn run(
                     day.is_on = is_on;
                     day.save(&psr);
                 },
-                Ok(prices) = s.recv() => {
+                Ok(new_prices) = s.recv() => {
+                    prices = new_prices;
+                    info!("Received new prices");
+                    let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
+                    let plan = update_plan(day.plan, &prices, utc_now(), day.end, required_time_left, day.is_on);
+                    let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());
+                    info!("Sending request: {:?}", cr);
+                    tx_out.try_send(cr);
+                    day.plan = plan;
+                    day.save(&psr);
+                }
+                Some(()) = sleep_until_plan_end(&day.plan) => {
+                    info!("Plan ended time elapsed");
                     let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
                     let plan = update_plan(day.plan, &prices, utc_now(), day.end, required_time_left, day.is_on);
                     let cr = prices_to_hot_water_request(day.is_on, &plan, &prices, Utc::now());

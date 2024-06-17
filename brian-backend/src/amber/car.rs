@@ -20,7 +20,10 @@ use robotica_common::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::select;
+use tokio::{
+    select,
+    time::{sleep_until, Instant},
+};
 use tracing::{debug, error, info};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
@@ -66,6 +69,25 @@ impl Default for PersistentState {
             min_charge_tomorrow: 70,
             charge_plan: None,
         }
+    }
+}
+
+async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
+    let end_time = plan.as_ref().and_then(|plan| {
+        (plan.plan.get_end_time() - Utc::now())
+            .to_std()
+            .map_err(|err| {
+                error!("Failed to convert time delta to std duration: {}", err);
+                err
+            })
+            .ok()
+    });
+
+    if let Some(end_time) = end_time {
+        sleep_until(Instant::now() + end_time).await;
+        Some(())
+    } else {
+        None
     }
 }
 
@@ -137,6 +159,9 @@ pub fn run(
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
                     save_state(teslamate_id, &psr, &ps);
+                },
+                Some(()) = sleep_until_plan_end(&ps.charge_plan) => {
+                    info!("{id}: Plan ended");
                 },
                 else => break,
             }

@@ -49,7 +49,6 @@ impl Plan {
         self.start_time
     }
 
-    #[cfg(test)]
     pub const fn get_end_time(&self) -> chrono::DateTime<Utc> {
         self.end_time
     }
