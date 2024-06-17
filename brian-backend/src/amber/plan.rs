@@ -62,6 +62,11 @@ impl Plan {
     }
 
     pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> Option<f32> {
+        // We can't go back in time unfortunately.
+        if self.end_time <= self.start_time {
+            return None;
+        }
+
         // Ensure now is within the requested period.
         let now = max(self.start_time, now);
         let now = min(self.end_time, now);
@@ -102,6 +107,11 @@ pub fn get_cheapest(
     required_duration: chrono::TimeDelta,
     prices: &Prices,
 ) -> Option<(Plan, f32)> {
+    // Short circuit entire process if the search period is invalid.
+    if end_search <= start_search {
+        return None;
+    }
+
     let interval = prices.interval;
 
     // Get the time of the next 30 minute interval from now
@@ -365,13 +375,21 @@ mod tests {
     // test single period with different now times
     #[case(
         dt("2020-01-01T00:00:00Z"),
-        TimeDelta::minutes(25*60*60),
+        dt("2020-01-02T01:30:00Z"),
         dt("2020-01-01T00:00:00Z"),
         20.0 * 0.5 * 50.0 * 1.0
     )]
+    // We can't do negative durations!
+    #[case(
+        dt("2020-01-01T01:30:00Z"),
+        dt("2020-01-01T00:00:00Z"),
+        dt("2020-01-01T00:00:00Z"),
+        20.0 * 0.5 * 50.0 * 1.0
+    )]
+
     fn test_forecast_price_no_prices(
         #[case] start_time: chrono::DateTime<Utc>,
-        #[case] duration: chrono::TimeDelta,
+        #[case] end_time: chrono::DateTime<Utc>,
         #[case] now: chrono::DateTime<Utc>,
         #[case] expected: f32,
     ) {
@@ -381,8 +399,8 @@ mod tests {
             interval: INTERVAL,
         };
 
-        debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
-        let plan = Plan::new(20.0, start_time, start_time + duration);
+        debug!("{start_time:?} {end_time:?} {now:?} {expected:?}");
+        let plan = Plan::new(20.0, start_time, end_time);
         let result = plan.get_forecast_cost(now, &prices);
         assert!(result.is_none());
     }
@@ -472,6 +490,12 @@ mod tests {
     #[case(
         dt("2020-01-31T00:00:00Z"),
         dt("2020-01-31T00:30:00Z"),
+        TimeDelta::minutes(30),
+        20.0
+    )]
+    #[case(
+        dt("2020-01-31T00:30:00Z"),
+        dt("2020-01-31T00:00:00Z"),
         TimeDelta::minutes(30),
         20.0
     )]
