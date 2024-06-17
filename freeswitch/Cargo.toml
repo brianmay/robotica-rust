@@ -28,7 +28,7 @@ itertools = "0.13.0"
 envconfig = "0.10.0"
 freeswitch-esl = { git = "https://github.com/KaranGauswami/freeswitch-esl.git" }
 # freeswitch-esl = { path = "/home/brian/tree/3rdparty/freeswitch-esl"}
-reqwest = "0.12.4"
+reqwest = "0.12.5"
 
 [dependencies.openssl]
 optional = true
