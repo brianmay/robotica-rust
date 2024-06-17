@@ -202,7 +202,7 @@ fn prices_to_charge_request<T: TimeZone>(
             now,
             end_time,
             estimated_charge_time_to_min,
-            battery_level,
+            ps.min_charge_tomorrow,
             is_charging,
         );
         let is_current = charge_plan
