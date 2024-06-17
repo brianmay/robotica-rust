@@ -72,6 +72,20 @@ impl Default for PersistentState {
     }
 }
 
+async fn sleep_until_plan_start(plan: &Option<ChargePlanState>) -> Option<()> {
+    let start_time = plan.as_ref().and_then(|plan| {
+        // If plan start time is in the past this will return None.
+        (plan.plan.get_start_time() - Utc::now()).to_std().ok()
+    });
+
+    if let Some(start_time) = start_time {
+        sleep_until(Instant::now() + start_time).await;
+        Some(())
+    } else {
+        None
+    }
+}
+
 async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
     let end_time = plan.as_ref().and_then(|plan| {
         // If plan end time is in the past this will return None.
@@ -154,6 +168,9 @@ pub fn run(
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
                     save_state(teslamate_id, &psr, &ps);
+                },
+                Some(()) = sleep_until_plan_start(&ps.charge_plan) => {
+                    info!("{id}: Plan started");
                 },
                 Some(()) = sleep_until_plan_end(&ps.charge_plan) => {
                     info!("{id}: Plan ended");

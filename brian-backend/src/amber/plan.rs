@@ -44,7 +44,6 @@ impl Plan {
         self.kw
     }
 
-    #[cfg(test)]
     pub const fn get_start_time(&self) -> chrono::DateTime<Utc> {
         self.start_time
     }

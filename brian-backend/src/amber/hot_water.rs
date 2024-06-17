@@ -231,6 +231,20 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
     (start_day, end_day)
 }
 
+async fn sleep_until_plan_start(plan: &Option<Plan>) -> Option<()> {
+    let start_time = plan.as_ref().and_then(|plan| {
+        // If plan start time is in the past this will return None.
+        (plan.get_start_time() - Utc::now()).to_std().ok()
+    });
+
+    if let Some(start_time) = start_time {
+        sleep_until(Instant::now() + start_time).await;
+        Some(())
+    } else {
+        None
+    }
+}
+
 async fn sleep_until_plan_end(plan: &Option<Plan>) -> Option<()> {
     let end_time = plan.as_ref().and_then(|plan| {
         // If plan end time is in the past this will return None.
@@ -316,8 +330,12 @@ pub fn run(
                     info!("Received new prices");
                     process(&mut day, &prices, &tx_out, &psr, timezone);
                 }
+                Some(()) = sleep_until_plan_start(&day.plan) => {
+                    info!("Plan start time elapsed");
+                    process(&mut day, &prices, &tx_out, &psr, timezone);
+                }
                 Some(()) = sleep_until_plan_end(&day.plan) => {
-                    info!("Plan ended time elapsed");
+                    info!("Plan end time elapsed");
                     process(&mut day, &prices, &tx_out, &psr, timezone);
                 }
                 else => break,
