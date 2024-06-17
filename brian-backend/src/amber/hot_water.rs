@@ -122,6 +122,12 @@ fn update_plan(
     required_time_left: TimeDelta,
     is_on: bool,
 ) -> Option<Plan> {
+    // If required time left is negative or zero, then cancel the plan.
+    if required_time_left <= TimeDelta::zero() {
+        info!("Required time left is negative or zero");
+        return None;
+    }
+
     // Expire old plan
     let plan = plan.and_then(|plan| {
         if plan.is_expired(now) {

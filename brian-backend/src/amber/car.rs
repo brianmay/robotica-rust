@@ -324,6 +324,12 @@ fn update_charge_plan(
     charge_limit: u8,
     is_on: bool,
 ) -> Option<ChargePlanState> {
+    // If required time left is negative or zero, then cancel the plan.
+    if required_time_left <= TimeDelta::zero() {
+        info!("Required time left is negative or zero");
+        return None;
+    }
+
     // Expire old plan
     let plan = plan.and_then(|plan| {
         if plan.plan.is_expired(now) {
