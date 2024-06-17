@@ -74,13 +74,8 @@ impl Default for PersistentState {
 
 async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
     let end_time = plan.as_ref().and_then(|plan| {
-        (plan.plan.get_end_time() - Utc::now())
-            .to_std()
-            .map_err(|err| {
-                error!("Failed to convert time delta to std duration: {}", err);
-                err
-            })
-            .ok()
+        // If plan end time is in the past this will return None.
+        (plan.plan.get_end_time() - Utc::now()).to_std().ok()
     });
 
     if let Some(end_time) = end_time {
