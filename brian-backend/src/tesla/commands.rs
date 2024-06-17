@@ -71,7 +71,6 @@ async fn sleep_until(maybe_try_command: &mut Option<TryCommand>) -> Option<TryCo
 struct Errors {
     last_success: DateTime<Utc>,
     notified: bool,
-    send_left_home_commands: bool,
 }
 
 impl Errors {
@@ -79,14 +78,12 @@ impl Errors {
         Self {
             last_success: Utc::now(),
             notified: false,
-            send_left_home_commands: false,
         }
     }
 
     fn forget_errors(&mut self) {
         self.last_success = Utc::now();
         self.notified = false;
-        self.send_left_home_commands = false;
     }
 
     fn notify_success(&mut self, message_sink: &stateless::Sender<Message>) {
@@ -156,7 +153,7 @@ pub fn run_command_processor(
                                 info!("{name}: Command succeeded.");
                                 // If we did have a command, rate limit next command to 5 minutes.
                                 Some(TryCommand {
-                                    command: try_command.command,
+                                    command: Command::new(),
                                     next_try_instant: Instant::now() + Duration::from_secs(300),
                                 })
                             };
@@ -184,6 +181,11 @@ pub fn run_command_processor(
                 Ok(command) = s.recv() => {
                     if command.is_nil() {
                         info!("{name}: Received empty command: {:?}, forgetting errors.", command);
+                        errors.forget_errors();
+                    } else if maybe_try_command.is_none() {
+                        // There may have been a large gap since we tried talking to the car
+                        // last, hence we cannot rely on the last success time.
+                        info!("{name}: Received command: {:?}, forgetting errors.", command);
                         errors.forget_errors();
                     }
 
