@@ -386,16 +386,14 @@ fn update_charge_plan(
 
         let plan_is_on = plan.plan.is_current(now);
         let new_plan_is_on = new_plan.plan.is_current(now);
-        let is_on = plan_is_on;
 
-        info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
         info!("Has changed: {has_changed}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (is_on, new_plan_is_on, threshold_reached, has_changed) {
+        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached, has_changed) {
             // Charge limit has changed.
             (_, _, _, true) => true,
 
