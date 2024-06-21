@@ -120,7 +120,6 @@ fn update_plan(
     now: DateTime<Utc>,
     end_time: DateTime<Utc>,
     required_time_left: TimeDelta,
-    is_on: bool,
 ) -> Option<Plan> {
     // If required time left is negative or zero, then cancel the plan.
     if required_time_left <= TimeDelta::zero() {
@@ -166,7 +165,7 @@ fn update_plan(
 
         let plan_is_on = plan.is_current(now);
         let new_plan_is_on = new_plan.is_current(now);
-        let is_on = is_on && plan_is_on;
+        let is_on = plan_is_on;
 
         info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
@@ -273,7 +272,6 @@ fn process<T: TimeZone>(
         utc_now(),
         day.end,
         required_time_left,
-        day.is_on,
     );
     let cr = prices_to_hot_water_request(day.is_on, &plan, prices, Utc::now());
     info!("Sending request: {:?}", cr);
@@ -553,15 +551,7 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_plan(
-            None,
-            &prices,
-            start_time,
-            end_time,
-            required_duration,
-            false,
-        )
-        .unwrap();
+        let plan = update_plan(None, &prices, start_time, end_time, required_duration).unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);

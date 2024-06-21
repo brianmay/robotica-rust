@@ -220,7 +220,6 @@ fn prices_to_charge_request<T: TimeZone>(
             end_time,
             estimated_charge_time_to_min,
             ps.min_charge_tomorrow,
-            is_charging,
         );
         let is_current = charge_plan
             .as_ref()
@@ -339,7 +338,6 @@ fn update_charge_plan(
     end_time: DateTime<Utc>,
     required_time_left: TimeDelta,
     charge_limit: u8,
-    is_on: bool,
 ) -> Option<ChargePlanState> {
     // If required time left is negative or zero, then cancel the plan.
     if required_time_left <= TimeDelta::zero() {
@@ -388,7 +386,7 @@ fn update_charge_plan(
 
         let plan_is_on = plan.plan.is_current(now);
         let new_plan_is_on = new_plan.plan.is_current(now);
-        let is_on = is_on && plan_is_on;
+        let is_on = plan_is_on;
 
         info!("Is on: {is_on}");
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
@@ -629,16 +627,8 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_charge_plan(
-            None,
-            &prices,
-            start_time,
-            end_time,
-            required_duration,
-            10,
-            false,
-        )
-        .unwrap();
+        let plan =
+            update_charge_plan(None, &prices, start_time, end_time, required_duration, 10).unwrap();
         let cost = plan.plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.plan.get_kw(), 7.680);
