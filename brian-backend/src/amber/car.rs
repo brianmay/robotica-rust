@@ -456,7 +456,7 @@ const fn estimate_charge_time(battery_level: u8, min_charge_tomorrow: u8) -> Opt
     if diff <= 0 {
         None
     } else {
-        let charge_time = diff * 280 * 60 / 35;
+        let charge_time = diff * 280 * 60 / 39;
         // Allow for 1 minute for car waking up
         let charge_time = charge_time + 1;
         Some(TimeDelta::seconds(charge_time))
@@ -707,7 +707,7 @@ mod tests {
         assert_eq!(None, estimate_charge_time(70, 70));
         assert_eq!(None, estimate_charge_time(100, 70));
         assert_eq!(
-            Some(TimeDelta::seconds(18721)),
+            Some(TimeDelta::seconds(16801)),
             estimate_charge_time(51, 90)
         );
     }
