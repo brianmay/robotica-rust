@@ -16,7 +16,7 @@ use robotica_backend::{
 use robotica_common::{
     datetime::time_delta,
     mqtt::{MqttMessage, Parsed, QoS, Retain},
-    unsafe_naive_time_hms,
+    unsafe_naive_time_hms, unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -195,6 +195,7 @@ fn save_state(
 }
 
 const END_TIME: NaiveTime = unsafe_naive_time_hms!(6, 30, 0);
+const MIN_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
 
 fn prices_to_charge_request<T: TimeZone>(
     teslamate_id: TeslamateId,
@@ -387,27 +388,38 @@ fn update_charge_plan(
         let plan_is_on = plan.plan.is_current(now);
         let new_plan_is_on = new_plan.plan.is_current(now);
 
+        // If new plan continues old plan, use the old start time.
+        let new_plan = if plan_is_on && new_plan_is_on {
+            ChargePlanState {
+                plan: new_plan.plan.with_start_time(plan.plan.get_start_time()),
+                charge_limit,
+            }
+        } else {
+            new_plan
+        };
+
+        let force = (threshold_reached || has_changed)
+            && plan.plan.get_duration() >= MIN_TIME
+            && new_plan.plan.get_duration() >= MIN_TIME;
+
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
         info!("Threshold reached: {threshold_reached}");
         info!("Has changed: {has_changed}");
 
         #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (plan_is_on, new_plan_is_on, threshold_reached, has_changed) {
-            // Charge limit has changed.
-            (_, _, _, true) => true,
-
-            // new cost meets threshold, use new plan
-            (_, _, true, _) => true,
+        let use_new_plan = match (plan_is_on, new_plan_is_on, force) {
+            // force criteria met, use new plan
+            (_, _, true) => true,
 
             // Turning off but not meeting threshold, don't change
-            (true, false, false, false) => false,
+            (true, false, false) => false,
 
             // Already off, use new plan
-            (false, _, _, false) => true,
+            (false, _, false) => true,
 
             // Already on and staying on, use new plan
-            (true, true, false, false) => true,
+            (true, true, false) => true,
         };
 
         if use_new_plan {

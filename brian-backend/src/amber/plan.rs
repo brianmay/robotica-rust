@@ -52,6 +52,10 @@ impl Plan {
         self.end_time
     }
 
+    pub const fn with_start_time(self, start_time: chrono::DateTime<Utc>) -> Self {
+        Self { start_time, ..self }
+    }
+
     pub fn is_current(&self, dt: chrono::DateTime<Utc>) -> bool {
         self.start_time <= dt && self.end_time > dt
     }
@@ -94,7 +98,7 @@ impl Plan {
         Some(total)
     }
 
-    fn get_duration(&self) -> TimeDelta {
+    pub fn get_duration(&self) -> TimeDelta {
         self.end_time - self.start_time
     }
 }
