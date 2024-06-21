@@ -2,7 +2,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use robotica_backend::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
-        persistent_state::PersistentStateRow,
+        persistent_state::{self, PersistentStateRow},
         tesla::api::{CommandSequence, SequenceError, Token, VehicleId},
     },
     spawn,
@@ -19,7 +19,16 @@ use tracing::{error, info};
 
 use crate::InitState;
 
-use super::{new_message, Config, MonitorChargingError, TeslamateAuth};
+use super::private::new_message;
+use super::{Config, TeslamateAuth};
+
+/// Errors that can occur when monitoring charging.
+#[derive(Debug, Error)]
+pub enum MonitorChargingError {
+    /// An error occurred when loading the persistent state.
+    #[error("failed to load persistent state: {0}")]
+    LoadPersistentState(#[from] persistent_state::Error),
+}
 
 #[derive(Debug, Clone)]
 pub struct Command {
@@ -112,7 +121,7 @@ impl Errors {
     }
 }
 
-pub fn run_command_processor(
+pub fn run(
     state: &InitState,
     tesla: &Config,
     rx: stateless::Receiver<Command>,

@@ -48,7 +48,6 @@ use tracing::{debug, error, info};
 
 use crate::amber::hot_water;
 
-use self::tesla::monitor_charging;
 use robotica_backend::services::http;
 use robotica_backend::services::mqtt::{mqtt_channel, run_client, Subscriptions};
 use robotica_backend::services::mqtt::{MqttRx, MqttTx};
@@ -349,7 +348,7 @@ fn monitor_teslas(
     for tesla in teslas {
         let receivers = tesla::Receivers::new(tesla, state);
 
-        let locations = tesla::monitor_teslamate_location(
+        let locations = tesla::monitor_teslamate_location::monitor(
             state,
             receivers.location.clone(),
             postgres.clone(),
@@ -364,31 +363,31 @@ fn monitor_teslas(
             receivers.min_charge_tomorrow.clone(),
             receivers.is_charging.clone(),
         );
-        let monitor_charging_receivers = tesla::MonitorChargingInputs::from_receivers(
+        let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
             &receivers,
             charge_request,
             locations.is_home,
         );
         let outputs =
-            monitor_charging(&*state, tesla, monitor_charging_receivers).unwrap_or_else(|e| {
-                panic!("Error running tesla charging monitor: {e}");
-            });
-        let should_plugin_stream = tesla::monitor_tesla_location(
+            tesla::monitor_charging::monitor_charging(&*state, tesla, monitor_charging_receivers)
+                .unwrap_or_else(|e| {
+                    panic!("Error running tesla charging monitor: {e}");
+                });
+        let should_plugin_stream = tesla::monitor_location::monitor(
             tesla,
             &*state,
             locations.location,
             outputs.charging_information,
         );
 
-        tesla::commands::run_command_processor(state, tesla, outputs.commands).unwrap_or_else(
-            |e| {
-                panic!("Error running tesla command processor: {e}");
-            },
-        );
+        tesla::command_processor::run(state, tesla, outputs.commands).unwrap_or_else(|e| {
+            panic!("Error running tesla command processor: {e}");
+        });
 
-        let monitor_doors_receivers = tesla::MonitorDoorsReceivers::from_receivers(&receivers);
-        tesla::monitor_doors(&*state, tesla, monitor_doors_receivers);
-        tesla::plug_in_reminder(&*state, tesla, should_plugin_stream);
+        let monitor_doors_receivers =
+            tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
+        tesla::monitor_doors::monitor(&*state, tesla, monitor_doors_receivers);
+        tesla::plug_in_reminder::plug_in_reminder(&*state, tesla, should_plugin_stream);
     }
 }
 
