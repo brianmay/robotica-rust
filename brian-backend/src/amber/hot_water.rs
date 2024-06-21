@@ -46,7 +46,6 @@ struct DayState {
 }
 
 const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
-const MIN_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
 
 impl DayState {
     fn new<T: TimeZone>(now: DateTime<Utc>, timezone: &T) -> Self {
@@ -174,9 +173,7 @@ fn update_plan(
             new_plan
         };
 
-        let force = threshold_reached
-            && plan.get_duration() >= MIN_TIME
-            && new_plan.get_duration() >= MIN_TIME;
+        let force = threshold_reached;
 
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");

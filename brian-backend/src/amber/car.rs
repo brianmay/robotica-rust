@@ -195,7 +195,6 @@ fn save_state(
 }
 
 const END_TIME: NaiveTime = unsafe_naive_time_hms!(6, 30, 0);
-const MIN_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
 
 fn prices_to_charge_request<T: TimeZone>(
     teslamate_id: TeslamateId,
@@ -398,9 +397,7 @@ fn update_charge_plan(
             new_plan
         };
 
-        let force = (threshold_reached || has_changed)
-            && plan.plan.get_duration() >= MIN_TIME
-            && new_plan.plan.get_duration() >= MIN_TIME;
+        let force = threshold_reached || has_changed;
 
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
