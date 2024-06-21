@@ -16,7 +16,7 @@ use robotica_backend::{
 use robotica_common::{
     datetime::time_delta,
     mqtt::{MqttMessage, Parsed, QoS, Retain},
-    unsafe_naive_time_hms, unsafe_time_delta,
+    unsafe_naive_time_hms,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
