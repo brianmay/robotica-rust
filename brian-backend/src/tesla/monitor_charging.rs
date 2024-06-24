@@ -327,7 +327,7 @@ fn check_charge(
         ChargingStateEnum::Complete => ChargingSummary::NotCharging,
         ChargingStateEnum::Stopped => ChargingSummary::NotCharging,
         ChargingStateEnum::Disconnected => ChargingSummary::Disconnected,
-        ChargingStateEnum::NoPower => ChargingSummary::Disconnected,
+        ChargingStateEnum::NoPower => ChargingSummary::NotCharging,
     };
 
     // Start/stop charging as required.
