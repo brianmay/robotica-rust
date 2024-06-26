@@ -16,6 +16,7 @@ mod ha;
 mod hdmi;
 mod influxdb;
 mod lights;
+mod logging;
 mod robotica;
 mod rooms;
 mod tesla;
@@ -41,8 +42,8 @@ use robotica_common::robotica::lights::LightCommand;
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
+use robotica_common::shelly;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
-use robotica_common::{shelly, version};
 use tap::Pipe;
 use tracing::{debug, error, info};
 
@@ -55,14 +56,7 @@ use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 #[allow(unreachable_code)]
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
     color_backtrace::install();
-
-    info!(
-        "Starting brian-backend, version = {:?}, build time = {:?}",
-        version::VCS_REF,
-        version::BUILD_DATE
-    );
 
     let env = config::Environment::load().unwrap_or_else(|e| {
         panic!("Error loading environment: {e}");
@@ -71,6 +65,12 @@ async fn main() -> Result<()> {
     let config = env.config().unwrap_or_else(|e| {
         panic!("Error loading config: {e}");
     });
+
+    let _guard = logging::init_tracing_subscriber(&config.logging).unwrap_or_else(|e| {
+        panic!("Error initializing tracing subscriber: {e}");
+    });
+
+    info!("Starting brian-backend",);
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();

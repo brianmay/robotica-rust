@@ -76,6 +76,7 @@ pub struct Config {
     pub persistent_state: persistent_state::Config,
     pub teslas: Vec<tesla::Config>,
     pub database_url: String,
+    pub logging: crate::logging::Config,
 }
 
 /// An error loading the Config
