@@ -20,6 +20,7 @@ use robotica_common::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::{
     select,
     time::{sleep_until, Instant},
@@ -73,10 +74,12 @@ impl Default for PersistentState {
 }
 
 async fn sleep_until_plan_start(plan: &Option<ChargePlanState>) -> Option<()> {
-    let start_time = plan.as_ref().and_then(|plan| {
-        // If plan start time is in the past this will return None.
-        (plan.plan.get_start_time() - Utc::now()).to_std().ok()
-    });
+    // If duration is negative, we can't sleep because this happened in the past.
+    // This will always happen while plan is active.
+    // In this case we return None.
+    let start_time = plan
+        .as_ref()
+        .and_then(|plan| (plan.plan.get_start_time() - Utc::now()).to_std().ok());
 
     if let Some(start_time) = start_time {
         sleep_until(Instant::now() + start_time).await;
@@ -87,9 +90,14 @@ async fn sleep_until_plan_start(plan: &Option<ChargePlanState>) -> Option<()> {
 }
 
 async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
-    let end_time = plan.as_ref().and_then(|plan| {
-        // If plan end time is in the past this will return None.
-        (plan.plan.get_end_time() - Utc::now()).to_std().ok()
+    // If duration is negative, we can't sleep because this happened in the past.
+    // In this case we return Some(()).
+    // It is assumed the expired plan will be dropped.
+    let end_time = plan.as_ref().map(|plan| {
+        // If plan end time is in the past this will return immediately.
+        (plan.plan.get_end_time() - Utc::now())
+            .to_std()
+            .unwrap_or_else(|_| Duration::from_secs(0))
     });
 
     if let Some(end_time) = end_time {
@@ -170,10 +178,14 @@ pub fn run(
                     save_state(teslamate_id, &psr, &ps);
                 },
                 Some(()) = sleep_until_plan_start(&ps.charge_plan) => {
-                    info!("{id}: Plan started");
+                    info!("{id}: Plan start time elapsed");
                 },
                 Some(()) = sleep_until_plan_end(&ps.charge_plan) => {
-                    info!("{id}: Plan ended");
+                    info!("{id}: Plan end time elapsed");
+                    if v_is_charging {
+                        info!("{id}: Plan ended, but was still charging, estimated time was too short");
+                    }
+                    ps.charge_plan = None;
                 },
                 else => break,
             }
@@ -344,16 +356,6 @@ fn update_charge_plan(
         info!("Required time left is negative or zero");
         return None;
     }
-
-    // Expire old plan
-    let plan = plan.and_then(|plan| {
-        if plan.plan.is_expired(now) {
-            info!("Old plan expired");
-            None
-        } else {
-            Some(plan)
-        }
-    });
 
     let Some((new_plan, new_cost)) = get_cheapest(7.68, now, end_time, required_time_left, prices)
     else {

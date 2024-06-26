@@ -127,16 +127,6 @@ fn update_plan(
         return None;
     }
 
-    // Expire old plan
-    let plan = plan.and_then(|plan| {
-        if plan.is_expired(now) {
-            info!("Old plan expired");
-            None
-        } else {
-            Some(plan)
-        }
-    });
-
     let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
     else {
         error!("Can't get new plan");
@@ -160,11 +150,12 @@ fn update_plan(
         },
     );
 
+    let new_plan_is_on = new_plan.is_current(now);
+
     if let Some((plan, cost)) = plan_cost {
         let threshold_reached = new_cost < cost * 0.8;
 
         let plan_is_on = plan.is_current(now);
-        let new_plan_is_on = new_plan.is_current(now);
 
         // If new plan continues old plan, use the old start time.
         let new_plan = if plan_is_on && new_plan_is_on {
@@ -238,6 +229,9 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
 }
 
 async fn sleep_until_plan_start(plan: &Option<Plan>) -> Option<()> {
+    // If duration is negative, we can't sleep because this happened in the past.
+    // This will always happen while plan is active.
+    // In this case we return None.
     let start_time = plan.as_ref().and_then(|plan| {
         // If plan start time is in the past this will return None.
         (plan.get_start_time() - Utc::now()).to_std().ok()
@@ -252,9 +246,14 @@ async fn sleep_until_plan_start(plan: &Option<Plan>) -> Option<()> {
 }
 
 async fn sleep_until_plan_end(plan: &Option<Plan>) -> Option<()> {
-    let end_time = plan.as_ref().and_then(|plan| {
-        // If plan end time is in the past this will return None.
-        (plan.get_end_time() - Utc::now()).to_std().ok()
+    // If duration is negative, we can't sleep because this happened in the past.
+    // In this case we return Some(()).
+    // It is assumed the expired plan will be dropped.
+    let end_time = plan.as_ref().map(|plan| {
+        // If plan end time is in the past this will return immediately.
+        (plan.get_end_time() - Utc::now())
+            .to_std()
+            .unwrap_or_else(|_| Duration::from_secs(0))
     });
 
     if let Some(end_time) = end_time {
@@ -341,6 +340,7 @@ pub fn run(
                 }
                 Some(()) = sleep_until_plan_end(&day.plan) => {
                     info!("Plan end time elapsed");
+                    day.plan = None;
                     process(&mut day, &prices, &tx_out, &psr, timezone);
                 }
                 else => break,

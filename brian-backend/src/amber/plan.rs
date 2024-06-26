@@ -60,10 +60,6 @@ impl Plan {
         self.start_time <= dt && self.end_time > dt
     }
 
-    pub fn is_expired(&self, dt: chrono::DateTime<Utc>) -> bool {
-        self.end_time <= dt
-    }
-
     pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> Option<f32> {
         // We can't go back in time unfortunately.
         if self.end_time <= self.start_time {
