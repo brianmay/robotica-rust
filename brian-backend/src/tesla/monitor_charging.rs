@@ -98,24 +98,7 @@ pub fn monitor_charging(
     let ps = psr.load().unwrap_or_default();
 
     let mqtt = state.mqtt.clone();
-
-    let auto_charge_rx = {
-        let mqtt = mqtt.clone();
-        let teslamate_id = config.teslamate_id;
-
-        receivers.auto_charge.map(move |Json(cmd)| {
-            if let Command::Device(cmd) = &cmd {
-                let status = match cmd.action {
-                    DeviceAction::TurnOn => DevicePower::AutoOff,
-                    DeviceAction::TurnOff => DevicePower::Off,
-                };
-                publish_auto_charge(teslamate_id, status, &mqtt);
-            }
-            cmd
-        })
-    };
-
-    // let mut token = Token::get(&tesla_secret)?;
+    let auto_charge_rx = receivers.auto_charge;
 
     let config = config.clone();
     spawn(async move {
@@ -161,7 +144,7 @@ pub fn monitor_charging(
                     amber_charge_request = new_charge_request;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
-                    if let Command::Device(cmd) = cmd {
+                    if let Json(Command::Device(cmd)) = cmd {
                         ps.auto_charge = match cmd.action {
                             DeviceAction::TurnOn => true,
                             DeviceAction::TurnOff => false,
