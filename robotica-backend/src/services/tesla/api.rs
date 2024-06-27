@@ -180,6 +180,19 @@ pub struct Token {
     pub expires_at: DateTime<Utc>,
 }
 
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Token")
+            .field("access_token", &"[censored]")
+            .field("refresh_token", &"[censored]")
+            .field("id_token", &"[censored]")
+            .field("token_type", &self.token_type)
+            .field("renew_at", &self.renew_at)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
+}
+
 #[derive(Serialize)]
 struct SetChargeLimit {
     percent: u8,

@@ -15,7 +15,7 @@ use std::ops::Add;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::{select, time::Instant};
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 use crate::InitState;
 
@@ -62,6 +62,7 @@ impl Command {
     }
 }
 
+#[derive(Debug)]
 struct TryCommand {
     command: Command,
     next_try_instant: Instant,
@@ -272,6 +273,7 @@ async fn test_tesla_api(token: &Token, tesla_id: VehicleId) {
         .ok_or_else(|| anyhow::anyhow!("Tesla vehicle {id} not found", id = tesla_id.to_string()));
 }
 
+#[instrument]
 async fn try_send(
     try_command: &TryCommand,
     tesla: &Config,
