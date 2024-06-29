@@ -154,7 +154,7 @@ pub async fn get_prices(
         .send()
         .await?;
 
-    response.json().await
+    response.error_for_status()?.json().await
 }
 
 pub async fn get_usage(
@@ -177,7 +177,7 @@ pub async fn get_usage(
         .send()
         .await?;
 
-    response.json().await
+    response.error_for_status()?.json().await
 }
 
 #[cfg(test)]
