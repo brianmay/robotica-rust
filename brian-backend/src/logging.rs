@@ -137,8 +137,6 @@ fn init_logs(
 
 // Initialize tracing-subscriber and return OtelGuard for opentelemetry-related termination processing
 pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
-    let resource = resource(config);
-
     // Add a tracing filter to filter events from crates used by opentelemetry-otlp.
     // The filter levels are set as follows:
     // - Allow `info` level and above by default.
@@ -160,6 +158,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         .with(tracing_subscriber::fmt::layer());
 
     if let Some(remote) = &config.remote {
+        let resource = resource(config);
         let meter_provider = init_metrics(&resource, remote)?;
         let logger_provider = init_logs(&resource, remote)?;
 
