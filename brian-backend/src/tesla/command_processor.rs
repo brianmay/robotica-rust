@@ -210,14 +210,12 @@ fn increment_incoming(meters: &Meters, command: &Command, status: IncomingStatus
         IncomingStatus::None => "none",
     };
 
-    if !command.is_nil() {
-        let attributes = [
-            KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
-            KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
-            KeyValue::new("status", status),
-        ];
-        meters.incoming_requests.add(1, &attributes);
-    }
+    let attributes = [
+        KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
+        KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
+        KeyValue::new("status", status),
+    ];
+    meters.incoming_requests.add(1, &attributes);
 }
 
 pub fn run(
