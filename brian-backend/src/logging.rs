@@ -167,6 +167,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
             .with(OpenTelemetryLayer::new(init_tracer(&resource, remote)?))
             .with(OpenTelemetryTracingBridge::new(&logger_provider))
             .init();
+
         Ok(OtelGuard {
             meter_provider: Some(meter_provider),
             logger_provider: Some(logger_provider),

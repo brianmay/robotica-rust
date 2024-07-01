@@ -5609,6 +5609,7 @@ dependencies = [
  "lifx-core",
  "maud",
  "openid",
+ "opentelemetry",
  "pyo3",
  "regex",
  "reqwest 0.12.5",

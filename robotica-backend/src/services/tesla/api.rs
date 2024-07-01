@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use opentelemetry::{global, metrics::Counter, KeyValue};
 use robotica_common::{datetime::duration, mqtt::MqttMessage, unsafe_time_delta};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tap::Pipe;
@@ -13,6 +14,29 @@ use crate::{
     is_debug_mode,
     services::persistent_state::{self, PersistentStateRow},
 };
+
+/// A set of meter counters for the Tesla API
+#[derive(Debug)]
+pub struct Meters {
+    token_requests: Counter<u64>,
+    wake_up_requests: Counter<u64>,
+    requests: Counter<u64>,
+}
+
+impl Meters {
+    /// Create a new set of meter counters
+    #[must_use]
+    pub fn new(id: VehicleId) -> Self {
+        let id = id.to_string();
+        let meter = global::meter(format!("tesla::api::{id}"));
+
+        Meters {
+            token_requests: meter.u64_counter("token_requests").init(),
+            wake_up_requests: meter.u64_counter("wake_up_requests").init(),
+            requests: meter.u64_counter("requests").init(),
+        }
+    }
+}
 
 /// A vehicle ID for the owner-api endpoint.
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
@@ -41,31 +65,66 @@ pub enum Error {
     RateLimit(Duration),
 }
 
-fn handle_error(response: reqwest::Response) -> Result<reqwest::Response, Error> {
-    if response.status() == 429 {
-        let headers = response.headers();
-        let retry_time = headers
-            .get("Retry-After")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-            .unwrap_or(60)
-            .pipe(Duration::from_secs);
+#[tracing::instrument]
+fn handle_error(
+    response: Result<reqwest::Response, reqwest::Error>,
+) -> Result<reqwest::Response, Error> {
+    match response {
+        Ok(response) => {
+            if response.status() == 429 {
+                let headers = response.headers();
+                let retry_time = headers
+                    .get("Retry-After")
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(60)
+                    .pipe(Duration::from_secs);
 
-        info!(
-            "Got 429 rate limited, retry in: {}",
-            duration::to_string(&retry_time)
-        );
+                info!(
+                    "Got 429 rate limited, retry in: {}",
+                    duration::to_string(&retry_time)
+                );
 
-        for (name, value) in headers {
-            info!("rate limit header header {}: {:?}", name, value);
+                for (name, value) in headers {
+                    info!("rate limit header header {}: {:?}", name, value);
+                }
+
+                return Err(Error::RateLimit(retry_time));
+            }
+            response.error_for_status()?.pipe(Ok)
         }
-
-        return Err(Error::RateLimit(retry_time));
+        Err(e) => {
+            error!("Reqwest error: {}", e);
+            Err(Error::Reqwest(e))
+        }
     }
-    response.error_for_status()?.pipe(Ok)
 }
 
-async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> Result<U, Error> {
+#[tracing::instrument]
+fn increment_count(
+    url: &str,
+    result: Result<reqwest::Response, Error>,
+    counter: &Counter<u64>,
+) -> Result<reqwest::Response, Error> {
+    let status = match &result {
+        Ok(_response) => "successful",
+        Err(Error::RateLimit(_duration)) => "rate_limited",
+        Err(_e) => "error",
+    };
+
+    let url = url.to_string();
+    let attributes = [KeyValue::new("url", url), KeyValue::new("status", status)];
+    counter.add(1, &attributes);
+
+    result
+}
+
+#[tracing::instrument]
+async fn post<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOwned>(
+    url: &str,
+    body: &T,
+    counter: &Counter<u64>,
+) -> Result<U, Error> {
     debug!("post {}", url);
 
     let client = reqwest::Client::new();
@@ -75,30 +134,38 @@ async fn post<T: Serialize + Sync, U: DeserializeOwned>(url: &str, body: &T) -> 
         .json(body)
         .timeout(Duration::from_secs(30))
         .send()
-        .await?
-        .pipe(handle_error)?;
+        .await
+        .pipe(handle_error)
+        .pipe(|result| increment_count(url, result, counter))?;
 
     let text = response.json().await?;
     debug!("post done {}", url);
     Ok(text)
 }
 
+#[tracing::instrument]
 #[allow(dead_code)]
-async fn get<U: DeserializeOwned>(url: &str) -> Result<U, Error> {
+async fn get<U: DeserializeOwned>(url: &str, counter: &Counter<u64>) -> Result<U, Error> {
     let client = reqwest::Client::new();
     let response = client
         .get(url)
         .header("Content-Type", "application/json")
         .timeout(Duration::from_secs(30))
         .send()
-        .await?
-        .pipe(handle_error)?;
+        .await
+        .pipe(handle_error)
+        .pipe(|result| increment_count(url, result, counter))?;
 
     let text = response.json().await?;
     Ok(text)
 }
 
-async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U, Error> {
+#[tracing::instrument(skip(token))]
+async fn get_with_token<U: DeserializeOwned>(
+    url: &str,
+    token: &str,
+    counter: &Counter<u64>,
+) -> Result<U, Error> {
     debug!("get_with_token: {}", url);
 
     let client = reqwest::Client::new();
@@ -108,8 +175,9 @@ async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U
         .header("Authorization", format!("Bearer {token}"))
         .timeout(Duration::from_secs(30))
         .send()
-        .await?
-        .pipe(handle_error)?;
+        .await
+        .pipe(handle_error)
+        .pipe(|result| increment_count(url, result, counter))?;
 
     // let text = response.text().await?;
     // println!("{}", text);
@@ -120,10 +188,12 @@ async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U
     Ok(text)
 }
 
-async fn post_with_token<T: Serialize + Sync, U: DeserializeOwned>(
+#[tracing::instrument(skip(token))]
+async fn post_with_token<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOwned>(
     url: &str,
     token: &str,
     body: &T,
+    counter: &Counter<u64>,
 ) -> Result<U, Error> {
     debug!("post_with_token: {}", url);
 
@@ -135,8 +205,9 @@ async fn post_with_token<T: Serialize + Sync, U: DeserializeOwned>(
         .json(body)
         .timeout(Duration::from_secs(30))
         .send()
-        .await?
-        .error_for_status()?;
+        .await
+        .pipe(handle_error)
+        .pipe(|result| increment_count(url, result, counter))?;
 
     // let text = response.text().await?;
     // println!("{}", text);
@@ -153,6 +224,17 @@ struct TokenRenew {
     client_id: String,
     refresh_token: String,
     scope: String,
+}
+
+impl std::fmt::Debug for TokenRenew {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenRenew")
+            .field("grant_type", &self.grant_type)
+            .field("client_id", &self.client_id)
+            .field("refresh_token", &"[censored]")
+            .field("scope", &self.scope)
+            .finish()
+    }
 }
 
 /// Raw Tesla token from API
@@ -193,7 +275,7 @@ impl std::fmt::Debug for Token {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct SetChargeLimit {
     percent: u8,
 }
@@ -461,7 +543,6 @@ impl From<ApiError> for SequenceError {
         }
     }
 }
-
 impl Token {
     /// Load token from file
     ///
@@ -484,7 +565,8 @@ impl Token {
     const DEFAULT_EXPIRES_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
     const DEFAULT_RENEW_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
 
-    async fn renew(&self) -> Result<Self, Error> {
+    #[tracing::instrument]
+    async fn renew(&self, meters: &Meters) -> Result<Self, Error> {
         let url = "https://auth.tesla.com/oauth2/v3/token";
         let body = TokenRenew {
             grant_type: "refresh_token".into(),
@@ -493,7 +575,7 @@ impl Token {
             scope: "openid email offline_access".into(),
         };
 
-        let token: RawToken = post(url, &body).await?;
+        let token: RawToken = post(url, &body, &meters.token_requests).await?;
 
         let token = {
             let expires_in = Duration::from_secs(token.expires_in);
@@ -530,12 +612,17 @@ impl Token {
     /// Returns `TokenError::Json` if the response could not be deserialized.
     /// Returns `TokenError::Io` if the token could not be written to disk.
     /// Returns `TokenError::Environment` if the environment variable `TESLA_SECRET_FILE` is not set.
-    pub async fn check(&mut self, ps: &PersistentStateRow<Token>) -> Result<(), TokenError> {
+    #[tracing::instrument(skip(ps))]
+    pub async fn check(
+        &mut self,
+        ps: &PersistentStateRow<Token>,
+        meters: &Meters,
+    ) -> Result<(), TokenError> {
         if self.renew_at > chrono::Utc::now() {
             return Ok(());
         }
 
-        let token = self.renew().await?;
+        let token = self.renew(meters).await?;
         token.put(ps)?;
         *self = token;
         Ok(())
@@ -546,12 +633,14 @@ impl Token {
     /// # Errors
     ///
     /// Returns `WakeupError::Reqwest` if the HTTP request failed.
-    pub async fn wake_up(&self, id: VehicleId) -> Result<WakeUpResponse, Error> {
+    #[tracing::instrument]
+    pub async fn wake_up(&self, id: VehicleId, meters: &Meters) -> Result<WakeUpResponse, Error> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/wake_up",
             id = id.to_string()
         );
-        let response: OuterWakeUpResponse = post_with_token(&url, &self.access_token, &()).await?;
+        let response: OuterWakeUpResponse =
+            post_with_token(&url, &self.access_token, &(), &meters.wake_up_requests).await?;
         Ok(response.response)
     }
 
@@ -560,9 +649,11 @@ impl Token {
     /// # Errors
     ///
     /// Returns error if the HTTP request failed.
-    pub async fn get_vehicles(&self) -> Result<Vec<Vehicle>, Error> {
+    #[tracing::instrument]
+    pub async fn get_vehicles(&self, meters: &Meters) -> Result<Vec<Vehicle>, Error> {
         let url = "https://owner-api.teslamotors.com/api/1/products";
-        let response: OuterVehiclesResponse = get_with_token(url, &self.access_token).await?;
+        let response: OuterVehiclesResponse =
+            get_with_token(url, &self.access_token, &meters.requests).await?;
         Ok(response.response)
     }
 
@@ -572,9 +663,14 @@ impl Token {
     ///
     /// Returns `WakeupError::Reqwest` if the HTTP request failed.
     /// Returns `WakeupError::Timeout` if the car didn't wake up before the timeout elapsed.
-    pub async fn wake_up_and_process_response(&self, id: VehicleId) -> Result<(), WakeupError> {
+    #[tracing::instrument]
+    pub async fn wake_up_and_process_response(
+        &self,
+        id: VehicleId,
+        meters: &Meters,
+    ) -> Result<(), WakeupError> {
         info!("Trying to wake up");
-        let response = self.wake_up(id).await;
+        let response = self.wake_up(id, meters).await;
 
         match response {
             // Car is awake
@@ -617,12 +713,14 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_start(&self, id: VehicleId) -> Result<(), ApiError> {
+    #[tracing::instrument]
+    pub async fn charge_start(&self, id: VehicleId, meters: &Meters) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_start",
             id = id.to_string()
         );
-        let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &()).await?;
+        let response: OuterGenericResponse =
+            post_with_token(&url, &self.access_token, &(), &meters.requests).await?;
         response.into()
     }
 
@@ -632,12 +730,14 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn charge_stop(&self, id: VehicleId) -> Result<(), ApiError> {
+    #[tracing::instrument]
+    pub async fn charge_stop(&self, id: VehicleId, meters: &Meters) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_stop",
             id = id.to_string()
         );
-        let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &()).await?;
+        let response: OuterGenericResponse =
+            post_with_token(&url, &self.access_token, &(), &meters.requests).await?;
         response.into()
     }
 
@@ -647,14 +747,20 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn set_charge_limit(&self, id: VehicleId, percent: u8) -> Result<(), ApiError> {
+    #[tracing::instrument]
+    pub async fn set_charge_limit(
+        &self,
+        id: VehicleId,
+        percent: u8,
+        meters: &Meters,
+    ) -> Result<(), ApiError> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/set_charge_limit",
             id = id.to_string()
         );
         let body = SetChargeLimit { percent };
         let response: OuterGenericResponse =
-            post_with_token(&url, &self.access_token, &body).await?;
+            post_with_token(&url, &self.access_token, &body, &meters.requests).await?;
 
         if !response.response.result && response.response.reason == "already_set" {
             return Ok(());
@@ -669,12 +775,18 @@ impl Token {
     ///
     /// Returns `GenericError::Reqwest` if the HTTP request failed.
     /// Returns `GenericError::Failed` if the request was not successful.
-    pub async fn get_charge_state(&self, id: VehicleId) -> Result<ChargeState, Error> {
+    #[tracing::instrument]
+    pub async fn get_charge_state(
+        &self,
+        id: VehicleId,
+        meters: &Meters,
+    ) -> Result<ChargeState, Error> {
         let url = format!(
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/data_request/charge_state",
             id = id.to_string()
         );
-        let response: OuterChargeState = get_with_token(&url, &self.access_token).await?;
+        let response: OuterChargeState =
+            get_with_token(&url, &self.access_token, &meters.requests).await?;
         Ok(response.response)
     }
 }
@@ -688,12 +800,19 @@ enum Command {
 }
 
 impl Command {
-    async fn execute(&self, token: &Token, id: VehicleId) -> Result<(), SequenceError> {
+    async fn execute(
+        &self,
+        token: &Token,
+        id: VehicleId,
+        meters: &Meters,
+    ) -> Result<(), SequenceError> {
         match self {
-            Command::WakeUp => token.wake_up_and_process_response(id).await?,
-            Command::SetChargeLimit(percent) => token.set_charge_limit(id, *percent).await?,
-            Command::ChargeStart => token.charge_start(id).await?,
-            Command::ChargeStop => token.charge_stop(id).await?,
+            Command::WakeUp => token.wake_up_and_process_response(id, meters).await?,
+            Command::SetChargeLimit(percent) => {
+                token.set_charge_limit(id, *percent, meters).await?;
+            }
+            Command::ChargeStart => token.charge_start(id, meters).await?,
+            Command::ChargeStop => token.charge_stop(id, meters).await?,
         }
         Ok(())
     }
@@ -749,7 +868,13 @@ impl CommandSequence {
     ///
     /// Returns error if the wake up request failed.
     /// Returns error if any of the commands failed.
-    pub async fn execute(&self, token: &Token, car_id: VehicleId) -> Result<(), SequenceError> {
+    #[tracing::instrument]
+    pub async fn execute(
+        &self,
+        token: &Token,
+        car_id: VehicleId,
+        meters: &Meters,
+    ) -> Result<(), SequenceError> {
         if self.commands.is_empty() {
             return Ok(());
         }
@@ -760,11 +885,11 @@ impl CommandSequence {
         }
 
         for command in &self.prefix_commands {
-            command.execute(token, car_id).await?;
+            command.execute(token, car_id, meters).await?;
         }
 
         for command in &self.commands {
-            command.execute(token, car_id).await?;
+            command.execute(token, car_id, meters).await?;
         }
 
         Ok(())
@@ -796,6 +921,8 @@ mod tests {
     #[ignore = "requires secrets"]
     #[tokio::test]
     async fn test_get_token() {
+        let meters = Meters::new(VehicleId(0));
+
         let state_path = PathBuf::from("state");
         let config = persistent_state::Config { state_path };
         let psd = PersistentStateDatabase::new(&config).unwrap();
@@ -803,12 +930,12 @@ mod tests {
 
         let token = Token::get(&psr).unwrap();
 
-        let token = token.renew().await.unwrap();
+        let token = token.renew(&meters).await.unwrap();
         // token.wait_for_wake_up(&id.to_string()).await.unwrap();
         // token.charge_start(id).await.unwrap();
         // token.charge_stop(id).await.unwrap();
         // token.set_charge_limit(id, 88).await.unwrap();
-        let vehicles = token.get_vehicles().await.unwrap();
+        let vehicles = token.get_vehicles(&meters).await.unwrap();
         println!("{vehicles:#?}");
 
         // let charge_state = token.get_charge_state(id).await.unwrap();
