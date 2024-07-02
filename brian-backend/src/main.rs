@@ -362,6 +362,7 @@ fn monitor_teslas(
         let charge_request = amber::car::run(
             state,
             tesla.teslamate_id,
+            tesla.tesla_id,
             prices.clone(),
             receivers.battery_level.clone(),
             receivers.min_charge_tomorrow.clone(),

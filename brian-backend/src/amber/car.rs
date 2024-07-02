@@ -12,6 +12,7 @@ use robotica_backend::{
         stateful::{self, create_pipe, Receiver},
         stateless, Subscriber, Subscription,
     },
+    services::tesla::api::VehicleId,
     spawn,
 };
 use robotica_common::{
@@ -41,8 +42,15 @@ enum ChargingReason {
 }
 
 impl Meters {
-    fn new() -> Self {
-        let meter = global::meter("amber::car");
+    fn new(vehicle_id: VehicleId) -> Self {
+        let id = vehicle_id.to_string();
+        let attributes = vec![KeyValue::new("vehicle_id", id)];
+        let meter = global::meter_with_version(
+            "amber::car",
+            None::<String>,
+            None::<String>,
+            Some(attributes),
+        );
 
         Self {
             charging_requested: meter.u64_gauge("charging_requested").init(),
@@ -148,6 +156,7 @@ async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
 pub fn run(
     state: &InitState,
     teslamate_id: TeslamateId,
+    tesla_id: VehicleId,
     rx: Receiver<Arc<Prices>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
@@ -161,7 +170,7 @@ pub fn run(
         .persistent_state_database
         .for_name::<PersistentState>(&format!("tesla_amber_{id}"));
     let mut ps = psr.load().unwrap_or_default();
-    let meters = Meters::new();
+    let meters = Meters::new(tesla_id);
 
     spawn(async move {
         let mut s = rx.subscribe().await;

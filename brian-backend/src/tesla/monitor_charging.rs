@@ -1,4 +1,4 @@
-use opentelemetry::global;
+use opentelemetry::{global, KeyValue};
 use robotica_backend::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{persistent_state, tesla::api::ChargingStateEnum},
@@ -24,20 +24,35 @@ use super::{command_processor, ChargingInformation, Config, Receivers, Teslamate
 #[derive(Debug)]
 struct Meters {
     charging: opentelemetry::metrics::Gauge<u64>,
+    battery: opentelemetry::metrics::Gauge<u64>,
 }
 
 impl Meters {
-    fn new() -> Self {
-        let meter = global::meter("tesla::monitor_charging");
+    fn new(config: &Config) -> Self {
+        let id = config.tesla_id.to_string();
+        let attributes = vec![KeyValue::new("vehicle_id", id)];
+        let meter = global::meter_with_version(
+            "tesla::monitor_charging",
+            None::<String>,
+            None::<String>,
+            Some(attributes),
+        );
 
         Self {
             charging: meter.u64_gauge("charging").init(),
+            battery: meter.u64_gauge("battery").init(),
         }
     }
 
-    fn set_charging(&self, value: ChargingStateEnum) {
-        let value = u64::from(value.is_charging());
-        self.charging.record(value, &[]);
+    fn set_charging(&self, value: ChargingStateEnum, limit: u8) {
+        let attributes = vec![];
+        let value = if value.is_charging() { limit } else { 0 };
+        self.charging.record(u64::from(value), &attributes);
+    }
+
+    fn set_battery(&self, value: u8) {
+        let attributes = vec![];
+        self.battery.record(u64::from(value), &attributes);
     }
 }
 
@@ -121,7 +136,7 @@ pub fn monitor_charging(
     let mqtt = state.mqtt.clone();
     let auto_charge_rx = receivers.auto_charge;
 
-    let meters = Meters::new();
+    let meters = Meters::new(config);
 
     let config = config.clone();
     spawn(async move {
@@ -158,7 +173,8 @@ pub fn monitor_charging(
             charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
         });
 
-        meters.set_charging(tesla_state.charging_state);
+        meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
+        meters.set_battery(tesla_state.battery_level);
 
         loop {
             let was_at_home = tesla_state.is_at_home;
@@ -190,6 +206,7 @@ pub fn monitor_charging(
                 Ok(Parsed(new_charge_level)) = battery_level_s.recv() => {
                     info!("{name}: Charge level: {new_charge_level}");
                     tesla_state.battery_level = new_charge_level;
+                    meters.set_battery(tesla_state.battery_level);
                 }
                 Ok(new_is_at_home) = is_home_s.recv() => {
                     info!("{name}: Location is at home: {new_is_at_home}");
@@ -199,7 +216,7 @@ pub fn monitor_charging(
                 Ok(charging_state) = charging_state_s.recv() => {
                     info!("{name}: Charging state: {charging_state:?}");
                     tesla_state.charging_state = charging_state;
-                    meters.set_charging(tesla_state.charging_state);
+                    meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
                 }
             }
 

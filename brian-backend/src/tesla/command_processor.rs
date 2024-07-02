@@ -4,7 +4,7 @@ use robotica_backend::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
         persistent_state::{self},
-        tesla::api::{self, CommandSequence, SequenceError, Token, VehicleId},
+        tesla::api::{self, CommandSequence, SequenceError, Token},
     },
     spawn,
 };
@@ -43,8 +43,8 @@ struct Meters {
 }
 
 impl Meters {
-    fn new(vehicle_id: VehicleId) -> Self {
-        let id = vehicle_id.to_string();
+    fn new(config: &Config) -> Self {
+        let id = config.tesla_id.to_string();
         let attributes = vec![KeyValue::new("vehicle_id", id)];
         let meter = global::meter_with_version(
             "tesla::command_processor",
@@ -240,7 +240,7 @@ pub fn run(
         let mut errors = Errors::new();
 
         let tesla = tesla;
-        let meters = Meters::new(tesla.tesla_id);
+        let meters = Meters::new(&tesla);
         let Ok(mut token) = s_token.recv().await else {
             error!("Failed to get token.");
             return;
