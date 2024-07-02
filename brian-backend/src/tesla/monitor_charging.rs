@@ -1,3 +1,4 @@
+use opentelemetry::global;
 use robotica_backend::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{persistent_state, tesla::api::ChargingStateEnum},
@@ -19,6 +20,26 @@ use tracing::{error, info};
 use crate::{amber::car::ChargeRequest, InitState};
 
 use super::{command_processor, ChargingInformation, Config, Receivers, TeslamateId};
+
+#[derive(Debug)]
+struct Meters {
+    charging: opentelemetry::metrics::Gauge<u64>,
+}
+
+impl Meters {
+    fn new() -> Self {
+        let meter = global::meter("tesla::monitor_charging");
+
+        Self {
+            charging: meter.u64_gauge("charging").init(),
+        }
+    }
+
+    fn set_charging(&self, value: ChargingStateEnum) {
+        let value = u64::from(value.is_charging());
+        self.charging.record(value, &[]);
+    }
+}
 
 /// Errors that can occur when monitoring charging.
 #[derive(Debug, Error)]
@@ -100,6 +121,8 @@ pub fn monitor_charging(
     let mqtt = state.mqtt.clone();
     let auto_charge_rx = receivers.auto_charge;
 
+    let meters = Meters::new();
+
     let config = config.clone();
     spawn(async move {
         let name = &config.name;
@@ -134,6 +157,8 @@ pub fn monitor_charging(
             charge_limit: tesla_state.charge_limit,
             charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
         });
+
+        meters.set_charging(tesla_state.charging_state);
 
         loop {
             let was_at_home = tesla_state.is_at_home;
@@ -174,6 +199,7 @@ pub fn monitor_charging(
                 Ok(charging_state) = charging_state_s.recv() => {
                     info!("{name}: Charging state: {charging_state:?}");
                     tesla_state.charging_state = charging_state;
+                    meters.set_charging(tesla_state.charging_state);
                 }
             }
 

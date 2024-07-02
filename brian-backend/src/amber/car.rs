@@ -6,6 +6,7 @@ use super::{
     Prices,
 };
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
+use opentelemetry::{global, KeyValue};
 use robotica_backend::{
     pipes::{
         stateful::{self, create_pipe, Receiver},
@@ -26,6 +27,42 @@ use tokio::{
     time::{sleep_until, Instant},
 };
 use tracing::{debug, error, info};
+
+#[derive(Debug)]
+struct Meters {
+    charging_requested: opentelemetry::metrics::Gauge<u64>,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum ChargingReason {
+    Plan,
+    Cheap,
+    Combined,
+}
+
+impl Meters {
+    fn new() -> Self {
+        let meter = global::meter("amber::car");
+
+        Self {
+            charging_requested: meter.u64_gauge("charging_requested").init(),
+        }
+    }
+
+    fn set_charging_requested(&self, request: ChargeRequest, reason: ChargingReason) {
+        let reason = match reason {
+            ChargingReason::Plan => "plan",
+            ChargingReason::Cheap => "cheap",
+            ChargingReason::Combined => "combined",
+        };
+        let value = match request {
+            ChargeRequest::ChargeTo(limit) => u64::from(limit),
+            ChargeRequest::Manual => 0,
+        };
+        self.charging_requested
+            .record(value, &[KeyValue::new("reason", reason)]);
+    }
+}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
 pub enum ChargeRequest {
@@ -124,6 +161,7 @@ pub fn run(
         .persistent_state_database
         .for_name::<PersistentState>(&format!("tesla_amber_{id}"));
     let mut ps = psr.load().unwrap_or_default();
+    let meters = Meters::new();
 
     spawn(async move {
         let mut s = rx.subscribe().await;
@@ -156,6 +194,12 @@ pub fn run(
                 &Local,
             );
             ps = new_ps;
+            if let Some(plan_request) = cr.plan_request {
+                meters.set_charging_requested(plan_request, ChargingReason::Plan);
+            }
+            meters.set_charging_requested(cr.cheap_request, ChargingReason::Cheap);
+            meters.set_charging_requested(cr.result, ChargingReason::Combined);
+
             save_state(teslamate_id, &psr, &ps);
 
             info!("{id}: Charging request: {:#?}", cr);
@@ -223,7 +267,7 @@ fn prices_to_charge_request<T: TimeZone>(
     let estimated_charge_time_to_min =
         estimate_to_limit(teslamate_id, battery_level, now, ps.min_charge_tomorrow, tz);
 
-    let force = if let Some(estimated_charge_time_to_min) = estimated_charge_time_to_min {
+    let plan_request = if let Some(estimated_charge_time_to_min) = estimated_charge_time_to_min {
         let (_start_time, end_time) = super::private::get_day(now, END_TIME, tz);
         let charge_plan = update_charge_plan(
             ps.charge_plan,
@@ -251,28 +295,24 @@ fn prices_to_charge_request<T: TimeZone>(
     // Get the normal charge request based on category
     let category = get_weighted_price_category(is_charging, prices, now);
     #[allow(clippy::match_same_arms)]
-    let normal = match category {
+    let cheap_request = match category {
         Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
         Some(PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
         Some(PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
         Some(PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
         None => ChargeRequest::ChargeTo(50),
     };
-    info!(
-        "{id}: Price Category: {category:?}, Normal charge request: {normal:?}",
-        category = category,
-        normal = normal
-    );
+    info!("{id}: Price Category: {category:?}, Cheap request: {cheap_request:?}",);
 
     // get the largest value out of force and normal
-    let result = force.map_or(normal, |force| {
-        let result = normal.max(force);
-        info!("{id}: Forcing charge to {force:?}, now {result:?}");
+    let combined_request = plan_request.map_or(cheap_request, |force| {
+        let result = cheap_request.max(force);
+        info!("{id}: Plan charge to {force:?}, now {result:?}");
         result
     });
 
     // Get some more stats
-    let estimated_charge_time_to_limit = match result {
+    let estimated_charge_time_to_limit = match combined_request {
         ChargeRequest::ChargeTo(limit) => {
             estimate_to_limit(teslamate_id, battery_level, now, limit, tz)
         }
@@ -284,9 +324,9 @@ fn prices_to_charge_request<T: TimeZone>(
         time: now,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
-        force,
-        normal,
-        result,
+        plan_request,
+        cheap_request,
+        result: combined_request,
         charge_plan: ps.charge_plan.clone(),
         estimated_charge_time_to_min,
         estimated_charge_time_to_limit,
@@ -327,8 +367,8 @@ struct State {
     time: DateTime<Utc>,
     battery_level: u8,
     min_charge_tomorrow: u8,
-    force: Option<ChargeRequest>,
-    normal: ChargeRequest,
+    plan_request: Option<ChargeRequest>,
+    cheap_request: ChargeRequest,
     result: ChargeRequest,
     charge_plan: Option<ChargePlanState>,
 
@@ -685,12 +725,12 @@ mod tests {
         assert_eq!(state.battery_level, battery_level);
         assert_eq!(state.min_charge_tomorrow, 72);
         if forced {
-            assert_eq!(state.force, Some(ChargeRequest::ChargeTo(72)));
+            assert_eq!(state.plan_request, Some(ChargeRequest::ChargeTo(72)));
         } else {
-            assert_eq!(state.force, None);
+            assert_eq!(state.plan_request, None);
         }
         assert_eq!(state.result, ChargeRequest::ChargeTo(90));
-        assert_eq!(state.normal, ChargeRequest::ChargeTo(90));
+        assert_eq!(state.cheap_request, ChargeRequest::ChargeTo(90));
         assert_eq!(new_ps.min_charge_tomorrow, 72);
 
         let charge_plan = new_ps.charge_plan.unwrap();
