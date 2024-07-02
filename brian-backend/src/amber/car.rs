@@ -70,6 +70,22 @@ impl Meters {
             ],
         );
     }
+
+    fn set_nil_charging_requested(&self, reason: ChargingReason) {
+        let reason = match reason {
+            ChargingReason::Plan => "plan",
+            ChargingReason::Cheap => "cheap",
+            ChargingReason::Combined => "combined",
+        };
+        let value = 0;
+        self.charging_requested.record(
+            value,
+            &[
+                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("reason", reason),
+            ],
+        );
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
@@ -205,6 +221,8 @@ pub fn run(
             ps = new_ps;
             if let Some(plan_request) = cr.plan_request {
                 meters.set_charging_requested(plan_request, ChargingReason::Plan);
+            } else {
+                meters.set_nil_charging_requested(ChargingReason::Plan);
             }
             meters.set_charging_requested(cr.cheap_request, ChargingReason::Cheap);
             meters.set_charging_requested(cr.result, ChargingReason::Combined);
