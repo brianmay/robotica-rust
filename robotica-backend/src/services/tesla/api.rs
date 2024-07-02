@@ -18,23 +18,34 @@ use crate::{
 /// A set of meter counters for the Tesla API
 #[derive(Debug)]
 pub struct Meters {
-    token_requests: Counter<u64>,
-    wake_up_requests: Counter<u64>,
-    requests: Counter<u64>,
+    auth_requests: Counter<u64>,
+    vehicle_requests: Counter<u64>,
+    other_requests: Counter<u64>,
 }
 
 impl Meters {
     /// Create a new set of meter counters
     #[must_use]
-    pub fn new(id: VehicleId) -> Self {
-        let id = id.to_string();
-        let meter = global::meter(format!("tesla::api::{id}"));
+    pub fn new() -> Self {
+        let attributes = vec![];
+        let meter = global::meter_with_version(
+            "tesla::api",
+            None::<String>,
+            None::<String>,
+            Some(attributes),
+        );
 
         Meters {
-            token_requests: meter.u64_counter("token_requests").init(),
-            wake_up_requests: meter.u64_counter("wake_up_requests").init(),
-            requests: meter.u64_counter("requests").init(),
+            auth_requests: meter.u64_counter("auth_requests").init(),
+            vehicle_requests: meter.u64_counter("vehicle_requests").init(),
+            other_requests: meter.u64_counter("other_requests").init(),
         }
+    }
+}
+
+impl Default for Meters {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -100,12 +111,22 @@ fn handle_error(
     }
 }
 
+#[derive(Debug)]
+enum AuthOperation {
+    RenewToken,
+}
+
 #[tracing::instrument]
-fn increment_count(
+fn increment_auth_count(
     url: &str,
-    result: Result<reqwest::Response, Error>,
-    counter: &Counter<u64>,
-) -> Result<reqwest::Response, Error> {
+    operation: AuthOperation,
+    result: Result<RawToken, Error>,
+    meters: &Meters,
+) -> Result<RawToken, Error> {
+    let operation = match operation {
+        AuthOperation::RenewToken => "renew_token",
+    };
+
     let status = match &result {
         Ok(_response) => "successful",
         Err(Error::RateLimit(_duration)) => "rate_limited",
@@ -113,9 +134,86 @@ fn increment_count(
     };
 
     let url = url.to_string();
-    let attributes = [KeyValue::new("url", url), KeyValue::new("status", status)];
-    counter.add(1, &attributes);
+    let attributes = [
+        KeyValue::new("url", url),
+        KeyValue::new("operation", operation),
+        KeyValue::new("status", status),
+    ];
+    meters.auth_requests.add(1, &attributes);
+    result
+}
 
+#[derive(Debug)]
+enum OtherOperation {
+    GetProducts,
+}
+
+#[tracing::instrument]
+fn increment_other_count<U: std::fmt::Debug>(
+    url: &str,
+    operation: OtherOperation,
+    result: Result<U, Error>,
+    meters: &Meters,
+) -> Result<U, Error> {
+    let operation = match operation {
+        OtherOperation::GetProducts => "get_products",
+    };
+
+    let status = match &result {
+        Ok(_response) => "successful",
+        Err(Error::RateLimit(_duration)) => "rate_limited",
+        Err(_e) => "error",
+    };
+
+    let url = url.to_string();
+    let attributes = [
+        KeyValue::new("url", url),
+        KeyValue::new("operation", operation),
+        KeyValue::new("status", status),
+    ];
+    meters.other_requests.add(1, &attributes);
+    result
+}
+
+#[derive(Debug)]
+enum VehicleOperation {
+    WakeUp,
+    SetChargeLimit,
+    GetChargeState,
+    ChargeStart,
+    ChargeStop,
+}
+
+#[tracing::instrument]
+fn increment_vehicle_count<U: std::fmt::Debug>(
+    url: &str,
+    operation: VehicleOperation,
+    vehicle_id: VehicleId,
+    result: Result<U, Error>,
+    meters: &Meters,
+) -> Result<U, Error> {
+    let operation = match operation {
+        VehicleOperation::WakeUp => "wake_up",
+        VehicleOperation::SetChargeLimit => "set_charge_limit",
+        VehicleOperation::ChargeStart => "charge_start",
+        VehicleOperation::ChargeStop => "charge_stop",
+        VehicleOperation::GetChargeState => "get_charge_state",
+    };
+
+    let status = match &result {
+        Ok(_response) => "successful",
+        Err(Error::RateLimit(_duration)) => "rate_limited",
+        Err(_e) => "error",
+    };
+
+    let url = url.to_string();
+    let attributes = [
+        KeyValue::new("url", url),
+        KeyValue::new("operation", operation),
+        KeyValue::new("vehicle_id", vehicle_id.to_string()),
+        KeyValue::new("status", status),
+    ];
+    meters.vehicle_requests.add(1, &attributes);
     result
 }
 
@@ -123,7 +221,6 @@ fn increment_count(
 async fn post<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOwned>(
     url: &str,
     body: &T,
-    counter: &Counter<u64>,
 ) -> Result<U, Error> {
     debug!("post {}", url);
 
@@ -135,8 +232,7 @@ async fn post<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOwned>(
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .pipe(handle_error)
-        .pipe(|result| increment_count(url, result, counter))?;
+        .pipe(handle_error)?;
 
     let text = response.json().await?;
     debug!("post done {}", url);
@@ -153,19 +249,14 @@ async fn get<U: DeserializeOwned>(url: &str, counter: &Counter<u64>) -> Result<U
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .pipe(handle_error)
-        .pipe(|result| increment_count(url, result, counter))?;
+        .pipe(handle_error)?;
 
     let text = response.json().await?;
     Ok(text)
 }
 
 #[tracing::instrument(skip(token))]
-async fn get_with_token<U: DeserializeOwned>(
-    url: &str,
-    token: &str,
-    counter: &Counter<u64>,
-) -> Result<U, Error> {
+async fn get_with_token<U: DeserializeOwned>(url: &str, token: &str) -> Result<U, Error> {
     debug!("get_with_token: {}", url);
 
     let client = reqwest::Client::new();
@@ -176,8 +267,7 @@ async fn get_with_token<U: DeserializeOwned>(
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .pipe(handle_error)
-        .pipe(|result| increment_count(url, result, counter))?;
+        .pipe(handle_error)?;
 
     // let text = response.text().await?;
     // println!("{}", text);
@@ -193,7 +283,6 @@ async fn post_with_token<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOw
     url: &str,
     token: &str,
     body: &T,
-    counter: &Counter<u64>,
 ) -> Result<U, Error> {
     debug!("post_with_token: {}", url);
 
@@ -206,8 +295,7 @@ async fn post_with_token<T: Serialize + Sync + std::fmt::Debug, U: DeserializeOw
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .pipe(handle_error)
-        .pipe(|result| increment_count(url, result, counter))?;
+        .pipe(handle_error)?;
 
     // let text = response.text().await?;
     // println!("{}", text);
@@ -247,8 +335,20 @@ pub struct RawToken {
     expires_in: u64,
 }
 
+impl std::fmt::Debug for RawToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RawToken")
+            .field("access_token", &"[censored]")
+            .field("refresh_token", &"[censored]")
+            .field("id_token", &"[censored]")
+            .field("token_type", &self.token_type)
+            .field("expires_in", &self.expires_in)
+            .finish()
+    }
+}
+
 /// Token to access the Tesla API
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Token {
     access_token: String,
     refresh_token: String,
@@ -400,7 +500,7 @@ pub struct ChargeState {
 }
 
 /// The response from a generic request
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct GenericResponse {
     /// The reason for an error or ""
     reason: String,
@@ -410,7 +510,7 @@ pub struct GenericResponse {
 }
 
 /// The response from a wake up request
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct WakeUpResponse {
     state: String,
 }
@@ -575,7 +675,9 @@ impl Token {
             scope: "openid email offline_access".into(),
         };
 
-        let token: RawToken = post(url, &body, &meters.token_requests).await?;
+        let token: RawToken = post(url, &body)
+            .await
+            .pipe(|result| increment_auth_count(url, AuthOperation::RenewToken, result, meters))?;
 
         let token = {
             let expires_in = Duration::from_secs(token.expires_in);
@@ -639,8 +741,11 @@ impl Token {
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/wake_up",
             id = id.to_string()
         );
-        let response: OuterWakeUpResponse =
-            post_with_token(&url, &self.access_token, &(), &meters.wake_up_requests).await?;
+        let response: OuterWakeUpResponse = post_with_token(&url, &self.access_token, &())
+            .await
+            .pipe(|result| {
+                increment_vehicle_count(&url, VehicleOperation::WakeUp, id, result, meters)
+            })?;
         Ok(response.response)
     }
 
@@ -650,10 +755,14 @@ impl Token {
     ///
     /// Returns error if the HTTP request failed.
     #[tracing::instrument]
-    pub async fn get_vehicles(&self, meters: &Meters) -> Result<Vec<Vehicle>, Error> {
+    pub async fn get_products(&self, meters: &Meters) -> Result<Vec<Vehicle>, Error> {
         let url = "https://owner-api.teslamotors.com/api/1/products";
         let response: OuterVehiclesResponse =
-            get_with_token(url, &self.access_token, &meters.requests).await?;
+            get_with_token(url, &self.access_token)
+                .await
+                .pipe(|result| {
+                    increment_other_count(url, OtherOperation::GetProducts, result, meters)
+                })?;
         Ok(response.response)
     }
 
@@ -719,8 +828,11 @@ impl Token {
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_start",
             id = id.to_string()
         );
-        let response: OuterGenericResponse =
-            post_with_token(&url, &self.access_token, &(), &meters.requests).await?;
+        let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &())
+            .await
+            .pipe(|result| {
+            increment_vehicle_count(&url, VehicleOperation::ChargeStart, id, result, meters)
+        })?;
         response.into()
     }
 
@@ -736,8 +848,11 @@ impl Token {
             "https://owner-api.teslamotors.com/api/1/vehicles/{id}/command/charge_stop",
             id = id.to_string()
         );
-        let response: OuterGenericResponse =
-            post_with_token(&url, &self.access_token, &(), &meters.requests).await?;
+        let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &())
+            .await
+            .pipe(|result| {
+            increment_vehicle_count(&url, VehicleOperation::ChargeStop, id, result, meters)
+        })?;
         response.into()
     }
 
@@ -759,8 +874,11 @@ impl Token {
             id = id.to_string()
         );
         let body = SetChargeLimit { percent };
-        let response: OuterGenericResponse =
-            post_with_token(&url, &self.access_token, &body, &meters.requests).await?;
+        let response: OuterGenericResponse = post_with_token(&url, &self.access_token, &body)
+            .await
+            .pipe(|result| {
+                increment_vehicle_count(&url, VehicleOperation::SetChargeLimit, id, result, meters)
+            })?;
 
         if !response.response.result && response.response.reason == "already_set" {
             return Ok(());
@@ -786,7 +904,17 @@ impl Token {
             id = id.to_string()
         );
         let response: OuterChargeState =
-            get_with_token(&url, &self.access_token, &meters.requests).await?;
+            get_with_token(&url, &self.access_token)
+                .await
+                .pipe(|result| {
+                    increment_vehicle_count(
+                        &url,
+                        VehicleOperation::GetChargeState,
+                        id,
+                        result,
+                        meters,
+                    )
+                })?;
         Ok(response.response)
     }
 }
@@ -921,7 +1049,7 @@ mod tests {
     #[ignore = "requires secrets"]
     #[tokio::test]
     async fn test_get_token() {
-        let meters = Meters::new(VehicleId(0));
+        let meters = Meters::new();
 
         let state_path = PathBuf::from("state");
         let config = persistent_state::Config { state_path };
@@ -935,7 +1063,7 @@ mod tests {
         // token.charge_start(id).await.unwrap();
         // token.charge_stop(id).await.unwrap();
         // token.set_charge_limit(id, 88).await.unwrap();
-        let vehicles = token.get_vehicles(&meters).await.unwrap();
+        let vehicles = token.get_products(&meters).await.unwrap();
         println!("{vehicles:#?}");
 
         // let charge_state = token.get_charge_state(id).await.unwrap();

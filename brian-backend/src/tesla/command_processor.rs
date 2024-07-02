@@ -3,7 +3,7 @@ use opentelemetry::{global, metrics::Counter, KeyValue};
 use robotica_backend::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
-        persistent_state::{self, PersistentStateRow},
+        persistent_state::{self},
         tesla::api::{self, CommandSequence, SequenceError, Token, VehicleId},
     },
     spawn,
@@ -12,8 +12,8 @@ use robotica_common::{
     robotica::{audio::MessagePriority, message::Message},
     unsafe_time_delta,
 };
-use std::ops::Add;
 use std::time::Duration;
+use std::{ops::Add, sync::Arc};
 use thiserror::Error;
 use tokio::{select, time::Instant};
 use tracing::{error, info, instrument};
@@ -43,12 +43,17 @@ struct Meters {
 }
 
 impl Meters {
-    fn new(tesla_id: VehicleId) -> Self {
-        let id = tesla_id.to_string();
-        let meter = global::meter(format!("tesla::command_processor::{id}"));
-
+    fn new(vehicle_id: VehicleId) -> Self {
+        let id = vehicle_id.to_string();
+        let attributes = vec![KeyValue::new("vehicle_id", id)];
+        let meter = global::meter_with_version(
+            "tesla::command_processor",
+            None::<String>,
+            None::<String>,
+            Some(attributes),
+        );
         Self {
-            api: api::Meters::new(tesla_id),
+            api: api::Meters::new(),
             outgoing_attempt: meter.u64_counter("outgoing_attempt").init(),
             outgoing_requests: meter.u64_counter("outgoing_requests").init(),
             incoming_requests: meter.u64_counter("incoming_requests").init(),
@@ -200,14 +205,12 @@ fn increment_outgoing_done(meters: &Meters, command: &Command, status: OutgoingS
 enum IncomingStatus {
     Delayed,
     Hurried,
-    None,
 }
 
 fn increment_incoming(meters: &Meters, command: &Command, status: IncomingStatus) {
     let status = match status {
         IncomingStatus::Delayed => "delayed",
         IncomingStatus::Hurried => "hurried",
-        IncomingStatus::None => "none",
     };
 
     let attributes = [
@@ -222,32 +225,29 @@ pub fn run(
     state: &InitState,
     tesla: &Config,
     rx: stateless::Receiver<Command>,
-) -> Result<(), MonitorChargingError> {
+    rx_token: stateless::Receiver<Arc<Token>>,
+) {
     // let tesla_id = tesla.tesla_id;
     let name = tesla.name.clone();
     let tesla = tesla.clone();
     let message_sink = state.message_sink.clone();
 
-    let tesla_secret = state.persistent_state_database.for_name("tesla_token");
-    let mut token = Token::get(&tesla_secret)?;
-
     spawn(async move {
         let mut s = rx.subscribe().await;
+        let mut s_token = rx_token.subscribe().await;
+
         let mut maybe_try_command: Option<TryCommand> = None;
-        let mut refresh_token_timer = tokio::time::interval(Duration::from_secs(3600));
         let mut errors = Errors::new();
 
         let tesla = tesla;
         let meters = Meters::new(tesla.tesla_id);
-
-        check_token(&mut token, &tesla_secret, &meters).await;
-        test_tesla_api(&token, tesla.tesla_id, &meters).await;
+        let Ok(mut token) = s_token.recv().await else {
+            error!("Failed to get token.");
+            return;
+        };
 
         loop {
             select! {
-                _ = refresh_token_timer.tick() => {
-                    check_token(&mut token, &tesla_secret, &meters).await;
-                }
                 Some(try_command) = sleep_until(&mut maybe_try_command) => {
                     info!("{name}: Trying command: {:?}", try_command.command);
                     increment_outgoing_started(&meters, &try_command.command);
@@ -318,7 +318,7 @@ pub fn run(
 
                         // We are not rate limiting and command is nil.
                         (None, true) => {
-                            increment_incoming(&meters, &command, IncomingStatus::None);
+                            // We don't need to log nil commands.
                             None
                         }
 
@@ -341,11 +341,14 @@ pub fn run(
                         info!("{name}: Received empty command: {:?}, ignoring.", command);
                     }
                 }
+
+                Ok(new_token) = s_token.recv() => {
+                    info!("{name}: Received new token.");
+                    token = new_token;
+                }
             }
         }
     });
-
-    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -366,36 +369,6 @@ async fn enable_teslamate_logging(config: &Config) -> Result<(), TeslamateError>
     };
     client.send().await?.error_for_status()?;
     Ok(())
-}
-
-async fn check_token(
-    token: &mut Token,
-    tesla_secret: &PersistentStateRow<Token>,
-    counters: &Meters,
-) {
-    info!("Refreshing state, token expiration: {:?}", token.expires_at);
-    token
-        .check(tesla_secret, &counters.api)
-        .await
-        .unwrap_or_else(|err| {
-            error!("Failed to refresh token: {}", err);
-        });
-    info!("Token expiration: {:?}", token.expires_at);
-}
-
-async fn test_tesla_api(token: &Token, tesla_id: VehicleId, counters: &Meters) {
-    let data = match token.get_vehicles(&counters.api).await {
-        Ok(data) => data,
-        Err(err) => {
-            error!("Failed to get vehicles: {}", err);
-            return;
-        }
-    };
-
-    _ = data
-        .into_iter()
-        .find(|vehicle| vehicle.id == tesla_id)
-        .ok_or_else(|| anyhow::anyhow!("Tesla vehicle {id} not found", id = tesla_id.to_string()));
 }
 
 #[instrument]

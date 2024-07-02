@@ -345,6 +345,10 @@ fn monitor_teslas(
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
+    let token = tesla::token::run(state).unwrap_or_else(|e| {
+        panic!("Error running tesla token generator: {e}");
+    });
+
     for tesla in teslas {
         let receivers = tesla::Receivers::new(tesla, state);
 
@@ -380,9 +384,7 @@ fn monitor_teslas(
             outputs.charging_information,
         );
 
-        tesla::command_processor::run(state, tesla, outputs.commands).unwrap_or_else(|e| {
-            panic!("Error running tesla command processor: {e}");
-        });
+        tesla::command_processor::run(state, tesla, outputs.commands, token.clone());
 
         let monitor_doors_receivers =
             tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);

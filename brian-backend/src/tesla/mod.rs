@@ -5,6 +5,7 @@ pub mod monitor_location;
 pub mod monitor_teslamate_location;
 pub mod plug_in_reminder;
 mod private;
+pub mod token;
 
 use crate::amber::car::ChargeRequest;
 
