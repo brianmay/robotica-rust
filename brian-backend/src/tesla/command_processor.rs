@@ -3,8 +3,8 @@ use opentelemetry::{global, metrics::Counter, KeyValue};
 use robotica_backend::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
-        persistent_state::{self},
-        tesla::api::{self, CommandSequence, SequenceError, Token},
+        persistent_state,
+        tesla::api::{self, CommandSequence, SequenceError, Token, VehicleId},
     },
     spawn,
 };
@@ -40,18 +40,19 @@ struct Meters {
     notified_errors: Counter<u64>,
     cleared_errors: Counter<u64>,
     cancelled: Counter<u64>,
+    vehicle_id: VehicleId,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum OutgoingStatus {
+    Success,
+    RateLimited,
+    Error,
 }
 
 impl Meters {
     fn new(config: &Config) -> Self {
-        let id = config.tesla_id.to_string();
-        let attributes = vec![KeyValue::new("vehicle_id", id)];
-        let meter = global::meter_with_version(
-            "tesla::command_processor",
-            None::<String>,
-            None::<String>,
-            Some(attributes),
-        );
+        let meter = global::meter("tesla::command_processor");
         Self {
             api: api::Meters::new(),
             outgoing_attempt: meter.u64_counter("outgoing_attempt").init(),
@@ -60,6 +61,69 @@ impl Meters {
             notified_errors: meter.u64_counter("notified_errors").init(),
             cleared_errors: meter.u64_counter("cleared_errors").init(),
             cancelled: meter.u64_counter("cancelled").init(),
+            vehicle_id: config.tesla_id,
+        }
+    }
+
+    fn increment_cleared_errors(&self, forgotten: bool) {
+        let attributes = [
+            KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+            KeyValue::new("forgotten", forgotten),
+        ];
+        self.cleared_errors.add(1, &attributes);
+    }
+
+    fn increment_notified_errors(&self) {
+        let attributes = [KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        self.notified_errors.add(1, &attributes);
+    }
+
+    fn increment_incoming(&self, command: &Command, status: IncomingStatus) {
+        let status = match status {
+            IncomingStatus::Delayed => "delayed",
+            IncomingStatus::Hurried => "hurried",
+        };
+
+        let attributes = [
+            KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+            KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
+            KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
+            KeyValue::new("status", status),
+        ];
+        self.incoming_requests.add(1, &attributes);
+    }
+
+    fn increment_cancelled(&self) {
+        let attributes = [KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        self.cancelled.add(1, &attributes);
+    }
+
+    fn increment_outgoing_started(&self, command: &Command) {
+        if !command.is_nil() {
+            let attributes = [
+                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
+                KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
+            ];
+            self.outgoing_attempt.add(1, &attributes);
+        }
+    }
+
+    fn increment_outgoing_done(&self, command: &Command, status: OutgoingStatus) {
+        let status = match status {
+            OutgoingStatus::Success => "success",
+            OutgoingStatus::RateLimited => "rate_limited",
+            OutgoingStatus::Error => "error",
+        };
+
+        if !command.is_nil() {
+            let attributes = [
+                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
+                KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
+                KeyValue::new("status", status),
+            ];
+            self.outgoing_requests.add(1, &attributes);
         }
     }
 }
@@ -111,11 +175,6 @@ async fn sleep_until(maybe_try_command: &mut Option<TryCommand>) -> Option<TryCo
     }
 }
 
-fn increase_cleared_errors(meters: &Meters, forgotten: bool) {
-    let attributes = [KeyValue::new("forgotten", forgotten)];
-    meters.cleared_errors.add(1, &attributes);
-}
-
 #[derive(Debug)]
 struct Errors {
     last_success: DateTime<Utc>,
@@ -132,7 +191,7 @@ impl Errors {
 
     fn forget_errors(&mut self, meters: &Meters) {
         if self.notified {
-            increase_cleared_errors(meters, true);
+            meters.increment_cleared_errors(true);
         }
         self.last_success = Utc::now();
         self.notified = false;
@@ -145,7 +204,7 @@ impl Errors {
                 MessagePriority::Urgent,
             );
             message_sink.try_send(msg);
-            increase_cleared_errors(meters, false);
+            meters.increment_cleared_errors(false);
         }
         self.last_success = Utc::now();
         self.notified = false;
@@ -156,7 +215,7 @@ impl Errors {
     fn notify_errors(&mut self, message_sink: &stateless::Sender<Message>, meters: &Meters) {
         if !self.notified && self.last_success.add(Self::FAILURE_NOTIFICATION_INTERVAL) < Utc::now()
         {
-            meters.notified_errors.add(1, &[]);
+            meters.increment_notified_errors();
             let msg = new_message(
                 "The Tesla and I have not been talking to each other for 30 minutes",
                 MessagePriority::Urgent,
@@ -167,58 +226,10 @@ impl Errors {
     }
 }
 
-fn increment_outgoing_started(meters: &Meters, command: &Command) {
-    if !command.is_nil() {
-        let attributes = [
-            KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
-            KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
-        ];
-        meters.outgoing_attempt.add(1, &attributes);
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum OutgoingStatus {
-    Success,
-    RateLimited,
-    Error,
-}
-
-fn increment_outgoing_done(meters: &Meters, command: &Command, status: OutgoingStatus) {
-    let status = match status {
-        OutgoingStatus::Success => "success",
-        OutgoingStatus::RateLimited => "rate_limited",
-        OutgoingStatus::Error => "error",
-    };
-
-    if !command.is_nil() {
-        let attributes = [
-            KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
-            KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
-            KeyValue::new("status", status),
-        ];
-        meters.outgoing_requests.add(1, &attributes);
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 enum IncomingStatus {
     Delayed,
     Hurried,
-}
-
-fn increment_incoming(meters: &Meters, command: &Command, status: IncomingStatus) {
-    let status = match status {
-        IncomingStatus::Delayed => "delayed",
-        IncomingStatus::Hurried => "hurried",
-    };
-
-    let attributes = [
-        KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
-        KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
-        KeyValue::new("status", status),
-    ];
-    meters.incoming_requests.add(1, &attributes);
 }
 
 pub fn run(
@@ -250,11 +261,11 @@ pub fn run(
             select! {
                 Some(try_command) = sleep_until(&mut maybe_try_command) => {
                     info!("{name}: Trying command: {:?}", try_command.command);
-                    increment_outgoing_started(&meters, &try_command.command);
+                    meters.increment_outgoing_started(&try_command.command);
 
                     match try_send(&try_command, &tesla, &token, &meters).await {
                         Ok(()) => {
-                            increment_outgoing_done(&meters, &try_command.command, OutgoingStatus::Success);
+                            meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Success);
                             maybe_try_command = if try_command.command.is_nil() {
                                 info!("{name}: Nil command succeeded.");
                                 // If we didn't actually have a command, don't rate limit.
@@ -271,7 +282,7 @@ pub fn run(
                         }
                         Err(SequenceError::WaitRetry(duration)) => {
                             info!("{name}: WaitRetry, retrying in {duration:?}.", );
-                            increment_outgoing_done(&meters, &try_command.command, OutgoingStatus::RateLimited);
+                            meters.increment_outgoing_done(&try_command.command, OutgoingStatus::RateLimited);
                             maybe_try_command = Some(TryCommand {
                                 command: try_command.command,
                                 next_try_instant: Instant::now() + duration,
@@ -282,7 +293,7 @@ pub fn run(
                         Err(err) => {
                             let duration = Duration::from_secs(60);
                             error!("{name}: Command failed: {err}, retrying in {duration:?}.");
-                            increment_outgoing_done(&meters, &try_command.command, OutgoingStatus::Error);
+                            meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Error);
                             maybe_try_command = Some(TryCommand {
                                 command: try_command.command,
                                 next_try_instant: Instant::now() + duration,
@@ -294,7 +305,7 @@ pub fn run(
                 Ok(command) = s.recv() => {
                     if let Some(try_command) = &maybe_try_command {
                         if !try_command.command.is_nil() && command.is_nil() {
-                            meters.cancelled.add(1, &[]);
+                            meters.increment_cancelled();
                         }
                     }
 
@@ -312,7 +323,7 @@ pub fn run(
                         // We are rate limiting, so we need to keep the rate limit.
                         // Even if the command is nil.
                         (Some(try_command), _) => {
-                            increment_incoming(&meters, &command, IncomingStatus::Delayed);
+                            meters.increment_incoming(&command, IncomingStatus::Delayed);
                             Some(try_command.next_try_instant)
                         }
 
@@ -324,7 +335,7 @@ pub fn run(
 
                         // We are not rate limiting, command is not nil, execute immediately.
                         (None, false) => {
-                            increment_incoming(&meters, &command, IncomingStatus::Hurried);
+                            meters.increment_incoming(&command, IncomingStatus::Hurried);
                             Some(Instant::now())
                         }
                     };

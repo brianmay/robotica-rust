@@ -32,6 +32,7 @@ use tracing::{debug, error, info};
 #[derive(Debug)]
 struct Meters {
     charging_requested: opentelemetry::metrics::Gauge<u64>,
+    vehicle_id: VehicleId,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -43,17 +44,11 @@ enum ChargingReason {
 
 impl Meters {
     fn new(vehicle_id: VehicleId) -> Self {
-        let id = vehicle_id.to_string();
-        let attributes = vec![KeyValue::new("vehicle_id", id)];
-        let meter = global::meter_with_version(
-            "amber::car",
-            None::<String>,
-            None::<String>,
-            Some(attributes),
-        );
+        let meter = global::meter("amber::car");
 
         Self {
             charging_requested: meter.u64_gauge("charging_requested").init(),
+            vehicle_id,
         }
     }
 
@@ -67,8 +62,13 @@ impl Meters {
             ChargeRequest::ChargeTo(limit) => u64::from(limit),
             ChargeRequest::Manual => 0,
         };
-        self.charging_requested
-            .record(value, &[KeyValue::new("reason", reason)]);
+        self.charging_requested.record(
+            value,
+            &[
+                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("reason", reason),
+            ],
+        );
     }
 }
 

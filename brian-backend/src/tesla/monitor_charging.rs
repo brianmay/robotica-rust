@@ -1,7 +1,10 @@
 use opentelemetry::{global, KeyValue};
 use robotica_backend::{
     pipes::{stateful, stateless, Subscriber, Subscription},
-    services::{persistent_state, tesla::api::ChargingStateEnum},
+    services::{
+        persistent_state,
+        tesla::api::{ChargingStateEnum, VehicleId},
+    },
     spawn,
 };
 use robotica_common::{
@@ -25,33 +28,28 @@ use super::{command_processor, ChargingInformation, Config, Receivers, Teslamate
 struct Meters {
     charging: opentelemetry::metrics::Gauge<u64>,
     battery: opentelemetry::metrics::Gauge<u64>,
+    vehicle_id: VehicleId,
 }
 
 impl Meters {
     fn new(config: &Config) -> Self {
-        let id = config.tesla_id.to_string();
-        let attributes = vec![KeyValue::new("vehicle_id", id)];
-        let meter = global::meter_with_version(
-            "tesla::monitor_charging",
-            None::<String>,
-            None::<String>,
-            Some(attributes),
-        );
+        let meter = global::meter("tesla::monitor_charging");
 
         Self {
             charging: meter.u64_gauge("charging").init(),
             battery: meter.u64_gauge("battery").init(),
+            vehicle_id: config.tesla_id,
         }
     }
 
     fn set_charging(&self, value: ChargingStateEnum, limit: u8) {
-        let attributes = vec![];
+        let attributes = vec![KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
         let value = if value.is_charging() { limit } else { 0 };
         self.charging.record(u64::from(value), &attributes);
     }
 
     fn set_battery(&self, value: u8) {
-        let attributes = vec![];
+        let attributes = vec![KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
         self.battery.record(u64::from(value), &attributes);
     }
 }
