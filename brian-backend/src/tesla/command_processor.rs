@@ -84,13 +84,15 @@ impl Meters {
             IncomingStatus::Hurried => "hurried",
         };
 
-        let attributes = [
-            KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
-            KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
-            KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
-            KeyValue::new("status", status),
-        ];
-        self.incoming_requests.add(1, &attributes);
+        if !command.is_nil() {
+            let attributes = [
+                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
+                KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
+                KeyValue::new("status", status),
+            ];
+            self.incoming_requests.add(1, &attributes);
+        }
     }
 
     fn increment_cancelled(&self) {
