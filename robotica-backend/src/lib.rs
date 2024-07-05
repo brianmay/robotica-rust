@@ -8,12 +8,12 @@
 #![allow(clippy::use_self)]
 #![allow(clippy::to_string_trait_impl)]
 
-#[cfg(feature = "scheduler")]
 #[macro_use]
 extern crate lalrpop_util;
 
 // extern crate robotica_backend_macros;
 
+pub mod conditions;
 pub mod database;
 pub mod devices;
 pub mod pipes;

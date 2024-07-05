@@ -1,13 +1,12 @@
 use std::str::FromStr;
 use std::collections::HashSet;
-use crate::scheduling::ast::{Expr, Opcode, Condition, ConditionOpcode, Boolean, Fields, TypeError, ConditionsError, Reference};
-use field_ref::FieldRef;
+use crate::conditions::ast::{Expr, Opcode, Condition, ConditionOpcode, Boolean, Fields, ConditionError, Reference, FieldRef, unquote};
 use lalrpop_util::ParseError;
 
 grammar<T>(fields: &Fields<T>);
 
 extern {
-    type Error = ConditionsError;
+    type Error = ConditionError;
 }
 
 
@@ -15,27 +14,20 @@ pub Boolean: Boolean<T> = {
     "not" <Condition> => Boolean::<T>::Not(<>),
     <left:Boolean> "and" <right:Condition> => Boolean::<T>::And(Box::new(left), right),
     <left:Boolean> "or" <right:Condition> => Boolean::<T>::Or(Box::new(left), right),
-    <Condition> => Boolean::<T>::Cond(<>),
+    <Condition> => Boolean::<T>::Condition(<>),
 }
 
 Condition: Condition<T> = {
     "(" <Boolean> ")" => Condition::<T>::Boolean(Box::new(<>)),
-    <l:Expr> <op:ConditionOpcode> <r:Expr> =>? {
-        let f = || -> Result<Condition<T>, ConditionsError> {
-            let l_type = l.type_of()?;
-            let r_type = r.type_of()?;
-
-            if l_type == r_type {
-                Ok(Condition::<T>::Op(l, op, r))
-            } else {
-                Err(TypeError::TypeMismatch(l_type, r_type).into())
-            }
+    <left:Expr> <op:ConditionOpcode> <right:Expr> =>? {
+        let f = || -> Result<Condition<T>, ConditionError> {
+            Ok(Condition::<T>::Op(left, op, right))
         };
         let result = f();
         result.map_err(|e| e.into())
     },
-    <ConstantString> "in" <SetVariable> => Condition::<T>::In(<>),
-    <ConstantString> "not in" <SetVariable> => Condition::<T>::NotIn(<>),
+    <left:ConstantString> "in" <right:SetVariable> => Condition::<T>::In(unquote(&left), right),
+    <left:ConstantString> "not in" <right:SetVariable> => Condition::<T>::NotIn(unquote(&left), right),
 };
 
 ConditionOpcode: ConditionOpcode = {
@@ -69,33 +61,38 @@ FactorOp: Opcode = {
 };
 
 Term: Box<Expr<T>> = {
-    Num => Box::new(Expr::<T>::Number(<>)),
+    Integer => Box::new(Expr::<T>::Integer(<>)),
+    Float => Box::new(Expr::<T>::Float(<>)),
     <ConstantString> => Box::new(Expr::<T>::String(<>)),
     <Variable> => Box::new(Expr::<T>::Variable(<>)),
     "(" <Expr> ")"
 };
 
-Num: i32 = {
+Integer: i32 = {
     r"[0-9]+" => i32::from_str(<>).unwrap()
 };
 
+Float: f32 = {
+    r"[0-9]+\.[0-9]+" => f32::from_str(<>).unwrap()
+};
+
 ConstantString: String = {
-    <l:r"'[a-zA-Z_][a-zA-Z0-9_:]*'"> => l[1..l.len()-1].into(),
-    <l:r#""[a-zA-Z_][a-zA-Z0-9_:]*""#> => l[1..l.len()-1].into(),
+    <l:r"'[a-zA-Z_][a-zA-Z0-9_:]*'"> => unquote(l),
+    <l:r#""[a-zA-Z_][a-zA-Z0-9_:]*""#> => unquote(l),
 };
 
 Variable: Reference<T> = {
     <r:r"[a-zA-Z_][a-zA-Z0-9_]*"> =>?
-        match fields.any.get(r) {
-            Some(v) => Ok((*v).clone()),
-            None => Err(ParseError::User{error: ConditionsError::FieldNotFound(r.to_string())}),
+        match fields.scalars.contains(r) {
+            true => Ok(Reference::new_scalar(r)),
+            false => Err(ParseError::User{error: ConditionError::FieldNotFound(r.to_string())}),
         },
 };
 
 SetVariable: FieldRef<T, HashSet<String>> = {
     <r:r"[a-zA-Z_][a-zA-Z0-9_]*"> =>?
-        match fields.sets.get(r) {
-            Some(v) => Ok(*v),
-            None => Err(ParseError::User{error: ConditionsError::FieldNotFound(r.to_string())}),
+        match fields.hash_sets.contains(r) {
+            true => Ok(FieldRef::new(r)),
+            false => Err(ParseError::User{error: ConditionError::FieldNotFound(r.to_string())}),
         },
 };

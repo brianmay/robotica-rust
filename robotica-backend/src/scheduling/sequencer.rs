@@ -6,8 +6,7 @@ use std::{
 };
 
 use chrono::{NaiveDate, Utc};
-use field_ref::field_ref_of;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use robotica_common::{
@@ -17,11 +16,9 @@ use robotica_common::{
     scheduler::{Importance, Mark, Status},
 };
 
-use super::{
-    ast::{Boolean, Fields},
-    conditions,
-    scheduler::{self},
-};
+use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference};
+
+use super::scheduler::{self};
 
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
@@ -183,37 +180,26 @@ pub struct Context {
     options: HashSet<String>,
 }
 
-fn get_fields() -> Fields<Context> {
-    let mut fields: Fields<Context> = Fields {
-        any: HashMap::new(),
-        sets: HashMap::new(),
-    };
+impl GetValues for Context {
+    fn get_fields() -> Fields<Self> {
+        let mut fields: Fields<Self> = Fields::default();
+        fields.hash_sets.insert("today".to_string());
+        fields.hash_sets.insert("tomorrow`".to_string());
+        fields.hash_sets.insert("options".to_string());
+        fields
+    }
 
-    fields
-        .sets
-        .insert("today".to_string(), field_ref_of!(Context => today));
-    fields
-        .sets
-        .insert("tomorrow".to_string(), field_ref_of!(Context => tomorrow));
-    fields
-        .sets
-        .insert("options".to_string(), field_ref_of!(Context => options));
-    fields
-}
+    fn get_scalar(&self, _field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
+        None
+    }
 
-impl<'de> Deserialize<'de> for Boolean<Context> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let fields = get_fields();
-        let s: String = Deserialize::deserialize(deserializer)?;
-        let expr = conditions::BooleanParser::new()
-            .parse(&fields, &s)
-            .map_err(|e| {
-                serde::de::Error::custom(format!("Error parsing classifier config: {e}"))
-            })?;
-        Ok(expr)
+    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
+        match field.get_name() {
+            "today" => Some(&self.today),
+            "tomorrow" => Some(&self.tomorrow),
+            "options" => Some(&self.options),
+            _ => None,
+        }
     }
 }
 
@@ -418,7 +404,12 @@ fn filter_sequence(config: &Config, context: &Context) -> bool {
         }
     }
     if let Some(if_cond) = &config.if_cond {
-        if !if_cond.iter().any(|c| c.eval(context)) {
+        if !if_cond.iter().any(|c| {
+            c.eval(context).unwrap_or_else(|e| {
+                tracing::error!("Error evaluating condition: {e:?}");
+                false
+            })
+        }) {
             ok = false;
         }
     }

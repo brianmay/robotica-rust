@@ -1,18 +1,16 @@
 //! Classification of a date.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     path::{Path, PathBuf},
 };
 
-use crate::scheduling::conditions;
 use chrono::Datelike;
-use field_ref::field_ref_of;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use thiserror::Error;
 
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string, Date, Weekday};
 
-use super::ast::{Boolean, Fields, Reference};
+use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference, Scalar};
 
 #[derive(Debug)]
 struct Context {
@@ -21,39 +19,28 @@ struct Context {
     day_of_week: String,
 }
 
-fn get_fields() -> Fields<Context> {
-    let mut fields: Fields<Context> = Fields {
-        any: HashMap::new(),
-        sets: HashMap::new(),
-    };
-    fields.any.insert(
-        "days_since_epoch".to_string(),
-        Reference::Int(field_ref_of!(Context => days_since_epoch)),
-    );
-    fields.any.insert(
-        "day_of_week".to_string(),
-        Reference::String(field_ref_of!(Context => day_of_week)),
-    );
-    fields.sets.insert(
-        "classifications".to_string(),
-        field_ref_of!(Context => classifications),
-    );
-    fields
-}
+impl GetValues for Context {
+    fn get_fields() -> Fields<Self> {
+        let mut fields: Fields<Self> = Fields::default();
+        fields.scalars.insert("days_since_epoch".to_string());
+        fields.scalars.insert("day_of_week".to_string());
+        fields.hash_sets.insert("classifications".to_string());
+        fields
+    }
 
-impl<'de> Deserialize<'de> for Boolean<Context> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let fields = get_fields();
-        let s: String = Deserialize::deserialize(deserializer)?;
-        let expr = conditions::BooleanParser::new()
-            .parse(&fields, &s)
-            .map_err(|e| {
-                serde::de::Error::custom(format!("Error parsing classifier config: {e}"))
-            })?;
-        Ok(expr)
+    fn get_scalar(&self, field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
+        match field.get_name() {
+            "days_since_epoch" => Some(Scalar::new_int(self.days_since_epoch)),
+            "day_of_week" => Some(Scalar::new_string(&self.day_of_week)),
+            _ => None,
+        }
+    }
+
+    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
+        match field.get_name() {
+            "classifications" => Some(&self.classifications),
+            _ => None,
+        }
     }
 }
 
@@ -145,7 +132,12 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
                 classifications: tags.clone(),
                 day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
             };
-            if !if_cond.iter().any(|c| c.eval(&context)) {
+            if !if_cond.iter().any(|c| {
+                c.eval(&context).unwrap_or_else(|e| {
+                    tracing::error!("Error evaluating condition: {}", e);
+                    false
+                })
+            }) {
                 continue;
             }
         }
@@ -186,7 +178,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use std::str::FromStr;
 
-    use crate::scheduling::ast::{Condition, ConditionOpcode, Expr};
+    use crate::conditions::ast::{Condition, ConditionOpcode, Expr};
 
     use super::*;
 
@@ -313,14 +305,14 @@ mod tests {
     #[test]
     fn test_cond() {
         let conditions = vec![
-            Boolean::Cond(Condition::Op(
-                Box::new(Expr::Number(10)),
+            Boolean::Condition(Condition::Op(
+                Box::new(Expr::Integer(10)),
                 ConditionOpcode::Eq,
-                Box::new(Expr::Number(11)),
+                Box::new(Expr::Integer(11)),
             )),
-            Boolean::Cond(Condition::In(
+            Boolean::Condition(Condition::In(
                 "classifications".to_string(),
-                field_ref_of!(Context => classifications),
+                FieldRef::new("classifications"),
             )),
         ];
 

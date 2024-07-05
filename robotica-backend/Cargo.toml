@@ -7,7 +7,7 @@ edition = "2021"
 
 [features]
 websockets = ["robotica-common/websockets"]
-scheduler = ["pyo3", "lalrpop-util"]
+scheduler = ["pyo3"]
 
 [dependencies]
 bytes = "1.6.0"
@@ -23,9 +23,8 @@ reqwest = { version = "0.12.5", features = ["json"] }
 gethostname = "0.4.3"
 thiserror = "1.0.61"
 chrono = "0.4.38"
-lalrpop-util = { version = "0.20.2", features = ["lexer"], optional = true }
+lalrpop-util = { version = "0.20.2", features = ["lexer"] }
 regex = "1.10.5"
-field-ref = "0.2.1"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 lifx-core = "0.4.0"
@@ -52,6 +51,7 @@ geozero = { version = "0.13.0", features = ["with-postgis-sqlx"] }
 geo = { version = "0.28.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 opentelemetry = { version = "0.23.0", features = ["metrics"] }
+rstest = "0.21.0"
 
 [build-dependencies]
 lalrpop = "0.20.2"

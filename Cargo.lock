@@ -1975,12 +1975,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "field-ref"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81aa757552cac3530563495774d3c13d8a4d8b4e1ffbe7e3142a8511df748822"
-
-[[package]]
 name = "filetime"
 version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5598,7 +5592,6 @@ dependencies = [
  "bytes",
  "chrono",
  "env_logger",
- "field-ref",
  "futures",
  "geo",
  "geozero",
@@ -5614,6 +5607,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.5",
  "robotica-common",
+ "rstest",
  "rumqttc",
  "rustls-native-certs",
  "serde",

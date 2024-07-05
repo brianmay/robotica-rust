@@ -1,17 +1,13 @@
 //! Create a schedule based on tags from classifier.
 //!
 
-use super::{
-    ast::{Boolean, Fields, Reference},
-    conditions,
-};
+use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference, Scalar};
 use chrono::Datelike;
 use chrono::{NaiveDate, TimeZone};
-use field_ref::field_ref_of;
 use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, week_day_to_string, DateTime, Time,
 };
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -64,38 +60,28 @@ struct Context {
     day_of_week: String,
 }
 
-fn get_fields() -> Fields<Context> {
-    let mut fields: Fields<Context> = Fields {
-        any: HashMap::new(),
-        sets: HashMap::new(),
-    };
+impl GetValues for Context {
+    fn get_fields() -> Fields<Self> {
+        let mut fields: Fields<Self> = Fields::default();
+        fields.scalars.insert("day_of_week".to_string());
+        fields.hash_sets.insert("today".to_string());
+        fields.hash_sets.insert("tomorrow`".to_string());
+        fields
+    }
 
-    fields
-        .sets
-        .insert("today".to_string(), field_ref_of!(Context => today));
-    fields
-        .sets
-        .insert("tomorrow".to_string(), field_ref_of!(Context => tomorrow));
-    fields.any.insert(
-        "day_of_week".to_string(),
-        Reference::String(field_ref_of!(Context => day_of_week)),
-    );
-    fields
-}
+    fn get_scalar(&self, field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
+        match field.get_name() {
+            "day_of_week" => Some(Scalar::new_string(&self.day_of_week)),
+            _ => None,
+        }
+    }
 
-impl<'de> Deserialize<'de> for Boolean<Context> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let fields = get_fields();
-        let s: String = Deserialize::deserialize(deserializer)?;
-        let expr = conditions::BooleanParser::new()
-            .parse(&fields, &s)
-            .map_err(|e| {
-                serde::de::Error::custom(format!("Error parsing classifier config: {e}"))
-            })?;
-        Ok(expr)
+    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
+        match field.get_name() {
+            "today" => Some(&self.today),
+            "tomorrow" => Some(&self.tomorrow),
+            _ => None,
+        }
     }
 }
 
@@ -139,7 +125,10 @@ fn is_condition_ok(
                 tomorrow: tomorrow.clone(),
                 day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
             };
-            s_if.eval(&context)
+            s_if.eval(&context).unwrap_or_else(|e| {
+                tracing::error!("Error evaluating condition: {:?}", e);
+                false
+            })
         })
     })
 }
@@ -272,7 +261,7 @@ mod tests {
     use chrono::FixedOffset;
     use robotica_common::datetime::convert_date_time_to_utc;
 
-    use crate::scheduling::conditions::BooleanParser;
+    use crate::conditions::BooleanParser;
 
     use super::*;
 
@@ -325,7 +314,7 @@ mod tests {
             },
             Config {
                 if_cond: Some(vec![BooleanParser::new()
-                    .parse(&get_fields(), "'boxing' in today")
+                    .parse(&Context::get_fields(), "'boxing' in today")
                     .unwrap()]),
                 today: None,
                 tomorrow: None,

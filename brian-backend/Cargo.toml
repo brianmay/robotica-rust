@@ -37,6 +37,7 @@ opentelemetry-otlp = { version = "0.16.0", features = ["logs", "metrics", "tls-w
 opentelemetry-stdout = "0.4.0"
 tonic = "0.11.0"
 opentelemetry-appender-tracing = "0.4.0"
+rstest = "0.21.0"
 
 [dev-dependencies]
 float-cmp = "0.9.0"
