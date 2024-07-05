@@ -17,7 +17,7 @@ use tracing::error;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_backend::database::locations::list_locations;
 ///
@@ -72,7 +72,7 @@ pub async fn list_locations(postgres: &sqlx::PgPool) -> Result<Vec<Location>, sq
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_common::robotica::locations::CreateLocation;
 /// use robotica_backend::database::locations::create_location;
@@ -135,7 +135,7 @@ pub async fn create_location(
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_backend::database::locations::delete_location;
 ///
@@ -185,7 +185,7 @@ pub async fn delete_location(postgres: &sqlx::PgPool, id: i32) -> Result<(), sql
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_backend::database::locations::update_location;
 /// use robotica_common::robotica::locations::Location;
@@ -251,7 +251,7 @@ pub async fn update_location(
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_backend::database::locations::get_location;
 /// use robotica_common::robotica::locations::Location;
@@ -321,7 +321,7 @@ pub async fn get_location(
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_backend::database::locations::search_locations;
 /// use robotica_common::robotica::locations::Location;
@@ -369,4 +369,83 @@ pub async fn search_locations(
     })
     .collect::<Vec<_>>()
     .pipe(Ok)
+}
+
+#[cfg(test)]
+mod test {
+    #![allow(clippy::unwrap_used)]
+    use sqlx::{Pool, Postgres};
+
+    use super::*;
+    use robotica_common::robotica::locations::CreateLocation;
+
+    async fn db_create_location(postgres: &Pool<Postgres>) {
+        let bounds = geo::Polygon::new(
+            geo::LineString::from(vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]),
+            vec![],
+        );
+        let geometry = Geometry::Polygon(bounds);
+        let geo = wkb::Encode(geometry);
+
+        sqlx::query("INSERT INTO locations (name,color,announce_on_enter,announce_on_exit, bounds) VALUES ('test', 'red', false, false, $1);",)
+            .bind(geo)
+            .execute(postgres)
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_create_location(postgres: Pool<Postgres>) {
+        let location = CreateLocation {
+            name: "New Location".to_string(),
+            color: "blue".to_string(),
+            announce_on_enter: true,
+            announce_on_exit: false,
+            bounds: geo::Polygon::new(
+                geo::LineString::from(vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]),
+                vec![],
+            ),
+        };
+        let id = create_location(&postgres, &location).await.unwrap();
+        assert!(id > 0);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_list_locations(postgres: Pool<Postgres>) {
+        db_create_location(&postgres).await;
+        let locations = list_locations(&postgres).await.unwrap();
+        assert!(!locations.is_empty());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_get_location(postgres: Pool<Postgres>) {
+        db_create_location(&postgres).await;
+        let locations = list_locations(&postgres).await.unwrap();
+        let location = locations.first().unwrap();
+        let rc = get_location(&postgres, location.id).await.unwrap();
+        assert!(rc.is_some());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_update_location(postgres: Pool<Postgres>) {
+        db_create_location(&postgres).await;
+
+        let locations = list_locations(&postgres).await.unwrap();
+        let mut location = locations.first().unwrap().clone();
+        location.name = "Updated Location".to_string();
+        update_location(&postgres, &location).await.unwrap();
+        let rc = get_location(&postgres, location.id).await.unwrap().unwrap();
+        assert_eq!(rc.name, "Updated Location");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_delete_location(postgres: Pool<Postgres>) {
+        db_create_location(&postgres).await;
+
+        let locations = list_locations(&postgres).await.unwrap();
+        let location = locations.first().unwrap();
+        delete_location(&postgres, location.id).await.unwrap();
+        let rc = get_location(&postgres, location.id).await.unwrap();
+        assert!(rc.is_none());
+    }
 }
