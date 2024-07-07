@@ -21,8 +21,8 @@ use robotica_common::{
     unsafe_naive_time_hms,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
+use std::{cmp::min, sync::Arc};
 use tokio::{
     select,
     time::{sleep_until, Instant},
@@ -450,8 +450,12 @@ fn update_charge_plan(
     };
 
     if let Some((plan, cost)) = plan_cost {
-        let threshold_reached = new_cost < cost * 0.8;
+        // If there is more then 30 minutes left on plan and new plan is cheaper then 80% of old plan, then force new plan.
+        // Or if the charge limit has changed, force new plan.
+        let time_left = min(plan.plan.get_end_time() - now, required_time_left);
+        let threshold_reached = new_cost < cost * 0.8 && time_left >= TimeDelta::minutes(30);
         let has_changed = plan.charge_limit != charge_limit;
+        let force = threshold_reached || has_changed;
 
         let plan_is_on = plan.plan.is_current(now);
         let new_plan_is_on = new_plan.plan.is_current(now);
@@ -465,8 +469,6 @@ fn update_charge_plan(
         } else {
             new_plan
         };
-
-        let force = threshold_reached || has_changed;
 
         info!("Old Plan: {plan:?} {cost} {plan_is_on}");
         info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
