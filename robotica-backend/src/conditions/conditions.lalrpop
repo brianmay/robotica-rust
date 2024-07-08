@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::collections::HashSet;
-use crate::conditions::ast::{Expr, Opcode, Condition, ConditionOpcode, Boolean, Fields, ConditionError, Reference, FieldRef, unquote};
+use crate::conditions::ast::{Expr, Opcode, Condition, ConditionOpcode, BooleanExpr, Fields, ConditionError, Reference, FieldRef, unquote};
 use lalrpop_util::ParseError;
 
 grammar<T>(fields: &Fields<T>);
@@ -10,15 +10,15 @@ extern {
 }
 
 
-pub Boolean: Boolean<T> = {
-    "not" <Condition> => Boolean::<T>::Not(<>),
-    <left:Boolean> "and" <right:Condition> => Boolean::<T>::And(Box::new(left), right),
-    <left:Boolean> "or" <right:Condition> => Boolean::<T>::Or(Box::new(left), right),
-    <Condition> => Boolean::<T>::Condition(<>),
+pub BooleanExpr: BooleanExpr<T> = {
+    "not" <Condition> => BooleanExpr::<T>::Not(<>),
+    <left:BooleanExpr> "and" <right:Condition> => BooleanExpr::<T>::And(Box::new(left), right),
+    <left:BooleanExpr> "or" <right:Condition> => BooleanExpr::<T>::Or(Box::new(left), right),
+    <Condition> => BooleanExpr::<T>::Condition(<>),
 }
 
 Condition: Condition<T> = {
-    "(" <Boolean> ")" => Condition::<T>::Boolean(Box::new(<>)),
+    "(" <BooleanExpr> ")" => Condition::<T>::BooleanExpr(Box::new(<>)),
     <left:Expr> <op:ConditionOpcode> <right:Expr> =>? {
         let f = || -> Result<Condition<T>, ConditionError> {
             Ok(Condition::<T>::Op(left, op, right))
@@ -63,6 +63,7 @@ FactorOp: Opcode = {
 Term: Box<Expr<T>> = {
     Integer => Box::new(Expr::<T>::Integer(<>)),
     Float => Box::new(Expr::<T>::Float(<>)),
+    Boolean => Box::new(Expr::<T>::Boolean(<>)),
     <ConstantString> => Box::new(Expr::<T>::String(<>)),
     <Variable> => Box::new(Expr::<T>::Variable(<>)),
     "(" <Expr> ")"
@@ -74,6 +75,11 @@ Integer: i32 = {
 
 Float: f32 = {
     r"[0-9]+\.[0-9]+" => f32::from_str(<>).unwrap()
+};
+
+Boolean: bool = {
+    "true" => true,
+    "false" => false,
 };
 
 ConstantString: String = {

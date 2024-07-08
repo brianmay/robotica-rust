@@ -23,7 +23,7 @@ lalrpop_mod!(
 ); // synthesized by LALRPOP
 
 pub mod ast;
-pub use conditions::BooleanParser;
+pub use conditions::BooleanExprParser;
 
 #[cfg(test)]
 mod test;

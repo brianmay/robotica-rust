@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use crate::conditions::ast::FieldRef;
 
 use super::ast::{
-    Boolean, Condition, ConditionError, ConditionOpcode, Error, Expr, Fields, GetValues, Opcode,
-    Reference, Scalar,
+    BooleanExpr, Condition, ConditionError, ConditionOpcode, Error, Expr, Fields, GetValues,
+    Opcode, Reference, Scalar,
 };
 use super::conditions;
 
@@ -15,11 +15,12 @@ struct Context {
     dog: HashSet<String>,
     text: String,
     cat: i32,
+    is_a_duck: bool,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct JsonField {
-    value: Boolean<Context>,
+    value: BooleanExpr<Context>,
 }
 
 impl GetValues for Context {
@@ -27,6 +28,7 @@ impl GetValues for Context {
         let mut fields: Fields<Context> = Fields::default();
         fields.scalars.insert("cat".to_string());
         fields.scalars.insert("text".to_string());
+        fields.scalars.insert("is_a_duck".to_string());
         fields.hash_sets.insert("dog".to_string());
         fields
     }
@@ -35,6 +37,7 @@ impl GetValues for Context {
         match field.get_name() {
             "cat" => Some(super::ast::Scalar::Integer(self.cat)),
             "text" => Some(super::ast::Scalar::String(self.text.clone())),
+            "is_a_duck" => Some(super::ast::Scalar::Boolean(self.is_a_duck)),
             _ => None,
         }
     }
@@ -53,7 +56,7 @@ impl GetValues for Context {
 #[rstest::rstest]
 #[case(
     "10 == 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10))
@@ -61,15 +64,17 @@ impl GetValues for Context {
 )]
 #[case(
     "(10 == 10)",
-    Boolean::Condition(Condition::Boolean(Box::new(Boolean::Condition(Condition::Op(
-        Box::new(Expr::Integer(10)),
-        ConditionOpcode::Eq,
-        Box::new(Expr::Integer(10))
-    )))))
+    BooleanExpr::Condition(Condition::BooleanExpr(Box::new(BooleanExpr::Condition(
+        Condition::Op(
+            Box::new(Expr::Integer(10)),
+            ConditionOpcode::Eq,
+            Box::new(Expr::Integer(10))
+        )
+    ))))
 )]
 #[case(
     "10 == 'string'",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string()))
@@ -77,7 +82,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10 != 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::NotEq,
         Box::new(Expr::Integer(10))
@@ -85,7 +90,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10 < 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Lt,
         Box::new(Expr::Integer(10))
@@ -93,7 +98,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10.0 < 10.0",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Float(10.0)),
         ConditionOpcode::Lt,
         Box::new(Expr::Float(10.0))
@@ -101,7 +106,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10 <= 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Lte,
         Box::new(Expr::Integer(10))
@@ -109,7 +114,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10 > 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Gt,
         Box::new(Expr::Integer(10))
@@ -117,7 +122,7 @@ impl GetValues for Context {
 )]
 #[case(
     "10 >= 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Gte,
         Box::new(Expr::Integer(10))
@@ -125,7 +130,7 @@ impl GetValues for Context {
 )]
 #[case(
     "not 10 == 10",
-    Boolean::Not(Condition::Op(
+    BooleanExpr::Not(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10))
@@ -133,36 +138,36 @@ impl GetValues for Context {
 )]
 #[case(
     "'food' in dog",
-    Boolean::Condition(Condition::In(
+    BooleanExpr::Condition(Condition::In(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "'food' not in dog",
-    Boolean::Condition(Condition::NotIn(
+    BooleanExpr::Condition(Condition::NotIn(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "\"food\" in dog",
-    Boolean::Condition(Condition::In(
+    BooleanExpr::Condition(Condition::In(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "\"food\" not in dog",
-    Boolean::Condition(Condition::NotIn(
+    BooleanExpr::Condition(Condition::NotIn(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "10 == 10 and 11 == 11",
-    Boolean::And(
-        Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::And(
+        Box::new(BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
@@ -176,9 +181,9 @@ impl GetValues for Context {
 )]
 #[case(
     "10 == 10 or 11 == 11 and 12 == 12",
-    Boolean::And(
-        Box::new(Boolean::Or(
-            Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::And(
+        Box::new(BooleanExpr::Or(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(10)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(10))
@@ -198,14 +203,14 @@ impl GetValues for Context {
 )]
 #[case(
     "10 == 10 or (11 == 11 and 12 == 12)",
-    Boolean::Or(
-        Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::Or(
+        Box::new(BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
         ))),
-        Condition::Boolean(Box::new(Boolean::And(
-            Box::new(Boolean::Condition(Condition::Op(
+        Condition::BooleanExpr(Box::new(BooleanExpr::And(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(11)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(11))
@@ -220,7 +225,7 @@ impl GetValues for Context {
 )]
 #[case(
     "22 * cat + 66 == 9",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Op(
             Box::new(Expr::Op(
                 Box::new(Expr::Integer(22)),
@@ -236,7 +241,7 @@ impl GetValues for Context {
 )]
 #[case(
     "text == 'string'",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Variable(Reference::new_scalar("text"))),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string())),
@@ -244,15 +249,31 @@ impl GetValues for Context {
 )]
 #[case(
     "text == \"string\"",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Variable(Reference::new_scalar("text"))),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string())),
     ))
 )]
-fn test_parse_condition(#[case] input: &str, #[case] expected: Boolean<Context>) {
+#[case(
+    "is_a_duck == true",
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(true)),
+    ))
+)]
+#[case(
+    "is_a_duck == false",
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(false)),
+    ))
+)]
+fn test_parse_condition(#[case] input: &str, #[case] expected: BooleanExpr<Context>) {
     let fields = Context::get_fields();
-    let expr = conditions::BooleanParser::new()
+    let expr = conditions::BooleanExprParser::new()
         .parse(&fields, input)
         .unwrap();
     assert_eq!(expr, expected);
@@ -263,11 +284,15 @@ fn test_parse_condition(#[case] input: &str, #[case] expected: Boolean<Context>)
     "not_found == \"string\"",
     ConditionError::FieldNotFound("not_found".to_string())
 )]
+#[case(
+    "is_a_duck == yes",
+    ConditionError::FieldNotFound("yes".to_string())
+)]
 fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionError) {
     use lalrpop_util::ParseError;
 
     let fields = Context::get_fields();
-    let expr = conditions::BooleanParser::new()
+    let expr = conditions::BooleanExprParser::new()
         .parse(&fields, input)
         .unwrap_err();
     let ParseError::User { error } = expr else {
@@ -279,7 +304,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 #[rstest::rstest]
 #[case(
     "10 == 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10))
@@ -287,17 +312,17 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 == 10",
-    Boolean::Condition(Condition::Boolean(Box::new(Boolean::Condition(Condition::Boolean(
-        Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::BooleanExpr(Box::new(BooleanExpr::Condition(
+        Condition::BooleanExpr(Box::new(BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
-        )))
-    )))))
+        ))))
+    ))))
 )]
 #[case(
     "10 == 'string'",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string()))
@@ -305,7 +330,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 != 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::NotEq,
         Box::new(Expr::Integer(10))
@@ -313,7 +338,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 < 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Lt,
         Box::new(Expr::Integer(10))
@@ -321,7 +346,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10.0 < 10.0",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Float(10.0)),
         ConditionOpcode::Lt,
         Box::new(Expr::Float(10.0))
@@ -329,7 +354,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 <= 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Lte,
         Box::new(Expr::Integer(10))
@@ -337,7 +362,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 > 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Gt,
         Box::new(Expr::Integer(10))
@@ -345,7 +370,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "10 >= 10",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Gte,
         Box::new(Expr::Integer(10))
@@ -353,7 +378,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "not (10 == 10)",
-    Boolean::Not(Condition::Op(
+    BooleanExpr::Not(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10))
@@ -361,36 +386,36 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "'food' in dog",
-    Boolean::Condition(Condition::In(
+    BooleanExpr::Condition(Condition::In(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "'food' not in dog",
-    Boolean::Condition(Condition::NotIn(
+    BooleanExpr::Condition(Condition::NotIn(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "'food' in dog",
-    Boolean::Condition(Condition::In(
+    BooleanExpr::Condition(Condition::In(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "'food' not in dog",
-    Boolean::Condition(Condition::NotIn(
+    BooleanExpr::Condition(Condition::NotIn(
         "food".to_string(),
         FieldRef::new("dog")
     ))
 )]
 #[case(
     "(10 == 10) and (11 == 11)",
-    Boolean::And(
-        Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::And(
+        Box::new(BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
@@ -404,9 +429,9 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "((10 == 10) or (11 == 11)) and (12 == 12)",
-    Boolean::And(
-        Box::new(Boolean::Or(
-            Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::And(
+        Box::new(BooleanExpr::Or(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(10)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(10))
@@ -426,14 +451,14 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "(10 == 10) or ((11 == 11) and (12 == 12))",
-    Boolean::Or(
-        Box::new(Boolean::Condition(Condition::Op(
+    BooleanExpr::Or(
+        Box::new(BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
         ))),
-        Condition::Boolean(Box::new(Boolean::And(
-            Box::new(Boolean::Condition(Condition::Op(
+        Condition::BooleanExpr(Box::new(BooleanExpr::And(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(11)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(11))
@@ -448,7 +473,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "((22 * cat) + 66) == 9",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Op(
             Box::new(Expr::Op(
                 Box::new(Expr::Integer(22)),
@@ -464,7 +489,7 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "text == 'string'",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Variable(Reference::new_scalar("text"))),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string())),
@@ -472,20 +497,36 @@ fn test_parse_condition_error(#[case] input: &str, #[case] expected: ConditionEr
 )]
 #[case(
     "text == 'string'",
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Variable(Reference::new_scalar("text"))),
         ConditionOpcode::Eq,
         Box::new(Expr::String("string".to_string())),
     ))
 )]
-fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Context>) {
+#[case(
+    "is_a_duck == true",
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(true)),
+    ))
+)]
+#[case(
+    "is_a_duck == false",
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(false)),
+    ))
+)]
+fn test_serialize_to_string(#[case] expected: &str, #[case] input: BooleanExpr<Context>) {
     let result = input.serialize_to_string();
     assert_eq!(result, expected);
 }
 
 #[rstest::rstest]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10))
@@ -494,11 +535,12 @@ fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Conte
         dog: HashSet::new(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     true
 )]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(11))
@@ -507,11 +549,12 @@ fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Conte
         dog: HashSet::new(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     false
 )]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Variable(Reference::new_scalar("cat")))
@@ -520,11 +563,12 @@ fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Conte
         dog: HashSet::new(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     true
 )]
 #[case(
-    Boolean::Condition(Condition::In(
+    BooleanExpr::Condition(Condition::In(
         "food".to_string(),
         FieldRef::new("dog")
     )),
@@ -532,11 +576,12 @@ fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Conte
         dog: vec!["food".to_string()].into_iter().collect(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     true
 )]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Op(
             Box::new(Expr::Op(
                 Box::new(Expr::Integer(22)),
@@ -553,17 +598,50 @@ fn test_serialize_to_string(#[case] expected: &str, #[case] input: Boolean<Conte
         dog: vec!["food".to_string()].into_iter().collect(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     true
 )]
-fn test_eval(#[case] input: Boolean<Context>, #[case] context: Context, #[case] expected: bool) {
+#[case(
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(true)),
+    )),
+    Context {
+        dog: vec!["food".to_string()].into_iter().collect(),
+        text: "string".to_string(),
+        cat: 10,
+        is_a_duck: true,
+    },
+    true
+)]
+#[case(
+    BooleanExpr::Condition(Condition::Op(
+        Box::new(Expr::Variable(Reference::new_scalar("is_a_duck"))),
+        ConditionOpcode::Eq,
+        Box::new(Expr::Boolean(false)),
+    )),
+    Context {
+        dog: vec!["food".to_string()].into_iter().collect(),
+        text: "string".to_string(),
+        cat: 10,
+        is_a_duck: true,
+    },
+    false
+)]
+fn test_eval(
+    #[case] input: BooleanExpr<Context>,
+    #[case] context: Context,
+    #[case] expected: bool,
+) {
     let result = input.eval(&context).unwrap();
     assert_eq!(result, expected);
 }
 
 #[rstest::rstest]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Variable(Reference::new_scalar("text")))
@@ -572,11 +650,12 @@ fn test_eval(#[case] input: Boolean<Context>, #[case] context: Context, #[case] 
         dog: HashSet::new(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
-    Error::IncompatibleFieldTypes(Scalar::Integer(10), Scalar::String("string".to_string()))
+    Error::InvalidOperationForTypes("==".to_string(), Scalar::Integer(10), Scalar::String("string".to_string()))
 )]
 #[case(
-    Boolean::Condition(Condition::Op(
+    BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Variable(Reference::new_scalar("not-found")))
@@ -585,11 +664,12 @@ fn test_eval(#[case] input: Boolean<Context>, #[case] context: Context, #[case] 
         dog: HashSet::new(),
         text: "string".to_string(),
         cat: 10,
+        is_a_duck: true,
     },
     Error::InvalidFieldName("not-found".to_string())
 )]
 fn test_eval_error(
-    #[case] input: Boolean<Context>,
+    #[case] input: BooleanExpr<Context>,
     #[case] context: Context,
     #[case] expected: Error,
 ) {
@@ -603,7 +683,7 @@ fn test_json_serialize() {
     let parsed = serde_json::from_str::<JsonField>(string).unwrap();
     assert_eq!(
         parsed.value,
-        Boolean::Condition(Condition::Op(
+        BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10))
@@ -613,7 +693,7 @@ fn test_json_serialize() {
 
 #[test]
 fn test_json_deserialize() {
-    let value = Boolean::Condition(Condition::Op(
+    let value = BooleanExpr::Condition(Condition::Op(
         Box::new(Expr::Integer(10)),
         ConditionOpcode::Eq,
         Box::new(Expr::Integer(10)),

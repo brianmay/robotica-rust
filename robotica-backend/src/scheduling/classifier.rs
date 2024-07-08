@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string, Date, Weekday};
 
-use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference, Scalar};
+use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar};
 
 #[derive(Debug)]
 struct Context {
@@ -53,7 +53,7 @@ pub struct Config {
     week_day: Option<bool>,
     day_of_week: Option<Weekday>,
     #[serde(rename = "if")]
-    if_cond: Option<Vec<Boolean<Context>>>,
+    if_cond: Option<Vec<BooleanExpr<Context>>>,
     if_set: Option<Vec<String>>,
     if_not_set: Option<Vec<String>>,
     add: Option<Vec<String>>,
@@ -305,12 +305,12 @@ mod tests {
     #[test]
     fn test_cond() {
         let conditions = vec![
-            Boolean::Condition(Condition::Op(
+            BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(10)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(11)),
             )),
-            Boolean::Condition(Condition::In(
+            BooleanExpr::Condition(Condition::In(
                 "classifications".to_string(),
                 FieldRef::new("classifications"),
             )),

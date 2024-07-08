@@ -16,7 +16,7 @@ use robotica_common::{
     scheduler::{Importance, Mark, Status},
 };
 
-use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference};
+use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference};
 
 use super::scheduler::{self};
 
@@ -55,7 +55,7 @@ pub struct Config {
 
     /// The conditions that must be true before this is scheduled.
     #[serde(rename = "if")]
-    if_cond: Option<Vec<Boolean<Context>>>,
+    if_cond: Option<Vec<BooleanExpr<Context>>>,
 
     /// The required classifications for this step.
     classifications: Option<HashSet<String>>,
@@ -124,7 +124,7 @@ pub struct Sequence {
 
     /// The conditions that must be true before this is scheduled.
     #[serde(skip)]
-    pub if_cond: Option<Vec<Boolean<Context>>>,
+    pub if_cond: Option<Vec<BooleanExpr<Context>>>,
 
     /// The required classifications for this step.
     #[serde(skip)]

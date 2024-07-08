@@ -1,7 +1,7 @@
 //! Create a schedule based on tags from classifier.
 //!
 
-use crate::conditions::ast::{Boolean, FieldRef, Fields, GetValues, Reference, Scalar};
+use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar};
 use chrono::Datelike;
 use chrono::{NaiveDate, TimeZone};
 use robotica_common::datetime::{
@@ -39,7 +39,7 @@ pub struct Sequence {
 #[derive(Deserialize, Debug)]
 pub struct Config {
     #[serde(rename = "if")]
-    if_cond: Option<Vec<Boolean<Context>>>,
+    if_cond: Option<Vec<BooleanExpr<Context>>>,
     today: Option<Vec<String>>,
     tomorrow: Option<Vec<String>>,
     sequences: HashMap<String, Sequence>,
@@ -261,7 +261,7 @@ mod tests {
     use chrono::FixedOffset;
     use robotica_common::datetime::convert_date_time_to_utc;
 
-    use crate::conditions::BooleanParser;
+    use crate::conditions::BooleanExprParser;
 
     use super::*;
 
@@ -313,7 +313,7 @@ mod tests {
                 )]),
             },
             Config {
-                if_cond: Some(vec![BooleanParser::new()
+                if_cond: Some(vec![BooleanExprParser::new()
                     .parse(&Context::get_fields(), "'boxing' in today")
                     .unwrap()]),
                 today: None,

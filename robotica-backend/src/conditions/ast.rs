@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tap::Pipe;
 use thiserror::Error;
 
-use super::BooleanParser;
+use super::BooleanExprParser;
 
 /// Quotes a string.
 #[must_use]
@@ -15,7 +15,7 @@ pub fn quote(string: &str) -> String {
     format!("'{string}'")
 }
 
-/// Unquotes a string.
+/// Removes quotes from string.
 #[must_use]
 pub fn unquote(string: &str) -> String {
     if (string.starts_with('\'') && string.ends_with('\''))
@@ -36,9 +36,9 @@ pub enum Error {
     #[error("Invalid field name: {0}")]
     InvalidFieldName(String),
 
-    /// Incompatible field type.
-    #[error("Incompatible field type: {0} and {1}")]
-    IncompatibleFieldTypes(Scalar, Scalar),
+    /// Invalid operation for types.
+    #[error("Invalid operation {0} for types: {1} and {2}")]
+    InvalidOperationForTypes(String, Scalar, Scalar),
 
     /// Cannot test floats for equality.
     #[error("Cannot test floats for equality: {0} and {1}")]
@@ -195,8 +195,7 @@ impl<T: GetValues> Reference<T> {
 }
 
 /// Value type, represents a String or an Integer.
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Scalar {
     /// String value.
     String(String),
@@ -206,6 +205,9 @@ pub enum Scalar {
 
     /// Float value.
     Float(f32),
+
+    /// Boolean value.
+    Boolean(bool),
 }
 
 impl Display for Scalar {
@@ -214,6 +216,7 @@ impl Display for Scalar {
             Self::String(s) => write!(f, "{s}"),
             Self::Integer(i) => write!(f, "{i}"),
             Self::Float(fl) => write!(f, "{fl}"),
+            Self::Boolean(b) => write!(f, "{b}"),
         }
     }
 }
@@ -293,6 +296,9 @@ pub enum Expr<T> {
     /// String value.
     String(String),
 
+    /// Boolean value.
+    Boolean(bool),
+
     /// Variable reference.
     Variable(Reference<T>),
 
@@ -306,6 +312,7 @@ impl<T> Expr<T> {
             Expr::Integer(n) => SerializeValue::new_string(n.to_string()),
             Expr::Float(f) => SerializeValue::new_string(format!("{f:.01}")),
             Expr::String(s) => SerializeValue::new_string(quote(s)),
+            Expr::Boolean(b) => SerializeValue::new_string(b.to_string()),
             Expr::Variable(v) => v.to_tree(),
             Expr::Op(l, op, r) => {
                 let v = vec![
@@ -324,6 +331,7 @@ impl<T: Clone> Clone for Expr<T> {
             Self::Integer(arg0) => Self::Integer(*arg0),
             Self::Float(arg0) => Self::Float(*arg0),
             Self::String(arg0) => Self::String(arg0.clone()),
+            Self::Boolean(arg0) => Self::Boolean(*arg0),
             Self::Variable(arg0) => Self::Variable(arg0.clone()),
             Self::Op(arg0, arg1, arg2) => Self::Op(arg0.clone(), *arg1, arg2.clone()),
         }
@@ -336,6 +344,7 @@ impl<T: GetValues> Expr<T> {
             Expr::Integer(n) => (*n).pipe(Scalar::Integer).pipe(Ok),
             Expr::Float(f) => (*f).pipe(Scalar::Float).pipe(Ok),
             Expr::String(s) => s.clone().pipe(Scalar::String).pipe(Ok),
+            Expr::Boolean(b) => (*b).pipe(Scalar::Boolean).pipe(Ok),
             Expr::Variable(v) => v.get_scalar(context),
             Expr::Op(l, op, r) => op.eval(&l.eval(context)?, &r.eval(context)?),
         }
@@ -366,7 +375,11 @@ impl Opcode {
         match (l, r) {
             (Scalar::Integer(l), Scalar::Integer(r)) => self.eval_int(*l, *r),
             (Scalar::Float(l), Scalar::Float(r)) => self.eval_float(*l, *r),
-            (l, r) => Err(Error::IncompatibleFieldTypes(l.clone(), r.clone())),
+            (l, r) => Err(Error::InvalidOperationForTypes(
+                self.to_string().to_string(),
+                l.clone(),
+                r.clone(),
+            )),
         }
     }
 
@@ -409,7 +422,7 @@ impl Opcode {
 #[derive(Debug, PartialEq)]
 pub enum Condition<T> {
     /// Boolean value.
-    Boolean(Box<Boolean<T>>),
+    BooleanExpr(Box<BooleanExpr<T>>),
 
     /// Comparison operation.
     Op(Box<Expr<T>>, ConditionOpcode, Box<Expr<T>>),
@@ -424,7 +437,7 @@ pub enum Condition<T> {
 impl<T> Condition<T> {
     fn to_tree(&self) -> SerializeValue {
         match self {
-            Condition::Boolean(b) => b.to_tree(),
+            Condition::BooleanExpr(b) => b.to_tree(),
             Condition::Op(l, op, r) => vec![
                 l.to_tree(),
                 SerializeValue::new_string(op.to_string()),
@@ -449,7 +462,7 @@ impl<T> Condition<T> {
 impl<T: Clone> Clone for Condition<T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Boolean(b) => Self::Boolean(b.clone()),
+            Self::BooleanExpr(b) => Self::BooleanExpr(b.clone()),
             Self::Op(l, op, r) => Self::Op(l.clone(), *op, r.clone()),
             Self::In(s, r) => Self::In(s.clone(), r.clone()),
             Self::NotIn(s, r) => Self::NotIn(s.clone(), r.clone()),
@@ -460,7 +473,7 @@ impl<T: Clone> Clone for Condition<T> {
 impl<T: GetValues> Condition<T> {
     fn eval(&self, context: &T) -> Result<bool, Error> {
         match self {
-            Condition::Boolean(b) => b.eval(context),
+            Condition::BooleanExpr(b) => b.eval(context),
             Condition::Op(l, op, r) => {
                 let l = l.eval(context)?;
                 let r = r.eval(context)?;
@@ -468,7 +481,12 @@ impl<T: GetValues> Condition<T> {
                     (Scalar::Integer(l), Scalar::Integer(r)) => op.eval_int(l, r).pipe(Ok),
                     (Scalar::Float(l), Scalar::Float(r)) => op.eval_float(l, r),
                     (Scalar::String(l), Scalar::String(r)) => op.eval_string(&l, &r).pipe(Ok),
-                    (l, r) => Err(Error::IncompatibleFieldTypes(l, r)),
+                    (Scalar::Boolean(l), Scalar::Boolean(r)) => op.eval_boolean(l, r),
+                    (l, r) => Err(Error::InvalidOperationForTypes(
+                        op.to_string().to_string(),
+                        l,
+                        r,
+                    )),
                 }
             }
             Condition::In(l, r) => r.get_hash_set(context).map(|m| m.contains(l)),
@@ -523,6 +541,18 @@ impl ConditionOpcode {
         }
     }
 
+    fn eval_boolean(self, l: bool, r: bool) -> Result<bool, Error> {
+        match self {
+            ConditionOpcode::Eq => Ok(l == r),
+            ConditionOpcode::NotEq => Ok(l != r),
+            _ => Err(Error::InvalidOperationForTypes(
+                self.to_string().to_string(),
+                Scalar::Boolean(l),
+                Scalar::Boolean(r),
+            )),
+        }
+    }
+
     fn eval_string(self, l: &str, r: &str) -> bool {
         match self {
             ConditionOpcode::Eq => l == r,
@@ -548,48 +578,48 @@ impl ConditionOpcode {
 
 /// AST for boolean expressions.
 #[derive(Debug, PartialEq)]
-pub enum Boolean<T> {
+pub enum BooleanExpr<T> {
     /// Negation.
     Not(Condition<T>),
 
     /// Logical AND.
-    And(Box<Boolean<T>>, Condition<T>),
+    And(Box<BooleanExpr<T>>, Condition<T>),
 
     /// Logical OR.
-    Or(Box<Boolean<T>>, Condition<T>),
+    Or(Box<BooleanExpr<T>>, Condition<T>),
 
     /// Condition.
     Condition(Condition<T>),
 }
 
-impl<T: Clone> Clone for Boolean<T> {
+impl<T: Clone> Clone for BooleanExpr<T> {
     fn clone(&self) -> Self {
         match self {
-            Boolean::Not(c) => Boolean::Not(c.clone()),
-            Boolean::And(l, r) => Boolean::And(l.clone(), r.clone()),
-            Boolean::Or(l, r) => Boolean::Or(l.clone(), r.clone()),
-            Boolean::Condition(c) => Boolean::Condition(c.clone()),
+            BooleanExpr::Not(c) => BooleanExpr::Not(c.clone()),
+            BooleanExpr::And(l, r) => BooleanExpr::And(l.clone(), r.clone()),
+            BooleanExpr::Or(l, r) => BooleanExpr::Or(l.clone(), r.clone()),
+            BooleanExpr::Condition(c) => BooleanExpr::Condition(c.clone()),
         }
     }
 }
 
-impl<T> Boolean<T> {
+impl<T> BooleanExpr<T> {
     fn to_tree(&self) -> SerializeValue {
         match self {
-            Boolean::Not(cond) => {
+            BooleanExpr::Not(cond) => {
                 vec![SerializeValue::new_string("not"), cond.to_tree()].pipe(SerializeValue::Tree)
             }
-            Boolean::And(left, right) | Boolean::Or(left, right) => vec![
+            BooleanExpr::And(left, right) | BooleanExpr::Or(left, right) => vec![
                 left.to_tree(),
                 SerializeValue::new_string(match self {
-                    Boolean::And(_, _) => "and",
-                    Boolean::Or(_, _) => "or",
+                    BooleanExpr::And(_, _) => "and",
+                    BooleanExpr::Or(_, _) => "or",
                     _ => unreachable!(),
                 }),
                 right.to_tree(),
             ]
             .pipe(SerializeValue::Tree),
-            Boolean::Condition(cond) => cond.to_tree(),
+            BooleanExpr::Condition(cond) => cond.to_tree(),
         }
     }
 
@@ -601,7 +631,7 @@ impl<T> Boolean<T> {
     }
 }
 
-impl<T: GetValues> Boolean<T> {
+impl<T: GetValues> BooleanExpr<T> {
     /// Evaluates the boolean expression.
     ///
     /// # Errors
@@ -609,29 +639,29 @@ impl<T: GetValues> Boolean<T> {
     /// Returns an error if the expression cannot be evaluated.
     pub fn eval(&self, context: &T) -> Result<bool, Error> {
         match self {
-            Boolean::Not(cond) => cond.eval(context).map(|b| !b),
-            Boolean::And(left, right) => Ok(left.eval(context)? && right.eval(context)?),
-            Boolean::Or(left, right) => Ok(left.eval(context)? || right.eval(context)?),
-            Boolean::Condition(cond) => cond.eval(context),
+            BooleanExpr::Not(cond) => cond.eval(context).map(|b| !b),
+            BooleanExpr::And(left, right) => Ok(left.eval(context)? && right.eval(context)?),
+            BooleanExpr::Or(left, right) => Ok(left.eval(context)? || right.eval(context)?),
+            BooleanExpr::Condition(cond) => cond.eval(context),
         }
     }
 }
 
-impl<'de, T: GetValues> Deserialize<'de> for Boolean<T> {
+impl<'de, T: GetValues> Deserialize<'de> for BooleanExpr<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let fields = T::get_fields();
         let s: String = Deserialize::deserialize(deserializer)?;
-        let expr = BooleanParser::new()
+        let expr = BooleanExprParser::new()
             .parse(&fields, &s)
             .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))?;
         Ok(expr)
     }
 }
 
-impl<T> Serialize for Boolean<T> {
+impl<T> Serialize for BooleanExpr<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -685,7 +715,7 @@ mod tests {
     fn test_eval_single() {
         let context = Context::default();
 
-        let result = Boolean::Condition(Condition::Op(
+        let result = BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10)),
@@ -700,7 +730,7 @@ mod tests {
     fn test_eval_not() {
         let context = Context::default();
 
-        let result = Boolean::Not(Condition::Op(
+        let result = BooleanExpr::Not(Condition::Op(
             Box::new(Expr::Integer(10)),
             ConditionOpcode::Eq,
             Box::new(Expr::Integer(10)),
@@ -716,9 +746,10 @@ mod tests {
         let mut context = Context::default();
         context.dog.insert("food".to_string());
 
-        let result = Boolean::Condition(Condition::In("food".to_string(), FieldRef::new("dog")))
-            .eval(&context)
-            .unwrap();
+        let result =
+            BooleanExpr::Condition(Condition::In("food".to_string(), FieldRef::new("dog")))
+                .eval(&context)
+                .unwrap();
 
         assert!(result);
     }
@@ -728,9 +759,10 @@ mod tests {
         let mut context = Context::default();
         context.dog.insert("food".to_string());
 
-        let result = Boolean::Condition(Condition::NotIn("food".to_string(), FieldRef::new("dog")))
-            .eval(&context)
-            .unwrap();
+        let result =
+            BooleanExpr::Condition(Condition::NotIn("food".to_string(), FieldRef::new("dog")))
+                .eval(&context)
+                .unwrap();
 
         assert!(!result);
     }
@@ -739,8 +771,8 @@ mod tests {
     fn test_eval_and() {
         let context = Context::default();
 
-        let result = Boolean::And(
-            Box::new(Boolean::Condition(Condition::Op(
+        let result = BooleanExpr::And(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(10)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(10)),
@@ -761,9 +793,9 @@ mod tests {
     fn test_eval_or_and() {
         let context = Context::default();
 
-        let result = Boolean::And(
-            Box::new(Boolean::Or(
-                Box::new(Boolean::Condition(Condition::Op(
+        let result = BooleanExpr::And(
+            Box::new(BooleanExpr::Or(
+                Box::new(BooleanExpr::Condition(Condition::Op(
                     Box::new(Expr::Integer(9)),
                     ConditionOpcode::Eq,
                     Box::new(Expr::Integer(9)),
@@ -790,14 +822,14 @@ mod tests {
     fn test_eval_or_and_override() {
         let context = Context::default();
 
-        let result = Boolean::Or(
-            Box::new(Boolean::Condition(Condition::Op(
+        let result = BooleanExpr::Or(
+            Box::new(BooleanExpr::Condition(Condition::Op(
                 Box::new(Expr::Integer(9)),
                 ConditionOpcode::Eq,
                 Box::new(Expr::Integer(9)),
             ))),
-            Condition::Boolean(Box::new(Boolean::And(
-                Box::new(Boolean::Condition(Condition::Op(
+            Condition::BooleanExpr(Box::new(BooleanExpr::And(
+                Box::new(BooleanExpr::Condition(Condition::Op(
                     Box::new(Expr::Integer(10)),
                     ConditionOpcode::Eq,
                     Box::new(Expr::Integer(11)),
@@ -822,7 +854,7 @@ mod tests {
             ..Context::default()
         };
 
-        let result = Boolean::Condition(Condition::Op(
+        let result = BooleanExpr::Condition(Condition::Op(
             Box::new(Expr::Op(
                 Box::new(Expr::Op(
                     Box::new(Expr::Integer(2)),
