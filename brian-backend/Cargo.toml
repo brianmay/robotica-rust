@@ -35,7 +35,7 @@ opentelemetry_sdk = { version = "0.23.0", features = ["rt-tokio"] }
 opentelemetry-semantic-conventions = "0.15.0"
 opentelemetry-otlp = { version = "0.16.0", features = ["logs", "metrics", "tls-webkpi-roots"] }
 opentelemetry-stdout = "0.4.0"
-tonic = "0.11.0"
+tonic = "0.12.0"
 opentelemetry-appender-tracing = "0.4.0"
 rstest = "0.21.0"
 
