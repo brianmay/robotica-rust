@@ -38,12 +38,18 @@ impl Prices {
         get_current_price_response(&self.list, dt)
     }
 
-    fn get_next_period(&self, now: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
-        let interval = self.interval;
-        #[allow(clippy::cast_possible_wrap)]
-        let value =
-            now + interval - TimeDelta::seconds(now.timestamp() % interval.as_secs() as i64);
-        value
+    fn get_next_period(&self, now: chrono::DateTime<Utc>) -> Option<chrono::DateTime<Utc>> {
+        let Ok(interval) = i64::try_from(self.interval.as_secs()) else {
+            error!(
+                "Failed to convert interval to i64: {}",
+                self.interval.as_secs()
+            );
+            return None;
+        };
+
+        let timestamp = now.timestamp();
+        let value = timestamp + interval - timestamp % interval;
+        DateTime::from_timestamp(value, 0)
     }
 
     fn get_weighted_price(&self, dt: DateTime<Utc>) -> Option<f32> {
@@ -287,6 +293,8 @@ mod tests {
 
     #[rstest::rstest]
     #[case(dt("2020-01-01T00:00:00Z"), dt("2020-01-01T00:30:00Z"))]
+    #[case(dt("2020-01-01T00:00:01Z"), dt("2020-01-01T00:30:00Z"))]
+    #[case(dt("2020-01-01T00:00:00.55Z"), dt("2020-01-01T00:30:00Z"))]
     #[case(dt("2020-01-01T00:10:00Z"), dt("2020-01-01T00:30:00Z"))]
     #[case(dt("2020-01-01T00:29:00Z"), dt("2020-01-01T00:30:00Z"))]
     #[case(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z"))]
@@ -296,7 +304,7 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let result = prices.get_next_period(now);
+        let result = prices.get_next_period(now).unwrap();
         assert_eq!(result, expected);
     }
 

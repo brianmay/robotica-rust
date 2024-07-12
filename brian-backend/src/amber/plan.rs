@@ -88,7 +88,12 @@ impl Plan {
             };
 
             total += new_cost;
-            now = prices.get_next_period(now);
+            now = if let Some(next) = prices.get_next_period(now) {
+                next
+            } else {
+                error!("Cannot find next period for {now}");
+                return None;
+            }
         }
 
         Some(total)
@@ -115,7 +120,10 @@ pub fn get_cheapest(
 
     // Get the time of the next 30 minute interval from now
     #[allow(clippy::cast_possible_wrap)]
-    let next_interval = prices.get_next_period(start_search);
+    let Some(next_interval) = prices.get_next_period(start_search) else {
+        error!("Cannot find next interval for {start_search}");
+        return None;
+    };
 
     let now_time = {
         let end_time = min(start_search + required_duration, end_search);
@@ -134,6 +142,7 @@ pub fn get_cheapest(
         .chain(rest_times)
         .filter_map(|plan| {
             let price = plan.get_forecast_cost(start_search, prices);
+            // error!("Plan: {:?} Price: {:?}", plan, price);
             price.map(|price| {
                 // We need the largest value, hence we get the negative duration.
                 let duration = -plan.get_duration();
