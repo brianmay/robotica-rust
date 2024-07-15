@@ -30,7 +30,7 @@ impl TryFrom<&EslConnection> for Call {
 
     fn try_from(conn: &EslConnection) -> Result<Self, ()> {
         let caller_number = conn.get_info::<String>("Caller-Caller-ID-Number");
-        let destination_number = conn.get_info::<String>("Caller-Destination-Number");
+        let destination_number = conn.get_info::<String>("variable_original_destination");
 
         if let (Some(caller_number), Some(destination_number)) = (caller_number, destination_number)
         {
