@@ -29,6 +29,8 @@ impl TryFrom<&EslConnection> for Call {
     type Error = ();
 
     fn try_from(conn: &EslConnection) -> Result<Self, ()> {
+        info!("Getting call info: {conn:#?}");
+
         let caller_number = conn.get_info::<String>("Caller-Caller-ID-Number");
         let destination_number = conn.get_info::<String>("Caller-Destination-Number");
 
