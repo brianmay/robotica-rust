@@ -52,7 +52,7 @@ pub struct CalendarEntry {
 }
 
 impl FromPyObject<'_> for CalendarEntry {
-    fn extract(ob: &'_ PyAny) -> pyo3::PyResult<Self> {
+    fn extract_bound(ob: &Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
         let start: Dt = ob.get_item("DTSTART")?.extract()?;
         let end: Dt = ob.get_item("DTEND")?.extract()?;
 
@@ -75,14 +75,14 @@ impl FromPyObject<'_> for CalendarEntry {
             summary: ob.get_item("SUMMARY")?.extract()?,
             description: ob
                 .get_item("DESCRIPTION")
-                .map_or_else(|_| Ok(None), PyAny::extract)?,
+                .map_or_else(|_| Ok(None), |f| Bound::<PyAny>::extract(&f))?,
             location: ob
                 .get_item("LOCATION")
-                .map_or_else(|_| Ok(None), PyAny::extract)?,
+                .map_or_else(|_| Ok(None), |f| Bound::<PyAny>::extract(&f))?,
             uid: ob.get_item("UID")?.extract()?,
             status: ob
                 .get_item("STATUS")
-                .map_or_else(|_| Ok(None), PyAny::extract)?,
+                .map_or_else(|_| Ok(None), |f| Bound::<PyAny>::extract(&f))?,
             transp: ob.get_item("TRANSP")?.extract()?,
             sequence: ob.get_item("SEQUENCE")?.extract()?,
             start_end,
@@ -91,7 +91,7 @@ impl FromPyObject<'_> for CalendarEntry {
             last_modified: ob.get_item("LAST-MODIFIED")?.extract()?,
             recurrence_id: ob
                 .get_item("RECURRENCE-ID")
-                .map_or_else(|_| Ok(None), PyAny::extract)?,
+                .map_or_else(|_| Ok(None), |f| Bound::<PyAny>::extract(&f))?,
         })
     }
 }
