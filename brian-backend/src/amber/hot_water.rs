@@ -1,11 +1,10 @@
 use crate::InitState;
 
 use super::{
-    plan::{self, get_cheapest},
+    user_plan::{PlanTrait, UserPlan},
     Prices,
 };
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
-use plan::Plan;
 use robotica_backend::{
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
@@ -19,12 +18,9 @@ use robotica_common::{
     unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
-use std::{cmp::min, sync::Arc};
-use tokio::{
-    select,
-    time::{sleep_until, Instant},
-};
+use tokio::select;
 use tracing::{error, info};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -32,6 +28,17 @@ pub enum Request {
     Heat,
     DoNotHeat,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct HeatPlanUserData {}
+
+impl PlanTrait for HeatPlanUserData {
+    fn get_client() -> &'static str {
+        "hot_water"
+    }
+}
+
+type HeatPlan = UserPlan<HeatPlanUserData>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct DayState {
@@ -42,7 +49,7 @@ struct DayState {
     cheap_power_for_day: TimeDelta,
     last_cheap_update: DateTime<Utc>,
     is_on: bool,
-    plan: Option<Plan>,
+    plan: HeatPlan,
 }
 
 const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
@@ -56,7 +63,7 @@ impl DayState {
             cheap_power_for_day: TimeDelta::zero(),
             last_cheap_update: now,
             is_on: false,
-            plan: None,
+            plan: HeatPlan::new_none(HeatPlanUserData {}),
         }
     }
 
@@ -113,99 +120,13 @@ impl DayState {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn update_plan(
-    plan: Option<Plan>,
-    prices: &Prices,
-    now: DateTime<Utc>,
-    end_time: DateTime<Utc>,
-    required_time_left: TimeDelta,
-) -> Option<Plan> {
-    // If required time left is negative or zero, then cancel the plan.
-    if required_time_left <= TimeDelta::zero() {
-        info!("Required time left is negative or zero");
-        return None;
-    }
-
-    let Some((new_plan, new_cost)) = get_cheapest(3.6, now, end_time, required_time_left, prices)
-    else {
-        error!("Can't get new plan");
-        return plan;
-    };
-
-    let plan_cost = plan.map_or_else(
-        || {
-            info!("No old plan available");
-            None
-        },
-        |plan| {
-            info!("Old Plan: {plan:?}, checking cost");
-            plan.get_forecast_cost(now, prices).map_or_else(
-                || {
-                    info!("Old plan available but cannot get cost");
-                    None
-                },
-                |cost| Some((plan, cost)),
-            )
-        },
-    );
-
-    let new_plan_is_on = new_plan.is_current(now);
-
-    if let Some((plan, cost)) = plan_cost {
-        // If there is more then 30 minutes left on plan and new plan is cheaper then 80% of old plan, then force new plan.
-        let time_left = min(plan.get_end_time() - now, required_time_left);
-        let threshold_reached = new_cost < cost * 0.8 && time_left >= TimeDelta::minutes(30);
-        let force = threshold_reached;
-
-        let plan_is_on = plan.is_current(now);
-
-        // If new plan continues old plan, use the old start time.
-        let new_plan = if plan_is_on && new_plan_is_on {
-            new_plan.with_start_time(plan.get_start_time())
-        } else {
-            new_plan
-        };
-
-        info!("Old Plan: {plan:?} {cost} {plan_is_on}");
-        info!("New Plan: {new_plan:?} {new_cost} {new_plan_is_on}");
-        info!("Threshold reached: {threshold_reached}");
-
-        #[allow(clippy::match_same_arms)]
-        let use_new_plan = match (plan_is_on, new_plan_is_on, force) {
-            // force criteria met, use new plan
-            (_, _, true) => true,
-
-            // Turning off but not meeting threshold, don't change
-            (true, false, false) => false,
-
-            // Already off, use new plan
-            (false, _, false) => true,
-
-            // Already on and staying on, use new plan
-            (true, true, false) => true,
-        };
-
-        if use_new_plan {
-            info!("Using new plan");
-            Some(new_plan)
-        } else {
-            info!("Using old plan");
-            Some(plan)
-        }
-    } else {
-        info!("No old plan; Using new Plan: {:?}", new_plan);
-        Some(new_plan)
-    }
-}
-
 fn prices_to_hot_water_request(
     is_on: bool,
-    plan: &Option<Plan>,
+    plan: &HeatPlan,
     prices: &Prices,
     now: DateTime<Utc>,
 ) -> Request {
-    let is_cheap = plan.as_ref().map_or(false, |plan| plan.is_current(now));
+    let is_cheap = plan.is_current(now);
 
     let current_price = prices.get_weighted_price(now);
     let threshold = if is_on { 14.0 } else { 12.0 };
@@ -229,62 +150,28 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
     (start_day, end_day)
 }
 
-async fn sleep_until_plan_start(plan: &Option<Plan>) -> Option<()> {
-    // If duration is negative, we can't sleep because this happened in the past.
-    // This will always happen while plan is active.
-    // In this case we return None.
-    let start_time = plan.as_ref().and_then(|plan| {
-        // If plan start time is in the past this will return None.
-        (plan.get_start_time() - Utc::now()).to_std().ok()
-    });
-
-    if let Some(start_time) = start_time {
-        sleep_until(Instant::now() + start_time).await;
-        Some(())
-    } else {
-        None
-    }
-}
-
-async fn sleep_until_plan_end(plan: &Option<Plan>) -> Option<()> {
-    // If duration is negative, we can't sleep because this happened in the past.
-    // In this case we return Some(()).
-    // It is assumed the expired plan will be dropped.
-    let end_time = plan.as_ref().map(|plan| {
-        // If plan end time is in the past this will return immediately.
-        (plan.get_end_time() - Utc::now())
-            .to_std()
-            .unwrap_or_else(|_| Duration::from_secs(0))
-    });
-
-    if let Some(end_time) = end_time {
-        sleep_until(Instant::now() + end_time).await;
-        Some(())
-    } else {
-        None
-    }
-}
-
 fn process<T: TimeZone>(
-    day: &mut DayState,
+    mut day: DayState,
     prices: &Prices,
     tx_out: &Sender<Request>,
     psr: &PersistentStateRow<DayState>,
     timezone: &T,
-) {
+) -> DayState {
     let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
-    let plan = update_plan(
-        day.plan.take(),
+    let plan = day.plan.update_plan(
+        3.6,
         prices,
         utc_now(),
         day.end,
         required_time_left,
+        HeatPlanUserData {},
     );
     let cr = prices_to_hot_water_request(day.is_on, &plan, prices, Utc::now());
     info!("Sending request: {:?}", cr);
     tx_out.try_send(cr);
     day.plan = plan;
     day.save(psr);
+    day
 }
 
 pub fn run(
@@ -321,7 +208,7 @@ pub fn run(
         };
 
         info!("Received initial prices");
-        process(&mut day, &prices, &tx_out, &psr, timezone);
+        day = process(day, &prices, &tx_out, &psr, timezone);
 
         loop {
             select! {
@@ -333,16 +220,16 @@ pub fn run(
                 Ok(new_prices) = s.recv() => {
                     prices = new_prices;
                     info!("Received new prices");
-                    process(&mut day, &prices, &tx_out, &psr, timezone);
+                    day = process(day, &prices, &tx_out, &psr, timezone);
                 }
-                Some(()) = sleep_until_plan_start(&day.plan) => {
+                Some(()) = day.plan.sleep_until_plan_start() => {
                     info!("Plan start time elapsed");
-                    process(&mut day, &prices, &tx_out, &psr, timezone);
+                    day = process(day, &prices, &tx_out, &psr, timezone);
                 }
-                Some(()) = sleep_until_plan_end(&day.plan) => {
+                Some(()) = day.plan.sleep_until_plan_end() => {
                     info!("Plan end time elapsed");
-                    day.plan = None;
-                    process(&mut day, &prices, &tx_out, &psr, timezone);
+                    day.plan = HeatPlan::new_none(HeatPlanUserData{});
+                    day = process(day, &prices, &tx_out, &psr, timezone);
                 }
                 else => break,
             }
@@ -386,7 +273,7 @@ mod tests {
                 cheap_power_for_day: TimeDelta::minutes(0),
                 last_cheap_update: now,
                 is_on: false,
-                plan: None
+                plan: HeatPlan::new_none(HeatPlanUserData {}),
             }
         );
     }
@@ -439,7 +326,7 @@ mod tests {
             last_cheap_update,
             cheap_power_for_day,
             is_on,
-            plan: None,
+            plan: HeatPlan::new_none(HeatPlanUserData {}),
         };
 
         let cheap_time = TimeDelta::minutes(180);
@@ -555,7 +442,17 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = update_plan(None, &prices, start_time, end_time, required_duration).unwrap();
+        let heat_plan = HeatPlan::new_none(HeatPlanUserData {});
+        let heat_plan = heat_plan.update_plan(
+            3.6,
+            &prices,
+            start_time,
+            end_time,
+            required_duration,
+            HeatPlanUserData {},
+        );
+
+        let plan = heat_plan.get_plan().unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
@@ -679,10 +576,10 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let plan = Plan::new_test(3.6, start_time, end_time);
+        let plan = HeatPlan::new_test(3.6, start_time, end_time, HeatPlanUserData {});
 
         // Act
-        let request = prices_to_hot_water_request(is_on, &Some(plan), &prices, now);
+        let request = prices_to_hot_water_request(is_on, &plan, &prices, now);
 
         // Assert
         assert_eq!(request, expected);
