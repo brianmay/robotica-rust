@@ -9,10 +9,6 @@ use super::{
     Prices,
 };
 
-pub trait PlanTrait {
-    fn get_client() -> &'static str;
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct UserPlan<T> {
     plan: Option<Plan>,
@@ -40,7 +36,6 @@ impl<T> UserPlan<T> {
         }
     }
 
-    #[cfg(test)]
     pub const fn get_plan(&self) -> Option<&Plan> {
         self.plan.as_ref()
     }
@@ -78,20 +73,18 @@ impl<T: PartialEq> PartialEq for UserPlan<T> {
 
 impl<T: Debug + PartialEq> UserPlan<T> {
     #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::too_many_arguments)]
     pub fn update_plan(
         self,
+        id: &str,
         kw: f32,
         prices: &Prices,
         now: DateTime<Utc>,
         end_time: DateTime<Utc>,
         required_time_left: TimeDelta,
         user_data: T,
-    ) -> Self
-    where
-        T: PlanTrait,
-    {
+    ) -> Self {
         let old_user_plan = self;
-        let client = T::get_client();
 
         // If required time left is negative or zero, then cancel the plan.
         if required_time_left <= TimeDelta::zero() {
@@ -105,12 +98,12 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         let Some((new_plan, new_cost)) =
             get_cheapest(kw, now, end_time, required_time_left, prices)
         else {
-            error!(client, plan =? old_user_plan, "Can't get new plan; using old plan");
+            error!(id, plan =? old_user_plan, "Can't get new plan; using old plan");
             return old_user_plan;
         };
 
         let Some(old_plan) = old_user_plan.plan else {
-            info!(client, plan =? new_plan, "No old plan available, using new Plan");
+            info!(id, plan =? new_plan, "No old plan available, using new Plan");
             return Self {
                 plan: Some(new_plan),
                 user_data,
@@ -118,7 +111,7 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         };
 
         let Some(old_cost) = old_plan.get_forecast_cost(now, prices) else {
-            info!(client, plan =? new_plan, "Old plan available but cannot get cost; using new plan");
+            info!(id, plan =? new_plan, "Old plan available but cannot get cost; using new plan");
             return Self {
                 plan: Some(new_plan),
                 user_data,
@@ -143,7 +136,7 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         };
 
         info!(
-            client,
+            id,
             ?old_plan,
             old_cost,
             old_plan_is_on,
@@ -172,13 +165,13 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         };
 
         if use_new_plan {
-            info!(client, plan =? new_plan, "Using new plan");
+            info!(id, plan =? new_plan, "Using new plan");
             Self {
                 plan: Some(new_plan),
                 user_data,
             }
         } else {
-            info!(client, plan =? old_plan, "Using old plan");
+            info!(id, plan =? old_plan, "Using old plan");
             Self {
                 plan: Some(old_plan),
                 user_data,
@@ -248,12 +241,6 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     struct UserData {}
-
-    impl PlanTrait for UserData {
-        fn get_client() -> &'static str {
-            "test"
-        }
-    }
 
     #[rstest::rstest]
     #[case(
@@ -368,6 +355,7 @@ mod tests {
 
         let user_plan = UserPlan::new_none(UserData {});
         let user_plan = user_plan.update_plan(
+            "test",
             7.68,
             &prices,
             start_time,

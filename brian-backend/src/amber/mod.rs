@@ -13,6 +13,7 @@ use tracing::{error, info};
 
 pub mod api;
 pub mod car;
+mod combined;
 pub mod hot_water;
 pub mod logging;
 mod plan;
