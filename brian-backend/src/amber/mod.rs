@@ -18,6 +18,7 @@ pub mod logging;
 mod plan;
 mod private;
 pub mod rules;
+mod user_plan;
 
 #[derive(Debug)]
 pub struct Prices {
