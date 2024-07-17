@@ -7,7 +7,7 @@ pub mod plug_in_reminder;
 mod private;
 pub mod token;
 
-use crate::amber::car::ChargeRequest;
+use crate::amber::{car::ChargeRequest, rules};
 
 use monitor_doors::{DoorState, UserIsPresent};
 use reqwest::Url;
@@ -50,6 +50,7 @@ pub struct Receivers {
     pub user_present: stateful::Receiver<UserIsPresent>,
     pub auto_charge: stateless::Receiver<Json<Command>>,
     pub min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
+    pub rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 }
 
 impl Receivers {
@@ -101,6 +102,11 @@ impl Receivers {
                 .subscribe_into_stateless::<Parsed<u8>>(&format!(
                     "teslamate/cars/{id}/min_charge_tomorrow"
                 ));
+        let rules = state
+            .subscriptions
+            .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(&format!(
+                "teslamate/cars/{id}/rules"
+            ));
 
         let is_charging = charging_state.clone().map(|(_, c)| c.is_charging());
 
@@ -117,6 +123,7 @@ impl Receivers {
             user_present,
             auto_charge,
             min_charge_tomorrow,
+            rules,
         }
     }
 }

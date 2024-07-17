@@ -2,8 +2,7 @@ use crate::{tesla::TeslamateId, InitState};
 
 use super::{
     plan::{get_cheapest, Plan},
-    price_category::{get_weighted_price_category, PriceCategory},
-    Prices,
+    rules, Prices,
 };
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::{global, KeyValue};
@@ -17,7 +16,7 @@ use robotica_backend::{
 };
 use robotica_common::{
     datetime::time_delta,
-    mqtt::{MqttMessage, Parsed, QoS, Retain},
+    mqtt::{Json, MqttMessage, Parsed, QoS, Retain},
     unsafe_naive_time_hms,
 };
 use serde::{Deserialize, Serialize};
@@ -38,7 +37,7 @@ struct Meters {
 #[derive(Debug, Copy, Clone)]
 enum ChargingReason {
     Plan,
-    Cheap,
+    Rules,
     Combined,
 }
 
@@ -55,7 +54,7 @@ impl Meters {
     fn set_charging_requested(&self, request: ChargeRequest, reason: ChargingReason) {
         let reason = match reason {
             ChargingReason::Plan => "plan",
-            ChargingReason::Cheap => "cheap",
+            ChargingReason::Rules => "cheap",
             ChargingReason::Combined => "combined",
         };
         let value = match request {
@@ -74,7 +73,7 @@ impl Meters {
     fn set_nil_charging_requested(&self, reason: ChargingReason) {
         let reason = match reason {
             ChargingReason::Plan => "plan",
-            ChargingReason::Cheap => "cheap",
+            ChargingReason::Rules => "cheap",
             ChargingReason::Combined => "combined",
         };
         let value = 0;
@@ -88,7 +87,9 @@ impl Meters {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+#[serde(rename_all = "snake_case")]
 pub enum ChargeRequest {
     ChargeTo(u8),
     //DoNotCharge,
@@ -123,6 +124,7 @@ struct ChargePlanState {
 struct PersistentState {
     min_charge_tomorrow: u8,
     charge_plan: Option<ChargePlanState>,
+    rules: rules::RuleSet<ChargeRequest>,
 }
 
 impl Default for PersistentState {
@@ -130,6 +132,7 @@ impl Default for PersistentState {
         Self {
             min_charge_tomorrow: 70,
             charge_plan: None,
+            rules: rules::RuleSet::new(vec![]),
         }
     }
 }
@@ -177,6 +180,7 @@ pub fn run(
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
     is_charging: stateful::Receiver<bool>,
+    rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 ) -> Receiver<ChargeRequest> {
     let (tx_out, rx_out) = create_pipe("amber/car");
     let id = teslamate_id.to_string();
@@ -193,6 +197,7 @@ pub fn run(
         let mut s_min_charge_tomorrow = min_charge_tomorrow.subscribe().await;
         let mut s_battery_level = battery_level.subscribe().await;
         let mut s_is_charging = is_charging.subscribe().await;
+        let mut s_rules = rules.subscribe().await;
 
         let Ok(mut v_prices) = s.recv().await else {
             error!("{id}: Failed to get initial prices");
@@ -224,7 +229,7 @@ pub fn run(
             } else {
                 meters.set_nil_charging_requested(ChargingReason::Plan);
             }
-            meters.set_charging_requested(cr.cheap_request, ChargingReason::Cheap);
+            meters.set_charging_requested(cr.rules_request, ChargingReason::Rules);
             meters.set_charging_requested(cr.result, ChargingReason::Combined);
 
             save_state(teslamate_id, &psr, &ps);
@@ -246,6 +251,11 @@ pub fn run(
                 Ok(min_charge_tomorrow) = s_min_charge_tomorrow.recv() => {
                     debug!("{id}: Setting min charge tomorrow to {}", *min_charge_tomorrow);
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
+                    save_state(teslamate_id, &psr, &ps);
+                },
+                Ok(rules) = s_rules.recv() => {
+                    debug!("{id}: Setting rules to {:?}", rules);
+                    ps.rules = rules.into_inner();
                     save_state(teslamate_id, &psr, &ps);
                 },
                 Some(()) = sleep_until_plan_start(&ps.charge_plan) => {
@@ -286,16 +296,21 @@ fn prices_to_charge_request<T: TimeZone>(
     is_charging: bool,
     mut ps: PersistentState,
     now: DateTime<Utc>,
-    tz: &T,
+    timezone: &T,
 ) -> (State, PersistentState) {
     let id = teslamate_id.to_string();
 
     // How long should car take to charge to min_charge_tomorrow?
-    let estimated_charge_time_to_min =
-        estimate_to_limit(teslamate_id, battery_level, now, ps.min_charge_tomorrow, tz);
+    let estimated_charge_time_to_min = estimate_to_limit(
+        teslamate_id,
+        battery_level,
+        now,
+        ps.min_charge_tomorrow,
+        timezone,
+    );
 
     let plan_request = if let Some(estimated_charge_time_to_min) = estimated_charge_time_to_min {
-        let (_start_time, end_time) = super::private::get_day(now, END_TIME, tz);
+        let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
         let charge_plan = update_charge_plan(
             ps.charge_plan,
             prices,
@@ -319,21 +334,16 @@ fn prices_to_charge_request<T: TimeZone>(
         None
     };
 
-    // Get the normal charge request based on category
-    let category = get_weighted_price_category(is_charging, prices, now);
-    #[allow(clippy::match_same_arms)]
-    let cheap_request = match category {
-        Some(PriceCategory::SuperCheap) => ChargeRequest::ChargeTo(90),
-        Some(PriceCategory::Cheap) => ChargeRequest::ChargeTo(80),
-        Some(PriceCategory::Normal) => ChargeRequest::ChargeTo(50),
-        Some(PriceCategory::Expensive) => ChargeRequest::ChargeTo(20),
-        None => ChargeRequest::ChargeTo(50),
-    };
-    info!("{id}: Price Category: {category:?}, Cheap request: {cheap_request:?}",);
+    let rules_request = ps
+        .rules
+        .apply(prices, now, is_charging, timezone)
+        .copied()
+        .unwrap_or(ChargeRequest::ChargeTo(0));
+    info!("{id}: Rules request: {rules_request:?}",);
 
     // get the largest value out of force and normal
-    let combined_request = plan_request.map_or(cheap_request, |force| {
-        let result = cheap_request.max(force);
+    let combined_request = plan_request.map_or(rules_request, |force| {
+        let result = rules_request.max(force);
         info!("{id}: Plan charge to {force:?}, now {result:?}");
         result
     });
@@ -341,23 +351,25 @@ fn prices_to_charge_request<T: TimeZone>(
     // Get some more stats
     let estimated_charge_time_to_limit = match combined_request {
         ChargeRequest::ChargeTo(limit) => {
-            estimate_to_limit(teslamate_id, battery_level, now, limit, tz)
+            estimate_to_limit(teslamate_id, battery_level, now, limit, timezone)
         }
         ChargeRequest::Manual => None,
     };
-    let estimated_charge_time_to_90 = estimate_to_limit(teslamate_id, battery_level, now, 90, tz);
+    let estimated_charge_time_to_90 =
+        estimate_to_limit(teslamate_id, battery_level, now, 90, timezone);
 
     let state = State {
         time: now,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
         plan_request,
-        cheap_request,
+        rules_request,
         result: combined_request,
         charge_plan: ps.charge_plan.clone(),
         estimated_charge_time_to_min,
         estimated_charge_time_to_limit,
         estimated_charge_time_to_90,
+        rules: ps.rules.clone(),
     };
 
     (state, ps)
@@ -395,7 +407,7 @@ struct State {
     battery_level: u8,
     min_charge_tomorrow: u8,
     plan_request: Option<ChargeRequest>,
-    cheap_request: ChargeRequest,
+    rules_request: ChargeRequest,
     result: ChargeRequest,
     charge_plan: Option<ChargePlanState>,
 
@@ -407,6 +419,8 @@ struct State {
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_charge_time_to_90: Option<TimeDelta>,
+
+    rules: rules::RuleSet<ChargeRequest>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -732,13 +746,46 @@ mod tests {
         #[case] expected_end_time: DateTime<Utc>,
         #[case] expected_cost: f32,
     ) {
+        use tap::Pipe;
+
         let summary = Prices {
             list: pr_list_descending(0.0),
             interval: INTERVAL,
         };
+        let rules = vec![
+            rules::Rule::new(
+                "is_on==true and weighted_price < 11.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(90),
+            ),
+            rules::Rule::new(
+                "is_on==true and weighted_price < 16.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(80),
+            ),
+            rules::Rule::new(
+                "is_on==true and weighted_price < 31.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(70),
+            ),
+            rules::Rule::new("is_on==true".parse().unwrap(), ChargeRequest::ChargeTo(50)),
+            rules::Rule::new(
+                "is_on==false and weighted_price < 9.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(90),
+            ),
+            rules::Rule::new(
+                "is_on==false and weighted_price < 14.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(80),
+            ),
+            rules::Rule::new(
+                "is_on==false and weighted_price < 29.0".parse().unwrap(),
+                ChargeRequest::ChargeTo(70),
+            ),
+            rules::Rule::new("is_on==false".parse().unwrap(), ChargeRequest::ChargeTo(50)),
+        ]
+        .pipe(rules::RuleSet::new);
+
         let ps = PersistentState {
             min_charge_tomorrow: 72,
             charge_plan: None,
+            rules,
         };
         let battery_level = 10u8;
         let (state, new_ps) = prices_to_charge_request(
@@ -759,7 +806,7 @@ mod tests {
             assert_eq!(state.plan_request, None);
         }
         assert_eq!(state.result, ChargeRequest::ChargeTo(90));
-        assert_eq!(state.cheap_request, ChargeRequest::ChargeTo(90));
+        assert_eq!(state.rules_request, ChargeRequest::ChargeTo(90));
         assert_eq!(new_ps.min_charge_tomorrow, 72);
 
         let charge_plan = new_ps.charge_plan.unwrap();

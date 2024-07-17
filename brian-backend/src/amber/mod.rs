@@ -16,8 +16,8 @@ pub mod car;
 pub mod hot_water;
 pub mod logging;
 mod plan;
-mod price_category;
 mod private;
+pub mod rules;
 
 #[derive(Debug)]
 pub struct Prices {

@@ -319,6 +319,13 @@ impl<Body: FromStr> TryFrom<MqttMessage> for Parsed<Body> {
 /// A JSON MQTT message.
 pub struct Json<T>(pub T);
 
+impl<T> Json<T> {
+    /// Unwrap the inner value
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
 impl<T: Clone> Clone for Json<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())

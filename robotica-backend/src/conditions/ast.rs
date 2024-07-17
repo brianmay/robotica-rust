@@ -1,6 +1,6 @@
 //! Abstract syntax tree for conditions.
 
-use std::{collections::HashSet, fmt::Display};
+use std::{collections::HashSet, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tap::Pipe;
@@ -325,7 +325,7 @@ impl<T> Expr<T> {
         }
     }
 }
-impl<T: Clone> Clone for Expr<T> {
+impl<T> Clone for Expr<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Integer(arg0) => Self::Integer(*arg0),
@@ -459,7 +459,8 @@ impl<T> Condition<T> {
         }
     }
 }
-impl<T: Clone> Clone for Condition<T> {
+
+impl<T> Clone for Condition<T> {
     fn clone(&self) -> Self {
         match self {
             Self::BooleanExpr(b) => Self::BooleanExpr(b.clone()),
@@ -577,7 +578,7 @@ impl ConditionOpcode {
 }
 
 /// AST for boolean expressions.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum BooleanExpr<T> {
     /// Negation.
     Not(Condition<T>),
@@ -592,7 +593,13 @@ pub enum BooleanExpr<T> {
     Condition(Condition<T>),
 }
 
-impl<T: Clone> Clone for BooleanExpr<T> {
+impl<T> std::fmt::Debug for BooleanExpr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.serialize_to_string())
+    }
+}
+
+impl<T> Clone for BooleanExpr<T> {
     fn clone(&self) -> Self {
         match self {
             BooleanExpr::Not(c) => BooleanExpr::Not(c.clone()),
@@ -658,6 +665,17 @@ impl<'de, T: GetValues> Deserialize<'de> for BooleanExpr<T> {
             .parse(&fields, &s)
             .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))?;
         Ok(expr)
+    }
+}
+
+impl<T: GetValues> FromStr for BooleanExpr<T> {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fields = T::get_fields();
+        BooleanExprParser::new()
+            .parse(&fields, s)
+            .map_err(|e| Error::InvalidFieldName(e.to_string()))
     }
 }
 
