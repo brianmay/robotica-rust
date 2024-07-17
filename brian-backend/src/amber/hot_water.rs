@@ -147,6 +147,7 @@ impl DayState {
             .unwrap_or_else(TimeDelta::zero);
 
         info!(
+            id,
             "Cheap power for day: {}, time left: {}",
             time_delta::to_string(&self.cheap_power_for_day),
             time_delta::to_string(&duration),
@@ -212,7 +213,7 @@ fn process<T: TimeZone>(
         combined: state,
         required_time_left: Some(required_time_left),
     };
-    publish_state(&state, mqtt);
+    publish_state(id, &state, mqtt);
 
     info!(id, ?cr, "Sending request");
     tx_out.try_send(cr);
@@ -245,7 +246,7 @@ pub fn run(
         } else {
             Request::DoNotHeat
         };
-        info!("Sending initial state: {:?}", initial);
+        info!(id, cr=?initial, "Sending initial request");
         tx_out.try_send(initial);
     }
 
@@ -308,12 +309,12 @@ pub fn run(
     rx_out.rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300))
 }
 
-fn publish_state(state: &State, mqtt: &MqttTx) {
+fn publish_state(id: &str, state: &State, mqtt: &MqttTx) {
     let topic = "robotica/state/hot_water/amber";
     let result = MqttMessage::from_json(topic, &state, Retain::Retain, QoS::AtLeastOnce);
     match result {
         Ok(msg) => mqtt.try_send(msg),
-        Err(e) => error!("Failed to serialize state: {:?}", e),
+        Err(e) => error!(id, "Failed to serialize state: {:?}", e),
     }
 }
 
