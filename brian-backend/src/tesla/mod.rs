@@ -24,13 +24,6 @@ use super::InitState;
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TeslamateId(u32);
 
-impl TeslamateId {
-    #[cfg(test)]
-    pub const fn testing_value() -> Self {
-        Self(99)
-    }
-}
-
 impl ToString for TeslamateId {
     fn to_string(&self) -> String {
         self.0.to_string()
@@ -100,12 +93,12 @@ impl Receivers {
             state
                 .subscriptions
                 .subscribe_into_stateless::<Parsed<u8>>(&format!(
-                    "teslamate/cars/{id}/min_charge_tomorrow"
+                    "robotica/command/tesla/{id}/min_charge_tomorrow"
                 ));
         let rules = state
             .subscriptions
             .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(&format!(
-                "teslamate/cars/{id}/rules"
+                "robotica/command/tesla/{id}/rules"
             ));
 
         let is_charging = charging_state.clone().map(|(_, c)| c.is_charging());

@@ -305,8 +305,14 @@ fn monitor_hot_water(
         .subscribe_into_stateful::<Json<shelly::SwitchStatus>>("hotwater/status/switch:0")
         .map(|(_, json)| json.0.output);
 
+    let rules = state
+        .subscriptions
+        .subscribe_into_stateless::<Json<amber::rules::RuleSet<amber::hot_water::Request>>>(
+            "robotica/command/hot_water/rules",
+        );
+
     let mqtt_clone = state.mqtt.clone();
-    let hot_water_request = amber::hot_water::run(state, prices.clone(), is_on);
+    let hot_water_request = amber::hot_water::run(state, prices.clone(), is_on, rules);
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
         if old.is_none() {
@@ -362,7 +368,6 @@ fn monitor_teslas(
         let charge_request = amber::car::run(
             state,
             tesla.teslamate_id,
-            tesla.tesla_id,
             prices.clone(),
             receivers.battery_level.clone(),
             receivers.min_charge_tomorrow.clone(),

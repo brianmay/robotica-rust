@@ -1,20 +1,24 @@
 use crate::InitState;
 
 use super::{
-    user_plan::{PlanTrait, UserPlan},
+    combined,
+    rules::{self},
+    user_plan::UserPlan,
     Prices,
 };
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
+use opentelemetry::metrics::Meter;
 use robotica_backend::{
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
-        Subscriber, Subscription,
+        stateless, Subscriber, Subscription,
     },
-    services::persistent_state::PersistentStateRow,
+    services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
     spawn,
 };
 use robotica_common::{
     datetime::{time_delta, utc_now},
+    mqtt::{Json, MqttMessage, QoS, Retain},
     unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
@@ -23,20 +27,49 @@ use std::time::Duration;
 use tokio::select;
 use tracing::{error, info};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Request {
     Heat,
     DoNotHeat,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct HeatPlanUserData {}
-
-impl PlanTrait for HeatPlanUserData {
-    fn get_client() -> &'static str {
-        "hot_water"
+impl Default for Request {
+    fn default() -> Self {
+        Self::DoNotHeat
     }
 }
+
+impl combined::Max for Request {
+    fn max(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Heat, _) | (_, Self::Heat) => Self::Heat,
+            _ => Self::DoNotHeat,
+        }
+    }
+}
+
+impl combined::RequestTrait for Request {
+    type GaugeType = u64;
+
+    fn init_gauge(meter: &Meter) -> opentelemetry::metrics::Gauge<Self::GaugeType> {
+        meter.u64_gauge("charge_request").init()
+    }
+
+    fn get_meter_value(&self) -> Self::GaugeType {
+        match self {
+            Self::Heat => 2,
+            Self::DoNotHeat => 1,
+        }
+    }
+
+    fn get_nil_meter_value() -> Self::GaugeType {
+        0
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+struct HeatPlanUserData {}
 
 type HeatPlan = UserPlan<HeatPlanUserData>;
 
@@ -50,6 +83,7 @@ struct DayState {
     last_cheap_update: DateTime<Utc>,
     is_on: bool,
     plan: HeatPlan,
+    rules: rules::RuleSet<Request>,
 }
 
 const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
@@ -64,6 +98,7 @@ impl DayState {
             last_cheap_update: now,
             is_on: false,
             plan: HeatPlan::new_none(HeatPlanUserData {}),
+            rules: rules::RuleSet::new(vec![]),
         }
     }
 
@@ -84,8 +119,9 @@ impl DayState {
         })
     }
 
-    fn cheap_update<T: TimeZone>(
+    fn calculate_required_time_left<T: TimeZone>(
         &mut self,
+        id: &str,
         now: DateTime<Utc>,
         cheap_time: TimeDelta,
         timezone: &T,
@@ -99,6 +135,7 @@ impl DayState {
         if self.is_on {
             let duration = now - self.last_cheap_update;
             info!(
+                id,
                 "Adding {duration:?} to cheap power for day {now:?} - {last_cheap_update:?}",
                 last_cheap_update = self.last_cheap_update,
             );
@@ -120,45 +157,36 @@ impl DayState {
     }
 }
 
-fn prices_to_hot_water_request(
-    is_on: bool,
-    plan: &HeatPlan,
-    prices: &Prices,
-    now: DateTime<Utc>,
-) -> Request {
-    let is_cheap = plan.is_current(now);
-
-    let current_price = prices.get_weighted_price(now);
-    let threshold = if is_on { 14.0 } else { 12.0 };
-
-    let should_be_on = match (is_cheap, current_price) {
-        (true, _) => true,
-        (false, Some(price)) if price < threshold => true,
-        _ => false,
-    };
-
-    if should_be_on {
-        Request::Heat
-    } else {
-        Request::DoNotHeat
-    }
-}
-
 fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, DateTime<Utc>) {
     let end_time: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
     let (start_day, end_day) = super::private::get_day(now, end_time, local);
     (start_day, end_day)
 }
 
+#[derive(Serialize)]
+struct State {
+    #[serde(flatten)]
+    combined: combined::State<HeatPlanUserData, Request>,
+
+    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
+    required_time_left: Option<TimeDelta>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process<T: TimeZone>(
+    id: &str,
     mut day: DayState,
     prices: &Prices,
     tx_out: &Sender<Request>,
     psr: &PersistentStateRow<DayState>,
+    meters: Option<&combined::Meters<Request>>,
+    now: DateTime<Utc>,
+    mqtt: &MqttTx,
     timezone: &T,
 ) -> DayState {
-    let required_time_left = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
+    let required_time_left = day.calculate_required_time_left(id, utc_now(), CHEAP_TIME, timezone);
     let plan = day.plan.update_plan(
+        id,
         3.6,
         prices,
         utc_now(),
@@ -166,8 +194,27 @@ fn process<T: TimeZone>(
         required_time_left,
         HeatPlanUserData {},
     );
-    let cr = prices_to_hot_water_request(day.is_on, &plan, prices, Utc::now());
-    info!("Sending request: {:?}", cr);
+
+    let state = combined::get_request(
+        id,
+        Request::Heat,
+        &plan,
+        &day.rules,
+        prices,
+        day.is_on,
+        meters,
+        now,
+        timezone,
+    );
+    let cr = state.get_result();
+
+    let state = State {
+        combined: state,
+        required_time_left: Some(required_time_left),
+    };
+    publish_state(&state, mqtt);
+
+    info!(id, ?cr, "Sending request");
     tx_out.try_send(cr);
     day.plan = plan;
     day.save(psr);
@@ -178,9 +225,12 @@ pub fn run(
     state: &InitState,
     rx: Receiver<Arc<Prices>>,
     is_on: Receiver<bool>,
+    rules: stateless::Receiver<Json<rules::RuleSet<Request>>>,
 ) -> Receiver<Request> {
     let (tx_out, rx_out) = create_pipe("amber/hot_water");
     let timezone = &Local;
+    let id = "hot_water";
+    let mqtt = state.mqtt.clone();
 
     let psr = state
         .persistent_state_database
@@ -202,34 +252,53 @@ pub fn run(
     spawn(async move {
         let mut s = rx.subscribe().await;
         let mut s_is_on = is_on.subscribe().await;
+        let mut s_rules = rules.subscribe().await;
+
         let Ok(mut prices) = s.recv().await else {
-            error!("Failed to get initial prices");
+            error!(id, "Failed to get initial prices");
             return;
         };
 
-        info!("Received initial prices");
-        day = process(day, &prices, &tx_out, &psr, timezone);
+        let meters = combined::Meters::new("hot_water");
+
+        info!(id, "Received initial prices");
+        day = process(
+            id,
+            day,
+            &prices,
+            &tx_out,
+            &psr,
+            Some(&meters),
+            utc_now(),
+            &mqtt,
+            timezone,
+        );
 
         loop {
             select! {
                 Ok(is_on) = s_is_on.recv() => {
-                    let _required_time = day.cheap_update(utc_now(), CHEAP_TIME, timezone);
+                    let _required_time = day.calculate_required_time_left(id, utc_now(), CHEAP_TIME, timezone);
                     day.is_on = is_on;
                     day.save(&psr);
                 },
                 Ok(new_prices) = s.recv() => {
+                    info!(id, "Received new prices");
                     prices = new_prices;
-                    info!("Received new prices");
-                    day = process(day, &prices, &tx_out, &psr, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
+                }
+                Ok(Json(new_rules)) = s_rules.recv() => {
+                    info!(id, "Received new rules");
+                    day.rules = new_rules;
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_start() => {
-                    info!("Plan start time elapsed");
-                    day = process(day, &prices, &tx_out, &psr, timezone);
+                    info!(id, "Plan start time elapsed");
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_end() => {
-                    info!("Plan end time elapsed");
+                    info!(id, "Plan end time elapsed");
                     day.plan = HeatPlan::new_none(HeatPlanUserData{});
-                    day = process(day, &prices, &tx_out, &psr, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
                 }
                 else => break,
             }
@@ -237,6 +306,15 @@ pub fn run(
     });
 
     rx_out.rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300))
+}
+
+fn publish_state(state: &State, mqtt: &MqttTx) {
+    let topic = "robotica/state/hot_water/amber";
+    let result = MqttMessage::from_json(topic, &state, Retain::Retain, QoS::AtLeastOnce);
+    match result {
+        Ok(msg) => mqtt.try_send(msg),
+        Err(e) => error!("Failed to serialize state: {:?}", e),
+    }
 }
 
 #[cfg(test)]
@@ -274,6 +352,7 @@ mod tests {
                 last_cheap_update: now,
                 is_on: false,
                 plan: HeatPlan::new_none(HeatPlanUserData {}),
+                rules: rules::RuleSet::new(vec![]),
             }
         );
     }
@@ -311,7 +390,7 @@ mod tests {
         TimeDelta::minutes(42),
         TimeDelta::minutes(180-42)
     )]
-    fn test_cheap_update(
+    fn test_calculate_required_time_left(
         #[case] now: DateTime<Utc>,
         #[case] last_cheap_update: DateTime<Utc>,
         #[case] cheap_power_for_day: TimeDelta,
@@ -320,6 +399,8 @@ mod tests {
         #[case] expected_time_left: TimeDelta,
     ) {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+        let id = "test";
+
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
             end: dt("2020-01-01T04:00:00Z"),
@@ -327,10 +408,11 @@ mod tests {
             cheap_power_for_day,
             is_on,
             plan: HeatPlan::new_none(HeatPlanUserData {}),
+            rules: rules::RuleSet::new(vec![]),
         };
 
         let cheap_time = TimeDelta::minutes(180);
-        let actual = ds.cheap_update(now, cheap_time, &timezone);
+        let actual = ds.calculate_required_time_left(id, now, cheap_time, &timezone);
         assert_eq!(ds.last_cheap_update, now);
         assert_eq!(ds.cheap_power_for_day, expected_time_used);
         assert_eq!(actual, expected_time_left);
@@ -444,6 +526,7 @@ mod tests {
 
         let heat_plan = HeatPlan::new_none(HeatPlanUserData {});
         let heat_plan = heat_plan.update_plan(
+            "test",
             3.6,
             &prices,
             start_time,
@@ -518,7 +601,7 @@ mod tests {
         true,
         Request::Heat
     )]
-    fn test_prices_to_hot_water_request(
+    fn test_get_request(
         #[case] start_time: DateTime<Utc>,
         #[case] end_time: DateTime<Utc>,
         #[case] now: DateTime<Utc>,
@@ -576,10 +659,33 @@ mod tests {
             interval: INTERVAL,
         };
 
+        let rules = rules::RuleSet::new(vec![
+            rules::Rule::new(
+                "is_on==false and weighted_price < 12.0".parse().unwrap(),
+                Request::Heat,
+            ),
+            rules::Rule::new(
+                "is_on==true and weighted_price < 14.0".parse().unwrap(),
+                Request::Heat,
+            ),
+            rules::Rule::new("true == true".parse().unwrap(), Request::DoNotHeat),
+        ]);
+
         let plan = HeatPlan::new_test(3.6, start_time, end_time, HeatPlanUserData {});
 
         // Act
-        let request = prices_to_hot_water_request(is_on, &plan, &prices, now);
+        let request = combined::get_request(
+            "test",
+            Request::Heat,
+            &plan,
+            &rules,
+            &prices,
+            is_on,
+            None,
+            now,
+            &timezone,
+        )
+        .get_result();
 
         // Assert
         assert_eq!(request, expected);
