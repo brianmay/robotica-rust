@@ -172,6 +172,8 @@ async fn sleep_until_plan_end(plan: &Option<ChargePlanState>) -> Option<()> {
     }
 }
 
+// Refactoring this is on TODO list.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     state: &InitState,
     teslamate_id: TeslamateId,
