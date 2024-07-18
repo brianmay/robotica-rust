@@ -128,11 +128,12 @@ impl DayState {
     ) -> TimeDelta {
         // If the date has changed, reset the cheap power for the day.
         if now < self.start || now >= self.end {
-            let rules = replace(&mut self.rules, rules::RuleSet::new(vec![]));
-            *self = Self {
-                rules,
-                ..Self::new(now, timezone)
-            }
+            let (start_day, end_day) = get_cheap_day(now, timezone);
+            self.start = start_day;
+            self.end = end_day;
+            self.cheap_power_for_day = TimeDelta::zero();
+            self.last_cheap_update = start_day;
+            self.plan = HeatPlan::new_none(HeatPlanUserData {});
         };
 
         // Add recent time to total cheap_power_for_day
