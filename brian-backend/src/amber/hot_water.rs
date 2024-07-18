@@ -1,4 +1,4 @@
-use crate::{delays::rate_limit, InitState};
+use crate::InitState;
 
 use super::{
     plan::{self, get_cheapest},
@@ -349,11 +349,7 @@ pub fn run(
         }
     });
 
-    rate_limit(
-        "amber/hot_water/ratelimit",
-        Duration::from_secs(300),
-        rx_out,
-    )
+    rx_out.rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300))
 }
 
 #[cfg(test)]

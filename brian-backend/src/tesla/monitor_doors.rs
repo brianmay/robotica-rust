@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use robotica_backend::{
-    pipes::{stateful, Subscriber, Subscription},
+    pipes::{delays::DelayInputOptions, stateful, Subscriber, Subscription},
     spawn,
 };
 use robotica_common::{
@@ -13,11 +13,7 @@ use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
-use crate::{
-    delays::{delay_input, delay_repeat, DelayInputOptions},
-    tesla::private::new_message,
-    InitState,
-};
+use crate::{tesla::private::new_message, InitState};
 
 use super::{Config, Receivers};
 
@@ -196,10 +192,9 @@ pub fn monitor(state: &InitState, tesla: &Config, receivers: MonitorInputs) {
 
     // We only care if doors open for at least 120 seconds.
     let duration = Duration::from_secs(120);
-    let rx = delay_input(
+    let rx = rx.delay_input(
         "tesla_doors (delayed)",
         duration,
-        rx,
         |(_, c)| !c.is_empty(),
         DelayInputOptions {
             skip_subsequent_delay: true,
@@ -211,7 +206,7 @@ pub fn monitor(state: &InitState, tesla: &Config, receivers: MonitorInputs) {
 
     // Repeat the last value every 5 minutes.
     let duration = Duration::from_secs(300);
-    let rx = delay_repeat("tesla_doors (repeat)", duration, rx, |(_, c)| !c.is_empty());
+    let rx = rx.delay_repeat("tesla_doors (repeat)", duration, |(_, c)| !c.is_empty());
 
     // Output the message.
     let tesla = tesla.clone();

@@ -10,7 +10,6 @@
 mod amber;
 pub(crate) mod audience;
 mod config;
-mod delays;
 mod environment_monitor;
 mod ha;
 mod hdmi;
@@ -25,7 +24,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use chrono::{Local, TimeZone};
-use delays::rate_limit;
 use lights::{run_auto_light, run_passage_light, SharedEntities};
 use robotica_backend::devices::lifx::DiscoverConfig;
 use robotica_backend::devices::{fake_switch, lifx};
@@ -44,7 +42,6 @@ use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
-use tap::Pipe;
 use tracing::{debug, error, info};
 
 use crate::amber::hot_water;
@@ -57,6 +54,7 @@ use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 #[tokio::main]
 async fn main() -> Result<()> {
     color_backtrace::install();
+    let started = stateless::Started::new();
 
     let env = config::Environment::load().unwrap_or_else(|e| {
         panic!("Error loading environment: {e}");
@@ -95,6 +93,8 @@ async fn main() -> Result<()> {
     sqlx::migrate!("../migrations").run(&postgres).await?;
 
     setup_pipes(state, mqtt_rx, config, postgres).await;
+
+    started.notify();
 
     loop {
         debug!("I haven't crashed yet!");
@@ -258,7 +258,7 @@ fn monitor_bathroom_door(state: &mut InitState) {
         .subscriptions
         .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
         .map(|(_, json)| json.into())
-        .pipe(|rx| rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30), rx));
+        .rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30));
 
     let mqtt = state.mqtt.clone();
     let message_sink = state.message_sink.clone();

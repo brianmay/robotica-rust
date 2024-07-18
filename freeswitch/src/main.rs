@@ -10,7 +10,10 @@ mod freeswitch;
 mod phone_db;
 
 use config::Config;
-use robotica_backend::services::mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions};
+use robotica_backend::{
+    pipes::stateless,
+    services::mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
+};
 use robotica_common::version;
 
 use tracing::{debug, info};
@@ -21,6 +24,7 @@ use crate::config::Environment;
 async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
+    let started = stateless::Started::new();
 
     info!(
         "Starting Freeswitch, version = {:?}, build time = {:?}",
@@ -32,7 +36,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = env.config()?;
     start_services(config).await?;
 
-    Ok(())
+    started.notify();
+    loop {
+        debug!("I haven't crashed yet!");
+        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+    }
 }
 
 /// Running state for program.
@@ -53,8 +61,5 @@ async fn start_services(config: Config) -> Result<(), anyhow::Error> {
     freeswitch::run(&running_state, config.freeswitch, config.phone_db).await?;
     run_client(running_state.subscriptions, mqtt_rx, config.mqtt)?;
 
-    loop {
-        debug!("I haven't crashed yet!");
-        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
-    }
+    Ok(())
 }

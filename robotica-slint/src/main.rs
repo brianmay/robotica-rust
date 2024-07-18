@@ -14,9 +14,12 @@ mod ui;
 
 use std::sync::Arc;
 
-use robotica_backend::services::{
-    mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
-    persistent_state::{self, PersistentStateDatabase},
+use robotica_backend::{
+    pipes::stateless::{self, Started},
+    services::{
+        mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
+        persistent_state::{self, PersistentStateDatabase},
+    },
 };
 use robotica_common::version;
 use tokio::sync::mpsc;
@@ -52,6 +55,7 @@ impl TryFrom<config::Config> for LoadedConfig {
 async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
+    let started = stateless::Started::new();
 
     info!(
         "Starting robotica-slint, version = {:?}, build time = {:?}",
@@ -74,7 +78,7 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     let config: LoadedConfig = config.try_into()?;
-    start_services(config)?;
+    start_services(config, &started)?;
 
     Ok(())
 }
@@ -87,7 +91,7 @@ pub struct RunningState {
     // persistent_state_database: PersistentStateDatabase,
 }
 
-fn start_services(config: LoadedConfig) -> Result<(), anyhow::Error> {
+fn start_services(config: LoadedConfig, started: &Started) -> Result<(), anyhow::Error> {
     let (mqtt, mqtt_rx) = mqtt_channel();
     let mut subscriptions: Subscriptions = Subscriptions::new();
     let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
@@ -112,6 +116,8 @@ fn start_services(config: LoadedConfig) -> Result<(), anyhow::Error> {
         mqtt,
         tx_screen_command,
     };
+
+    started.notify();
 
     ui::run_gui(running_state, config.ui, rx_screen_command);
     Ok(())

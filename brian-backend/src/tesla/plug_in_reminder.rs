@@ -6,7 +6,7 @@ use robotica_backend::{
 use robotica_common::robotica::audio::MessagePriority;
 use std::time::Duration;
 
-use crate::{delays::delay_repeat, InitState};
+use crate::InitState;
 
 use super::{private::new_message, Config, ShouldPlugin};
 
@@ -18,10 +18,9 @@ pub fn plug_in_reminder(
     let message_sink = state.message_sink.clone();
     let tesla = tesla.clone();
 
-    let should_plugin_stream = delay_repeat(
+    let should_plugin_stream = should_plugin_stream.delay_repeat(
         "tesla_should_plugin (repeat)",
         Duration::from_secs(60 * 10),
-        should_plugin_stream,
         |(_, should_plugin)| *should_plugin == ShouldPlugin::ShouldPlugin,
     );
 

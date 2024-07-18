@@ -1,7 +1,9 @@
+//! Delays and rate limiting for pipes.
+
 use std::time::Duration;
 
 // use tracing::debug;
-use robotica_backend::{
+use crate::{
     pipes::{stateful, stateless, Subscriber},
     spawn,
 };
@@ -11,7 +13,7 @@ use tokio::{
 };
 use tracing::debug;
 
-pub enum DelayInputState<T> {
+enum DelayInputState<T> {
     Idle,
     Delaying(Instant, T),
     NoDelay,
@@ -29,17 +31,15 @@ where
     }
 }
 
-// pub trait IsActive {
-//     fn is_active(&self) -> bool;
-// }
-
+/// Options for `delay_input`.
 #[derive(Default)]
 pub struct DelayInputOptions {
+    /// Skip subsequent delays.
     pub skip_subsequent_delay: bool,
 }
 
 #[allow(clippy::needless_pass_by_value)]
-pub fn delay_input<T>(
+fn delay_input<T>(
     name: &str,
     duration: Duration,
     rx: stateful::Receiver<T>,
@@ -50,9 +50,10 @@ where
     T: Clone + Eq + Send + Sync + 'static,
 {
     let (tx_out, rx_out) = stateful::create_pipe(name);
+
     spawn(async move {
-        let mut state = DelayInputState::Idle;
         let mut s = rx.subscribe().await;
+        let mut state = DelayInputState::Idle;
 
         loop {
             select! {
@@ -95,7 +96,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum DelayRepeatState<T> {
+enum DelayRepeatState<T> {
     Idle,
     Delaying(Interval, T),
 }
@@ -112,7 +113,7 @@ where
     }
 }
 
-pub fn delay_repeat<T>(
+fn delay_repeat<T>(
     name: &str,
     duration: Duration,
     rx: stateful::Receiver<T>,
@@ -122,9 +123,10 @@ where
     T: Clone + Eq + Send + 'static,
 {
     let (tx_out, rx_out) = stateless::create_pipe(name);
+
     spawn(async move {
-        let mut state = DelayRepeatState::Idle;
         let mut s = rx.subscribe().await;
+        let mut state = DelayRepeatState::Idle;
 
         loop {
             select! {
@@ -162,7 +164,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum RateLimitState<T> {
+enum RateLimitState<T> {
     Idle,
     Waiting(Instant),
     Delaying(Instant, T),
@@ -180,11 +182,7 @@ impl<T: Sync> RateLimitState<T> {
     }
 }
 
-pub fn rate_limit<T>(
-    name: &str,
-    duration: Duration,
-    rx: stateful::Receiver<T>,
-) -> stateful::Receiver<T>
+fn rate_limit<T>(name: &str, duration: Duration, rx: stateful::Receiver<T>) -> stateful::Receiver<T>
 where
     T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
 {
@@ -192,8 +190,8 @@ where
     let name = name.to_string();
 
     spawn(async move {
-        let mut state = RateLimitState::Idle;
         let mut s = rx.subscribe().await;
+        let mut state = RateLimitState::Idle;
 
         loop {
             select! {
@@ -245,4 +243,44 @@ where
         }
     });
     rx_out
+}
+
+impl<T> stateful::Receiver<T> {
+    /// Delay active input by a certain duration.
+    #[must_use]
+    pub fn delay_input(
+        self,
+        name: &str,
+        duration: Duration,
+        is_active: impl Fn(&stateful::OldNewType<T>) -> bool + Send + 'static,
+        options: DelayInputOptions,
+    ) -> stateful::Receiver<T>
+    where
+        T: Clone + Eq + Send + Sync + 'static,
+    {
+        delay_input(name, duration, self, is_active, options)
+    }
+
+    /// Delay and repeat active input by a certain duration.
+    #[must_use]
+    pub fn delay_repeat(
+        self,
+        name: &str,
+        duration: Duration,
+        is_active: impl Fn(&stateful::OldNewType<T>) -> bool + Send + 'static,
+    ) -> stateless::Receiver<T>
+    where
+        T: Clone + Eq + Send + 'static,
+    {
+        delay_repeat(name, duration, self, is_active)
+    }
+
+    /// Delay input by a certain duration.
+    #[must_use]
+    pub fn rate_limit(self, name: &str, duration: Duration) -> stateful::Receiver<T>
+    where
+        T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
+    {
+        rate_limit(name, duration, self)
+    }
 }
