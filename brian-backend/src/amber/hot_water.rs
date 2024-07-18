@@ -207,7 +207,7 @@ fn process<T: TimeZone>(
         now,
         timezone,
     );
-    let cr = state.get_result();
+    let request = state.get_result();
 
     let state = State {
         combined: state,
@@ -215,8 +215,8 @@ fn process<T: TimeZone>(
     };
     publish_state(id, &state, mqtt);
 
-    info!(id, ?cr, "Sending request");
-    tx_out.try_send(cr);
+    info!(id, ?request, "Sending request");
+    tx_out.try_send(request);
     day.plan = plan;
     day.save(psr);
     day
@@ -246,7 +246,7 @@ pub fn run(
         } else {
             Request::DoNotHeat
         };
-        info!(id, cr=?initial, "Sending initial request");
+        info!(id, request=?initial, "Sending initial request");
         tx_out.try_send(initial);
     }
 

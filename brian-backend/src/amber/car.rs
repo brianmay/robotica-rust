@@ -162,7 +162,7 @@ pub fn run(
 
         loop {
             info!(id, ?ps, "Persistent State");
-            let (cr, new_ps) = prices_to_charge_request(
+            let (request, new_ps) = prices_to_charge_request(
                 &id,
                 &v_prices,
                 v_battery_level,
@@ -173,19 +173,12 @@ pub fn run(
                 &Local,
             );
             ps = new_ps;
-            // if let Some(plan_request) = cr.plan_request {
-            //     meters.set_charging_requested(plan_request, ChargingReason::Plan);
-            // } else {
-            //     meters.set_nil_charging_requested(ChargingReason::Plan);
-            // }
-            // meters.set_charging_requested(cr.rules_request, ChargingReason::Rules);
-            // meters.set_charging_requested(cr.result, ChargingReason::Combined);
 
             save_state(teslamate_id, &psr, &ps);
 
-            info!(id, request=?cr, "Charging request");
-            publish_state(teslamate_id, &cr, &mqtt);
-            tx_out.try_send(cr.combined.get_result());
+            info!(id, request=?request, "Charging request");
+            publish_state(teslamate_id, &request, &mqtt);
+            tx_out.try_send(request.combined.get_result());
 
             select! {
                 Ok(prices) = s.recv() => {
