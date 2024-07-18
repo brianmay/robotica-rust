@@ -22,8 +22,8 @@ use robotica_common::{
     unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
-use std::{mem::replace, sync::Arc};
 use tokio::select;
 use tracing::{error, info};
 
