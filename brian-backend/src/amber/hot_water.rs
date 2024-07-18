@@ -185,12 +185,12 @@ fn process<T: TimeZone>(
     mqtt: &MqttTx,
     timezone: &T,
 ) -> DayState {
-    let required_time_left = day.calculate_required_time_left(id, utc_now(), CHEAP_TIME, timezone);
+    let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
     let plan = day.plan.update_plan(
         id,
         3.6,
         prices,
-        utc_now(),
+        now,
         day.end,
         required_time_left,
         HeatPlanUserData {},
