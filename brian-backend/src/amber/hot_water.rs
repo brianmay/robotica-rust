@@ -22,8 +22,8 @@ use robotica_common::{
     unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
+use std::{mem::replace, sync::Arc};
 use tokio::select;
 use tracing::{error, info};
 
@@ -128,7 +128,11 @@ impl DayState {
     ) -> TimeDelta {
         // If the date has changed, reset the cheap power for the day.
         if now < self.start || now >= self.end {
-            *self = Self::new(now, timezone);
+            let rules = replace(&mut self.rules, rules::RuleSet::new(vec![]));
+            *self = Self {
+                rules,
+                ..Self::new(now, timezone)
+            }
         };
 
         // Add recent time to total cheap_power_for_day
