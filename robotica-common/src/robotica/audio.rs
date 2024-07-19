@@ -126,7 +126,7 @@ impl AudioCommand {
     #[must_use]
     pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
         use chrono::Timelike;
-        let day_hour = matches!(now.hour(), 7..=21);
+        let day_hour = matches!(now.hour(), 8..=21);
 
         let priority = self.priority;
         #[allow(clippy::match_same_arms)]
