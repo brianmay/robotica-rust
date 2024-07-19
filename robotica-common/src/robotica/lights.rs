@@ -109,7 +109,7 @@ pub struct RoboticaColor {
 }
 
 /// A V2 command to send to a light
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "action")]
 pub enum LightCommand {

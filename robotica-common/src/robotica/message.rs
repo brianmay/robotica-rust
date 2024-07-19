@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::audio::MessagePriority;
 
 /// A HA audio command
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Message {
     /// The title of the message.
     pub title: String,

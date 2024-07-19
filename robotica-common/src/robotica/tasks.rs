@@ -14,7 +14,7 @@ use crate::mqtt::{self, MqttMessage, Retain};
 use super::commands::Command;
 
 /// Payload in a task.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Payload {
     /// A string payload.
     #[serde(rename = "payload_str")]
@@ -81,7 +81,7 @@ impl Task {
 
 /// A task with optional target names instead of topics.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SubTask {
     /// The with a target instead of the required topic.
     pub title: String,

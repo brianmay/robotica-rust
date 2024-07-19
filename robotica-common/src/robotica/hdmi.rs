@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 
 /// A command to send to a HDMI matrix.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HdmiCommand {
     /// The input to switch to.
     pub input: u8,

@@ -36,7 +36,7 @@ pub struct State {
 }
 
 /// A command to play some music
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MusicCommand {
     /// The playlist to play.
     pub play_list: Option<String>,
@@ -46,7 +46,7 @@ pub struct MusicCommand {
 }
 
 /// A command to change the volumes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VolumeCommand {
     /// The music volume to set.
     pub music: Option<u8>,
@@ -56,7 +56,7 @@ pub struct VolumeCommand {
 }
 
 /// The priority of a message
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessagePriority {
     /// The message is urgent and should be delivered immediately.
     Urgent,
@@ -85,7 +85,7 @@ impl Display for MessagePriority {
 }
 
 /// A message to send
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Message {
     /// The title of the message.
     pub title: String,
@@ -95,7 +95,7 @@ pub struct Message {
 }
 
 /// An audio command
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AudioCommand {
     /// The message to send.
     pub message: Option<Message>,

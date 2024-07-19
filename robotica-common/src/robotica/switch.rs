@@ -10,7 +10,7 @@ use thiserror::Error;
 use crate::mqtt::MqttMessage;
 
 /// An action to send to a switch.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceAction {
     /// Turn the switch on.
@@ -21,7 +21,7 @@ pub enum DeviceAction {
 }
 
 /// A command to send to a switch
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeviceCommand {
     /// The action to perform.
     pub action: DeviceAction,

@@ -426,7 +426,14 @@ fn monitor_teslas(
 }
 
 fn fake_switch(state: &mut InitState, topic_substr: &str) {
-    fake_switch::run(&mut state.subscriptions, state.mqtt.clone(), topic_substr);
+    let topic_substr: String = topic_substr.into();
+    let topic = format!("command/{topic_substr}");
+    let rx = state
+        .subscriptions
+        .subscribe_into_stateless::<Json<Command>>(&topic);
+
+    let topic = format!("state/{topic_substr}/power");
+    fake_switch::run(rx).send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
 }
 
 async fn setup_lights(state: &mut InitState) {
