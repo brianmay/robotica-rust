@@ -8,7 +8,7 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    mqtt::{Json, MqttMessage, Parsed, QoS, Retain},
+    mqtt::{Json, Parsed},
     robotica::{
         commands::Command,
         switch::{DeviceAction, DevicePower},
@@ -20,9 +20,9 @@ use thiserror::Error;
 use tokio::select;
 use tracing::{error, info};
 
-use crate::{amber::car::ChargeRequest, InitState};
+use crate::amber::car::ChargeRequest;
 
-use super::{command_processor, ChargingInformation, Config, Receivers, TeslamateId};
+use super::{command_processor, ChargingInformation, Config, Receivers};
 
 #[derive(Debug)]
 struct Meters {
@@ -91,6 +91,7 @@ impl Inputs {
 pub struct Outputs {
     pub charging_information: stateful::Receiver<ChargingInformation>,
     pub commands: stateless::Receiver<command_processor::Command>,
+    pub auto_charge: stateful::Receiver<DevicePower>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -104,9 +105,6 @@ struct TeslaState {
     battery_level: u8,
     charging_state: ChargingStateEnum,
     is_at_home: bool,
-    // last_success: DateTime<Utc>,
-    // notified_errors: bool,
-    // send_left_home_commands: bool,
 }
 
 impl TeslaState {
@@ -117,7 +115,8 @@ impl TeslaState {
 
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
-    state: &InitState,
+    // state: &InitState,
+    persistent_state_database: &persistent_state::PersistentStateDatabase,
     config: &Config,
     receivers: Inputs,
 ) -> Result<Outputs, Error> {
@@ -125,13 +124,12 @@ pub fn monitor_charging(
 
     let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
     let (tx_command, rx_command) = stateless::create_pipe("tesla_charging_command");
+    let (tx_auto_charge, rx_auto_charge) = stateful::create_pipe("tesla_auto_charge");
 
-    let psr = state
-        .persistent_state_database
-        .for_name::<PersistentState>(&format!("tesla_{id}"));
+    let psr = persistent_state_database.for_name::<PersistentState>(&format!("tesla_{id}"));
     let ps = psr.load().unwrap_or_default();
 
-    let mqtt = state.mqtt.clone();
+    // let mqtt = state.mqtt.clone();
     let auto_charge_rx = receivers.auto_charge;
 
     let meters = Meters::new(config);
@@ -192,7 +190,7 @@ pub fn monitor_charging(
                             error!("{name}: Error saving persistent state: {}", e);
                         });
                         info!("{name}: Auto charge: {}", ps.auto_charge);
-                        update_auto_charge(ps.auto_charge,config.teslamate_id, &tesla_state, &mqtt);
+                        update_auto_charge(ps.auto_charge, &tesla_state, &tx_auto_charge);
                     } else {
                         info!("{name}: Ignoring invalid auto_charge command: {cmd:?}");
                     }
@@ -238,13 +236,14 @@ pub fn monitor_charging(
                 charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
             });
 
-            update_auto_charge(ps.auto_charge, config.teslamate_id, &tesla_state, &mqtt);
+            update_auto_charge(ps.auto_charge, &tesla_state, &tx_auto_charge);
         }
     });
 
     Outputs {
         charging_information: rx_summary,
         commands: rx_command,
+        auto_charge: rx_auto_charge,
     }
     .pipe(Ok)
 }
@@ -274,9 +273,8 @@ const fn should_charge_at_home(
 
 fn update_auto_charge(
     auto_charge: bool,
-    teslamate_id: TeslamateId,
     tesla_state: &TeslaState,
-    mqtt: &robotica_backend::services::mqtt::MqttTx,
+    mqtt: &stateful::Sender<DevicePower>,
 ) {
     let notified_errors = false;
     let is_charging = tesla_state.is_charging();
@@ -287,21 +285,7 @@ fn update_auto_charge(
         (false, false, _) => DevicePower::Off,
     };
 
-    publish_auto_charge(teslamate_id, status, mqtt);
-}
-
-fn publish_auto_charge(
-    teslamate_id: TeslamateId,
-    status: DevicePower,
-    mqtt: &robotica_backend::services::mqtt::MqttTx,
-) {
-    let topic = format!(
-        "state/Tesla/{id}/AutoCharge/power",
-        id = teslamate_id.to_string()
-    );
-    let string: String = status.into();
-    let msg = MqttMessage::new(topic, string, Retain::Retain, QoS::AtLeastOnce);
-    mqtt.try_send(msg);
+    mqtt.try_send(status);
 }
 
 enum ChargingSummary {

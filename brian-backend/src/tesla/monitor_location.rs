@@ -10,7 +10,7 @@ use tap::Pipe;
 use tokio::select;
 use tracing::{debug, error};
 
-use crate::{amber::car::ChargeRequest, InitState};
+use crate::amber::car::ChargeRequest;
 
 use super::{private::new_message, ChargingInformation, Config, ShouldPlugin};
 
@@ -98,11 +98,10 @@ fn announce_charging_state(
 
 pub fn monitor(
     tesla: &Config,
-    state: &InitState,
+    message_sink: stateless::Sender<Message>,
     location_stream: stateful::Receiver<LocationList>,
     charging_info: stateful::Receiver<ChargingInformation>,
 ) -> stateful::Receiver<ShouldPlugin> {
-    let message_sink = state.message_sink.clone();
     let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
 
     let tesla = tesla.clone();

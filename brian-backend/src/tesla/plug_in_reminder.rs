@@ -1,21 +1,19 @@
 use chrono::Timelike;
 use robotica_backend::{
-    pipes::{stateful, Subscriber, Subscription},
+    pipes::{stateful, stateless, Subscriber, Subscription},
     spawn,
 };
-use robotica_common::robotica::audio::MessagePriority;
+use robotica_common::robotica::{audio::MessagePriority, message::Message};
 use std::time::Duration;
-
-use crate::InitState;
 
 use super::{private::new_message, Config, ShouldPlugin};
 
+#[must_use]
 pub fn plug_in_reminder(
-    state: &InitState,
     tesla: &Config,
     should_plugin_stream: stateful::Receiver<ShouldPlugin>,
-) {
-    let message_sink = state.message_sink.clone();
+) -> stateless::Receiver<Message> {
+    let (message_tx, message_rx) = stateless::create_pipe("tesla_plug_in_reminder");
     let tesla = tesla.clone();
 
     let should_plugin_stream = should_plugin_stream.delay_repeat(
@@ -35,8 +33,10 @@ pub fn plug_in_reminder(
                     format!("{name} might run away and should be leashed"),
                     MessagePriority::Low,
                 );
-                message_sink.try_send(msg);
+                message_tx.try_send(msg);
             }
         }
     });
+
+    message_rx
 }

@@ -1,6 +1,6 @@
 //! Stateless receiver code.
 
-use super::create_pipe;
+use super::{create_pipe, Sender};
 use crate::pipes::{Subscriber, Subscription as SubscriptionTrait};
 use crate::{pipes::RecvError, spawn};
 use async_trait::async_trait;
@@ -231,6 +231,17 @@ where
                     f(data);
                 }
             }
+        });
+    }
+
+    /// Send the data to another pipe.
+    pub fn send_to(self, dest: &Sender<T>)
+    where
+        T: 'static,
+    {
+        let dest = dest.clone();
+        self.for_each(move |(_, data)| {
+            dest.try_send(data);
         });
     }
 

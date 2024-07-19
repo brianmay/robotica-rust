@@ -18,8 +18,6 @@ use thiserror::Error;
 use tokio::{select, time::Instant};
 use tracing::{error, info, instrument};
 
-use crate::InitState;
-
 use super::private::new_message;
 use super::{Config, TeslamateAuth};
 
@@ -234,16 +232,16 @@ enum IncomingStatus {
     Hurried,
 }
 
+#[must_use]
 pub fn run(
-    state: &InitState,
     tesla: &Config,
     rx: stateless::Receiver<Command>,
     rx_token: stateless::Receiver<Arc<Token>>,
-) {
+) -> stateless::Receiver<Message> {
     // let tesla_id = tesla.tesla_id;
     let name = tesla.name.clone();
     let tesla = tesla.clone();
-    let message_sink = state.message_sink.clone();
+    let (message_tx, message_rx) = stateless::create_pipe("tesla_command_processor");
 
     spawn(async move {
         let mut s = rx.subscribe().await;
@@ -280,7 +278,7 @@ pub fn run(
                                     next_try_instant: Instant::now() + Duration::from_secs(300),
                                 })
                             };
-                            errors.notify_success(&message_sink, &meters);
+                            errors.notify_success(&message_tx, &meters);
                         }
                         Err(SequenceError::WaitRetry(duration)) => {
                             info!("{name}: WaitRetry, retrying in {duration:?}.", );
@@ -290,7 +288,7 @@ pub fn run(
                                 next_try_instant: Instant::now() + duration,
                             });
 
-                            errors.notify_errors(&message_sink, &meters);
+                            errors.notify_errors(&message_tx, &meters);
                         }
                         Err(err) => {
                             let duration = Duration::from_secs(60);
@@ -300,7 +298,7 @@ pub fn run(
                                 command: try_command.command,
                                 next_try_instant: Instant::now() + duration,
                             });
-                            errors.notify_errors(&message_sink, &meters);
+                            errors.notify_errors(&message_tx, &meters);
                         }
                     }
                 }
@@ -362,6 +360,8 @@ pub fn run(
             }
         }
     });
+
+    message_rx
 }
 
 #[derive(Debug, Error)]

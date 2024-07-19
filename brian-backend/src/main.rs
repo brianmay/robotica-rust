@@ -47,7 +47,7 @@ use tracing::{debug, error, info};
 use crate::amber::hot_water;
 
 use robotica_backend::services::http;
-use robotica_backend::services::mqtt::{mqtt_channel, run_client, Subscriptions};
+use robotica_backend::services::mqtt::{mqtt_channel, run_client, SendOptions, Subscriptions};
 use robotica_backend::services::mqtt::{MqttRx, MqttTx};
 
 #[allow(unreachable_code)]
@@ -359,10 +359,19 @@ fn monitor_teslas(
         let receivers = tesla::Receivers::new(tesla, state);
 
         let locations = tesla::monitor_teslamate_location::monitor(
-            state,
+            tesla,
             receivers.location.clone(),
             postgres.clone(),
-            tesla,
+        );
+
+        locations.messages.send_to(&state.message_sink);
+        locations.location_message.send_to_mqtt_json(
+            &state.mqtt,
+            format!(
+                "state/Tesla/{id}/Locations",
+                id = tesla.teslamate_id.to_string()
+            ),
+            &SendOptions::new(),
         );
 
         let charge_request = amber::car::run(
@@ -379,24 +388,40 @@ fn monitor_teslas(
             charge_request,
             locations.is_home,
         );
-        let outputs =
-            tesla::monitor_charging::monitor_charging(&*state, tesla, monitor_charging_receivers)
-                .unwrap_or_else(|e| {
-                    panic!("Error running tesla charging monitor: {e}");
-                });
+        let outputs = tesla::monitor_charging::monitor_charging(
+            &state.persistent_state_database,
+            tesla,
+            monitor_charging_receivers,
+        )
+        .unwrap_or_else(|e| {
+            panic!("Error running tesla charging monitor: {e}");
+        });
+
+        outputs.auto_charge.send_to_mqtt_string(
+            &state.mqtt,
+            format!(
+                "state/Tesla/{id}/AutoCharge/power",
+                id = tesla.teslamate_id.to_string()
+            ),
+            &SendOptions::new(),
+        );
+
         let should_plugin_stream = tesla::monitor_location::monitor(
             tesla,
-            &*state,
+            state.message_sink.clone(),
             locations.location,
             outputs.charging_information,
         );
 
-        tesla::command_processor::run(state, tesla, outputs.commands, token.clone());
+        tesla::command_processor::run(tesla, outputs.commands, token.clone())
+            .send_to(&state.message_sink);
 
         let monitor_doors_receivers =
             tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
-        tesla::monitor_doors::monitor(&*state, tesla, monitor_doors_receivers);
-        tesla::plug_in_reminder::plug_in_reminder(&*state, tesla, should_plugin_stream);
+
+        tesla::monitor_doors::monitor(tesla, monitor_doors_receivers).send_to(&state.message_sink);
+        tesla::plug_in_reminder::plug_in_reminder(tesla, should_plugin_stream)
+            .send_to(&state.message_sink);
     }
 }
 

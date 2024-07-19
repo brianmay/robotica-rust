@@ -1,15 +1,13 @@
 use robotica_backend::{
-    pipes::{stateful, Subscriber, Subscription},
+    pipes::{stateful, stateless, Subscriber, Subscription},
     spawn,
 };
 use robotica_common::{
-    mqtt::{Json, QoS, Retain},
-    robotica::{self, audio::MessagePriority, locations::LocationList},
+    mqtt::Json,
+    robotica::{self, audio::MessagePriority, locations::LocationList, message::Message},
     teslamate,
 };
 use tracing::error;
-
-use crate::InitState;
 
 use super::{
     private::{new_message, new_private_message},
@@ -112,18 +110,18 @@ pub struct Outputs {
     // pub lat_lng: stateful::Receiver<robotica::locations::LocationMessage>,
     pub location: stateful::Receiver<LocationList>,
     pub is_home: stateful::Receiver<bool>,
+    pub messages: stateless::Receiver<Message>,
+    pub location_message: stateful::Receiver<robotica::locations::LocationMessage>,
 }
 
 pub fn monitor(
-    state: &InitState,
+    tesla: &Config,
     location: stateful::Receiver<Json<teslamate::Location>>,
     postgres: sqlx::PgPool,
-    tesla: &Config,
 ) -> Outputs {
-    let (tx, rx) = stateful::create_pipe("teslamate_location");
-    let id = tesla.teslamate_id.to_string();
-    let mqtt = state.mqtt.clone();
-    let message_sink = state.message_sink.clone();
+    let (location_tx, location_rx) = stateful::create_pipe("teslamate_location");
+    let (message_tx, message_rx) = stateless::create_pipe("teslamate_location_message");
+    let tesla = tesla.clone();
 
     spawn(async move {
         let mut inputs = location.subscribe().await;
@@ -165,24 +163,26 @@ pub fn monitor(
                 .collect();
 
             if !first_time {
+                let name = &tesla.name;
+
                 for location in &arrived {
-                    let msg = format!("The Tesla arrived at {}", location.name);
+                    let msg = format!("{name} arrived at {}", location.name);
                     let msg = if location.announce_on_enter {
                         new_message(msg, MessagePriority::Low)
                     } else {
                         new_private_message(msg, MessagePriority::Low)
                     };
-                    message_sink.try_send(msg);
+                    message_tx.try_send(msg);
                 }
 
                 for location in left {
-                    let msg = format!("The Tesla left {}", location.name);
+                    let msg = format!("{name} left {}", location.name);
                     let msg = if location.announce_on_exit {
                         new_message(msg, MessagePriority::Low)
                     } else {
                         new_private_message(msg, MessagePriority::Low)
                     };
-                    message_sink.try_send(msg);
+                    message_tx.try_send(msg);
                 }
             }
 
@@ -195,23 +195,20 @@ pub fn monitor(
                 longitude: location.longitude,
                 locations: locations.to_vec(),
             };
-            mqtt.try_serialize_send(
-                format!("state/Tesla/{id}/Locations"),
-                &Json(output.clone()),
-                Retain::Retain,
-                QoS::AtLeastOnce,
-            );
-
-            tx.try_send(output);
+            location_tx.try_send(output);
         }
     });
 
-    let location = rx.map(|(_, l)| LocationList::new(l.locations));
+    let location = location_rx
+        .clone()
+        .map(|(_, l)| LocationList::new(l.locations));
     let is_home = location.clone().map(|(_, l)| l.is_at_home());
 
     Outputs {
         // lat_lng: rx,
         location,
         is_home,
+        messages: message_rx,
+        location_message: location_rx,
     }
 }

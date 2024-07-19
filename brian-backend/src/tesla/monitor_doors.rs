@@ -1,19 +1,19 @@
 use std::fmt::Display;
 
 use robotica_backend::{
-    pipes::{delays::DelayInputOptions, stateful, Subscriber, Subscription},
+    pipes::{delays::DelayInputOptions, stateful, stateless, Subscriber, Subscription},
     spawn,
 };
 use robotica_common::{
     mqtt::{BoolError, MqttMessage},
-    robotica::audio::MessagePriority,
+    robotica::{audio::MessagePriority, message::Message},
 };
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
-use crate::{tesla::private::new_message, InitState};
+use crate::tesla::private::new_message;
 
 use super::{Config, Receivers};
 
@@ -127,8 +127,9 @@ impl MonitorInputs {
     }
 }
 
-pub fn monitor(state: &InitState, tesla: &Config, receivers: MonitorInputs) {
-    let message_sink = state.message_sink.clone();
+#[must_use]
+pub fn monitor(tesla: &Config, receivers: MonitorInputs) -> stateless::Receiver<Message> {
+    let (message_tx, message_rx) = stateless::create_pipe("tesla_doors_message");
 
     let (tx, rx) = stateful::create_pipe("tesla_doors");
 
@@ -216,9 +217,11 @@ pub fn monitor(state: &InitState, tesla: &Config, receivers: MonitorInputs) {
             debug!("open received: {:?}", open);
             let msg = doors_to_message(&tesla, &open);
             let msg = new_message(msg, MessagePriority::Urgent);
-            message_sink.try_send(msg);
+            message_tx.try_send(msg);
         }
     });
+
+    message_rx
 }
 
 fn doors_to_message(tesla: &Config, open: &[Door]) -> String {

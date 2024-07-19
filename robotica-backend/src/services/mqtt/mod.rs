@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error};
 
-use robotica_common::mqtt::{MqttMessage, MqttSerializer, QoS, Retain};
+use robotica_common::mqtt::{Json, MqttMessage, MqttSerializer, QoS, Retain};
 
 use crate::pipes::{generic, stateful, stateless};
 use crate::spawn;
@@ -545,6 +545,130 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
     }
 }
 
+/// Options for sending a message.
+pub struct SendOptions {
+    qos: Option<QoS>,
+    retain: Option<Retain>,
+}
+
+impl Default for SendOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SendOptions {
+    /// Create a new set of send options.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            qos: None,
+            retain: None,
+        }
+    }
+
+    /// Set the `QoS` level.
+    #[must_use]
+    pub const fn qos(mut self, qos: QoS) -> Self {
+        self.qos = Some(qos);
+        self
+    }
+
+    /// Set the `Retain` flag.
+    #[must_use]
+    pub const fn retain(mut self, retain: Retain) -> Self {
+        self.retain = Some(retain);
+        self
+    }
+}
+
+impl<T: MqttSerializer + 'static + Send + Clone> stateful::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt(self, mqtt: &MqttTx, topic: impl Into<String>, options: &SendOptions) {
+        let qos = options.qos.unwrap_or(QoS::AtLeastOnce);
+        let retain = options.retain.unwrap_or(Retain::Retain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |(_, data)| {
+            mqtt.try_serialize_send(&topic, &data, retain, qos);
+        });
+    }
+}
+
+impl<T: serde::Serialize + 'static + Send + Clone> stateful::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt_json(self, mqtt: &MqttTx, topic: impl Into<String>, options: &SendOptions) {
+        let qos = options.qos.unwrap_or(QoS::AtLeastOnce);
+        let retain = options.retain.unwrap_or(Retain::Retain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |(_, data)| {
+            mqtt.try_serialize_send(&topic, &Json(data), retain, qos);
+        });
+    }
+}
+
+impl<T: Into<String> + 'static + Send + Clone> stateful::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt_string(
+        self,
+        mqtt: &MqttTx,
+        topic: impl Into<String>,
+        options: &SendOptions,
+    ) {
+        let qos = options.qos.unwrap_or(QoS::AtLeastOnce);
+        let retain = options.retain.unwrap_or(Retain::Retain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |(_, data)| {
+            mqtt.try_serialize_send(&topic, &data.into(), retain, qos);
+        });
+    }
+}
+
+impl<T: MqttSerializer + 'static + Send + Clone> stateless::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt(self, mqtt: &MqttTx, topic: impl Into<String>, options: &SendOptions) {
+        let qos = options.qos.unwrap_or(QoS::ExactlyOnce);
+        let retain = options.retain.unwrap_or(Retain::NoRetain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |data| {
+            mqtt.try_serialize_send(&topic, &data, retain, qos);
+        });
+    }
+}
+
+impl<T: serde::Serialize + 'static + Send + Clone> stateless::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt_json(self, mqtt: &MqttTx, topic: impl Into<String>, options: &SendOptions) {
+        let qos = options.qos.unwrap_or(QoS::ExactlyOnce);
+        let retain = options.retain.unwrap_or(Retain::NoRetain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |data| {
+            mqtt.try_serialize_send(&topic, &Json(data), retain, qos);
+        });
+    }
+}
+
+impl<T: Into<String> + 'static + Send + Clone> stateless::Receiver<T> {
+    /// Serialize and send incoming data to MQTT.
+    pub fn send_to_mqtt_string(
+        self,
+        mqtt: &MqttTx,
+        topic: impl Into<String>,
+        options: &SendOptions,
+    ) {
+        let qos = options.qos.unwrap_or(QoS::ExactlyOnce);
+        let retain = options.retain.unwrap_or(Retain::NoRetain);
+        let mqtt = mqtt.clone();
+        let topic = topic.into();
+        self.for_each(move |data| {
+            mqtt.try_serialize_send(&topic, &data.into(), retain, qos);
+        });
+    }
+}
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
