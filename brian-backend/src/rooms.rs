@@ -136,15 +136,6 @@ fn brian_config(passage_light: &LightConfig) -> UiConfig {
                     }),
                 },
                 ButtonConfig {
-                    id: "bathroom".to_string(),
-                    title: "Bathroom".to_string(),
-                    icon: Icon::Trumpet,
-                    controller: ControllerConfig::Switch(switch::Config {
-                        action: Action::Toggle,
-                        topic_substr: "Brian/Request_Bathroom".to_string(),
-                    }),
-                },
-                ButtonConfig {
                     id: "night".to_string(),
                     title: "Night".to_string(),
                     icon: Icon::Night,
@@ -274,15 +265,6 @@ fn dining_room_config(passage_light: &LightConfig, hdmi_inputs: &[HdmiInputConfi
                     controller: ControllerConfig::Switch(switch::Config {
                         action: Action::Toggle,
                         topic_substr: "Dining/Messages".to_string(),
-                    }),
-                },
-                ButtonConfig {
-                    id: "bathroom".to_string(),
-                    title: "Bathroom".to_string(),
-                    icon: Icon::Trumpet,
-                    controller: ControllerConfig::Switch(switch::Config {
-                        action: Action::Toggle,
-                        topic_substr: "Dining/Request_Bathroom".to_string(),
                     }),
                 },
             ],

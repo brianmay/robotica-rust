@@ -232,10 +232,12 @@ async fn setup_pipes(
     });
 
     fake_switch(&mut state, "Dining/Messages");
+    // FIXME: delete legacy
     fake_switch(&mut state, "Dining/Request_Bathroom");
 
     fake_switch(&mut state, "Brian/Night");
     fake_switch(&mut state, "Brian/Messages");
+    // FIXME: delete legacy
     fake_switch(&mut state, "Brian/Request_Bathroom");
 
     fake_switch(&mut state, "Jan/Messages");
