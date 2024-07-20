@@ -20,12 +20,13 @@ mod robotica;
 mod rooms;
 mod tesla;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
 use chrono::{Local, TimeZone};
-use lights::{run_auto_light, run_passage_light, SharedEntities};
-use robotica_backend::devices::lifx::DiscoverConfig;
+use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
+use robotica_backend::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_backend::devices::{fake_switch, lifx};
 use robotica_backend::pipes::{stateful, stateless, Subscriber};
 use robotica_backend::scheduling::calendar::{CalendarEntry, StartEnd};
@@ -36,7 +37,7 @@ use robotica_backend::spawn;
 use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
-use robotica_common::robotica::lights::LightCommand;
+use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
@@ -248,7 +249,7 @@ async fn setup_pipes(
 
     fake_switch(&mut state, "Akira/Messages");
 
-    setup_lights(&mut state).await;
+    setup_lights(&mut state, &config.lifx, &config.lights, &config.strips).await;
 
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
@@ -273,7 +274,7 @@ fn monitor_bathroom_door(state: &mut InitState) {
                 let action = match door {
                     DoorState::Open => LightCommand::TurnOff,
                     DoorState::Closed => LightCommand::TurnOn {
-                        scene: "busy".to_string(),
+                        scene: SceneName::new("busy"),
                     },
                 };
                 let command = Command::Light(action);
@@ -438,9 +439,14 @@ fn fake_switch(state: &mut InitState, topic_substr: &str) {
     fake_switch::run(rx).send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
 }
 
-async fn setup_lights(state: &mut InitState) {
+async fn setup_lights(
+    state: &mut InitState,
+    lifx: &config::LifxConfig,
+    lights: &[config::LightConfig],
+    strips: &[config::StripConfig],
+) {
     let lifx_config = DiscoverConfig {
-        broadcast: "192.168.16.255:56700".to_string(),
+        broadcast: lifx.broadcast.clone(),
         poll_time: std::time::Duration::from_secs(10),
         device_timeout: std::time::Duration::from_secs(45),
         api_timeout: std::time::Duration::from_secs(1),
@@ -450,48 +456,314 @@ async fn setup_lights(state: &mut InitState) {
         .await
         .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
 
-    let shared = SharedEntities::default();
-    run_auto_light(
-        state,
-        discover.clone(),
-        shared.clone(),
-        "Brian/Light",
-        105_867_434_619_856,
-    );
-    run_auto_light(
-        state,
-        discover.clone(),
-        shared.clone(),
-        "Dining/Light",
-        74_174_870_942_672,
-    );
-    run_auto_light(
-        state,
-        discover.clone(),
-        shared.clone(),
-        "Jan/Light",
-        189_637_382_730_704,
-    );
-    run_auto_light(
-        state,
-        discover.clone(),
-        shared.clone(),
-        "Twins/Light",
-        116_355_744_756_688,
-    );
-    run_auto_light(
-        state,
-        discover.clone(),
-        shared.clone(),
-        "Akira/Light",
-        280_578_114_286_544,
+    let shared = lights::get_default_scenes();
+
+    for light_config in lights {
+        auto_light(
+            state,
+            &discover,
+            &shared,
+            // &light_config.topic_substr,
+            // light_config.lifx_id,
+            light_config,
+        );
+    }
+
+    for strip_config in strips {
+        strip_light(state, &discover, &shared, strip_config);
+    }
+
+    // auto_light(
+    //     state,
+    //     &discover,
+    //     &shared,
+    //     "Brian/Light",
+    //     105_867_434_619_856,
+    // );
+
+    // auto_light(
+    //     state,
+    //     &discover,
+    //     &shared,
+    //     "Dining/Light",
+    //     74_174_870_942_672,
+    // );
+
+    // auto_light(state, &discover, &shared, "Jan/Light", 189_637_382_730_704);
+
+    // auto_light(
+    //     state,
+    //     &discover,
+    //     &shared,
+    //     "Twins/Light",
+    //     116_355_744_756_688,
+    // );
+
+    // auto_light(
+    //     state,
+    //     &discover,
+    //     &shared,
+    //     "Akira/Light",
+    //     280_578_114_286_544,
+    // );
+
+    // passage_light(
+    //     state,
+    //     &discover,
+    //     &shared,
+    //     "Passage/Light",
+    //     LifxId::new(137_092_148_851_664),
+    // );
+}
+
+fn auto_light(
+    init_state: &mut InitState,
+    discover: &stateless::Receiver<lifx::Device>,
+    shared: &SceneMap,
+    // topic_substr: &str,
+    // lifx_id: LifxId,
+    config: &config::LightConfig,
+) {
+    let topic_substr = &config.topic_substr;
+
+    let inputs = lights::Inputs {
+        commands: init_state
+            .subscriptions
+            .subscribe_into_stateless::<Json<Command>>(format!("command/{topic_substr}")),
+    };
+
+    let hash_map: HashMap<SceneName, Scene> = config
+        .scenes
+        .iter()
+        .map(|(name, scene_config)| {
+            let scene = scene_config.get_scene(init_state, name.clone());
+            (name.clone(), scene)
+        })
+        .collect();
+
+    let auto_scene = Scene::new(
+        init_state
+            .subscriptions
+            .subscribe_into_stateful::<Json<PowerColor>>(format!("command/{topic_substr}/auto"))
+            .map(|(_, Json(pc))| pc),
+        SceneName::new("auto"),
     );
 
-    run_passage_light(
-        state,
-        discover,
-        shared,
-        "Passage/Light",
-        137_092_148_851_664,
+    let scene_map = {
+        let mut scene_map = SceneMap::new(HashMap::new());
+        scene_map.merge(shared.clone());
+        scene_map.merge(SceneMap::new(hash_map));
+        scene_map.insert(SceneName::new("auto"), auto_scene);
+        scene_map
+    };
+
+    let lights::Outputs { pc, scene } = run_auto_light(
+        inputs,
+        &init_state.persistent_state_database,
+        scene_map,
+        config.flash_color.clone(),
+        topic_substr,
     );
+
+    scene.send_to_mqtt_string(
+        &init_state.mqtt,
+        format!("state/{topic_substr}/scene"),
+        &SendOptions::new(),
+    );
+
+    send_to_device(&config.device, topic_substr, pc, discover, init_state);
+}
+
+fn split_light(
+    init_state: &mut InitState,
+    // discover: &stateless::Receiver<lifx::Device>,
+    shared: &SceneMap,
+    topic_substr: &str,
+    scenes: &HashMap<SceneName, config::LightSceneConfig>,
+    flash_color: &PowerColor,
+    // lifx_id: LifxId,
+    // config: &config::SplitLightConfig,
+    priority: usize,
+    // name: &str,
+) -> stateful::Receiver<SplitPowerColor> {
+    let inputs = lights::Inputs {
+        commands: init_state
+            .subscriptions
+            .subscribe_into_stateless::<Json<Command>>(format!("command/{topic_substr}")),
+    };
+
+    let hash_map: HashMap<SceneName, Scene> = scenes
+        .iter()
+        .map(|(name, scene_config)| {
+            let scene = scene_config.get_scene(init_state, name.clone());
+            (name.clone(), scene)
+        })
+        .collect();
+
+    let auto_scene = Scene::new(
+        init_state
+            .subscriptions
+            .subscribe_into_stateful::<Json<PowerColor>>(format!("command/{topic_substr}/auto"))
+            .map(|(_, Json(pc))| pc),
+        SceneName::new("auto"),
+    );
+
+    let scene_map = {
+        let mut scene_map = SceneMap::new(HashMap::new());
+        scene_map.merge(shared.clone());
+        scene_map.merge(SceneMap::new(hash_map));
+        scene_map.insert(SceneName::new("auto"), auto_scene);
+        scene_map
+    };
+
+    let lights::SplitOutputs { spc, scene } = run_split_light(
+        inputs,
+        &init_state.persistent_state_database,
+        scene_map,
+        flash_color.clone(),
+        topic_substr,
+        priority,
+    );
+
+    scene.send_to_mqtt_string(
+        &init_state.mqtt,
+        format!("state/{topic_substr}/scene"),
+        &SendOptions::new(),
+    );
+
+    spc
+}
+
+fn strip_light(
+    init_state: &mut InitState,
+    discover: &stateless::Receiver<lifx::Device>,
+    shared: &SceneMap,
+    // topic_substr: &str,
+    config: &config::StripConfig,
+) {
+    let (combined_tx, combined_rx) = stateful::create_pipe(&config.topic_substr);
+    let topic_substr = &config.topic_substr;
+
+    for (priority, split) in config.splits.iter().enumerate() {
+        let name = &split.name;
+        let topic_substr = if name == "all" {
+            topic_substr.to_string()
+        } else {
+            format!("{topic_substr}/split/{name}")
+        };
+        split_light(
+            init_state,
+            shared,
+            &topic_substr,
+            &split.scenes,
+            &split.flash_color,
+            priority,
+        )
+        .send_to(&combined_tx);
+    }
+
+    let splits: Vec<_> = config
+        .splits
+        .iter()
+        .map(|split| lights::SplitLightConfig {
+            begin: split.begin,
+            number: split.number,
+        })
+        .collect();
+
+    let merge_config = lights::MergeLightConfig {
+        splits,
+        number_of_lights: config.number_of_lights,
+    };
+
+    let pc = lights::run_merge_light(combined_rx, topic_substr, merge_config);
+
+    send_to_device(&config.device, topic_substr, pc, discover, init_state);
+    //     let mut inputs = |name| lights::Inputs {
+    //         commands: init_state
+    //             .subscriptions
+    //             .subscribe_into_stateless::<Json<Command>>(format!(
+    //                 "command/{topic_substr}/split/{name}"
+    //             )),
+    //         auto: init_state
+    //             .subscriptions
+    //             .subscribe_into_stateful::<Json<PowerColor>>(format!(
+    //                 "command/{topic_substr}/split/{name}/auto"
+    //             ))
+    //             .map(|(_, Json(pc))| pc),
+    //     };
+
+    //     let process_output = |name, outputs: lights::Outputs| {
+    //         outputs.state.send_to_mqtt_json(
+    //             &init_state.mqtt,
+    //             format!("state/{topic_substr}/split/{name}/status",),
+    //             &SendOptions::new(),
+    //         );
+
+    //         outputs.scene.send_to_mqtt_string(
+    //             &init_state.mqtt,
+    //             format!("state/{topic_substr}/split/{name}/scene",),
+    //             &SendOptions::new(),
+    //         );
+    //     };
+
+    //     let passage_inputs = PassageInputs {
+    //         all: inputs("all"),
+    //         cupboard: inputs("cupboard"),
+    //         bathroom: inputs("bathroom"),
+    //         bedroom: inputs("bedroom"),
+    //     };
+
+    //     let outputs = run_passage_light(
+    //         passage_inputs,
+    //         &init_state.persistent_state_database,
+    //         discover.clone(),
+    //         shared,
+    //         topic_substr,
+    //         lifx_id,
+    //     );
+
+    //     process_output("all", outputs.all);
+    //     process_output("cupboard", outputs.cupboard);
+    //     process_output("bathroom", outputs.bathroom);
+    //     process_output("bedroom", outputs.bedroom);
+}
+
+fn send_to_device(
+    device: &config::LightDeviceConfig,
+    topic_substr: &str,
+    pc: stateful::Receiver<PowerColor>,
+    discover: &stateless::Receiver<lifx::Device>,
+    init_state: &InitState,
+) {
+    let output = match device {
+        config::LightDeviceConfig::Lifx { lifx_id } => {
+            lifx::device_entity(pc, *lifx_id, discover, DeviceConfig::default())
+        }
+        config::LightDeviceConfig::Debug { lifx_id } => {
+            let lifx_id = *lifx_id;
+            pc.map(move |(_, pc)| {
+                info!("Debug {lifx_id}: {pc:?}");
+                State::Online(pc)
+            })
+        }
+    };
+
+    output.clone().send_to_mqtt_json(
+        &init_state.mqtt,
+        format!("state/{topic_substr}/status"),
+        &SendOptions::new(),
+    );
+
+    output
+        .map(|(_, pc)| match pc {
+            State::Online(PowerColor::On(..)) => PowerState::On,
+            State::Online(PowerColor::Off) => PowerState::Off,
+            State::Offline => PowerState::Offline,
+        })
+        .send_to_mqtt_json(
+            &init_state.mqtt,
+            format!("state/{topic_substr}/power"),
+            &SendOptions::new(),
+        );
 }

@@ -98,3 +98,16 @@ where
 
     (sender, receiver)
 }
+
+/// Create a stateful entity that sends a static value.
+pub fn static_pipe<T: Clone + PartialEq + Send + 'static>(
+    value: T,
+    name: impl Into<String>,
+) -> Receiver<T> {
+    let (tx, rx) = create_pipe(name);
+    spawn(async move {
+        tx.try_send(value);
+        tx.closed().await;
+    });
+    rx
+}

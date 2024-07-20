@@ -4,7 +4,7 @@ use crate::{
     mqtt::{Json, MqttMessage},
     robotica::{
         commands::Command,
-        lights::{self, LightCommand, PowerState},
+        lights::{self, LightCommand, PowerState, SceneName},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ pub struct Config {
     pub action: Action,
 
     /// The scene to use for the light
-    pub scene: String,
+    pub scene: SceneName,
 }
 
 impl ConfigTrait for Config {
@@ -43,7 +43,7 @@ impl ConfigTrait for Config {
 /// The controller for a light
 pub struct Controller {
     config: Config,
-    scene: Option<String>,
+    scene: Option<SceneName>,
     power: Option<lights::PowerState>,
 }
 
@@ -75,11 +75,7 @@ impl ControllerTrait for Controller {
 
     fn process_message(&mut self, label: Label, data: MqttMessage) {
         match label.try_into() {
-            Ok(ButtonStateMsgType::Scene) => match data.try_into() {
-                Ok(scene) => self.scene = Some(scene),
-                Err(e) => error!("Invalid scene value: {e}"),
-            },
-
+            Ok(ButtonStateMsgType::Scene) => self.scene = Some(data.into()),
             Ok(ButtonStateMsgType::Power) => match data.try_into() {
                 Ok(Json(state)) => self.power = Some(state),
                 Err(e) => error!("Invalid power value: {e}"),
@@ -120,10 +116,10 @@ impl ControllerTrait for Controller {
 }
 
 fn get_display_state_internal(lb: &Controller) -> DisplayState {
-    let scene = lb.scene.as_deref();
+    let scene = lb.scene.as_ref();
 
-    let off = scene == Some("off");
-    let scene_selected = scene.map_or(false, |scene| scene == lb.config.scene);
+    let off = scene == Some(&SceneName::new("off"));
+    let scene_selected = scene.map_or(false, |scene| *scene == lb.config.scene);
 
     match lb.power {
         None => DisplayState::Unknown,

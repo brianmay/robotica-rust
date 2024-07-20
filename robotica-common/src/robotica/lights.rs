@@ -4,6 +4,8 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
+use crate::mqtt::MqttMessage;
+
 /// A LIFX device's power level.
 #[derive(Serialize, Deserialize)]
 pub enum PowerLevel {
@@ -108,6 +110,43 @@ pub struct RoboticaColor {
     pub kelvin: u16,
 }
 
+/// A scene name for a light.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct SceneName(String);
+
+impl SceneName {
+    /// Create a new scene name.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+}
+
+impl Default for SceneName {
+    fn default() -> Self {
+        Self("default".to_string())
+    }
+}
+impl Display for SceneName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl From<SceneName> for String {
+    fn from(val: SceneName) -> Self {
+        val.0
+    }
+}
+// impl From<String> for SceneName {
+//     fn from(val: String) -> Self {
+//         Self(val)
+//     }
+// }
+impl From<MqttMessage> for SceneName {
+    fn from(msg: MqttMessage) -> Self {
+        Self(msg.topic)
+    }
+}
+
 /// A V2 command to send to a light
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -116,7 +155,7 @@ pub enum LightCommand {
     /// Turn the switch on.
     TurnOn {
         /// The scene to use
-        scene: String,
+        scene: SceneName,
     },
 
     /// Turn the switch off.

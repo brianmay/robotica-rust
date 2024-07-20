@@ -4,6 +4,7 @@ use std::{net::SocketAddr, time::Duration};
 
 use lifx_core::{BuildOptions, Message, RawMessage};
 use robotica_common::robotica::lights::{Colors, PowerColor, PowerLevel, State, HSBK};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
     net::UdpSocket,
@@ -18,6 +19,24 @@ use crate::{
     pipes::{stateless, Subscriber, Subscription},
     spawn,
 };
+
+/// A LIFX ID
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct LifxId(u64);
+
+impl LifxId {
+    /// Create a new LIFX ID
+    #[must_use]
+    pub const fn new(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+impl std::fmt::Display for LifxId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:016x}", self.0)
+    }
+}
 
 /// Configuration for the LIFX discovery process
 pub struct DiscoverConfig {
@@ -76,7 +95,7 @@ pub async fn discover(
                     debug!("Discover received {len} bytes from {addr}");
                     match RawMessage::unpack(&buf[..len]) {
                         Ok(raw) => {
-                            let target = raw.frame_addr.target;
+                            let target = LifxId(raw.frame_addr.target);
                             let device_timeout = config.device_timeout;
                             let api_timeout = config.api_timeout;
                             let num_retries = config.num_retries;
@@ -110,7 +129,7 @@ fn hsbk_to_lifx(hsbk: HSBK) -> lifx_core::HSBK {
 /// A LIFX device
 #[derive(Clone, Debug)]
 pub struct Device {
-    target: u64,
+    target: LifxId,
     addr: SocketAddr,
     device_timeout: Duration,
     api_timeout: Duration,
@@ -342,7 +361,7 @@ async fn send_only(
     let source: u32 = 0x1234_5678;
     let opts = BuildOptions {
         source,
-        target: Some(device.target),
+        target: Some(device.target.0),
         ack_required: false,
         res_required: false,
         sequence: *sequence,
@@ -370,7 +389,7 @@ async fn send_and_wait_response(
 
         let opts = BuildOptions {
             source,
-            target: Some(device.target),
+            target: Some(device.target.0),
             ack_required: false,
             res_required: true,
             sequence: this_sequence,
@@ -404,7 +423,7 @@ async fn send_and_wait_ack(
 
         let opts = BuildOptions {
             source,
-            target: Some(device.target),
+            target: Some(device.target.0),
             ack_required: true,
             res_required: false,
             sequence: this_sequence,
@@ -453,14 +472,15 @@ pub struct DeviceConfig {
 }
 
 /// Run the device.
+#[must_use]
 pub fn device_entity(
     rx_pc: stateful::Receiver<PowerColor>,
-    tx_state: stateful::Sender<State>,
-    id: u64,
-    discover: stateless::Receiver<Device>,
+    id: LifxId,
+    discover: &stateless::Receiver<Device>,
     config: DeviceConfig,
-) {
-    let discover = discover.filter(move |d| d.target == id);
+) -> stateful::Receiver<State> {
+    let (tx_state, rx_state) = stateful::create_pipe("lifx_state");
+    let discover = discover.clone().filter(move |d| d.target == id);
 
     spawn(async move {
         let mut discover_s = discover.subscribe().await;
@@ -518,6 +538,8 @@ pub fn device_entity(
             }
         }
     });
+
+    rx_state
 }
 
 async fn maybe_sleep_until(state: &DeviceState) -> Option<()> {
@@ -526,5 +548,25 @@ async fn maybe_sleep_until(state: &DeviceState) -> Option<()> {
         Some(())
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn test_serialize_lifx_id() {
+        let id = LifxId::new(0x1234_5678_9abc_def0);
+        let serialized = serde_json::to_string(&id).unwrap();
+        assert_eq!(serialized, "1311768467463790320");
+    }
+
+    #[test]
+    fn test_deserialize_lifx_id() {
+        let serialized = "1311768467463790320";
+        let id: LifxId = serde_json::from_str(serialized).unwrap();
+        assert_eq!(id, LifxId::new(0x1234_5678_9abc_def0));
     }
 }

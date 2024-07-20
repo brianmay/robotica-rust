@@ -1,9 +1,18 @@
-use crate::{amber, influxdb, tesla};
+use crate::{
+    amber, influxdb,
+    lights::{self, Scene},
+    tesla, InitState,
+};
 use envconfig::Envconfig;
 use robotica_backend::{
+    devices::lifx::LifxId,
+    pipes::stateful,
     scheduling::executor,
-    services::mqtt,
-    services::{http, persistent_state},
+    services::{http, mqtt, persistent_state},
+};
+use robotica_common::{
+    mqtt::Json,
+    robotica::lights::{PowerColor, SceneName},
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -60,6 +69,7 @@ impl Environment {
 
         Ok(config)
     }
+
     /// Load the environment from the environment variables.
     pub fn load() -> Result<Self, envconfig::Error> {
         Self::init_from_env()
@@ -77,6 +87,9 @@ pub struct Config {
     pub teslas: Vec<tesla::Config>,
     pub database_url: String,
     pub logging: crate::logging::Config,
+    pub lights: Vec<LightConfig>,
+    pub strips: Vec<StripConfig>,
+    pub lifx: LifxConfig,
 }
 
 /// An error loading the Config
@@ -93,4 +106,99 @@ pub enum Error {
     /// Error merging the files
     #[error("Error merging files: {0}")]
     Merge(#[from] robotica_backend::serde::Error),
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", content = "value")]
+pub enum LightSceneConfig {
+    FixedColor(PowerColor),
+    MqttFeed(String),
+}
+
+impl LightSceneConfig {
+    pub fn get_scene(&self, state: &mut InitState, name: SceneName) -> Scene {
+        let entity = match self {
+            Self::FixedColor(pc) => stateful::static_pipe(pc.clone(), "FixedColor"),
+            Self::MqttFeed(topic) => state
+                .subscriptions
+                .subscribe_into_stateful::<Json<PowerColor>>(topic)
+                .map(|(_, Json(c))| c),
+        };
+        lights::Scene::new(entity, name)
+    }
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct LightConfig {
+    pub device: LightDeviceConfig,
+    pub topic_substr: String,
+    #[serde(default)]
+    pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
+    pub flash_color: PowerColor,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct StripConfig {
+    pub device: LightDeviceConfig,
+    pub topic_substr: String,
+    pub number_of_lights: usize,
+    pub splits: Vec<SplitLightConfig>,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+pub enum LightDeviceConfig {
+    Lifx { lifx_id: LifxId },
+    Debug { lifx_id: LifxId },
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct SplitLightConfig {
+    pub name: String,
+    #[serde(default)]
+    pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
+    pub flash_color: PowerColor,
+    pub begin: usize,
+    pub number: usize,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct LifxConfig {
+    pub broadcast: String,
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_light_device_deserialize() {
+        let json = json!({"type": "lifx", "lifx_id": 0x1234_5678_90ab_cdefu64});
+        let device: LightDeviceConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            device,
+            LightDeviceConfig::Lifx {
+                lifx_id: LifxId::new(0x1234_5678_90ab_cdef)
+            }
+        );
+
+        let json = json!({"type": "debug", "lifx_id": 0x1234_5678_90ab_cdefu64});
+        let device: LightDeviceConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            device,
+            LightDeviceConfig::Debug {
+                lifx_id: LifxId::new(0x1234_5678_90ab_cdef)
+            }
+        );
+    }
 }

@@ -1,5 +1,6 @@
 //! An interactive button that receives MQTT messages
 use robotica_common::config::Icon;
+use robotica_common::robotica::lights::SceneName;
 use yew::prelude::*;
 
 use robotica_common::controllers::robotica::{hdmi, lights, music, switch};
@@ -52,7 +53,7 @@ pub struct LightProps {
     pub icon: Icon,
 
     /// The scene to activate when the button is pressed.
-    pub scene: String,
+    pub scene: SceneName,
 }
 
 impl ConfigTrait for LightProps {

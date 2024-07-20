@@ -1,11 +1,10 @@
 use robotica_common::{
     config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon, RoomConfig, Rooms},
     controllers::{
-        robotica::lights,
-        robotica::switch,
-        robotica::{hdmi, music},
+        robotica::{hdmi, lights, music, switch},
         tasmota, zwave, Action,
     },
+    robotica::lights::SceneName,
 };
 
 pub fn get() -> Rooms {
@@ -193,11 +192,11 @@ fn twins_config() -> UiConfig {
             topic_substr: "Twins/Light".to_string(),
             extra_scenes: vec![
                 SceneConfig {
-                    id: "declan-night".to_string(),
+                    name: SceneName::new("declan-night"),
                     title: "Declan".to_string(),
                 },
                 SceneConfig {
-                    id: "nikolai-night".to_string(),
+                    name: SceneName::new("nikolai-night"),
                     title: "Nikolai".to_string(),
                 },
             ],
@@ -373,7 +372,7 @@ fn tesla_config() -> UiConfig {
 
 #[derive(Clone)]
 struct SceneConfig {
-    id: String,
+    name: SceneName,
     title: String,
 }
 
@@ -403,15 +402,15 @@ impl Default for LightConfig {
             topic_substr: String::new(),
             scenes: vec![
                 SceneConfig {
-                    id: "auto".to_string(),
+                    name: SceneName::new("auto"),
                     title: "Auto".to_string(),
                 },
                 SceneConfig {
-                    id: "on".to_string(),
+                    name: SceneName::new("on"),
                     title: "On".to_string(),
                 },
                 SceneConfig {
-                    id: "rainbow".to_string(),
+                    name: SceneName::new("rainbow"),
                     title: "Rainbow".to_string(),
                 },
             ],
@@ -475,13 +474,13 @@ impl From<LightConfig> for ButtonRowConfig {
             .scenes
             .into_iter()
             .map(|scene| ButtonConfig {
-                id: scene.id.clone(),
+                id: scene.name.to_string(),
                 title: scene.title,
                 icon: Icon::Light,
                 controller: ControllerConfig::Light(lights::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
-                    scene: scene.id,
+                    scene: scene.name,
                 }),
             })
             .collect();
@@ -494,13 +493,13 @@ impl From<LightConfig> for ButtonRowConfig {
 
         for scene in config.extra_scenes {
             row.buttons.push(ButtonConfig {
-                id: scene.id.clone(),
+                id: scene.name.to_string(),
                 title: scene.title.clone(),
                 icon: Icon::Light,
                 controller: ControllerConfig::Light(lights::Config {
                     action: Action::Toggle,
                     topic_substr: config.topic_substr.clone(),
-                    scene: scene.id.clone(),
+                    scene: scene.name.clone(),
                 }),
             });
         }
