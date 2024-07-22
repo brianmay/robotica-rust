@@ -184,7 +184,7 @@ impl<T: Sync> RateLimitState<T> {
 
 fn rate_limit<T>(name: &str, duration: Duration, rx: stateful::Receiver<T>) -> stateful::Receiver<T>
 where
-    T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
+    T: std::fmt::Debug + Clone + PartialEq + Send + Sync + 'static,
 {
     let (tx_out, rx_out) = stateful::create_pipe(name);
     let name = name.to_string();
@@ -279,7 +279,7 @@ impl<T> stateful::Receiver<T> {
     #[must_use]
     pub fn rate_limit(self, name: &str, duration: Duration) -> stateful::Receiver<T>
     where
-        T: std::fmt::Debug + Clone + Eq + Send + Sync + 'static,
+        T: std::fmt::Debug + Clone + PartialEq + Send + Sync + 'static,
     {
         rate_limit(name, duration, self)
     }

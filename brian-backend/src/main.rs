@@ -306,13 +306,21 @@ fn monitor_hot_water(
         );
 
     let mqtt_clone = state.mqtt.clone();
-    let hot_water_request = amber::hot_water::run(state, prices.clone(), is_on, rules);
+    let hot_water_state = amber::hot_water::run(
+        &state.persistent_state_database,
+        prices.clone(),
+        is_on,
+        rules,
+    );
+    hot_water_state.clone().send_to_mqtt_json(
+        &state.mqtt,
+        "robotica/state/hot_water/amber",
+        &SendOptions::new(),
+    );
+    let hot_water_request = hot_water_state.map(|(_, state)| state.get_result());
+
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
-        if old.is_none() {
-            return;
-        }
-
         let command = match current {
             hot_water::Request::Heat => shelly::SwitchCommand::On(None),
             hot_water::Request::DoNotHeat => shelly::SwitchCommand::Off(None),
@@ -326,16 +334,19 @@ fn monitor_hot_water(
         );
         mqtt_clone.try_send(msg);
 
-        let message = match current {
-            hot_water::Request::Heat => "Turning hot water on",
-            hot_water::Request::DoNotHeat => "Turning hot water off",
-        };
-        message_sink.try_send(Message::new(
-            "Hot Water",
-            message,
-            MessagePriority::DaytimeOnly,
-            audience::everyone(),
-        ));
+        // Don't announce when first starting up.
+        if old.is_some() {
+            let message = match current {
+                hot_water::Request::Heat => "Turning hot water on",
+                hot_water::Request::DoNotHeat => "Turning hot water off",
+            };
+            message_sink.try_send(Message::new(
+                "Hot Water",
+                message,
+                MessagePriority::DaytimeOnly,
+                audience::everyone(),
+            ));
+        }
     });
 }
 
@@ -368,8 +379,8 @@ fn monitor_teslas(
             &SendOptions::new(),
         );
 
-        let charge_request = amber::car::run(
-            state,
+        let charge_state = amber::car::run(
+            &state.persistent_state_database,
             tesla.teslamate_id,
             prices.clone(),
             receivers.battery_level.clone(),
@@ -377,6 +388,16 @@ fn monitor_teslas(
             receivers.is_charging.clone(),
             receivers.rules.clone(),
         );
+        charge_state.clone().send_to_mqtt_json(
+            &state.mqtt,
+            format!(
+                "robotica/state/tesla/{id}/amber",
+                id = tesla.teslamate_id.to_string()
+            ),
+            &SendOptions::new(),
+        );
+        let charge_request = charge_state.map(|(_, state)| state.get_result());
+
         let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
             &receivers,
             charge_request,

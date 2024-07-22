@@ -1,4 +1,4 @@
-use crate::{amber::combined, tesla::TeslamateId, InitState};
+use crate::{amber::combined, tesla::TeslamateId};
 
 use super::{rules, user_plan::UserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
@@ -12,7 +12,7 @@ use robotica_backend::{
 };
 use robotica_common::{
     datetime::time_delta,
-    mqtt::{Json, MqttMessage, Parsed, QoS, Retain},
+    mqtt::{Json, Parsed},
     unsafe_naive_time_hms,
 };
 use serde::{Deserialize, Serialize};
@@ -115,27 +115,23 @@ impl Default for PersistentState {
     }
 }
 
-// Refactoring this is on TODO list.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
-    state: &InitState,
+    persistent_state_database: &robotica_backend::services::persistent_state::PersistentStateDatabase,
     teslamate_id: TeslamateId,
     rx: Receiver<Arc<Prices>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
     is_charging: stateful::Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
-) -> Receiver<ChargeRequest> {
+) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/car");
     let id = format!(
         "tesla/{teslamate_id}",
         teslamate_id = teslamate_id.to_string()
     );
-    let mqtt = state.mqtt.clone();
 
-    let psr = state
-        .persistent_state_database
-        .for_name::<PersistentState>(&format!("tesla_amber_{id}"));
+    let psr = persistent_state_database.for_name::<PersistentState>(&format!("tesla_amber_{id}"));
     let mut ps = psr.load().unwrap_or_default();
 
     let meters: combined::Meters<ChargeRequest> = combined::Meters::new(&id);
@@ -177,8 +173,7 @@ pub fn run(
             save_state(teslamate_id, &psr, &ps);
 
             info!(id, request=?request, "Charging request");
-            publish_state(teslamate_id, &request, &mqtt);
-            tx_out.try_send(request.combined.get_result());
+            tx_out.try_send(request);
 
             select! {
                 Ok(prices) = s.recv() => {
@@ -320,8 +315,8 @@ fn estimate_to_limit<T: TimeZone>(
     estimated_charge_time
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-struct State {
+#[derive(Debug, Serialize, PartialEq, Clone)]
+pub struct State {
     battery_level: u8,
     min_charge_tomorrow: u8,
 
@@ -338,19 +333,9 @@ struct State {
     estimated_charge_time_to_90: Option<TimeDelta>,
 }
 
-fn publish_state(
-    teslamate_id: TeslamateId,
-    state: &State,
-    mqtt: &robotica_backend::services::mqtt::MqttTx,
-) {
-    let topic = format!(
-        "robotica/state/tesla/{id}/amber",
-        id = teslamate_id.to_string()
-    );
-    let result = MqttMessage::from_json(topic, &state, Retain::Retain, QoS::AtLeastOnce);
-    match result {
-        Ok(msg) => mqtt.try_send(msg),
-        Err(e) => error!("Failed to serialize state: {:?}", e),
+impl State {
+    pub const fn get_result(&self) -> ChargeRequest {
+        self.combined.get_result()
     }
 }
 

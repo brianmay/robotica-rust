@@ -1,5 +1,3 @@
-use crate::InitState;
-
 use super::{
     combined,
     rules::{self},
@@ -13,12 +11,12 @@ use robotica_backend::{
         stateful::{create_pipe, Receiver, Sender},
         stateless, Subscriber, Subscription,
     },
-    services::{mqtt::MqttTx, persistent_state::PersistentStateRow},
+    services::persistent_state::{self, PersistentStateRow},
     spawn,
 };
 use robotica_common::{
     datetime::{time_delta, utc_now},
-    mqtt::{Json, MqttMessage, QoS, Retain},
+    mqtt::Json,
     unsafe_time_delta,
 };
 use serde::{Deserialize, Serialize};
@@ -169,8 +167,8 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
     (start_day, end_day)
 }
 
-#[derive(Serialize)]
-struct State {
+#[derive(Clone, PartialEq, Serialize, Debug)]
+pub struct State {
     #[serde(flatten)]
     combined: combined::State<HeatPlanUserData, Request>,
 
@@ -178,16 +176,21 @@ struct State {
     required_time_left: Option<TimeDelta>,
 }
 
+impl State {
+    pub const fn get_result(&self) -> Request {
+        self.combined.get_result()
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn process<T: TimeZone>(
     id: &str,
     mut day: DayState,
     prices: &Prices,
-    tx_out: &Sender<Request>,
+    tx_out: &Sender<State>,
     psr: &PersistentStateRow<DayState>,
     meters: Option<&combined::Meters<Request>>,
     now: DateTime<Utc>,
-    mqtt: &MqttTx,
     timezone: &T,
 ) -> DayState {
     let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
@@ -218,42 +221,27 @@ fn process<T: TimeZone>(
         combined: state,
         required_time_left: Some(required_time_left),
     };
-    publish_state(id, &state, mqtt);
 
     info!(id, ?request, "Sending request");
-    tx_out.try_send(request);
+    tx_out.try_send(state);
     day.plan = plan;
     day.save(psr);
     day
 }
 
 pub fn run(
-    state: &InitState,
+    persistent_state_database: &persistent_state::PersistentStateDatabase,
     rx: Receiver<Arc<Prices>>,
     is_on: Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<Request>>>,
-) -> Receiver<Request> {
+) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/hot_water");
     let timezone = &Local;
     let id = "hot_water";
-    let mqtt = state.mqtt.clone();
 
-    let psr = state
-        .persistent_state_database
-        .for_name::<DayState>("hot_water_amber");
+    let psr = persistent_state_database.for_name::<DayState>("hot_water_amber");
 
     let mut day = DayState::load(&psr, utc_now(), timezone);
-
-    // Send initial state.
-    {
-        let initial = if day.is_on {
-            Request::Heat
-        } else {
-            Request::DoNotHeat
-        };
-        info!(id, request=?initial, "Sending initial request");
-        tx_out.try_send(initial);
-    }
 
     spawn(async move {
         let mut s = rx.subscribe().await;
@@ -276,7 +264,6 @@ pub fn run(
             &psr,
             Some(&meters),
             utc_now(),
-            &mqtt,
             timezone,
         );
 
@@ -290,21 +277,21 @@ pub fn run(
                 Ok(new_prices) = s.recv() => {
                     info!(id, "Received new prices");
                     prices = new_prices;
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Ok(Json(new_rules)) = s_rules.recv() => {
                     info!(id, "Received new rules");
                     day.rules = new_rules;
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_start() => {
                     info!(id, "Plan start time elapsed");
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_end() => {
                     info!(id, "Plan end time elapsed");
                     day.plan = HeatPlan::new_none(HeatPlanUserData{});
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), &mqtt, timezone);
+                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 else => break,
             }
@@ -312,15 +299,6 @@ pub fn run(
     });
 
     rx_out.rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300))
-}
-
-fn publish_state(id: &str, state: &State, mqtt: &MqttTx) {
-    let topic = "robotica/state/hot_water/amber";
-    let result = MqttMessage::from_json(topic, &state, Retain::Retain, QoS::AtLeastOnce);
-    match result {
-        Ok(msg) => mqtt.try_send(msg),
-        Err(e) => error!(id, "Failed to serialize state: {:?}", e),
-    }
 }
 
 #[cfg(test)]

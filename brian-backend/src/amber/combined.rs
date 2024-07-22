@@ -61,7 +61,7 @@ impl<R: RequestTrait> Meters<R> {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct State<UP, R> {
     time: DateTime<Utc>,
     plan_request: Option<R>,
