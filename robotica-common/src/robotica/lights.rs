@@ -1,8 +1,12 @@
 //! Messages for robotica lights
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    str::Utf8Error,
+};
 
 use serde::{Deserialize, Serialize};
+use tap::Pipe;
 
 use crate::mqtt::MqttMessage;
 
@@ -141,9 +145,11 @@ impl From<SceneName> for String {
 //         Self(val)
 //     }
 // }
-impl From<MqttMessage> for SceneName {
-    fn from(msg: MqttMessage) -> Self {
-        Self(msg.topic)
+impl TryFrom<MqttMessage> for SceneName {
+    type Error = Utf8Error;
+
+    fn try_from(msg: MqttMessage) -> Result<Self, Self::Error> {
+        msg.payload_as_str()?.to_string().pipe(Self).pipe(Ok)
     }
 }
 

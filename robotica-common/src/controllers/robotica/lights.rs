@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{error, warn};
 
 use super::super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
@@ -75,7 +75,15 @@ impl ControllerTrait for Controller {
 
     fn process_message(&mut self, label: Label, data: MqttMessage) {
         match label.try_into() {
-            Ok(ButtonStateMsgType::Scene) => self.scene = Some(data.into()),
+            Ok(ButtonStateMsgType::Scene) => {
+                self.scene = match data.try_into() {
+                    Ok(scene) => Some(scene),
+                    Err(e) => {
+                        error!("Invalid scene value: {e}");
+                        None
+                    }
+                }
+            }
             Ok(ButtonStateMsgType::Power) => match data.try_into() {
                 Ok(Json(state)) => self.power = Some(state),
                 Err(e) => error!("Invalid power value: {e}"),
