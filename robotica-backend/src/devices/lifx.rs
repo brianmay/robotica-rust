@@ -472,6 +472,8 @@ pub struct DeviceConfig {
 }
 
 impl DeviceConfig {
+    /// Set whether this device has multiple zones.
+    #[must_use]
     pub const fn set_multiple_zones(mut self, multiple_zones: bool) -> DeviceConfig {
         self.multiple_zones = multiple_zones;
         self
