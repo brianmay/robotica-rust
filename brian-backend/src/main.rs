@@ -646,9 +646,12 @@ fn send_to_device(
     init_state: &InitState,
 ) {
     let output = match device {
-        config::LightDeviceConfig::Lifx { lifx_id } => {
-            lifx::device_entity(pc, *lifx_id, discover, DeviceConfig::default())
-        }
+        config::LightDeviceConfig::Lifx { lifx_id } => lifx::device_entity(
+            pc,
+            *lifx_id,
+            discover,
+            DeviceConfig::default().set_multiple_zones(true),
+        ),
         config::LightDeviceConfig::Debug { lifx_id } => {
             let lifx_id = *lifx_id;
             pc.map(move |(_, pc)| {

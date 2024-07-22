@@ -471,6 +471,13 @@ pub struct DeviceConfig {
     pub multiple_zones: bool,
 }
 
+impl DeviceConfig {
+    pub const fn set_multiple_zones(mut self, multiple_zones: bool) -> DeviceConfig {
+        self.multiple_zones = multiple_zones;
+        self
+    }
+}
+
 /// Run the device.
 #[must_use]
 pub fn device_entity(
