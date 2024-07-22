@@ -60,18 +60,6 @@ impl SceneMap {
     }
 }
 
-// #[derive(Clone)]
-// pub struct SharedEntities {
-//     on: stateful::Receiver<PowerColor>,
-//     rainbow: stateful::Receiver<PowerColor>,
-//     busy: stateful::Receiver<PowerColor>,
-// akira_night: stateful::Receiver<PowerColor>,
-// declan_night: stateful::Receiver<PowerColor>,
-// nikolai_night: stateful::Receiver<PowerColor>,
-//     off: stateful::Receiver<PowerColor>,
-// }
-
-// impl Default for SharedEntities {
 pub fn get_default_scenes() -> SceneMap {
     let on_color = Colors::Single(HSBK {
         hue: 0.0,
@@ -79,27 +67,6 @@ pub fn get_default_scenes() -> SceneMap {
         brightness: 100.0,
         kelvin: 3500,
     });
-
-    // let akira_night_color = Colors::Single(HSBK {
-    //     hue: 240.0,
-    //     saturation: 100.0,
-    //     brightness: 6.0,
-    //     kelvin: 3500,
-    // });
-
-    // let declan_night_color = Colors::Single(HSBK {
-    //     hue: 52.0,
-    //     saturation: 50.0,
-    //     brightness: 6.0,
-    //     kelvin: 3500,
-    // });
-
-    // let nikolai_night_color = Colors::Single(HSBK {
-    //     hue: 261.0,
-    //     saturation: 100.0,
-    //     brightness: 6.0,
-    //     kelvin: 3500,
-    // });
 
     let mut map = HashMap::new();
     map.insert(
@@ -125,72 +92,8 @@ pub fn get_default_scenes() -> SceneMap {
         Scene::new(static_entity(PowerColor::Off, "off"), SceneName::new("off")),
     );
 
-    // Self {
-    //     on: static_entity(PowerColor::On(on_color), "On"),
-    //     rainbow: rainbow_entity("rainbow"),
-    //     busy: busy_entity("busy"),
-    //     // akira_night: static_entity(PowerColor::On(akira_night_color), "akira-night"),
-    //     // declan_night: static_entity(PowerColor::On(declan_night_color), "akira-night"),
-    //     // nikolai_night: static_entity(PowerColor::On(nikolai_night_color), "akira-night"),
-    //     off: static_entity(PowerColor::Off, "off"),
-    // }
-
     SceneMap::new(map)
 }
-// }
-
-// #[derive(Clone)]
-// struct StandardSceneEntities {
-//     on: stateful::Receiver<PowerColor>,
-//     auto: stateful::Receiver<PowerColor>,
-//     rainbow: stateful::Receiver<PowerColor>,
-//     busy: stateful::Receiver<PowerColor>,
-//     akira_night: stateful::Receiver<PowerColor>,
-//     declan_night: stateful::Receiver<PowerColor>,
-//     nikolai_night: stateful::Receiver<PowerColor>,
-//     off: stateful::Receiver<PowerColor>,
-// }
-
-// impl StandardSceneEntities {
-//     fn default(auto: stateful::Receiver<PowerColor>, shared: &SharedEntities) -> Self {
-//         Self {
-//             on: shared.on.clone(),
-//             auto,
-//             rainbow: shared.rainbow.clone(),
-//             busy: shared.busy.clone(),
-//             akira_night: shared.akira_night.clone(),
-//             declan_night: shared.declan_night.clone(),
-//             nikolai_night: shared.nikolai_night.clone(),
-//             off: shared.off.clone(),
-//         }
-//     }
-// }
-
-// const fn flash_color() -> PowerColor {
-//     PowerColor::On(Colors::Single(HSBK {
-//         hue: 240.0,
-//         saturation: 50.0,
-//         brightness: 100.0,
-//         kelvin: 3500,
-//     }))
-// }
-
-// impl GetSceneEntity for StandardSceneEntities {
-//     type Scene = StandardScene;
-
-//     fn get_scene_entity(&self, scene: Self::Scene) -> stateful::Receiver<PowerColor> {
-//         match scene {
-//             StandardScene::On => self.on.clone(),
-//             StandardScene::Auto => self.auto.clone(),
-//             StandardScene::Rainbow => self.rainbow.clone(),
-//             StandardScene::Busy => self.busy.clone(),
-//             StandardScene::AkiraNight => self.akira_night.clone(),
-//             StandardScene::DeclanNight => self.declan_night.clone(),
-//             StandardScene::NikolaiNight => self.nikolai_night.clone(),
-//             StandardScene::Off => self.off.clone(),
-//         }
-//     }
-// }
 
 fn static_entity(pc: PowerColor, name: impl Into<String>) -> stateful::Receiver<PowerColor> {
     let (tx, rx) = stateful::create_pipe(name);
@@ -261,36 +164,6 @@ fn rainbow_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
     });
     rx
 }
-
-// fn mqtt_entity(
-//     state: &mut crate::InitState,
-//     topic_substr: &str,
-//     name: impl Into<String>,
-// ) -> stateful::Receiver<PowerColor> {
-//     let name = name.into();
-//     let topic: String = format!("command/{topic_substr}/{name}");
-
-//     let pc_rx = state
-//         .subscriptions
-//         .subscribe_into_stateful::<Json<PowerColor>>(&topic)
-//         .map(|(_, Json(c))| c);
-
-//     let (tx, rx) = stateful::create_pipe(name);
-//     spawn(async move {
-//         let mut pc_s = pc_rx.subscribe().await;
-//         loop {
-//             select! {
-//                 Ok(pc) = pc_s.recv() => {
-//                     tx.try_send(pc);
-//                 }
-//                 () = tx.closed() => {
-//                     break;
-//                 }
-//             }
-//         }
-//     });
-//     rx
-// }
 
 pub struct Inputs {
     pub commands: stateless::Receiver<Json<Command>>,
@@ -439,169 +312,12 @@ pub fn run_merge_light(
             merged_tx.try_send(pc);
         }
     });
-
-    // device_entity(
-    //     merged_rx,
-    //     state_tx,
-    //     lifx_id,
-    //     discover,
-    //     DeviceConfig::default(),
-    // );
-
     merged_rx
 }
 
-// fn run_state_sender(
-//     state: &crate::InitState,
-//     topic_substr: impl Into<String>,
-//     rx_state: stateful::Receiver<State>,
-// ) {
-//     let topic_substr = topic_substr.into();
-
-//     {
-//         let mqtt = state.mqtt.clone();
-//         let topic_substr = topic_substr.to_string();
-//         let rx = rx_state.clone();
-//         spawn(async move {
-//             let mut rx = rx.subscribe().await;
-//             while let Ok(status) = rx.recv().await {
-//                 send_state(&mqtt, &status, &topic_substr);
-//             }
-//         });
-//     }
-
-//     {
-//         let mqtt = state.mqtt.clone();
-//         let rx = rx_state.map(|(_, status)| match status {
-//             lights::State::Online(PowerColor::On(..)) => lights::PowerState::On,
-//             lights::State::Online(PowerColor::Off) => lights::PowerState::Off,
-//             lights::State::Offline => lights::PowerState::Offline,
-//         });
-//         spawn(async move {
-//             let mut rx = rx.subscribe().await;
-//             while let Ok(status) = rx.recv().await {
-//                 send_power_state(&mqtt, &status, &topic_substr);
-//             }
-//         });
-//     }
-// }
-
-// pub struct PassageInputs {
-//     pub all: Inputs,
-//     pub cupboard: Inputs,
-//     pub bathroom: Inputs,
-//     pub bedroom: Inputs,
-// }
-
-// pub struct PassageOutputs {
-//     pub all: Outputs,
-//     pub cupboard: Outputs,
-//     pub bathroom: Outputs,
-//     pub bedroom: Outputs,
-// }
-
-// pub struct PassageScenes {
-//     pub all: SceneMap,
-//     pub cupboard: SceneMap,
-//     pub bathroom: SceneMap,
-//     pub bedroom: SceneMap,
-// }
-
-// #[must_use]
-// pub fn run_passage_light(
-//     inputs: PassageInputs,
-//     persistent_state_database: &crate::PersistentStateDatabase,
-//     discover: stateless::Receiver<Device>,
-//     passage_scenes: PassageScenes,
-//     id: &str,
-//     lifx_id: u64,
-// ) -> PassageOutputs {
-//     let (tx_state, rx_state) = stateful::create_pipe(format!("{lifx_id}-state"));
-
-//     let (all_pc_rx, all_scene_rx) = switch_entity(
-//         inputs.all.commands,
-//         persistent_state_database,
-//         id,
-//         passage_scenes.all,
-//         flash_color(),
-//         format!("{lifx_id}-all"),
-//     );
-
-//     let (cupboard_pc_rx, cupboard_scene_rx) = switch_entity(
-//         inputs.cupboard.commands,
-//         persistent_state_database,
-//         id,
-//         passage_scenes.cupboard,
-//         flash_color(),
-//         format!("{lifx_id}-cupboard"),
-//     );
-
-//     let (bathroom_pc_rx, bathroom_scene_rx) = switch_entity(
-//         inputs.bathroom.commands,
-//         persistent_state_database,
-//         id,
-//         passage_scenes.bathroom,
-//         flash_color(),
-//         format!("{lifx_id}-bathroom"),
-//     );
-
-//     let (bedroom_pc_rx, bedroom_scene_rx) = switch_entity(
-//         inputs.bedroom.commands,
-//         persistent_state_database,
-//         id,
-//         passage_scenes.bedroom,
-//         flash_color(),
-//         format!("{lifx_id}-bedroom"),
-//     );
-
-//     let entities = PassageEntities {
-//         all: all_pc_rx,
-//         cupboard: cupboard_pc_rx,
-//         bathroom: bathroom_pc_rx,
-//         bedroom: bedroom_pc_rx,
-//     };
-
-//     let config = DeviceConfig {
-//         multiple_zones: true,
-//     };
-
-//     let (rx, state_entities) =
-//         run_passage_multiplexer(entities, format!("{lifx_id}-multiplexer"), rx_state);
-
-//     device_entity(rx, tx_state, lifx_id, discover, config);
-
-//     PassageOutputs {
-//         all: Outputs {
-//             state: state_entities.all,
-//             scene: all_scene_rx,
-//         },
-
-//         cupboard: Outputs {
-//             state: state_entities.cupboard,
-//             scene: cupboard_scene_rx,
-//         },
-
-//         bathroom: Outputs {
-//             state: state_entities.bathroom,
-//             scene: bathroom_scene_rx,
-//         },
-
-//         bedroom: Outputs {
-//             state: state_entities.bedroom,
-//             scene: bedroom_scene_rx,
-//         },
-//     }
-// }
-
 struct LightState {
-    // scene_map: SceneMap,
-    // scene: Scene,
-    // scene_name: String,
-    // entity: stateful::Receiver<PowerColor>,
     entity_s: stateful::Subscription<PowerColor>,
     psr: PersistentStateRow<SceneName>,
-    // mqtt: MqttTx,
-    // topic_substr: String,
     pc_tx: stateful::Sender<PowerColor>,
     scene_tx: stateful::Sender<SceneName>,
     flash_color: PowerColor,
@@ -721,159 +437,6 @@ async fn set_scene(state: &mut LightState, scene: &Scene) {
     state.entity_s = scene.rx.subscribe().await;
     state.last_value = None;
 }
-
-// fn send_state(mqtt: &MqttTx, state: &lights::State, topic_substr: &str) {
-//     let topic = format!("state/{topic_substr}/status");
-//     match serde_json::to_string(&state) {
-//         Ok(json) => {
-//             let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
-//             mqtt.try_send(msg);
-//         }
-//         Err(e) => {
-//             error!("Failed to serialize status: {}", e);
-//         }
-//     }
-// }
-
-// fn send_power_state(mqtt: &MqttTx, power_state: &PowerState, topic_substr: &str) {
-//     let topic = format!("state/{topic_substr}/power");
-//     match serde_json::to_string(&power_state) {
-//         Ok(json) => {
-//             let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
-//             mqtt.try_send(msg);
-//         }
-//         Err(e) => {
-//             error!("Failed to serialize power status: {}", e);
-//         }
-//     }
-// }
-
-// fn send_scene<Scene: ScenesTrait>(mqtt: &MqttTx, scene: &Scene, topic_substr: &str) {
-//     let topic = format!("state/{topic_substr}/scene");
-//     let msg = MqttMessage::new(topic, scene.to_string(), Retain::Retain, QoS::AtLeastOnce);
-//     mqtt.try_send(msg);
-// }
-
-// struct PassageEntities {
-//     all: stateful::Receiver<PowerColor>,
-//     cupboard: stateful::Receiver<PowerColor>,
-//     bathroom: stateful::Receiver<PowerColor>,
-//     bedroom: stateful::Receiver<PowerColor>,
-// }
-
-// struct PassageStateEntities {
-//     all: stateful::Receiver<State>,
-//     cupboard: stateful::Receiver<State>,
-//     bathroom: stateful::Receiver<State>,
-//     bedroom: stateful::Receiver<State>,
-// }
-
-// fn run_passage_multiplexer(
-//     entities: PassageEntities,
-//     name: impl Into<String>,
-//     state_in: stateful::Receiver<State>,
-// ) -> (stateful::Receiver<PowerColor>, PassageStateEntities) {
-//     let name = name.into();
-//     let (tx, rx) = stateful::create_pipe(name.clone());
-//     let (tx_all_state, rx_all_state) = stateful::create_pipe(format!("{name}-all"));
-//     let (tx_cupboard_state, rx_cupboard_state) = stateful::create_pipe(format!("{name}-cupboard"));
-//     let (tx_bathroom_state, rx_bathroom_state) = stateful::create_pipe(format!("{name}-bathroom"));
-//     let (tx_bedroom_state, rx_bedroom_state) = stateful::create_pipe(format!("{name}-bathroom"));
-
-//     spawn(async move {
-//         let mut all = entities.all.subscribe().await;
-//         let mut cupboard = entities.cupboard.subscribe().await;
-//         let mut bathroom = entities.bathroom.subscribe().await;
-//         let mut bedroom = entities.bedroom.subscribe().await;
-//         let mut state_s = state_in.subscribe().await;
-
-//         let mut all_colors = PowerColor::Off;
-//         let mut cupboard_colors = PowerColor::Off;
-//         let mut bathroom_colors = PowerColor::Off;
-//         let mut bedroom_colors = PowerColor::Off;
-
-//         let mut state = None;
-
-//         loop {
-//             tokio::select! {
-//                 Ok(pc) = all.recv() => {
-//                     all_colors = pc;
-//                 }
-//                 Ok(pc) = cupboard.recv() => {
-//                     cupboard_colors = pc;
-//                 }
-//                 Ok(pc) = bathroom.recv() => {
-//                     bathroom_colors = pc;
-//                 }
-//                 Ok(pc) = bedroom.recv() => {
-//                     bedroom_colors = pc;
-//                 }
-//                 Ok(s) = state_s.recv() => {
-//                     state = Some(s);
-//                 }
-//             }
-
-//             match state {
-//                 None => {}
-//                 Some(State::Offline) => {
-//                     tx_all_state.try_send(State::Offline);
-//                     tx_cupboard_state.try_send(State::Offline);
-//                     tx_bathroom_state.try_send(State::Offline);
-//                     tx_bedroom_state.try_send(State::Offline);
-//                 }
-//                 Some(_) => {
-//                     tx_all_state.try_send(State::Online(all_colors.clone()));
-//                     tx_cupboard_state.try_send(State::Online(cupboard_colors.clone()));
-//                     tx_bathroom_state.try_send(State::Online(bathroom_colors.clone()));
-//                     tx_bedroom_state.try_send(State::Online(bedroom_colors.clone()));
-//                 }
-//             }
-
-//             let power = match (
-//                 &all_colors,
-//                 &cupboard_colors,
-//                 &bathroom_colors,
-//                 &bedroom_colors,
-//             ) {
-//                 (PowerColor::Off, PowerColor::Off, PowerColor::Off, PowerColor::Off) => {
-//                     PowerLevel::Off
-//                 }
-//                 _ => PowerLevel::On,
-//             };
-
-//             let mut colors = Vec::with_capacity(32);
-//             for _ in 0..32 {
-//                 colors.push(HSBK {
-//                     hue: 0.0,
-//                     saturation: 0.0,
-//                     brightness: 0.0,
-//                     kelvin: 3500,
-//                 });
-//             }
-
-//             copy_colors_to_pos(&all_colors, &mut colors, 0, 32);
-//             copy_colors_to_pos(&cupboard_colors, &mut colors, 7, 7);
-//             copy_colors_to_pos(&bathroom_colors, &mut colors, 23, 7);
-//             copy_colors_to_pos(&bedroom_colors, &mut colors, 30, 2);
-
-//             let pc = match power {
-//                 PowerLevel::On => PowerColor::On(Colors::Sequence(colors)),
-//                 PowerLevel::Off => PowerColor::Off,
-//             };
-
-//             tx.try_send(pc);
-//         }
-//     });
-
-//     let pse = PassageStateEntities {
-//         all: rx_all_state,
-//         cupboard: rx_cupboard_state,
-//         bathroom: rx_bathroom_state,
-//         bedroom: rx_bedroom_state,
-//     };
-
-//     (rx, pse)
-// }
 
 fn copy_colors_to_pos(add_colors: &PowerColor, colors: &mut [HSBK], offset: usize, number: usize) {
     let x: Box<dyn Iterator<Item = HSBK>> = match add_colors {

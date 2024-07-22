@@ -233,20 +233,11 @@ async fn setup_pipes(
     });
 
     fake_switch(&mut state, "Dining/Messages");
-    // FIXME: delete legacy
-    fake_switch(&mut state, "Dining/Request_Bathroom");
-
     fake_switch(&mut state, "Brian/Night");
     fake_switch(&mut state, "Brian/Messages");
-    // FIXME: delete legacy
-    fake_switch(&mut state, "Brian/Request_Bathroom");
-
     fake_switch(&mut state, "Jan/Messages");
-
     fake_switch(&mut state, "Twins/Messages");
-
     fake_switch(&mut state, "Living/Messages");
-
     fake_switch(&mut state, "Akira/Messages");
 
     setup_lights(&mut state, &config.lifx, &config.lights, &config.strips).await;
@@ -459,69 +450,18 @@ async fn setup_lights(
     let shared = lights::get_default_scenes();
 
     for light_config in lights {
-        auto_light(
-            state,
-            &discover,
-            &shared,
-            // &light_config.topic_substr,
-            // light_config.lifx_id,
-            light_config,
-        );
+        auto_light(state, &discover, &shared, light_config);
     }
 
     for strip_config in strips {
         strip_light(state, &discover, &shared, strip_config);
     }
-
-    // auto_light(
-    //     state,
-    //     &discover,
-    //     &shared,
-    //     "Brian/Light",
-    //     105_867_434_619_856,
-    // );
-
-    // auto_light(
-    //     state,
-    //     &discover,
-    //     &shared,
-    //     "Dining/Light",
-    //     74_174_870_942_672,
-    // );
-
-    // auto_light(state, &discover, &shared, "Jan/Light", 189_637_382_730_704);
-
-    // auto_light(
-    //     state,
-    //     &discover,
-    //     &shared,
-    //     "Twins/Light",
-    //     116_355_744_756_688,
-    // );
-
-    // auto_light(
-    //     state,
-    //     &discover,
-    //     &shared,
-    //     "Akira/Light",
-    //     280_578_114_286_544,
-    // );
-
-    // passage_light(
-    //     state,
-    //     &discover,
-    //     &shared,
-    //     "Passage/Light",
-    //     LifxId::new(137_092_148_851_664),
-    // );
 }
 
 fn auto_light(
     init_state: &mut InitState,
     discover: &stateless::Receiver<lifx::Device>,
     shared: &SceneMap,
-    // topic_substr: &str,
-    // lifx_id: LifxId,
     config: &config::LightConfig,
 ) {
     let topic_substr = &config.topic_substr;
@@ -576,15 +516,11 @@ fn auto_light(
 
 fn split_light(
     init_state: &mut InitState,
-    // discover: &stateless::Receiver<lifx::Device>,
     shared: &SceneMap,
     topic_substr: &str,
     scenes: &HashMap<SceneName, config::LightSceneConfig>,
     flash_color: &PowerColor,
-    // lifx_id: LifxId,
-    // config: &config::SplitLightConfig,
     priority: usize,
-    // name: &str,
 ) -> stateful::Receiver<SplitPowerColor> {
     let inputs = lights::Inputs {
         commands: init_state
@@ -679,54 +615,6 @@ fn strip_light(
     let pc = lights::run_merge_light(combined_rx, topic_substr, merge_config);
 
     send_to_device(&config.device, topic_substr, pc, discover, init_state);
-    //     let mut inputs = |name| lights::Inputs {
-    //         commands: init_state
-    //             .subscriptions
-    //             .subscribe_into_stateless::<Json<Command>>(format!(
-    //                 "command/{topic_substr}/split/{name}"
-    //             )),
-    //         auto: init_state
-    //             .subscriptions
-    //             .subscribe_into_stateful::<Json<PowerColor>>(format!(
-    //                 "command/{topic_substr}/split/{name}/auto"
-    //             ))
-    //             .map(|(_, Json(pc))| pc),
-    //     };
-
-    //     let process_output = |name, outputs: lights::Outputs| {
-    //         outputs.state.send_to_mqtt_json(
-    //             &init_state.mqtt,
-    //             format!("state/{topic_substr}/split/{name}/status",),
-    //             &SendOptions::new(),
-    //         );
-
-    //         outputs.scene.send_to_mqtt_string(
-    //             &init_state.mqtt,
-    //             format!("state/{topic_substr}/split/{name}/scene",),
-    //             &SendOptions::new(),
-    //         );
-    //     };
-
-    //     let passage_inputs = PassageInputs {
-    //         all: inputs("all"),
-    //         cupboard: inputs("cupboard"),
-    //         bathroom: inputs("bathroom"),
-    //         bedroom: inputs("bedroom"),
-    //     };
-
-    //     let outputs = run_passage_light(
-    //         passage_inputs,
-    //         &init_state.persistent_state_database,
-    //         discover.clone(),
-    //         shared,
-    //         topic_substr,
-    //         lifx_id,
-    //     );
-
-    //     process_output("all", outputs.all);
-    //     process_output("cupboard", outputs.cupboard);
-    //     process_output("bathroom", outputs.bathroom);
-    //     process_output("bedroom", outputs.bedroom);
 }
 
 fn send_to_device(
