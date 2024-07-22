@@ -1,29 +1,11 @@
 use robotica_backend::pipes::stateless;
-use robotica_backend::pipes::Subscriber;
-use robotica_backend::pipes::Subscription;
 use robotica_backend::services::mqtt::MqttTx;
-use robotica_common::mqtt::Json;
-use robotica_common::mqtt::QoS;
-use robotica_common::mqtt::Retain;
-use robotica_common::robotica::commands::Command;
+use robotica_backend::services::mqtt::SendOptions;
 use robotica_common::robotica::message::Message;
-use tracing::info;
 
-pub fn create_message_sink(mqtt: MqttTx) -> stateless::Sender<Message> {
+pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
     let (tx, rx) = stateless::create_pipe::<Message>("messages");
-    tokio::spawn(async move {
-        let mut rx = rx.subscribe().await;
-        while let Ok(msg) = rx.recv().await {
-            info!("Sending message {:?}", msg);
-            let payload = Json(Command::Message(msg));
-            mqtt.try_serialize_send(
-                "ha/event/message",
-                &payload,
-                Retain::NoRetain,
-                QoS::ExactlyOnce,
-            );
-        }
-    });
+    rx.send_to_mqtt_json(mqtt, "ha/event/message", &SendOptions::default());
     tx
 }
 

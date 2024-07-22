@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
-    let message_sink = ha::create_message_sink(mqtt.clone());
+    let message_sink = ha::create_message_sink(&mqtt);
     let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
         .unwrap_or_else(|e| {
             panic!("Error getting persistent state loader: {e}");

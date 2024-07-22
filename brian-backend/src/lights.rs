@@ -17,7 +17,7 @@ use robotica_common::{
     },
 };
 use tokio::time::sleep;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct Scene {
