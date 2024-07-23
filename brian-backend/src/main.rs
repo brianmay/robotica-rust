@@ -10,12 +10,12 @@
 mod amber;
 pub(crate) mod audience;
 mod config;
-mod environment_monitor;
 mod ha;
 mod hdmi;
 mod influxdb;
 mod lights;
 mod logging;
+mod metrics;
 mod robotica;
 mod rooms;
 mod tesla;
@@ -219,7 +219,14 @@ async fn setup_pipes(
 
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
 
-    environment_monitor::run(&mut state, &config.influxdb);
+    let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
+    for metric in config.metrics {
+        let raw: Vec<metrics::RawMetric> = metric.into();
+        raw_metrics.extend(raw);
+    }
+    for metric in raw_metrics {
+        metric.monitor(&mut state.subscriptions, &config.influxdb);
+    }
 
     executor(
         &mut state.subscriptions,

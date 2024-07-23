@@ -152,6 +152,25 @@ let
     };
   };
 
+  metric_type = types.submodule {
+    options = {
+      mqtt_topic = mkOption { type = types.str; };
+      influx_topic = mkOption { type = types.str; };
+      metric_type = mkOption {
+        type = types.enum [
+          "shelly_switch_status"
+          "shelly_notify"
+          "fish_tank"
+          "zwave_switch"
+          "anavi_temperature"
+          "anavi_humidity"
+          "zwave_f64"
+          "zwave_u8"
+        ];
+      };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       executor = mkOption {
@@ -171,6 +190,7 @@ let
       lifx = mkOption { type = lifx_type; };
       lights = mkOption { type = types.listOf light_type; };
       strips = mkOption { type = types.listOf strip_type; };
+      metrics = mkOption { type = types.listOf metric_type; };
     };
   };
 

@@ -1,7 +1,7 @@
 use crate::{
     amber, influxdb,
     lights::{self, Scene},
-    tesla, InitState,
+    metrics, tesla, InitState,
 };
 use envconfig::Envconfig;
 use robotica_backend::{
@@ -90,6 +90,7 @@ pub struct Config {
     pub lights: Vec<LightConfig>,
     pub strips: Vec<StripConfig>,
     pub lifx: LifxConfig,
+    pub metrics: Vec<metrics::ConfigMetric>,
 }
 
 /// An error loading the Config
