@@ -131,7 +131,7 @@ fn brian_config(passage_light: &LightConfig) -> UiConfig {
                     icon: Icon::Trumpet,
                     controller: ControllerConfig::Switch(switch::Config {
                         action: Action::Toggle,
-                        topic_substr: "Brian/Messages".to_string(),
+                        topic_substr: "Robotica/Brian/Messages".to_string(),
                     }),
                 },
                 ButtonConfig {
@@ -177,7 +177,7 @@ fn jan_config(passage_light: &LightConfig) -> UiConfig {
                 icon: Icon::Trumpet,
                 controller: ControllerConfig::Switch(switch::Config {
                     action: Action::Toggle,
-                    topic_substr: "Jan/Messages".to_string(),
+                    topic_substr: "Robotica/Jan/Messages".to_string(),
                 }),
             }],
         }],
@@ -220,7 +220,7 @@ fn twins_config() -> UiConfig {
                 icon: Icon::Trumpet,
                 controller: ControllerConfig::Switch(switch::Config {
                     action: Action::Toggle,
-                    topic_substr: "Twins/Messages".to_string(),
+                    topic_substr: "Robotica/Twins/Messages".to_string(),
                 }),
             }],
         }],
@@ -263,7 +263,7 @@ fn dining_room_config(passage_light: &LightConfig, hdmi_inputs: &[HdmiInputConfi
                     icon: Icon::Trumpet,
                     controller: ControllerConfig::Switch(switch::Config {
                         action: Action::Toggle,
-                        topic_substr: "Dining/Messages".to_string(),
+                        topic_substr: "Robotica/Dining/Messages".to_string(),
                     }),
                 },
             ],
@@ -298,7 +298,7 @@ fn living_room_config(hdmi_inputs: &[HdmiInputConfig]) -> UiConfig {
                 icon: Icon::Trumpet,
                 controller: ControllerConfig::Switch(switch::Config {
                     action: Action::Toggle,
-                    topic_substr: "Living/Messages".to_string(),
+                    topic_substr: "Robotica/Living/Messages".to_string(),
                 }),
             }],
         }],
@@ -332,7 +332,7 @@ fn akira_config() -> UiConfig {
                 icon: Icon::Trumpet,
                 controller: ControllerConfig::Switch(switch::Config {
                     action: Action::Toggle,
-                    topic_substr: "Akira/Messages".to_string(),
+                    topic_substr: "Robotica/Akira/Messages".to_string(),
                 }),
             }],
         }],

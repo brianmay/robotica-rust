@@ -370,7 +370,11 @@
           devenv-up = devShell.config.procfileScript;
         };
       }) // {
-        nixosModules.robotica-backend =
-          import ./modules/robotica-backend.nix { inherit self; };
+        nixosModules = {
+          robotica-backend =
+            import ./modules/robotica-backend.nix { inherit self; };
+          robotica-slint =
+            import ./modules/robotica-slint.nix { inherit self; };
+        };
       };
 }

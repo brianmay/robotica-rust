@@ -9,7 +9,7 @@ use std::{
 use robotica_backend::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{
-        mqtt::{MqttTx, Subscriptions},
+        mqtt::{self, MqttTx, Subscriptions},
         persistent_state::PersistentStateDatabase,
     },
     spawn,
@@ -49,7 +49,7 @@ pub struct Config {
     programs: ProgramsConfig,
     topic_substr: String,
     targets: HashMap<String, String>,
-    messages_enabled_topic: String,
+    messages_enabled_subtopic: String,
     sound_path: PathBuf,
 }
 
@@ -68,7 +68,7 @@ pub struct LoadedConfig {
     programs: LoadedProgramsConfig,
     topic_substr: String,
     targets: HashMap<String, String>,
-    messages_enabled_topic: String,
+    messages_enabled_subtopic: String,
     sound_path: PathBuf,
 }
 
@@ -88,7 +88,7 @@ impl TryFrom<Config> for LoadedConfig {
             programs,
             topic_substr: config.topic_substr,
             targets: config.targets,
-            messages_enabled_topic: config.messages_enabled_topic,
+            messages_enabled_subtopic: config.messages_enabled_subtopic,
             sound_path: config.sound_path,
         })
     }
@@ -105,10 +105,20 @@ pub fn run(
     let topic = format!("command/{topic_substr}");
     let command_rx: stateless::Receiver<Json<Command>> =
         subscriptions.subscribe_into_stateless(topic);
-    let messages_enabled_rx: stateful::Receiver<DevicePower> =
-        subscriptions.subscribe_into_stateful(&config.messages_enabled_topic);
+    let messages_enabled_rx: stateful::Receiver<DevicePower> = subscriptions
+        .subscribe_into_stateful(format!(
+            "robotica/command/{}",
+            config.messages_enabled_subtopic
+        ));
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
+
+    let (power_tx, power_rx) = stateful::create_pipe("messages_enabled");
+    power_rx.send_to_mqtt_json(
+        &mqtt,
+        format!("robotica/state/{}/power", config.messages_enabled_subtopic),
+        &mqtt::SendOptions::default(),
+    );
 
     spawn(async move {
         let topic_substr = &config.topic_substr;
@@ -178,6 +188,8 @@ pub fn run(
                         DevicePower::HardOff => false,
                         DevicePower::DeviceError => false,
                     };
+                    let status = if messages_enabled { DevicePower::On } else { DevicePower::Off };
+                    power_tx.try_send(status);
                 }
                 else => break,
             }
