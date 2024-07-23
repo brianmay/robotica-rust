@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::error;
 
 use super::super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
