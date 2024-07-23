@@ -239,13 +239,7 @@ async fn setup_pipes(
         panic!("Failed to start executor: {err}");
     });
 
-    fake_switch(&mut state, "Dining/Messages");
     fake_switch(&mut state, "Brian/Night");
-    fake_switch(&mut state, "Brian/Messages");
-    fake_switch(&mut state, "Jan/Messages");
-    fake_switch(&mut state, "Twins/Messages");
-    fake_switch(&mut state, "Living/Messages");
-    fake_switch(&mut state, "Akira/Messages");
 
     setup_lights(&mut state, &config.lifx, &config.lights, &config.strips).await;
 
