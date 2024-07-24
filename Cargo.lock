@@ -2119,31 +2119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "freeswitch"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "color-backtrace",
- "envconfig",
- "freeswitch-esl",
- "futures",
- "itertools 0.13.0",
- "openssl",
- "reqwest 0.12.5",
- "robotica-backend",
- "robotica-common",
- "serde",
- "serde_json",
- "serde_yml",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "freeswitch-esl"
 version = "0.1.0"
 source = "git+https://github.com/KaranGauswami/freeswitch-esl.git#df6dc403c15e55ea93f03ca4f8b3a579019180e4"
@@ -5676,6 +5651,31 @@ dependencies = [
  "tap",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "robotica-freeswitch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "color-backtrace",
+ "envconfig",
+ "freeswitch-esl",
+ "futures",
+ "itertools 0.13.0",
+ "openssl",
+ "reqwest 0.12.5",
+ "robotica-backend",
+ "robotica-common",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

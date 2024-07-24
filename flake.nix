@@ -191,12 +191,12 @@
           pkg = wrapper;
         };
 
-        freeswitch = let
+        robotica-freeswitch = let
           common = {
             src = ./.;
             pname = "robotica-freeswitch";
             version = "0.0.0";
-            cargoExtraArgs = "-p freeswitch";
+            cargoExtraArgs = "-p robotica-freeswitch";
             nativeBuildInputs = with pkgs; [ pkg-config ];
             buildInputs = with pkgs; [ openssl python3 protobuf ];
           };
@@ -222,9 +222,9 @@
             doCheck = true;
           } // common // build_env);
 
-          wrapper = pkgs.writeShellScriptBin "freeswitch" ''
+          wrapper = pkgs.writeShellScriptBin "robotica-freeswitch" ''
             export PATH="${poetry_env}/bin:$PATH"
-            exec ${pkg}/bin/freeswitch "$@"
+            exec ${pkg}/bin/robotica-freeswitch "$@"
           '';
         in {
           clippy = clippy;
@@ -356,9 +356,9 @@
           brian-backend-clippy = brian-backend.clippy;
           # brian-backend-coverage = brian-backend.coverage;
           brian-backend = brian-backend.pkg;
-          freeswitch-clippy = freeswitch.clippy;
-          # freeswitch-coverage = freeswitch.coverage;
-          freeswitch = freeswitch.pkg;
+          robotica-freeswitch-clippy = robotica-freeswitch.clippy;
+          # freeswitch-coverage = robotica-freeswitch.coverage;
+          robotica-freeswitch = robotica-freeswitch.pkg;
         };
 
         devShells.default = devShell;
@@ -366,7 +366,7 @@
           robotica-frontend = robotica-frontend-bindgen;
           brian-backend = brian-backend.pkg;
           robotica-slint = robotica-slint.pkg;
-          freeswitch = freeswitch.pkg;
+          robotica-freeswitch = robotica-freeswitch.pkg;
           devenv-up = devShell.config.procfileScript;
         };
       }) // {
@@ -375,6 +375,8 @@
             import ./modules/robotica-backend.nix { inherit self; };
           robotica-slint =
             import ./modules/robotica-slint.nix { inherit self; };
+          robotica-freeswitch =
+            import ./modules/robotica-freeswitch.nix { inherit self; };
         };
       };
 }

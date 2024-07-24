@@ -1,5 +1,5 @@
 [package]
-name = "freeswitch"
+name = "robotica-freeswitch"
 version = "0.1.0"
 authors = ["Brian May <brian@linuxpenguins.xyz>"]
 edition = "2021"
