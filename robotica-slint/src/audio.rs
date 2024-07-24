@@ -20,7 +20,7 @@ use robotica_common::{
         audio::{AudioCommand, Message, State},
         commands::Command,
         lights::LightCommand,
-        switch::DevicePower,
+        switch::{DeviceAction, DevicePower},
         tasks::{Payload, SubTask, Task},
     },
 };
@@ -105,7 +105,7 @@ pub fn run(
     let topic = format!("command/{topic_substr}");
     let command_rx: stateless::Receiver<Json<Command>> =
         subscriptions.subscribe_into_stateless(topic);
-    let messages_enabled_rx: stateful::Receiver<DevicePower> = subscriptions
+    let messages_enabled_rx: stateful::Receiver<Json<Command>> = subscriptions
         .subscribe_into_stateful(format!("command/{}", config.messages_enabled_subtopic));
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
@@ -178,15 +178,19 @@ pub fn run(
                     }
                 }
                 Ok(me) = messages_enabled_s.recv() => {
-                    messages_enabled = match me {
-                        DevicePower::On => true,
-                        DevicePower::Off => false,
-                        DevicePower::AutoOff => false,
-                        DevicePower::HardOff => false,
-                        DevicePower::DeviceError => false,
+                    match me {
+                        Json(Command::Device(command)) => {
+                            messages_enabled = match command.action {
+                                DeviceAction::TurnOn => true,
+                                DeviceAction::TurnOff => false,
+                            };
+                            let status = if messages_enabled { DevicePower::On } else { DevicePower::Off };
+                            power_tx.try_send(status);
+                        },
+                        _ => {
+                            error!("Invalid messages_enabled command, expected switch, got {:?}", me);
+                        }
                     };
-                    let status = if messages_enabled { DevicePower::On } else { DevicePower::Off };
-                    power_tx.try_send(status);
                 }
                 else => break,
             }
