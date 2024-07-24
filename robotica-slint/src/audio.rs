@@ -118,7 +118,7 @@ pub fn run(
     );
 
     let (power_tx, power_rx) = stateful::create_pipe("audio_messages_enabled");
-    power_rx.send_to_mqtt_json(
+    power_rx.send_to_mqtt_string(
         &mqtt,
         format!("state/{}/power", config.messages_enabled_subtopic),
         &mqtt::SendOptions::default(),
