@@ -7,12 +7,12 @@ let
   system = pkgs.stdenv.system;
   robotica-freeswitch = self.packages.${system}.robotica-freeswitch;
 
-  wrapper = pkgs.writeShellScriptBin "freeswitch" ''
+  wrapper = pkgs.writeShellScriptBin "robotica-freeswitch" ''
     export RUST_LOG=info
     export ROBOTICA_DEBUG="${boolToString (cfg.debug)}"
     export CONFIG_FILE="/etc/robotica-freeswitch.yaml"
     export SECRETS_FILE="${cfg.secrets}"
-    exec "${robotica-freeswitch}/bin/freeswitch"
+    exec "${robotica-freeswitch}/bin/robotica-freeswitch"
   '';
 
   freeswitch_type = types.submodule {
@@ -61,7 +61,7 @@ in {
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         User = "robotica";
-        ExecStart = "${wrapper}/bin/freeswitch";
+        ExecStart = "${wrapper}/bin/robotica-freeswitch";
       };
     };
   };
