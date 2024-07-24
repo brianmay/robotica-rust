@@ -4,7 +4,10 @@ use freeswitch_esl::{Esl, EslConnection, EslError};
 use robotica_backend::{services::mqtt::MqttTx, spawn};
 use robotica_common::{
     mqtt::{MqttMessage, Retain},
-    robotica::{audio::MessagePriority, message::Message},
+    robotica::{
+        audio::MessagePriority,
+        message::{Audience, Message},
+    },
 };
 use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
@@ -16,7 +19,7 @@ use crate::{phone_db, RunningState};
 pub struct Config {
     listen_address: String,
     topic: String,
-    audience: String,
+    audience: Audience,
 }
 
 #[derive(Debug)]

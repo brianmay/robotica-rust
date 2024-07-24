@@ -9,7 +9,10 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    robotica::{audio::MessagePriority, message::Message},
+    robotica::{
+        audio::MessagePriority,
+        message::{Audience, Message},
+    },
     unsafe_time_delta,
 };
 use std::time::Duration;
@@ -176,16 +179,18 @@ async fn sleep_until(maybe_try_command: &mut Option<TryCommand>) -> Option<TryCo
 }
 
 #[derive(Debug)]
-struct Errors {
+struct Errors<'a> {
     last_success: DateTime<Utc>,
     notified: bool,
+    audience: &'a Audience,
 }
 
-impl Errors {
-    fn new() -> Self {
+impl<'a> Errors<'a> {
+    fn new(audience: &'a Audience) -> Self {
         Self {
             last_success: Utc::now(),
             notified: false,
+            audience,
         }
     }
 
@@ -202,6 +207,7 @@ impl Errors {
             let msg = new_message(
                 "I am on talking terms with the Tesla again",
                 MessagePriority::Urgent,
+                self.audience,
             );
             message_sink.try_send(msg);
             meters.increment_cleared_errors(false);
@@ -219,6 +225,7 @@ impl Errors {
             let msg = new_message(
                 "The Tesla and I have not been talking to each other for 30 minutes",
                 MessagePriority::Urgent,
+                self.audience,
             );
             message_sink.try_send(msg);
             self.notified = true;
@@ -248,9 +255,8 @@ pub fn run(
         let mut s_token = rx_token.subscribe().await;
 
         let mut maybe_try_command: Option<TryCommand> = None;
-        let mut errors = Errors::new();
+        let mut errors = Errors::new(&tesla.audience.errors);
 
-        let tesla = tesla;
         let meters = Meters::new(&tesla);
         let Ok(mut token) = s_token.recv().await else {
             error!("Failed to get token.");

@@ -8,7 +8,6 @@
 #![allow(clippy::to_string_trait_impl)]
 
 mod amber;
-pub(crate) mod audience;
 mod config;
 mod ha;
 mod hdmi;
@@ -38,7 +37,7 @@ use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
-use robotica_common::robotica::message::Message;
+use robotica_common::robotica::message::{Audience, Message};
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
@@ -121,7 +120,11 @@ pub struct InitState {
     pub persistent_state_database: PersistentStateDatabase,
 }
 
-fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequence> {
+fn calendar_to_sequence(
+    event: CalendarEntry,
+    timezone: Local,
+    audience: &Audience,
+) -> Option<Sequence> {
     let (start_time, end_time) = calendar_start_top_times(&event, timezone).or_else(|| {
         error!("Error getting start/stop times from calendar event {event:?}");
         None
@@ -131,7 +134,7 @@ fn calendar_to_sequence(event: CalendarEntry, timezone: Local) -> Option<Sequenc
         "Calendar Event",
         &event.summary,
         MessagePriority::Low,
-        audience::everyone(),
+        audience.clone(),
     );
 
     let tasks = match event.start_end {
@@ -232,7 +235,9 @@ async fn setup_pipes(
         &mut state.subscriptions,
         state.mqtt.clone(),
         config.executor,
-        Box::new(calendar_to_sequence),
+        Box::new(move |event, timezone| {
+            calendar_to_sequence(event, timezone, &Audience::new("everyone"))
+        }),
         Local,
     )
     .unwrap_or_else(|err| {
@@ -284,7 +289,7 @@ fn monitor_bathroom_door(state: &mut InitState) {
                     "Bathroom Door",
                     message,
                     MessagePriority::DaytimeOnly,
-                    audience::dining_room(),
+                    Audience::new("everyone"),
                 ));
             }
         }
@@ -345,7 +350,7 @@ fn monitor_hot_water(
                 "Hot Water",
                 message,
                 MessagePriority::DaytimeOnly,
-                audience::everyone(),
+                Audience::new("everyone"),
             ));
         }
     });

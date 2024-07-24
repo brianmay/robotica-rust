@@ -32,6 +32,7 @@ pub fn plug_in_reminder(
                 let msg = new_message(
                     format!("{name} might run away and should be leashed"),
                     MessagePriority::Low,
+                    &tesla.audience.charging,
                 );
                 message_tx.try_send(msg);
             }

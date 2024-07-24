@@ -216,7 +216,7 @@ pub fn monitor(tesla: &Config, receivers: MonitorInputs) -> stateless::Receiver<
         while let Ok(open) = s.recv().await {
             debug!("open received: {:?}", open);
             let msg = doors_to_message(&tesla, &open);
-            let msg = new_message(msg, MessagePriority::Urgent);
+            let msg = new_message(msg, MessagePriority::Urgent, &tesla.audience.doors);
             message_tx.try_send(msg);
         }
     });

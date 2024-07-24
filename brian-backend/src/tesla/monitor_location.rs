@@ -91,7 +91,7 @@ fn announce_charging_state(
             .join(" and ");
 
         let msg = format!("{name} {msg}");
-        let msg = new_message(msg, MessagePriority::DaytimeOnly);
+        let msg = new_message(msg, MessagePriority::DaytimeOnly, &tesla.audience.charging);
         message_sink.try_send(msg);
     }
 }
@@ -158,7 +158,7 @@ pub fn monitor(
                         } else {
                             format!("{name} is at {level}% and the {limit_type} limit is {limit}%")
                         };
-                        let msg = new_message(msg, MessagePriority::DaytimeOnly);
+                        let msg = new_message(msg, MessagePriority::DaytimeOnly, &tesla.audience.locations);
                         message_sink.try_send(msg);
                     }
 

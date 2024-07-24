@@ -13,10 +13,8 @@ pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::audience;
-
     use super::*;
-    use robotica_common::robotica::audio::MessagePriority;
+    use robotica_common::robotica::{audio::MessagePriority, message::Audience};
     use serde_json::json;
 
     #[test]
@@ -25,7 +23,7 @@ mod tests {
             title: "Title".to_string(),
             body: "Body".to_string(),
             priority: MessagePriority::Low,
-            audience: audience::everyone().to_string(),
+            audience: Audience::new("everyone"),
             flash_lights: false,
         };
         let json = json!({

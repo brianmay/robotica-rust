@@ -75,12 +75,23 @@ let
   teslamate_type =
     types.submodule { options = { url = mkOption { type = types.str; }; }; };
 
+  tesla_audience_type = types.submodule {
+    options = {
+      errors = mkOption { type = types.str; };
+      locations = mkOption { type = types.str; };
+      doors = mkOption { type = types.str; };
+      charging = mkOption { type = types.str; };
+      private = mkOption { type = types.str; };
+    };
+  };
+
   tesla_type = types.submodule {
     options = {
       name = mkOption { type = types.str; };
       teslamate_id = mkOption { type = types.number; };
       tesla_id = mkOption { type = types.number; };
       teslamate = mkOption { type = teslamate_type; };
+      audiences = mkOption { type = tesla_audience_type; };
     };
   };
 

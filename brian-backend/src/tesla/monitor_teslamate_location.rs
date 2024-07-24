@@ -9,10 +9,7 @@ use robotica_common::{
 };
 use tracing::error;
 
-use super::{
-    private::{new_message, new_private_message},
-    Config,
-};
+use super::{private::new_message, Config};
 
 mod state {
     use std::collections::{HashMap, HashSet};
@@ -167,21 +164,23 @@ pub fn monitor(
 
                 for location in &arrived {
                     let msg = format!("{name} arrived at {}", location.name);
-                    let msg = if location.announce_on_enter {
-                        new_message(msg, MessagePriority::Low)
+                    let audience = if location.announce_on_enter {
+                        &tesla.audience.locations
                     } else {
-                        new_private_message(msg, MessagePriority::Low)
+                        &tesla.audience.private
                     };
+                    let msg = new_message(msg, MessagePriority::Low, audience);
                     message_tx.try_send(msg);
                 }
 
                 for location in left {
                     let msg = format!("{name} left {}", location.name);
-                    let msg = if location.announce_on_exit {
-                        new_message(msg, MessagePriority::Low)
+                    let audience = if location.announce_on_exit {
+                        &tesla.audience.locations
                     } else {
-                        new_private_message(msg, MessagePriority::Low)
+                        &tesla.audience.private
                     };
+                    let msg = new_message(msg, MessagePriority::Low, audience);
                     message_tx.try_send(msg);
                 }
             }
