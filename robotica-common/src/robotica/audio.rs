@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::tasks::SubTask;
 
 /// The current volume levels
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct VolumeState {
     /// The volume level for music
     pub music: u8,
@@ -25,7 +25,7 @@ impl Default for VolumeState {
 }
 
 /// The current state of the audio player
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct State {
     /// The current playlist
     pub play_list: Option<String>,

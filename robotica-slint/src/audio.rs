@@ -15,7 +15,7 @@ use robotica_backend::{
     spawn,
 };
 use robotica_common::{
-    mqtt::{Json, MqttMessage, QoS, Retain},
+    mqtt::{Json, QoS, Retain},
     robotica::{
         audio::{AudioCommand, Message, State},
         commands::Command,
@@ -125,8 +125,6 @@ pub fn run(
     );
 
     spawn(async move {
-        let topic_substr = &config.topic_substr;
-
         let mut command_s = command_rx.subscribe().await;
         let mut messages_enabled_s = messages_enabled_rx.subscribe().await;
 
