@@ -110,10 +110,17 @@ pub fn run(
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
-    let (power_tx, power_rx) = stateful::create_pipe("messages_enabled");
+    let (state_tx, state_rx) = stateful::create_pipe("audio_state");
+    state_rx.send_to_mqtt_json(
+        &mqtt,
+        format!("state/{topic_substr}"),
+        &mqtt::SendOptions::default(),
+    );
+
+    let (power_tx, power_rx) = stateful::create_pipe("audio_messages_enabled");
     power_rx.send_to_mqtt_json(
         &mqtt,
-        format!("robotica/state/{}/power", config.messages_enabled_subtopic),
+        format!("state/{}/power", config.messages_enabled_subtopic),
         &mqtt::SendOptions::default(),
     );
 
@@ -122,13 +129,12 @@ pub fn run(
 
         let mut command_s = command_rx.subscribe().await;
         let mut messages_enabled_s = messages_enabled_rx.subscribe().await;
-        let mut messages_enabled = false;
 
         init_all(&state, &config).await.unwrap_or_else(|err| {
             state.error = Some(err);
             state.play_list = None;
         });
-        send_state(&mqtt, &state, topic_substr);
+        send_state(&state, &state_tx, &power_tx);
 
         #[allow(clippy::match_same_arms)]
         loop {
@@ -136,8 +142,8 @@ pub fn run(
                 Ok(Json(command)) = command_s.recv() => {
                     if let Command::Audio(command) = command {
                         state.error = None;
-                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command, messages_enabled).await;
-                        send_state(&mqtt, &state, topic_substr);
+                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
+                        send_state(&state, &state_tx, &power_tx);
                         psr.save(&state).unwrap_or_else(|e| {
                             error!("Failed to save state: {}", e);
                         });
@@ -166,8 +172,8 @@ pub fn run(
                             volume: None,
                         };
                         state.error = None;
-                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command, messages_enabled).await;
-                        send_state(&mqtt, &state, topic_substr);
+                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
+                        send_state(&state, &state_tx, &power_tx);
                         psr.save(&state).unwrap_or_else(|e| {
                             error!("Failed to save state: {}", e);
                         });
@@ -180,12 +186,14 @@ pub fn run(
                 Ok(me) = messages_enabled_s.recv() => {
                     match me {
                         Json(Command::Device(command)) => {
-                            messages_enabled = match command.action {
+                            state.messages_enabled = match command.action {
                                 DeviceAction::TurnOn => true,
                                 DeviceAction::TurnOff => false,
                             };
-                            let status = if messages_enabled { DevicePower::On } else { DevicePower::Off };
-                            power_tx.try_send(status);
+                            send_state(&state, &state_tx, &power_tx);
+                            psr.save(&state).unwrap_or_else(|e| {
+                                error!("Failed to save state: {}", e);
+                            });
                         },
                         _ => {
                             error!("Invalid messages_enabled command, expected switch, got {:?}", me);
@@ -210,17 +218,18 @@ async fn init_all(state: &State, config: &LoadedConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn send_state(mqtt: &MqttTx, state: &State, topic_substr: &str) {
-    let topic = format!("state/{topic_substr}");
-    match serde_json::to_string(&state) {
-        Ok(json) => {
-            let msg = MqttMessage::new(topic, json, Retain::Retain, QoS::AtLeastOnce);
-            mqtt.try_send(msg);
-        }
-        Err(e) => {
-            error!("Failed to serialize power state: {}", e);
-        }
-    }
+fn send_state(
+    state: &State,
+    state_tx: &stateful::Sender<State>,
+    power_tx: &stateful::Sender<DevicePower>,
+) {
+    state_tx.try_send(state.clone());
+    let status = if state.messages_enabled {
+        DevicePower::On
+    } else {
+        DevicePower::Off
+    };
+    power_tx.try_send(status);
 }
 
 fn send_task(mqtt: &MqttTx, task: &Task) {
@@ -236,7 +245,6 @@ async fn handle_command(
     config: &Arc<LoadedConfig>,
     mqtt: &MqttTx,
     command: AudioCommand,
-    messages_enabled: bool,
 ) {
     let music_volume = command.volume.as_ref().and_then(|v| v.music);
     let message_volume = command.volume.as_ref().and_then(|v| v.message);
@@ -259,7 +267,7 @@ async fn handle_command(
 
     let should_play = {
         let now = chrono::Local::now();
-        command.should_play(now, messages_enabled)
+        command.should_play(now, state.messages_enabled)
     };
 
     if should_play {

@@ -33,6 +33,8 @@ pub struct State {
     pub error: Option<String>,
     /// The current volume levels
     pub volume: VolumeState,
+    /// Are messages enabled?
+    pub messages_enabled: bool,
 }
 
 /// A command to play some music
