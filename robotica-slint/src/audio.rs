@@ -106,10 +106,7 @@ pub fn run(
     let command_rx: stateless::Receiver<Json<Command>> =
         subscriptions.subscribe_into_stateless(topic);
     let messages_enabled_rx: stateful::Receiver<DevicePower> = subscriptions
-        .subscribe_into_stateful(format!(
-            "robotica/command/{}",
-            config.messages_enabled_subtopic
-        ));
+        .subscribe_into_stateful(format!("command/{}", config.messages_enabled_subtopic));
     let psr = database.for_name::<State>(topic_substr);
     let mut state = psr.load().unwrap_or_default();
 
