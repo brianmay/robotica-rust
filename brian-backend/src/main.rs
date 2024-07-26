@@ -323,7 +323,9 @@ fn monitor_hot_water(
         "robotica/state/hot_water/amber",
         &SendOptions::new(),
     );
-    let hot_water_request = hot_water_state.map(|(_, state)| state.get_result());
+    let hot_water_request = hot_water_state
+        .map(|(_, state)| state.get_result())
+        .rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300));
 
     let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {

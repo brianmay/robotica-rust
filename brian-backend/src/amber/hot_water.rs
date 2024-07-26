@@ -21,7 +21,6 @@ use robotica_common::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::select;
 use tracing::{error, info};
 
@@ -297,8 +296,7 @@ pub fn run(
             }
         }
     });
-
-    rx_out.rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300))
+    rx_out
 }
 
 #[cfg(test)]
