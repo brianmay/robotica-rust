@@ -86,6 +86,10 @@ impl<T> UserPlan<T> {
     pub const fn get_kw(&self) -> f32 {
         self.plan.get_kw()
     }
+
+    pub const fn get_user_data(&self) -> &T {
+        &self.user_data
+    }
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -143,9 +147,9 @@ impl<T> MaybeUserPlan<T> {
         }
     }
 
-    pub fn is_current(&self, now: DateTime<Utc>) -> bool {
-        self.get_plan().map_or(false, |plan| plan.is_current(now))
-    }
+    // pub fn is_current(&self, now: DateTime<Utc>) -> bool {
+    //     self.get_plan().map_or(false, |plan| plan.is_current(now))
+    // }
 
     pub fn get_average_cost_per_hour(&self) -> Option<f32> {
         self.0.as_ref().map(UserPlan::get_average_cost_per_hour)

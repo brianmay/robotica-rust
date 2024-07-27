@@ -1,4 +1,9 @@
-use super::{combined, rules, user_plan::MaybeUserPlan, Prices};
+use super::{
+    combined::{self, UserDataTrait},
+    rules,
+    user_plan::MaybeUserPlan,
+    Prices,
+};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::metrics::Meter;
 use robotica_backend::{
@@ -62,6 +67,14 @@ impl combined::RequestTrait for Request {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct HeatPlanUserData {}
+
+impl UserDataTrait for HeatPlanUserData {
+    type Request = Request;
+
+    fn get_request(&self) -> Self::Request {
+        Request::Heat
+    }
+}
 
 type HeatPlan = MaybeUserPlan<HeatPlanUserData>;
 
@@ -188,15 +201,7 @@ fn process<T: TimeZone>(
     let plan = day.plan.update_plan(id, prices, now, maybe_new_plan);
 
     let state = combined::get_request(
-        id,
-        Request::Heat,
-        &plan,
-        &day.rules,
-        prices,
-        day.is_on,
-        meters,
-        now,
-        timezone,
+        id, &plan, &day.rules, prices, day.is_on, meters, now, timezone,
     );
     let request = state.get_result();
 
@@ -669,18 +674,9 @@ mod tests {
         let plan = HeatPlan::new_test(3.6, start_time, end_time, HeatPlanUserData {});
 
         // Act
-        let request = combined::get_request(
-            "test",
-            Request::Heat,
-            &plan,
-            &rules,
-            &prices,
-            is_on,
-            None,
-            now,
-            &timezone,
-        )
-        .get_result();
+        let request =
+            combined::get_request("test", &plan, &rules, &prices, is_on, None, now, &timezone)
+                .get_result();
 
         // Assert
         assert_eq!(request, expected);

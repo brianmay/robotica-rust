@@ -1,6 +1,6 @@
 use crate::{amber::combined, tesla::TeslamateId};
 
-use super::{rules, user_plan::MaybeUserPlan, Prices};
+use super::{combined::UserDataTrait, rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::metrics::Meter;
 use robotica_backend::{
@@ -84,6 +84,14 @@ impl ChargePlanUserData {
         Self {
             min_charge_tomorrow,
         }
+    }
+}
+
+impl UserDataTrait for ChargePlanUserData {
+    type Request = ChargeRequest;
+
+    fn get_request(&self) -> Self::Request {
+        ChargeRequest::ChargeTo(self.min_charge_tomorrow)
     }
 }
 
@@ -240,7 +248,6 @@ fn prices_to_charge_request<T: TimeZone>(
 
     let request = combined::get_request(
         id,
-        ChargeRequest::ChargeTo(ps.min_charge_tomorrow),
         &ps.charge_plan,
         &ps.rules,
         prices,

@@ -17,6 +17,11 @@ enum Reason {
     Combined,
 }
 
+pub trait UserDataTrait {
+    type Request;
+    fn get_request(&self) -> Self::Request;
+}
+
 pub trait RequestTrait {
     type GaugeType;
 
@@ -62,12 +67,12 @@ impl<R: RequestTrait> Meters<R> {
 }
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
-pub struct State<UP, R> {
+pub struct State<UD, R> {
     time: DateTime<Utc>,
     plan_request: Option<R>,
     rules_request: Option<R>,
     result: R,
-    plan: MaybeUserPlan<UP>,
+    plan: MaybeUserPlan<UD>,
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_time_to_plan: Option<TimeDelta>,
@@ -75,7 +80,7 @@ pub struct State<UP, R> {
     rules: RuleSet<R>,
 }
 
-impl<UP, R: Copy> State<UP, R> {
+impl<UD, R: Copy> State<UD, R> {
     pub const fn get_result(&self) -> R {
         self.result
     }
@@ -83,24 +88,30 @@ impl<UP, R: Copy> State<UP, R> {
 
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn get_request<UP: Clone, R: Copy + Debug + Max + Default + RequestTrait, TZ: TimeZone>(
+pub fn get_request<UD, R, TZ>(
     id: &str,
-    plan_request: R,
-    plan: &MaybeUserPlan<UP>,
+    plan: &MaybeUserPlan<UD>,
     rules: &RuleSet<R>,
     prices: &Prices,
     is_on: bool,
     meters: Option<&Meters<R>>,
     now: DateTime<Utc>,
     timezone: &TZ,
-) -> State<UP, R> {
+) -> State<UD, R>
+where
+    UD: Clone + UserDataTrait<Request = R>,
+    R: Copy + Debug + Max + Default + RequestTrait,
+    TZ: TimeZone,
+{
     let rules_request = rules.apply(prices, now, is_on, timezone).copied();
 
-    let plan_request = if plan.is_current(now) {
-        Some(plan_request)
-    } else {
-        None
-    };
+    let plan_request = plan.get().and_then(|plan| {
+        if plan.is_current(now) {
+            Some(plan.get_user_data().get_request())
+        } else {
+            None
+        }
+    });
 
     let estimated_time_to_plan = plan
         .get_plan()
@@ -206,6 +217,13 @@ mod tests {
 
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
     struct TestRequest(u32);
+    impl UserDataTrait for TestRequest {
+        type Request = Self;
+
+        fn get_request(&self) -> Self::Request {
+            *self
+        }
+    }
 
     impl Max for TestRequest {
         fn max(self, other: Self) -> Self {
@@ -282,19 +300,9 @@ mod tests {
         ]
         .pipe(rules::RuleSet::new);
 
-        let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(99));
+        let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(72));
 
-        let state = get_request(
-            "test",
-            TestRequest(72),
-            &plan,
-            &rules,
-            &prices,
-            false,
-            None,
-            now,
-            &timezone,
-        );
+        let state = get_request("test", &plan, &rules, &prices, false, None, now, &timezone);
 
         assert_eq!(state.time, now);
         assert_eq!(state.plan_request, expected_plan);
