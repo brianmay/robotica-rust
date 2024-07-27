@@ -1,6 +1,6 @@
 use crate::{amber::combined, tesla::TeslamateId};
 
-use super::{rules, user_plan::UserPlan, Prices};
+use super::{rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::metrics::Meter;
 use robotica_backend::{
@@ -80,18 +80,18 @@ struct ChargePlanUserData {
 }
 
 impl ChargePlanUserData {
-    const fn new(ps: &PersistentState) -> Self {
+    const fn new(min_charge_tomorrow: u8) -> Self {
         Self {
-            min_charge_tomorrow: ps.min_charge_tomorrow,
+            min_charge_tomorrow,
         }
     }
 }
 
-type ChargePlan = UserPlan<ChargePlanUserData>;
+type ChargePlan = MaybeUserPlan<ChargePlanUserData>;
 
 impl ChargePlan {
-    const fn none_from_ps(ps: &PersistentState) -> Self {
-        Self::new_none(ChargePlanUserData::new(ps))
+    const fn none() -> Self {
+        Self::new_none()
     }
 }
 
@@ -107,9 +107,7 @@ impl Default for PersistentState {
         let min_charge_tomorrow = 70;
         Self {
             min_charge_tomorrow,
-            charge_plan: UserPlan::new_none(ChargePlanUserData {
-                min_charge_tomorrow,
-            }),
+            charge_plan: MaybeUserPlan::new_none(),
             rules: rules::RuleSet::new(vec![]),
         }
     }
@@ -203,7 +201,7 @@ pub fn run(
                     if v_is_charging {
                         info!(id, "Plan ended, but was still charging, estimated time was too short");
                     }
-                    ps.charge_plan = UserPlan::none_from_ps(&ps);
+                    ps.charge_plan = MaybeUserPlan::none();
                 },
                 else => break,
             }
@@ -237,25 +235,8 @@ fn prices_to_charge_request<T: TimeZone>(
     now: DateTime<Utc>,
     timezone: &T,
 ) -> (State, PersistentState) {
-    // How long should car take to charge to min_charge_tomorrow?
-    let estimated_charge_time_to_min =
-        estimate_to_limit(id, battery_level, now, ps.min_charge_tomorrow, timezone);
-
-    ps.charge_plan = if let Some(estimated_charge_time_to_min) = estimated_charge_time_to_min {
-        let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
-        let user_data = ChargePlanUserData::new(&ps);
-        ps.charge_plan.update_plan(
-            id,
-            7.680,
-            prices,
-            now,
-            end_time,
-            estimated_charge_time_to_min,
-            user_data,
-        )
-    } else {
-        UserPlan::none_from_ps(&ps)
-    };
+    let maybe_new_plan = get_new_plan(id, battery_level, now, &ps, timezone, prices);
+    ps.charge_plan = ps.charge_plan.update_plan(id, prices, now, maybe_new_plan);
 
     let request = combined::get_request(
         id,
@@ -269,25 +250,83 @@ fn prices_to_charge_request<T: TimeZone>(
         timezone,
     );
 
-    // Get some more stats
-    let estimated_charge_time_to_limit = match request.get_result() {
-        ChargeRequest::ChargeTo(limit) => {
-            estimate_to_limit(id, battery_level, now, limit, timezone)
-        }
-        ChargeRequest::Manual => None,
-    };
-    let estimated_charge_time_to_90 = estimate_to_limit(id, battery_level, now, 90, timezone);
-
     let state = State {
         combined: request,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
-        estimated_charge_time_to_min,
-        estimated_charge_time_to_limit,
-        estimated_charge_time_to_90,
     };
 
     (state, ps)
+}
+
+fn get_new_plan_to_min_charge(
+    id: &str,
+    battery_level: u8,
+    now: DateTime<Utc>,
+    timezone: &impl TimeZone,
+    prices: &Prices,
+    limit: u8,
+) -> MaybeUserPlan<ChargePlanUserData> {
+    let estimated_charge_time_to_min = estimate_to_limit(id, battery_level, now, limit, timezone);
+
+    estimated_charge_time_to_min.map_or_else(MaybeUserPlan::none, |estimated_charge_time_to_min| {
+        let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
+        let user_data = ChargePlanUserData::new(limit);
+        MaybeUserPlan::get_cheapest(
+            7.68,
+            now,
+            end_time,
+            estimated_charge_time_to_min,
+            prices,
+            user_data,
+        )
+    })
+}
+
+fn get_new_plan(
+    id: &str,
+    battery_level: u8,
+    now: DateTime<Utc>,
+    ps: &PersistentState,
+    timezone: &impl TimeZone,
+    prices: &Prices,
+) -> MaybeUserPlan<ChargePlanUserData> {
+    let mut try_limit = Vec::with_capacity(3);
+
+    if ps.min_charge_tomorrow < 90 {
+        try_limit.push((90, 7.68 * 10.0));
+    }
+
+    if ps.min_charge_tomorrow < 80 {
+        try_limit.push((80, 7.68 * 15.0));
+    }
+
+    try_limit.push((ps.min_charge_tomorrow, 7.68 * 40.0));
+
+    for (limit, max_cost_per_hour) in try_limit {
+        let new_plan = get_new_plan_to_min_charge(id, battery_level, now, timezone, prices, limit);
+        if let Some(plan) = new_plan.get() {
+            let propose_plan = plan.get_average_cost_per_hour() < max_cost_per_hour;
+
+            info!(
+                id,
+                ?new_plan,
+                average_cost_per_hour = new_plan.get_average_cost_per_hour(),
+                max_cost_per_hour,
+                limit,
+                propose_plan,
+                "Maybe propose plan"
+            );
+
+            if propose_plan {
+                return new_plan;
+            }
+        } else {
+            info!(id, limit, "No plan to charge to limit");
+        }
+    }
+
+    MaybeUserPlan::none()
 }
 
 fn estimate_to_limit<T: TimeZone>(
@@ -300,14 +339,14 @@ fn estimate_to_limit<T: TimeZone>(
     let estimated_charge_time = estimate_charge_time(battery_level, limit);
     if let Some(estimated_charge_time) = estimated_charge_time {
         let estimated_finish = dt + estimated_charge_time;
-        info!(
+        debug!(
             "{id}: Estimated charge time to {limit} is {time}, should finish at {finish:?}",
             id = id,
             time = time_delta::to_string(&estimated_charge_time),
             finish = estimated_finish.with_timezone(tz).to_rfc3339()
         );
     } else {
-        info!(
+        debug!(
             "{id}: Battery level is already at or above {limit}",
             limit = limit
         );
@@ -322,15 +361,6 @@ pub struct State {
 
     #[serde(flatten)]
     combined: combined::State<ChargePlanUserData, ChargeRequest>,
-
-    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    estimated_charge_time_to_min: Option<TimeDelta>,
-
-    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    estimated_charge_time_to_limit: Option<TimeDelta>,
-
-    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    estimated_charge_time_to_90: Option<TimeDelta>,
 }
 
 impl State {

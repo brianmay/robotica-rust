@@ -2,7 +2,7 @@ use std::cmp::{max, min};
 
 use chrono::{TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{debug, error};
 
 use super::Prices;
 
@@ -56,6 +56,23 @@ impl Plan {
         Self { start_time, ..self }
     }
 
+    pub fn get_time_left(&self, now: chrono::DateTime<Utc>) -> TimeDelta {
+        if now < self.start_time {
+            // hasn't started yet
+            self.get_duration()
+        } else if now < self.end_time {
+            // started but not finished
+            self.end_time - now
+        } else {
+            // finished
+            TimeDelta::zero()
+        }
+    }
+
+    pub fn get_duration(&self) -> TimeDelta {
+        self.end_time - self.start_time
+    }
+
     pub fn is_current(&self, dt: chrono::DateTime<Utc>) -> bool {
         self.start_time <= dt && self.end_time > dt
     }
@@ -74,7 +91,7 @@ impl Plan {
         let mut now = now;
         while now < self.end_time {
             let Some(p) = prices.find(now) else {
-                error!("Cannot find price for {now}");
+                debug!("Cannot find price for {now}");
                 return None;
             };
 
@@ -91,16 +108,12 @@ impl Plan {
             now = if let Some(next) = prices.get_next_period(now) {
                 next
             } else {
-                error!("Cannot find next period for {now}");
+                debug!("Cannot find next period for {now}");
                 return None;
             }
         }
 
         Some(total)
-    }
-
-    pub fn get_duration(&self) -> TimeDelta {
-        self.end_time - self.start_time
     }
 }
 
@@ -155,7 +168,7 @@ pub fn get_cheapest(
                 .partial_cmp(&(db, b, tb))
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|(plan, _, price, _)| (plan, price))
+        .map(|(plan, _, total_cost, _)| (plan, total_cost))
 }
 
 #[cfg(test)]

@@ -2,25 +2,118 @@ use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 use std::{cmp::min, fmt::Debug, time::Duration};
 use tokio::time::{sleep_until, Instant};
-use tracing::{error, info};
+use tracing::info;
 
 use super::{
     plan::{get_cheapest, Plan},
     Prices,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct UserPlan<T> {
-    plan: Option<Plan>,
+    plan: Plan,
     user_data: T,
+    cost: f32,
 }
 
 impl<T> UserPlan<T> {
-    pub const fn new_none(user_data: T) -> Self {
-        Self {
-            plan: None,
+    fn get_cheapest(
+        kw: f32,
+        start_search: DateTime<Utc>,
+        end_search: DateTime<Utc>,
+        required_duration: TimeDelta,
+        prices: &Prices,
+        user_data: T,
+    ) -> Option<Self> {
+        let plan = get_cheapest(kw, start_search, end_search, required_duration, prices);
+        plan.map(|(plan, cost)| Self {
+            plan,
             user_data,
+            cost,
+        })
+    }
+
+    pub fn with_start_time(self, start_time: DateTime<Utc>) -> Self {
+        Self {
+            plan: self.plan.with_start_time(start_time),
+            user_data: self.user_data,
+            cost: self.cost,
         }
+    }
+
+    pub const fn get_start_time(&self) -> DateTime<Utc> {
+        self.plan.get_start_time()
+    }
+
+    pub const fn get_end_time(&self) -> DateTime<Utc> {
+        self.plan.get_end_time()
+    }
+
+    pub fn get_time_left(&self, now: DateTime<Utc>) -> TimeDelta {
+        self.plan.get_time_left(now)
+    }
+
+    pub fn is_current(&self, now: DateTime<Utc>) -> bool {
+        self.plan.is_current(now)
+    }
+
+    #[cfg(test)]
+    pub fn get_forecast_cost(&self, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
+        self.plan.get_forecast_cost(now, prices)
+    }
+
+    pub fn get_forecast_average_cost(&self, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
+        let duration = self.plan.get_duration();
+        #[allow(clippy::cast_precision_loss)]
+        let duration = duration.num_seconds() as f32 / 3600.0;
+        self.plan
+            .get_forecast_cost(now, prices)
+            .map(|cost| cost / duration)
+    }
+
+    pub fn get_average_cost_per_hour(&self) -> f32 {
+        let duration = self.plan.get_duration();
+        #[allow(clippy::cast_precision_loss)]
+        let duration = duration.num_seconds() as f32 / 3600.0;
+        self.cost / duration
+    }
+
+    #[cfg(test)]
+    pub const fn get_kw(&self) -> f32 {
+        self.plan.get_kw()
+    }
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct MaybeUserPlan<T>(Option<UserPlan<T>>);
+
+impl<T> MaybeUserPlan<T> {
+    pub const fn new_none() -> Self {
+        Self(None)
+    }
+
+    pub fn get_cheapest(
+        kw: f32,
+        start_search: DateTime<Utc>,
+        end_search: DateTime<Utc>,
+        required_duration: TimeDelta,
+        prices: &Prices,
+        user_data: T,
+    ) -> Self {
+        let maybe_plan = UserPlan::get_cheapest(
+            kw,
+            start_search,
+            end_search,
+            required_duration,
+            prices,
+            user_data,
+        );
+        Self(maybe_plan)
+    }
+
+    pub const fn get(&self) -> Option<&UserPlan<T>> {
+        self.0.as_ref()
     }
 
     #[cfg(test)]
@@ -30,118 +123,89 @@ impl<T> UserPlan<T> {
         end_time: DateTime<Utc>,
         user_data: T,
     ) -> Self {
-        Self {
-            plan: Some(Plan::new_test(kw, start_time, end_time)),
+        let user_plan = UserPlan {
+            plan: Plan::new_test(kw, start_time, end_time),
             user_data,
-        }
+            cost: 0.0,
+        };
+        Self(Some(user_plan))
     }
 
     pub const fn get_plan(&self) -> Option<&Plan> {
-        self.plan.as_ref()
+        if let Some(user_plan) = &self.0 {
+            Some(&user_plan.plan)
+        } else {
+            None
+        }
     }
 
     pub fn is_current(&self, now: DateTime<Utc>) -> bool {
-        self.plan
-            .as_ref()
-            .map_or(false, |plan| plan.is_current(now))
+        self.get_plan().map_or(false, |plan| plan.is_current(now))
+    }
+
+    pub fn get_average_cost_per_hour(&self) -> Option<f32> {
+        self.0.as_ref().map(UserPlan::get_average_cost_per_hour)
     }
 }
 
-impl<T: Debug> Debug for UserPlan<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UserPlan")
-            .field("plan", &self.plan)
-            .field("user_data", &self.user_data)
-            .finish()
-    }
-}
-
-impl<T: Clone> Clone for UserPlan<T> {
-    fn clone(&self) -> Self {
-        Self {
-            plan: self.plan.clone(),
-            user_data: self.user_data.clone(),
-        }
-    }
-}
-
-impl<T: PartialEq> PartialEq for UserPlan<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.plan == other.plan && self.user_data == other.user_data
-    }
-}
-
-impl<T: Debug + PartialEq> UserPlan<T> {
+impl<T: Debug + PartialEq> MaybeUserPlan<T> {
     #[allow(clippy::cognitive_complexity)]
-    #[allow(clippy::too_many_arguments)]
+    // #[allow(clippy::too_many_arguments)]
     pub fn update_plan(
         self,
         id: &str,
-        kw: f32,
         prices: &Prices,
         now: DateTime<Utc>,
-        end_time: DateTime<Utc>,
-        required_time_left: TimeDelta,
-        user_data: T,
+        maybe_new_user_plan: Self,
     ) -> Self {
         let old_user_plan = self;
 
-        // If required time left is negative or zero, then cancel the plan.
-        if required_time_left <= TimeDelta::zero() {
-            info!("Required time left is negative or zero");
-            return Self {
-                plan: None,
-                user_data,
-            };
-        }
-
-        let Some((new_plan, new_cost)) =
-            get_cheapest(kw, now, end_time, required_time_left, prices)
-        else {
-            error!(id, plan =? old_user_plan, "Can't get new plan; using old plan");
-            return old_user_plan;
+        let Some(new_user_plan) = maybe_new_user_plan.0 else {
+            // This could happen because the device is fully charged.
+            info!(id, plan = ?old_user_plan, "Can't get new plan; discarding plan");
+            return Self(None);
         };
 
-        let Some(old_plan) = old_user_plan.plan else {
-            info!(id, plan =? new_plan, "No old plan available, using new Plan");
-            return Self {
-                plan: Some(new_plan),
-                user_data,
-            };
+        let Some(old_user_plan) = old_user_plan.0 else {
+            info!(id, plan = ?new_user_plan, "No old plan available, using new Plan");
+            return Self(Some(new_user_plan));
         };
 
-        let Some(old_cost) = old_plan.get_forecast_cost(now, prices) else {
-            info!(id, plan =? new_plan, "Old plan available but cannot get cost; using new plan");
-            return Self {
-                plan: Some(new_plan),
-                user_data,
-            };
+        let Some(old_average_cost) = old_user_plan.get_forecast_average_cost(now, prices) else {
+            info!(id, plan = ?new_user_plan, "Old plan available but cannot get cost; using new plan");
+            return Self(Some(new_user_plan));
         };
+
+        let new_average_cost = new_user_plan.get_average_cost_per_hour();
 
         // If there is more then 30 minutes left on plan and new plan is cheaper then 80% of old plan, then force new plan.
         // Or if the charge limit has changed, force new plan.
-        let time_left = min(old_plan.get_end_time() - now, required_time_left);
-        let threshold_reached = new_cost < old_cost * 0.8 && time_left >= TimeDelta::minutes(30);
-        let has_changed = old_user_plan.user_data != user_data;
+        let time_left = min(
+            old_user_plan.get_time_left(now),
+            new_user_plan.get_time_left(now),
+        );
+        let threshold_reached =
+            new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
+        let has_changed = old_user_plan.user_data != new_user_plan.user_data;
         let force = threshold_reached || has_changed;
 
-        let old_plan_is_on = old_plan.is_current(now);
-        let new_plan_is_on = new_plan.is_current(now);
+        let old_plan_is_on = old_user_plan.is_current(now);
+        let new_plan_is_on = new_user_plan.is_current(now);
 
         // If new plan continues old plan, use the old start time.
-        let new_plan = if old_plan_is_on && new_plan_is_on {
-            new_plan.with_start_time(old_plan.get_start_time())
+        let new_user_plan = if old_plan_is_on && new_plan_is_on {
+            new_user_plan.with_start_time(old_user_plan.get_start_time())
         } else {
-            new_plan
+            new_user_plan
         };
 
         info!(
             id,
-            ?old_plan,
-            old_cost,
+            ?old_user_plan,
+            old_average_cost,
             old_plan_is_on,
-            ?new_plan,
-            new_cost,
+            ?new_user_plan,
+            new_average_cost = new_user_plan.get_average_cost_per_hour(),
             new_plan_is_on,
             threshold_reached,
             has_changed,
@@ -165,17 +229,11 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         };
 
         if use_new_plan {
-            info!(id, plan =? new_plan, "Using new plan");
-            Self {
-                plan: Some(new_plan),
-                user_data,
-            }
+            info!(id, plan =? new_user_plan, "Using new plan");
+            Self(Some(new_user_plan))
         } else {
-            info!(id, plan =? old_plan, "Using old plan");
-            Self {
-                plan: Some(old_plan),
-                user_data,
-            }
+            info!(id, plan =? old_user_plan, "Using old plan");
+            Self(Some(old_user_plan))
         }
     }
 
@@ -187,7 +245,7 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         // This will always happen while plan is active.
         // In this case we return None.
         let start_time = self
-            .plan
+            .0
             .as_ref()
             .and_then(|plan| (plan.get_start_time() - Utc::now()).to_std().ok());
 
@@ -206,7 +264,7 @@ impl<T: Debug + PartialEq> UserPlan<T> {
         // If duration is negative, we can't sleep because this happened in the past.
         // In this case we return Some(()).
         // It is assumed the expired plan will be dropped.
-        let end_time = self.plan.as_ref().map(|plan| {
+        let end_time = self.0.as_ref().map(|plan| {
             // If plan end time is in the past this will return immediately.
             (plan.get_end_time() - Utc::now())
                 .to_std()
@@ -353,18 +411,18 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let user_plan = UserPlan::new_none(UserData {});
-        let user_plan = user_plan.update_plan(
-            "test",
+        let maybe_new_plan = MaybeUserPlan::get_cheapest(
             7.68,
-            &prices,
             start_time,
             end_time,
             required_duration,
+            &prices,
             UserData {},
         );
+        let user_plan = MaybeUserPlan::new_none();
+        let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);
 
-        let plan = user_plan.plan.unwrap();
+        let plan = user_plan.0.unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
         assert_approx_eq!(f32, plan.get_kw(), 7.680);
         assert_eq!(plan.get_start_time(), expected_start_time);

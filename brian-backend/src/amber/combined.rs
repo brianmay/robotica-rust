@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::fmt::Debug;
 use tracing::info;
 
-use super::{rules::RuleSet, user_plan::UserPlan, Prices};
+use super::{rules::RuleSet, user_plan::MaybeUserPlan, Prices};
 
 pub trait Max {
     fn max(self, other: Self) -> Self;
@@ -67,7 +67,7 @@ pub struct State<UP, R> {
     plan_request: Option<R>,
     rules_request: Option<R>,
     result: R,
-    plan: UserPlan<UP>,
+    plan: MaybeUserPlan<UP>,
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_time_to_plan: Option<TimeDelta>,
@@ -86,7 +86,7 @@ impl<UP, R: Copy> State<UP, R> {
 pub fn get_request<UP: Clone, R: Copy + Debug + Max + Default + RequestTrait, TZ: TimeZone>(
     id: &str,
     plan_request: R,
-    plan: &UserPlan<UP>,
+    plan: &MaybeUserPlan<UP>,
     rules: &RuleSet<R>,
     prices: &Prices,
     is_on: bool,
@@ -282,7 +282,7 @@ mod tests {
         ]
         .pipe(rules::RuleSet::new);
 
-        let plan = UserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(99));
+        let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(99));
 
         let state = get_request(
             "test",

@@ -1,9 +1,4 @@
-use super::{
-    combined,
-    rules::{self},
-    user_plan::UserPlan,
-    Prices,
-};
+use super::{combined, rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::metrics::Meter;
 use robotica_backend::{
@@ -68,7 +63,7 @@ impl combined::RequestTrait for Request {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct HeatPlanUserData {}
 
-type HeatPlan = UserPlan<HeatPlanUserData>;
+type HeatPlan = MaybeUserPlan<HeatPlanUserData>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct DayState {
@@ -94,7 +89,7 @@ impl DayState {
             cheap_power_for_day: TimeDelta::zero(),
             last_cheap_update: now,
             is_on: false,
-            plan: HeatPlan::new_none(HeatPlanUserData {}),
+            plan: HeatPlan::new_none(),
             rules: rules::RuleSet::new(vec![]),
         }
     }
@@ -130,7 +125,7 @@ impl DayState {
             self.end = end_day;
             self.cheap_power_for_day = TimeDelta::zero();
             self.last_cheap_update = start_day;
-            self.plan = HeatPlan::new_none(HeatPlanUserData {});
+            self.plan = HeatPlan::new_none();
         };
 
         // Add recent time to total cheap_power_for_day
@@ -170,9 +165,6 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
 pub struct State {
     #[serde(flatten)]
     combined: combined::State<HeatPlanUserData, Request>,
-
-    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    required_time_left: Option<TimeDelta>,
 }
 
 impl State {
@@ -192,16 +184,8 @@ fn process<T: TimeZone>(
     now: DateTime<Utc>,
     timezone: &T,
 ) -> DayState {
-    let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
-    let plan = day.plan.update_plan(
-        id,
-        3.6,
-        prices,
-        now,
-        day.end,
-        required_time_left,
-        HeatPlanUserData {},
-    );
+    let maybe_new_plan = get_new_plan(&mut day, id, now, timezone, prices);
+    let plan = day.plan.update_plan(id, prices, now, maybe_new_plan);
 
     let state = combined::get_request(
         id,
@@ -216,16 +200,31 @@ fn process<T: TimeZone>(
     );
     let request = state.get_result();
 
-    let state = State {
-        combined: state,
-        required_time_left: Some(required_time_left),
-    };
+    let state = State { combined: state };
 
     info!(id, ?request, "Sending request");
     tx_out.try_send(state);
     day.plan = plan;
     day.save(psr);
     day
+}
+
+fn get_new_plan(
+    day: &mut DayState,
+    id: &str,
+    now: DateTime<Utc>,
+    timezone: &impl TimeZone,
+    prices: &Prices,
+) -> MaybeUserPlan<HeatPlanUserData> {
+    let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
+    MaybeUserPlan::get_cheapest(
+        3.6,
+        now,
+        day.end,
+        required_time_left,
+        prices,
+        HeatPlanUserData {},
+    )
 }
 
 pub fn run(
@@ -289,7 +288,7 @@ pub fn run(
                 }
                 Some(()) = day.plan.sleep_until_plan_end() => {
                     info!(id, "Plan end time elapsed");
-                    day.plan = HeatPlan::new_none(HeatPlanUserData{});
+                    day.plan = HeatPlan::new_none();
                     day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 else => break,
@@ -333,7 +332,7 @@ mod tests {
                 cheap_power_for_day: TimeDelta::minutes(0),
                 last_cheap_update: now,
                 is_on: false,
-                plan: HeatPlan::new_none(HeatPlanUserData {}),
+                plan: HeatPlan::new_none(),
                 rules: rules::RuleSet::new(vec![]),
             }
         );
@@ -389,7 +388,7 @@ mod tests {
             last_cheap_update,
             cheap_power_for_day,
             is_on,
-            plan: HeatPlan::new_none(HeatPlanUserData {}),
+            plan: HeatPlan::new_none(),
             rules: rules::RuleSet::new(vec![]),
         };
 
@@ -506,18 +505,18 @@ mod tests {
             interval: INTERVAL,
         };
 
-        let heat_plan = HeatPlan::new_none(HeatPlanUserData {});
-        let heat_plan = heat_plan.update_plan(
-            "test",
+        let maybe_new_plan = MaybeUserPlan::get_cheapest(
             3.6,
-            &prices,
             start_time,
             end_time,
             required_duration,
+            &prices,
             HeatPlanUserData {},
         );
+        let user_plan = MaybeUserPlan::new_none();
+        let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);
 
-        let plan = heat_plan.get_plan().unwrap();
+        let plan = user_plan.get_plan().unwrap();
         let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
