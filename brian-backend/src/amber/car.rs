@@ -283,6 +283,7 @@ fn get_new_plan_to_min_charge(
     })
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn get_new_plan(
     id: &str,
     battery_level: u8,
@@ -308,6 +309,19 @@ fn get_new_plan(
         if let Some(plan) = new_plan.get() {
             let propose_plan = plan.get_average_cost_per_hour() < max_cost_per_hour;
 
+            if propose_plan {
+                info!(
+                    id,
+                    ?new_plan,
+                    total_cost = new_plan.get_total_cost(),
+                    average_cost_per_hour = new_plan.get_average_cost_per_hour(),
+                    max_cost_per_hour,
+                    limit,
+                    "Propose plan"
+                );
+                return new_plan;
+            }
+
             info!(
                 id,
                 ?new_plan,
@@ -315,18 +329,14 @@ fn get_new_plan(
                 average_cost_per_hour = new_plan.get_average_cost_per_hour(),
                 max_cost_per_hour,
                 limit,
-                propose_plan,
-                "Maybe propose plan"
+                "Skipping plan as too expensive"
             );
-
-            if propose_plan {
-                return new_plan;
-            }
         } else {
-            info!(id, limit, "No plan to charge to limit");
+            info!(id, limit, "No plan to charge to specified limit");
         }
     }
 
+    info!(id, "No plan found");
     MaybeUserPlan::none()
 }
 

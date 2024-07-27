@@ -207,20 +207,6 @@ impl<T: Debug + PartialEq> MaybeUserPlan<T> {
             new_user_plan
         };
 
-        info!(
-            id,
-            ?old_user_plan,
-            old_average_cost,
-            old_plan_is_on,
-            ?new_user_plan,
-            new_average_cost = new_user_plan.get_average_cost_per_hour(),
-            new_plan_is_on,
-            threshold_reached,
-            has_changed,
-            force,
-            "Choosing old plan or new plan"
-        );
-
         #[allow(clippy::match_same_arms)]
         let use_new_plan = match (old_plan_is_on, new_plan_is_on, force) {
             // force criteria met, use new plan
@@ -237,10 +223,36 @@ impl<T: Debug + PartialEq> MaybeUserPlan<T> {
         };
 
         if use_new_plan {
-            info!(id, plan =? new_user_plan, "Using new plan");
+            info!(
+                id,
+                ?old_user_plan,
+                old_average_cost,
+                old_plan_is_on,
+                ?new_user_plan,
+                new_average_cost = new_user_plan.get_average_cost_per_hour(),
+                new_plan_is_on,
+                threshold_reached,
+                has_changed,
+                force,
+                plan=?new_user_plan,
+                "Choosing new plan"
+            );
             Self(Some(new_user_plan))
         } else {
-            info!(id, plan =? old_user_plan, "Using old plan");
+            info!(
+                id,
+                ?old_user_plan,
+                old_average_cost,
+                old_plan_is_on,
+                ?new_user_plan,
+                new_average_cost = new_user_plan.get_average_cost_per_hour(),
+                new_plan_is_on,
+                threshold_reached,
+                has_changed,
+                force,
+                plan=?old_user_plan,
+                "Choosing old plan"
+            );
             Self(Some(old_user_plan))
         }
     }
