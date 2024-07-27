@@ -63,7 +63,7 @@ impl<T> UserPlan<T> {
     }
 
     pub fn get_forecast_average_cost(&self, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
-        let duration = self.plan.get_duration();
+        let duration = self.plan.get_timedelta();
         #[allow(clippy::cast_precision_loss)]
         let duration = duration.num_seconds() as f32 / 3600.0;
         self.plan
@@ -72,10 +72,14 @@ impl<T> UserPlan<T> {
     }
 
     pub fn get_average_cost_per_hour(&self) -> f32 {
-        let duration = self.plan.get_duration();
+        let duration = self.plan.get_timedelta();
         #[allow(clippy::cast_precision_loss)]
         let duration = duration.num_seconds() as f32 / 3600.0;
         self.cost / duration
+    }
+
+    pub const fn get_total_cost(&self) -> f32 {
+        self.cost
     }
 
     #[cfg(test)]
@@ -145,6 +149,10 @@ impl<T> MaybeUserPlan<T> {
 
     pub fn get_average_cost_per_hour(&self) -> Option<f32> {
         self.0.as_ref().map(UserPlan::get_average_cost_per_hour)
+    }
+
+    pub fn get_total_cost(&self) -> Option<f32> {
+        self.0.as_ref().map(UserPlan::get_total_cost)
     }
 }
 

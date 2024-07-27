@@ -1,12 +1,16 @@
-use std::cmp::{max, min};
+use std::{
+    cmp::{max, min},
+    fmt::Formatter,
+};
 
 use chrono::{TimeDelta, Utc};
+use robotica_common::datetime::{datetime_to_string, time_delta};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
 use super::Prices;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct Plan {
     kw: f32,
     start_time: chrono::DateTime<Utc>,
@@ -59,7 +63,7 @@ impl Plan {
     pub fn get_time_left(&self, now: chrono::DateTime<Utc>) -> TimeDelta {
         if now < self.start_time {
             // hasn't started yet
-            self.get_duration()
+            self.get_timedelta()
         } else if now < self.end_time {
             // started but not finished
             self.end_time - now
@@ -69,7 +73,7 @@ impl Plan {
         }
     }
 
-    pub fn get_duration(&self) -> TimeDelta {
+    pub fn get_timedelta(&self) -> TimeDelta {
         self.end_time - self.start_time
     }
 
@@ -117,6 +121,17 @@ impl Plan {
     }
 }
 
+impl std::fmt::Debug for Plan {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Plan")
+            .field("kw", &self.kw)
+            .field("start_time", &datetime_to_string(&self.start_time))
+            .field("end_time", &datetime_to_string(&self.end_time))
+            .field("duration", &time_delta::to_string(&self.get_timedelta()))
+            .finish()
+    }
+}
+
 pub fn get_cheapest(
     kw: f32,
     start_search: chrono::DateTime<Utc>,
@@ -158,7 +173,7 @@ pub fn get_cheapest(
             // error!("Plan: {:?} Price: {:?}", plan, price);
             price.map(|price| {
                 // We need the largest value, hence we get the negative duration.
-                let duration = -plan.get_duration();
+                let duration = -plan.get_timedelta();
                 let start_time = plan.start_time;
                 (plan, duration, price, start_time)
             })

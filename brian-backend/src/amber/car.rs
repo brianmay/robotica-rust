@@ -311,6 +311,7 @@ fn get_new_plan(
             info!(
                 id,
                 ?new_plan,
+                total_cost = new_plan.get_total_cost(),
                 average_cost_per_hour = new_plan.get_average_cost_per_hour(),
                 max_cost_per_hour,
                 limit,
