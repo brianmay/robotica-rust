@@ -317,7 +317,7 @@ fn get_new_plan(
                     average_cost_per_hour = new_plan.get_average_cost_per_hour(),
                     max_cost_per_hour,
                     limit,
-                    "Propose plan"
+                    "Proposing new plan"
                 );
                 return new_plan;
             }
