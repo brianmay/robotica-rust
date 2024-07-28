@@ -51,6 +51,7 @@ impl Plan {
         }
     }
 
+    #[cfg(test)]
     pub const fn get_kw(&self) -> f32 {
         self.kw
     }

@@ -182,27 +182,37 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
             return maybe_new_user_plan;
         };
 
-        let new_user_plan = maybe_new_user_plan.0.unwrap_or_else(|| {
-            // No new plan available.
-            // Create fake plan with same request and cost that ends now.
-            // We will replace plan with new plan the cost goes up.
-            let plan = UserPlan {
-                plan: Plan::new_nil(old_user_plan.plan.get_kw(), now),
-                request: old_user_plan.request,
-                cost: old_user_plan.cost,
+        let Some(new_user_plan) = maybe_new_user_plan.0 else {
+            // No new plan.
+            // This has to be a special case; we can't use a nil plan because a nil plan has no average cost.
+            let old_average_cost = old_user_plan.get_average_cost_per_hour();
+            let new_current_cost = old_user_plan.get_forecast_average_cost(now, prices);
+            let discard_plan = new_current_cost.map_or(true, |new_average_cost| {
+                old_average_cost > new_average_cost * 0.8
+            });
+
+            let result = if discard_plan {
+                info!(id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; price rise too much; discarding plan");
+                Self(None)
+            } else {
+                info!(id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; keeping old plan");
+                Self(Some(old_user_plan))
             };
-            info!(id, plan = ?plan, "No new plan available, using fake plan");
-            plan
-        });
+            return result;
+        };
 
         let new_average_cost = new_user_plan.get_average_cost_per_hour();
 
         // If there is more then 30 minutes left on old plan
         // and new plan is cheaper then 80% of old plan, then force new plan.
         // Or if the charge limit has changed, force new plan.
+        //
+        // If either of the costs is NaN this means the period had no time,
+        // so we should force the new plan.
         let time_left = old_user_plan.get_time_left(now);
-        let threshold_reached =
-            new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
+        let threshold_reached = new_average_cost.is_nan()
+            || old_average_cost.is_nan()
+            || new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
         let has_changed = old_user_plan.request != new_user_plan.request;
         let force = threshold_reached || has_changed;
 
