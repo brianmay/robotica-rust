@@ -17,11 +17,6 @@ enum Reason {
     Combined,
 }
 
-pub trait UserDataTrait {
-    type Request;
-    fn get_request(&self) -> Self::Request;
-}
-
 pub trait RequestTrait {
     type GaugeType;
 
@@ -67,12 +62,12 @@ impl<R: RequestTrait> Meters<R> {
 }
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
-pub struct State<UD, R> {
+pub struct State<R> {
     time: DateTime<Utc>,
     plan_request: Option<R>,
     rules_request: Option<R>,
     result: R,
-    plan: MaybeUserPlan<UD>,
+    plan: MaybeUserPlan<R>,
 
     #[serde(with = "robotica_common::datetime::with_option_time_delta")]
     estimated_time_to_plan: Option<TimeDelta>,
@@ -80,7 +75,7 @@ pub struct State<UD, R> {
     rules: RuleSet<R>,
 }
 
-impl<UD, R: Copy> State<UD, R> {
+impl<R: Copy> State<R> {
     pub const fn get_result(&self) -> R {
         self.result
     }
@@ -88,18 +83,17 @@ impl<UD, R: Copy> State<UD, R> {
 
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn get_request<UD, R, TZ>(
+pub fn get_request<R, TZ>(
     id: &str,
-    plan: &MaybeUserPlan<UD>,
+    plan: &MaybeUserPlan<R>,
     rules: &RuleSet<R>,
     prices: &Prices,
     is_on: bool,
     meters: Option<&Meters<R>>,
     now: DateTime<Utc>,
     timezone: &TZ,
-) -> State<UD, R>
+) -> State<R>
 where
-    UD: Clone + UserDataTrait<Request = R>,
     R: Copy + Debug + Max + Default + RequestTrait,
     TZ: TimeZone,
 {
@@ -107,7 +101,7 @@ where
 
     let plan_request = plan.get().and_then(|plan| {
         if plan.is_current(now) {
-            Some(plan.get_user_data().get_request())
+            Some(*plan.get_request())
         } else {
             None
         }
@@ -217,13 +211,6 @@ mod tests {
 
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
     struct TestRequest(u32);
-    impl UserDataTrait for TestRequest {
-        type Request = Self;
-
-        fn get_request(&self) -> Self::Request {
-            *self
-        }
-    }
 
     impl Max for TestRequest {
         fn max(self, other: Self) -> Self {

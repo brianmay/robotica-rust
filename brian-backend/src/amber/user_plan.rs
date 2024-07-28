@@ -10,25 +10,25 @@ use super::{
 };
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct UserPlan<T> {
+pub struct UserPlan<R> {
     plan: Plan,
-    user_data: T,
+    request: R,
     cost: f32,
 }
 
-impl<T> UserPlan<T> {
+impl<R> UserPlan<R> {
     fn get_cheapest(
         kw: f32,
         start_search: DateTime<Utc>,
         end_search: DateTime<Utc>,
         required_duration: TimeDelta,
         prices: &Prices,
-        user_data: T,
+        request: R,
     ) -> Option<Self> {
         let plan = get_cheapest(kw, start_search, end_search, required_duration, prices);
         plan.map(|(plan, cost)| Self {
             plan,
-            user_data,
+            request,
             cost,
         })
     }
@@ -36,7 +36,7 @@ impl<T> UserPlan<T> {
     pub fn with_start_time(self, start_time: DateTime<Utc>) -> Self {
         Self {
             plan: self.plan.with_start_time(start_time),
-            user_data: self.user_data,
+            request: self.request,
             cost: self.cost,
         }
     }
@@ -87,16 +87,16 @@ impl<T> UserPlan<T> {
         self.plan.get_kw()
     }
 
-    pub const fn get_user_data(&self) -> &T {
-        &self.user_data
+    pub const fn get_request(&self) -> &R {
+        &self.request
     }
 }
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct MaybeUserPlan<T>(Option<UserPlan<T>>);
+pub struct MaybeUserPlan<R>(Option<UserPlan<R>>);
 
-impl<T> MaybeUserPlan<T> {
+impl<R> MaybeUserPlan<R> {
     pub const fn new_none() -> Self {
         Self(None)
     }
@@ -107,7 +107,7 @@ impl<T> MaybeUserPlan<T> {
         end_search: DateTime<Utc>,
         required_duration: TimeDelta,
         prices: &Prices,
-        user_data: T,
+        request: R,
     ) -> Self {
         let maybe_plan = UserPlan::get_cheapest(
             kw,
@@ -115,12 +115,12 @@ impl<T> MaybeUserPlan<T> {
             end_search,
             required_duration,
             prices,
-            user_data,
+            request,
         );
         Self(maybe_plan)
     }
 
-    pub const fn get(&self) -> Option<&UserPlan<T>> {
+    pub const fn get(&self) -> Option<&UserPlan<R>> {
         self.0.as_ref()
     }
 
@@ -129,11 +129,11 @@ impl<T> MaybeUserPlan<T> {
         kw: f32,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-        user_data: T,
+        request: R,
     ) -> Self {
         let user_plan = UserPlan {
             plan: Plan::new_test(kw, start_time, end_time),
-            user_data,
+            request,
             cost: 0.0,
         };
         Self(Some(user_plan))
@@ -198,7 +198,7 @@ impl<T: Debug + PartialEq> MaybeUserPlan<T> {
         );
         let threshold_reached =
             new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
-        let has_changed = old_user_plan.user_data != new_user_plan.user_data;
+        let has_changed = old_user_plan.request != new_user_plan.request;
         let force = threshold_reached || has_changed;
 
         let old_plan_is_on = old_user_plan.is_current(now);
@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq)]
-    struct UserData {}
+    struct Request {}
 
     #[rstest::rstest]
     #[case(
@@ -441,7 +441,7 @@ mod tests {
             end_time,
             required_duration,
             &prices,
-            UserData {},
+            Request {},
         );
         let user_plan = MaybeUserPlan::new_none();
         let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);

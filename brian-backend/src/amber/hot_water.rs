@@ -1,5 +1,5 @@
 use super::{
-    combined::{self, UserDataTrait},
+    combined::{self},
     rules,
     user_plan::MaybeUserPlan,
     Prices,
@@ -65,18 +65,7 @@ impl combined::RequestTrait for Request {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-struct HeatPlanUserData {}
-
-impl UserDataTrait for HeatPlanUserData {
-    type Request = Request;
-
-    fn get_request(&self) -> Self::Request {
-        Request::Heat
-    }
-}
-
-type HeatPlan = MaybeUserPlan<HeatPlanUserData>;
+type HeatPlan = MaybeUserPlan<Request>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct DayState {
@@ -177,7 +166,7 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
 #[derive(Clone, PartialEq, Serialize, Debug)]
 pub struct State {
     #[serde(flatten)]
-    combined: combined::State<HeatPlanUserData, Request>,
+    combined: combined::State<Request>,
 }
 
 impl State {
@@ -220,16 +209,9 @@ fn get_new_plan(
     now: DateTime<Utc>,
     timezone: &impl TimeZone,
     prices: &Prices,
-) -> MaybeUserPlan<HeatPlanUserData> {
+) -> MaybeUserPlan<Request> {
     let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
-    MaybeUserPlan::get_cheapest(
-        3.6,
-        now,
-        day.end,
-        required_time_left,
-        prices,
-        HeatPlanUserData {},
-    )
+    MaybeUserPlan::get_cheapest(3.6, now, day.end, required_time_left, prices, Request::Heat)
 }
 
 pub fn run(
@@ -516,7 +498,7 @@ mod tests {
             end_time,
             required_duration,
             &prices,
-            HeatPlanUserData {},
+            Request::Heat,
         );
         let user_plan = MaybeUserPlan::new_none();
         let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);
@@ -671,7 +653,7 @@ mod tests {
             rules::Rule::new("true == true".parse().unwrap(), Request::DoNotHeat),
         ]);
 
-        let plan = HeatPlan::new_test(3.6, start_time, end_time, HeatPlanUserData {});
+        let plan = HeatPlan::new_test(3.6, start_time, end_time, Request::Heat);
 
         // Act
         let request =

@@ -1,6 +1,6 @@
 use crate::{amber::combined, tesla::TeslamateId};
 
-use super::{combined::UserDataTrait, rules, user_plan::MaybeUserPlan, Prices};
+use super::{rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
 use opentelemetry::metrics::Meter;
 use robotica_backend::{
@@ -74,28 +74,7 @@ impl combined::Max for ChargeRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-struct ChargePlanUserData {
-    min_charge_tomorrow: u8,
-}
-
-impl ChargePlanUserData {
-    const fn new(min_charge_tomorrow: u8) -> Self {
-        Self {
-            min_charge_tomorrow,
-        }
-    }
-}
-
-impl UserDataTrait for ChargePlanUserData {
-    type Request = ChargeRequest;
-
-    fn get_request(&self) -> Self::Request {
-        ChargeRequest::ChargeTo(self.min_charge_tomorrow)
-    }
-}
-
-type ChargePlan = MaybeUserPlan<ChargePlanUserData>;
+type ChargePlan = MaybeUserPlan<ChargeRequest>;
 
 impl ChargePlan {
     const fn none() -> Self {
@@ -273,19 +252,19 @@ fn get_new_plan_to_min_charge(
     timezone: &impl TimeZone,
     prices: &Prices,
     limit: u8,
-) -> MaybeUserPlan<ChargePlanUserData> {
+) -> MaybeUserPlan<ChargeRequest> {
     let estimated_charge_time_to_min = estimate_to_limit(id, battery_level, now, limit, timezone);
 
     estimated_charge_time_to_min.map_or_else(MaybeUserPlan::none, |estimated_charge_time_to_min| {
         let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
-        let user_data = ChargePlanUserData::new(limit);
+        let request = ChargeRequest::ChargeTo(limit);
         MaybeUserPlan::get_cheapest(
             7.68,
             now,
             end_time,
             estimated_charge_time_to_min,
             prices,
-            user_data,
+            request,
         )
     })
 }
@@ -298,7 +277,7 @@ fn get_new_plan(
     ps: &PersistentState,
     timezone: &impl TimeZone,
     prices: &Prices,
-) -> MaybeUserPlan<ChargePlanUserData> {
+) -> MaybeUserPlan<ChargeRequest> {
     let mut try_limit = Vec::with_capacity(3);
 
     if ps.min_charge_tomorrow < 90 {
@@ -378,7 +357,7 @@ pub struct State {
     min_charge_tomorrow: u8,
 
     #[serde(flatten)]
-    combined: combined::State<ChargePlanUserData, ChargeRequest>,
+    combined: combined::State<ChargeRequest>,
 }
 
 impl State {
