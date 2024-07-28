@@ -1,6 +1,6 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, fmt::Debug, time::Duration};
+use std::{fmt::Debug, time::Duration};
 use tokio::time::{sleep_until, Instant};
 use tracing::info;
 
@@ -160,7 +160,7 @@ impl<R> MaybeUserPlan<R> {
     }
 }
 
-impl<T: Debug + PartialEq> MaybeUserPlan<T> {
+impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
     #[allow(clippy::cognitive_complexity)]
     // #[allow(clippy::too_many_arguments)]
     pub fn update_plan(
@@ -172,30 +172,35 @@ impl<T: Debug + PartialEq> MaybeUserPlan<T> {
     ) -> Self {
         let old_user_plan = self;
 
-        let Some(new_user_plan) = maybe_new_user_plan.0 else {
-            // This could happen because the device is fully charged.
-            info!(id, plan = ?old_user_plan, "Can't get new plan; discarding plan");
-            return Self(None);
-        };
-
         let Some(old_user_plan) = old_user_plan.0 else {
-            info!(id, plan = ?new_user_plan, "No old plan available, using new Plan");
-            return Self(Some(new_user_plan));
+            info!(id, plan = ?maybe_new_user_plan, "No old plan available, using new Plan");
+            return maybe_new_user_plan;
         };
 
         let Some(old_average_cost) = old_user_plan.get_forecast_average_cost(now, prices) else {
-            info!(id, plan = ?new_user_plan, "Old plan available but cannot get cost; using new plan");
-            return Self(Some(new_user_plan));
+            info!(id, plan = ?maybe_new_user_plan, "Old plan available but cannot get cost; using new plan");
+            return maybe_new_user_plan;
         };
+
+        let new_user_plan = maybe_new_user_plan.0.unwrap_or_else(|| {
+            // No new plan available.
+            // Create fake plan with same request and cost that ends now.
+            // We will replace plan with new plan the cost goes up.
+            let plan = UserPlan {
+                plan: Plan::new_nil(old_user_plan.plan.get_kw(), now),
+                request: old_user_plan.request,
+                cost: old_user_plan.cost,
+            };
+            info!(id, plan = ?plan, "No new plan available, using fake plan");
+            plan
+        });
 
         let new_average_cost = new_user_plan.get_average_cost_per_hour();
 
-        // If there is more then 30 minutes left on plan and new plan is cheaper then 80% of old plan, then force new plan.
+        // If there is more then 30 minutes left on old plan
+        // and new plan is cheaper then 80% of old plan, then force new plan.
         // Or if the charge limit has changed, force new plan.
-        let time_left = min(
-            old_user_plan.get_time_left(now),
-            new_user_plan.get_time_left(now),
-        );
+        let time_left = old_user_plan.get_time_left(now);
         let threshold_reached =
             new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
         let has_changed = old_user_plan.request != new_user_plan.request;
@@ -321,7 +326,7 @@ mod tests {
         dt.into().parse().unwrap()
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Copy, Clone, Debug, PartialEq)]
     struct Request {}
 
     #[rstest::rstest]

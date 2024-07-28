@@ -30,6 +30,14 @@ impl Plan {
         }
     }
 
+    pub const fn new_nil(kw: f32, now: chrono::DateTime<Utc>) -> Self {
+        Self {
+            kw,
+            start_time: now,
+            end_time: now,
+        }
+    }
+
     #[cfg(test)]
     pub const fn new_test(
         kw: f32,
@@ -43,7 +51,6 @@ impl Plan {
         }
     }
 
-    #[cfg(test)]
     pub const fn get_kw(&self) -> f32 {
         self.kw
     }
@@ -141,7 +148,10 @@ pub fn get_cheapest(
 ) -> Option<(Plan, f32)> {
     // Short circuit entire process if the search period is invalid.
     if end_search <= start_search {
-        return None;
+        // Generate plan that will expire immediately because nothing to do.
+        // Use lowest cost so this will override any current plan.
+        let plan = Plan::new_nil(kw, start_search);
+        return Some((plan, f32::MIN));
     }
 
     let interval = prices.interval;
@@ -626,12 +636,6 @@ mod tests {
         TimeDelta::minutes(30),
         20.0
     )]
-    #[case(
-        dt("2020-01-31T00:30:00Z"),
-        dt("2020-01-31T00:00:00Z"),
-        TimeDelta::minutes(30),
-        20.0
-    )]
     fn test_get_cheapest_plan_no_prices(
         #[case] start_search: chrono::DateTime<Utc>,
         #[case] end_search: chrono::DateTime<Utc>,
@@ -645,5 +649,38 @@ mod tests {
 
         let result = get_cheapest(kw, start_search, end_search, required_duration, &prices);
         assert!(result.is_none());
+    }
+
+    #[rstest::rstest]
+    #[case(
+        dt("2020-01-31T00:30:00Z"),
+        dt("2020-01-31T00:00:00Z"),
+        TimeDelta::minutes(30),
+        20.0
+    )]
+    #[case(
+        dt("2020-01-31T00:30:00Z"),
+        dt("2020-01-31T00:30:00Z"),
+        TimeDelta::minutes(30),
+        20.0
+    )]
+    fn test_get_cheapest_plan_nil(
+        #[case] start_search: chrono::DateTime<Utc>,
+        #[case] end_search: chrono::DateTime<Utc>,
+        #[case] required_duration: chrono::TimeDelta,
+        #[case] kw: f32,
+    ) {
+        let prices = Prices {
+            list: pr_list_descending(50.0),
+            interval: INTERVAL,
+        };
+
+        let (plan, cost) =
+            get_cheapest(kw, start_search, end_search, required_duration, &prices).unwrap();
+
+        assert_approx_eq!(f32, plan.kw, kw);
+        assert_eq!(plan.start_time, start_search);
+        assert_eq!(plan.end_time, start_search);
+        assert_approx_eq!(f32, cost, f32::MIN);
     }
 }
