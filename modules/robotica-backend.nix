@@ -93,7 +93,7 @@ let
       teslamate = mkOption { type = teslamate_type; };
       audience = mkOption { type = tesla_audience_type; };
       amber_display = mkOption {
-        type = display_type;
+        type = lib.types.nullOr display_type;
         default = null;
       };
     };
@@ -196,7 +196,7 @@ let
   hot_water_type = types.submodule {
     options = {
       amber_display = mkOption {
-        type = display_type;
+        type = lib.types.nullOr display_type;
         default = null;
       };
     };
@@ -223,7 +223,7 @@ let
       strips = mkOption { type = types.listOf strip_type; };
       metrics = mkOption { type = types.listOf metric_type; };
       hot_water = mkOption {
-        type = hot_water_type;
+        type = lib.types.nullOr hot_water_type;
         default = null;
       };
     };
