@@ -72,7 +72,7 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 
     /// rate limit error
-    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    #[error("Rate limit error, retry in: {}", duration::to_string(*.0))]
     RateLimit(Duration),
 }
 
@@ -93,7 +93,7 @@ fn handle_error(
 
                 info!(
                     "Got 429 rate limited, retry in: {}",
-                    duration::to_string(&retry_time)
+                    duration::to_string(retry_time)
                 );
 
                 for (name, value) in headers {
@@ -541,7 +541,7 @@ pub enum TokenError {
     Json(#[from] serde_json::Error),
 
     /// Rate limit error
-    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    #[error("Rate limit error, retry in: {}", duration::to_string(*.0))]
     RateLimit(Duration),
 }
 
@@ -567,7 +567,7 @@ pub enum ApiError {
     Json(#[from] serde_json::Error),
 
     /// Rate limit error
-    #[error("Rate limit error, retry in: {}", duration::to_string(.0))]
+    #[error("Rate limit error, retry in: {}", duration::to_string(*.0))]
     RateLimit(Duration),
 
     /// The HTTP request succeeded, but the response was not successful.
@@ -601,7 +601,7 @@ impl From<OuterGenericResponse> for Result<(), ApiError> {
 #[derive(Debug, Error)]
 pub enum WakeupError {
     /// wait and retry error
-    #[error("Wait & Retry in: {}", duration::to_string(.0))]
+    #[error("Wait & Retry in: {}", duration::to_string(*.0))]
     WaitRetry(Duration),
 }
 
@@ -617,7 +617,7 @@ pub enum SequenceError {
     Json(#[from] serde_json::Error),
 
     /// wait and retry error
-    #[error("Wait & Retry in: {}", duration::to_string(.0))]
+    #[error("Wait & Retry in: {}", duration::to_string(*.0))]
     WaitRetry(Duration),
 
     /// The HTTP request succeeded, but the response was not successful.
@@ -803,7 +803,7 @@ impl Token {
             Err(Error::RateLimit(duration)) => {
                 info!(
                     "Trying to wake up: rate limit, retry in: {}",
-                    duration::to_string(&duration)
+                    duration::to_string(duration)
                 );
                 Err(WakeupError::WaitRetry(duration))
             }

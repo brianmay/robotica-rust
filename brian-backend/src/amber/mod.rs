@@ -21,6 +21,8 @@ mod private;
 pub mod rules;
 mod user_plan;
 
+pub use user_plan::MaybeUserPlan;
+
 #[derive(Debug)]
 pub struct Prices {
     pub list: Vec<api::PriceResponse>,

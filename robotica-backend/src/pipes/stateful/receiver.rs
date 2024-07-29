@@ -4,6 +4,7 @@ use super::{create_pipe, Sender};
 use crate::pipes::{Subscriber, Subscription as SubscriptionTrait};
 use crate::{pipes::RecvError, spawn};
 use async_trait::async_trait;
+use futures::Future;
 use tokio::{
     select,
     sync::{broadcast, mpsc, oneshot},
@@ -229,6 +230,24 @@ where
             loop {
                 while let Ok(data) = sub.recv_old_new().await {
                     f(data);
+                }
+            }
+        });
+    }
+
+    /// Run a function for every value received.
+    pub fn async_for_each<F, R>(self, f: F)
+    where
+        F: Fn(OldNewType<T>) -> R + Send + 'static,
+        R: Future<Output = ()> + Send,
+        T: 'static,
+    {
+        spawn(async move {
+            let mut sub = self.subscribe().await;
+
+            loop {
+                while let Ok(data) = sub.recv_old_new().await {
+                    f(data).await;
                 }
             }
         });

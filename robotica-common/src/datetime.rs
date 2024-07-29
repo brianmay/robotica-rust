@@ -57,9 +57,16 @@ pub fn utc_now() -> DateTime<Utc> {
     Utc::now()
 }
 
+/// Convert a time to a local string.
+#[must_use]
+pub fn datetime_to_time_string(dt: DateTime<Utc>) -> String {
+    let local = dt.with_timezone(&Local);
+    local.format("%H:%M:%S %z").to_string()
+}
+
 /// Convert a date time to a local string.
 #[must_use]
-pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
+pub fn datetime_to_string(dt: DateTime<Utc>) -> String {
     let local = dt.with_timezone(&Local);
     local.format("%Y-%m-%d %H:%M:%S %z").to_string()
 }
@@ -102,7 +109,7 @@ pub mod with_duration {
     where
         S: Serializer,
     {
-        let result = super::duration::to_string(duration);
+        let result = super::duration::to_string(*duration);
         serializer.serialize_str(&result)
     }
 }
@@ -135,7 +142,7 @@ pub mod with_time_delta {
     where
         S: Serializer,
     {
-        let result = super::time_delta::to_string(duration);
+        let result = super::time_delta::to_string(*duration);
         serializer.serialize_str(&result)
     }
 }
@@ -336,7 +343,7 @@ pub mod duration {
 
     /// Get the hours, minutes and seconds of a duration.
     #[must_use]
-    pub const fn hms(duration: &Duration) -> (u64, u64, u64) {
+    pub const fn hms(duration: Duration) -> (u64, u64, u64) {
         let secs = duration.as_secs();
         let (minutes, secs) = super::div_rem_u64(secs, 60);
         let (hours, minutes) = super::div_rem_u64(minutes, 60);
@@ -345,7 +352,7 @@ pub mod duration {
 
     /// Turn a duration into a string.
     #[must_use]
-    pub fn to_string(duration: &Duration) -> String {
+    pub fn to_string(duration: Duration) -> String {
         let (hours, minutes, seconds) = hms(duration);
         format!("{hours:02}:{minutes:02}:{seconds:02}")
     }
@@ -441,7 +448,7 @@ pub mod time_delta {
 
     /// Get the hours, minutes and seconds of a duration.
     #[must_use]
-    pub const fn hms(duration: &TimeDelta) -> (bool, u64, u64, u64) {
+    pub const fn hms(duration: TimeDelta) -> (bool, u64, u64, u64) {
         let secs = duration.num_seconds();
         if secs < 0 {
             #[allow(clippy::cast_sign_loss)]
@@ -460,7 +467,7 @@ pub mod time_delta {
 
     /// Turn a duration into a string.
     #[must_use]
-    pub fn to_string(duration: &TimeDelta) -> String {
+    pub fn to_string(duration: TimeDelta) -> String {
         let (neg, hours, minutes, seconds) = hms(duration);
         format!(
             "{sign}{hours:02}:{minutes:02}:{seconds:02}",
@@ -686,13 +693,13 @@ mod tests {
     #[test]
     fn test_duration_hms() {
         let duration = Duration::from_secs((60 + 2) * 60 + 3);
-        assert_eq!(duration::hms(&duration), (1, 2, 3));
+        assert_eq!(duration::hms(duration), (1, 2, 3));
     }
 
     #[test]
     fn test_duration_to_string() {
         let duration = Duration::from_secs((60 + 2) * 60 + 3);
-        assert_eq!(duration::to_string(&duration), "01:02:03");
+        assert_eq!(duration::to_string(duration), "01:02:03");
     }
 
     #[test]
@@ -774,19 +781,19 @@ mod tests {
     #[test]
     fn test_time_delta_hms() {
         let duration = time_delta::from_str("1:2:3").unwrap();
-        assert_eq!(time_delta::hms(&duration), (true, 1, 2, 3));
+        assert_eq!(time_delta::hms(duration), (true, 1, 2, 3));
 
         let duration = time_delta::from_str("-1:2:3").unwrap();
-        assert_eq!(time_delta::hms(&duration), (false, 1, 2, 3));
+        assert_eq!(time_delta::hms(duration), (false, 1, 2, 3));
     }
 
     #[test]
     fn test_time_delta_to_string() {
         let duration = time_delta::from_str("1:2:3").unwrap();
-        assert_eq!(time_delta::to_string(&duration), "01:02:03");
+        assert_eq!(time_delta::to_string(duration), "01:02:03");
 
         let duration = time_delta::from_str("-1:2:3").unwrap();
-        assert_eq!(time_delta::to_string(&duration), "-01:02:03");
+        assert_eq!(time_delta::to_string(duration), "-01:02:03");
     }
 
     #[derive(Serialize, Deserialize)]

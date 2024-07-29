@@ -49,6 +49,10 @@ impl<R> UserPlan<R> {
         self.plan.get_end_time()
     }
 
+    pub fn get_timedelta(&self) -> TimeDelta {
+        self.plan.get_timedelta()
+    }
+
     pub fn get_time_left(&self, now: DateTime<Utc>) -> TimeDelta {
         self.plan.get_time_left(now)
     }
@@ -139,6 +143,7 @@ impl<R> MaybeUserPlan<R> {
         Self(Some(user_plan))
     }
 
+    #[cfg(test)]
     pub const fn get_plan(&self) -> Option<&Plan> {
         if let Some(user_plan) = &self.0 {
             Some(&user_plan.plan)

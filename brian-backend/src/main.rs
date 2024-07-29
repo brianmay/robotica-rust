@@ -15,6 +15,7 @@ mod influxdb;
 mod lights;
 mod logging;
 mod metrics;
+mod open_epaper_link;
 mod robotica;
 mod rooms;
 mod tesla;
@@ -24,6 +25,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use chrono::{Local, TimeZone};
+use config::TeslaConfig;
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_backend::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_backend::devices::{fake_switch, lifx};
@@ -209,7 +211,9 @@ async fn setup_pipes(
     amber::logging::log_prices(prices.clone(), &config.influxdb);
     amber::logging::log_usage(usage, &config.influxdb);
 
-    monitor_hot_water(&mut state, &prices);
+    if let Some(hot_water) = config.hot_water {
+        monitor_hot_water(&mut state, hot_water, &prices);
+    }
 
     monitor_bathroom_door(&mut state);
 
@@ -298,6 +302,7 @@ fn monitor_bathroom_door(state: &mut InitState) {
 
 fn monitor_hot_water(
     state: &mut InitState,
+    hot_water: config::HotWaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
     let is_on = state
@@ -323,6 +328,9 @@ fn monitor_hot_water(
         "robotica/state/hot_water/amber",
         &SendOptions::new(),
     );
+    if let Some(display) = hot_water.amber_display {
+        open_epaper_link::output_amber_hotwater(display, hot_water_state.clone());
+    }
     let hot_water_request = hot_water_state
         .map(|(_, state)| state.get_result())
         .rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300));
@@ -359,7 +367,7 @@ fn monitor_hot_water(
 }
 
 fn monitor_teslas(
-    teslas: &[tesla::Config],
+    teslas: &[TeslaConfig],
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
@@ -369,10 +377,12 @@ fn monitor_teslas(
     });
 
     for tesla in teslas {
-        let receivers = tesla::Receivers::new(tesla, state);
+        let teslamate_id = tesla.monitoring.teslamate_id;
+
+        let receivers = tesla::Receivers::new(&tesla.monitoring, state);
 
         let locations = tesla::monitor_teslamate_location::monitor(
-            tesla,
+            &tesla.monitoring,
             receivers.location.clone(),
             postgres.clone(),
         );
@@ -380,16 +390,13 @@ fn monitor_teslas(
         locations.messages.send_to(&state.message_sink);
         locations.location_message.send_to_mqtt_json(
             &state.mqtt,
-            format!(
-                "state/Tesla/{id}/Locations",
-                id = tesla.teslamate_id.to_string()
-            ),
+            format!("state/Tesla/{id}/Locations", id = teslamate_id.to_string()),
             &SendOptions::new(),
         );
 
         let charge_state = amber::car::run(
             &state.persistent_state_database,
-            tesla.teslamate_id,
+            teslamate_id,
             prices.clone(),
             receivers.battery_level.clone(),
             receivers.min_charge_tomorrow.clone(),
@@ -400,10 +407,15 @@ fn monitor_teslas(
             &state.mqtt,
             format!(
                 "robotica/state/tesla/{id}/amber",
-                id = tesla.teslamate_id.to_string()
+                id = teslamate_id.to_string()
             ),
             &SendOptions::new(),
         );
+
+        if let Some(display) = &tesla.amber_display {
+            open_epaper_link::output_amber_car(display.clone(), charge_state.clone());
+        }
+
         let charge_request = charge_state.map(|(_, state)| state.get_result());
 
         let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
@@ -413,7 +425,7 @@ fn monitor_teslas(
         );
         let outputs = tesla::monitor_charging::monitor_charging(
             &state.persistent_state_database,
-            tesla,
+            &tesla.monitoring,
             monitor_charging_receivers,
         )
         .unwrap_or_else(|e| {
@@ -424,26 +436,27 @@ fn monitor_teslas(
             &state.mqtt,
             format!(
                 "state/Tesla/{id}/AutoCharge/power",
-                id = tesla.teslamate_id.to_string()
+                id = teslamate_id.to_string()
             ),
             &SendOptions::new(),
         );
 
         let should_plugin_stream = tesla::monitor_location::monitor(
-            tesla,
+            &tesla.monitoring,
             state.message_sink.clone(),
             locations.location,
             outputs.charging_information,
         );
 
-        tesla::command_processor::run(tesla, outputs.commands, token.clone())
+        tesla::command_processor::run(&tesla.monitoring, outputs.commands, token.clone())
             .send_to(&state.message_sink);
 
         let monitor_doors_receivers =
             tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
 
-        tesla::monitor_doors::monitor(tesla, monitor_doors_receivers).send_to(&state.message_sink);
-        tesla::plug_in_reminder::plug_in_reminder(tesla, should_plugin_stream)
+        tesla::monitor_doors::monitor(&tesla.monitoring, monitor_doors_receivers)
+            .send_to(&state.message_sink);
+        tesla::plug_in_reminder::plug_in_reminder(&tesla.monitoring, should_plugin_stream)
             .send_to(&state.message_sink);
     }
 }

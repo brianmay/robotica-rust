@@ -148,8 +148,8 @@ impl DayState {
         info!(
             id,
             "Cheap power for day: {}, time left: {}",
-            time_delta::to_string(&self.cheap_power_for_day),
-            time_delta::to_string(&duration),
+            time_delta::to_string(self.cheap_power_for_day),
+            time_delta::to_string(duration),
         );
 
         self.last_cheap_update = now;
@@ -166,7 +166,7 @@ fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, 
 #[derive(Clone, PartialEq, Serialize, Debug)]
 pub struct State {
     #[serde(flatten)]
-    combined: combined::State<Request>,
+    pub combined: combined::State<Request>,
 }
 
 impl State {

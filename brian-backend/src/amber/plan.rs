@@ -133,9 +133,9 @@ impl std::fmt::Debug for Plan {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Plan")
             .field("kw", &self.kw)
-            .field("start_time", &datetime_to_string(&self.start_time))
-            .field("end_time", &datetime_to_string(&self.end_time))
-            .field("duration", &time_delta::to_string(&self.get_timedelta()))
+            .field("start_time", &datetime_to_string(self.start_time))
+            .field("end_time", &datetime_to_string(self.end_time))
+            .field("duration", &time_delta::to_string(self.get_timedelta()))
             .finish()
     }
 }

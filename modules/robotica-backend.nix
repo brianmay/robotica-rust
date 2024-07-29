@@ -92,6 +92,10 @@ let
       tesla_id = mkOption { type = types.number; };
       teslamate = mkOption { type = teslamate_type; };
       audience = mkOption { type = tesla_audience_type; };
+      amber_display = mkOption {
+        type = display_type;
+        default = null;
+      };
     };
   };
 
@@ -182,6 +186,22 @@ let
     };
   };
 
+  display_type = types.submodule {
+    options = {
+      url = mkOption { type = types.str; };
+      mac = mkOption { type = types.str; };
+    };
+  };
+
+  hot_water_type = types.submodule {
+    options = {
+      amber_display = mkOption {
+        type = display_type;
+        default = null;
+      };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       executor = mkOption {
@@ -202,6 +222,10 @@ let
       lights = mkOption { type = types.listOf light_type; };
       strips = mkOption { type = types.listOf strip_type; };
       metrics = mkOption { type = types.listOf metric_type; };
+      hot_water = mkOption {
+        type = hot_water_type;
+        default = null;
+      };
     };
   };
 

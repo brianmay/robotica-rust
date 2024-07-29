@@ -1,4 +1,4 @@
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use opentelemetry::{global, metrics::Meter, KeyValue};
 use serde::Serialize;
 use std::fmt::Debug;
@@ -69,10 +69,23 @@ pub struct State<R> {
     result: R,
     plan: MaybeUserPlan<R>,
 
-    #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    estimated_time_to_plan: Option<TimeDelta>,
-
+    // #[serde(with = "robotica_common::datetime::with_option_time_delta")]
+    // estimated_time_to_plan: Option<TimeDelta>,
     rules: RuleSet<R>,
+}
+
+impl<R> State<R> {
+    pub const fn get_plan(&self) -> &MaybeUserPlan<R> {
+        &self.plan
+    }
+
+    // pub const fn get_rules(&self) -> &RuleSet<R> {
+    //     &self.rules
+    // }
+
+    // pub const fn get_estimated_time_to_plan(&self) -> Option<TimeDelta> {
+    //     self.estimated_time_to_plan
+    // }
 }
 
 impl<R: Copy> State<R> {
@@ -107,9 +120,7 @@ where
         }
     });
 
-    let estimated_time_to_plan = plan
-        .get_plan()
-        .map(|p| (p.get_end_time() - now).max(TimeDelta::zero()));
+    // let estimated_time_to_plan = plan.get_plan().map(|p| p.get_time_left(now));
 
     // get the largest value out of force and normal
     let combined_request = match (rules_request, plan_request) {
@@ -137,7 +148,7 @@ where
         time: now,
         result: combined_request,
         plan: plan.clone(),
-        estimated_time_to_plan,
+        // estimated_time_to_plan,
         plan_request,
         rules: rules.clone(),
         rules_request,
@@ -152,6 +163,7 @@ mod tests {
     use crate::amber::api::{self, IntervalType};
 
     use super::*;
+    use chrono::TimeDelta;
     use robotica_common::unsafe_duration;
     use std::time::Duration;
 

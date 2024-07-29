@@ -304,15 +304,15 @@ fn popover_sequence_content(sequence: &Sequence, on_close: &Callback<()>) -> Htm
                             } else { html! {} } }
                             <tr>
                                 <th scope="row">{"Required Time"}</th>
-                                <td>{datetime_to_string(&sequence.start_time)}</td>
+                                <td>{datetime_to_string(sequence.start_time)}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Required Duration"}</th>
-                                <td>{duration::to_string(&sequence.duration)}</td>
+                                <td>{duration::to_string(sequence.duration)}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Latest Time"}</th>
-                                <td>{datetime_to_string(&sequence.latest_time)}</td>
+                                <td>{datetime_to_string(sequence.latest_time)}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Schedule Date"}</th>

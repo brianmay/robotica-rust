@@ -339,7 +339,7 @@ fn estimate_to_limit<T: TimeZone>(
         debug!(
             "{id}: Estimated charge time to {limit} is {time}, should finish at {finish:?}",
             id = id,
-            time = time_delta::to_string(&estimated_charge_time),
+            time = time_delta::to_string(estimated_charge_time),
             finish = estimated_finish.with_timezone(tz).to_rfc3339()
         );
     } else {
@@ -353,11 +353,11 @@ fn estimate_to_limit<T: TimeZone>(
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct State {
-    battery_level: u8,
-    min_charge_tomorrow: u8,
+    pub battery_level: u8,
+    pub min_charge_tomorrow: u8,
 
     #[serde(flatten)]
-    combined: combined::State<ChargeRequest>,
+    pub combined: combined::State<ChargeRequest>,
 }
 
 impl State {
