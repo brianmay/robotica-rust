@@ -30,7 +30,7 @@ type CalendarToSequence<T> = dyn Fn(CalendarEntry, T) -> Option<Sequence> + Send
 
 /// Extra configuration settings for the executor.
 #[derive(serde::Deserialize)]
-pub struct ExtraConfig {
+pub struct Config {
     /// The topic to use in outgoing messages.
     pub instance: String,
 
@@ -51,15 +51,15 @@ const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
 const FIRST_OFFSET: TimeDelta = unsafe_time_delta!(days: -1);
 const LAST_OFFSET: TimeDelta = unsafe_time_delta!(days: 4);
 
-struct Config<T: TimeZone> {
+struct InternalConfig<T: TimeZone> {
     classifier: Vec<classifier::Config>,
     scheduler: Vec<scheduler::Config>,
     sequencer: sequencer::ConfigMap,
-    extra: ExtraConfig,
+    extra: Config,
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 }
-impl<T: TimeZone + Copy> Config<T> {
+impl<T: TimeZone + Copy> InternalConfig<T> {
     fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
         let calendar = calendar::load(&self.extra.calendar_url, start, stop).unwrap_or_else(|e| {
             error!("Error loading calendar: {e}");
@@ -212,7 +212,7 @@ struct State<T: TimeZone> {
     sequences: Vec<Sequence>,
     events: VecDeque<Event>,
     all_marks: AllMarks,
-    config: Config<T>,
+    config: InternalConfig<T>,
     mqtt: MqttTx,
     all_status: AllStatus,
     calendar_refresh_time: DateTime<Utc>,
@@ -488,7 +488,7 @@ pub enum ExecutorError {
 pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
-    extra_config: ExtraConfig,
+    extra_config: Config,
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 ) -> Result<(), ExecutorError> {
@@ -548,7 +548,7 @@ pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
 
 fn get_initial_state<T: TimeZone + Copy + 'static>(
     mqtt: MqttTx,
-    extra_config: ExtraConfig,
+    extra_config: Config,
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 ) -> Result<State<T>, ExecutorError> {
@@ -561,7 +561,7 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
             let scheduler = scheduler::load_config(&extra_config.schedule_file)?;
             let sequencer = sequencer::load_config(&extra_config.sequences_file)?;
             check_schedule(&scheduler, &sequencer)?;
-            Config {
+            InternalConfig {
                 classifier,
                 scheduler,
                 sequencer,

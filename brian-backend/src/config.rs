@@ -82,7 +82,7 @@ pub struct Config {
     pub amber: amber::api::Config,
     pub http: http::Config,
     pub influxdb: influxdb::Config,
-    pub executor: executor::ExtraConfig,
+    pub executor: executor::Config,
     pub persistent_state: persistent_state::Config,
     pub teslas: Vec<TeslaConfig>,
     pub database_url: String,
