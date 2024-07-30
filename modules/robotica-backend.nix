@@ -85,7 +85,7 @@ let
     };
   };
 
-  tesla_type = types.submodule {
+  car_type = types.submodule {
     options = {
       id = mkOption { type = types.str; };
       make = mkOption { type = types.enum [ "tesla" ]; };
@@ -218,7 +218,7 @@ let
         type = persistent_state_type;
         default = { };
       };
-      teslas = mkOption { type = types.listOf tesla_type; };
+      cars = mkOption { type = types.listOf car_type; };
       logging = mkOption { type = logging_type; };
       lifx = mkOption { type = lifx_type; };
       lights = mkOption { type = types.listOf light_type; };
