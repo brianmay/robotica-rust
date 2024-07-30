@@ -4,7 +4,7 @@ use robotica_backend::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
         persistent_state,
-        tesla::api::{self, CommandSequence, SequenceError, Token, VehicleId},
+        tesla::api::{self, CommandSequence, SequenceError, Token},
     },
     spawn,
 };
@@ -20,6 +20,8 @@ use std::{ops::Add, sync::Arc};
 use thiserror::Error;
 use tokio::{select, time::Instant};
 use tracing::{error, info, instrument};
+
+use crate::car;
 
 use super::private::new_message;
 use super::{Config, TeslamateAuth};
@@ -41,7 +43,7 @@ struct Meters {
     notified_errors: Counter<u64>,
     cleared_errors: Counter<u64>,
     cancelled: Counter<u64>,
-    vehicle_id: VehicleId,
+    id: String,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -52,7 +54,7 @@ enum OutgoingStatus {
 }
 
 impl Meters {
-    fn new(config: &Config) -> Self {
+    fn new(car: &car::Config) -> Self {
         let meter = global::meter("tesla::command_processor");
         Self {
             api: api::Meters::new(),
@@ -62,20 +64,20 @@ impl Meters {
             notified_errors: meter.u64_counter("notified_errors").init(),
             cleared_errors: meter.u64_counter("cleared_errors").init(),
             cancelled: meter.u64_counter("cancelled").init(),
-            vehicle_id: config.tesla_id,
+            id: car.id.to_string(),
         }
     }
 
     fn increment_cleared_errors(&self, forgotten: bool) {
         let attributes = [
-            KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+            KeyValue::new("id", self.id.to_string()),
             KeyValue::new("forgotten", forgotten),
         ];
         self.cleared_errors.add(1, &attributes);
     }
 
     fn increment_notified_errors(&self) {
-        let attributes = [KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        let attributes = [KeyValue::new("id", self.id.to_string())];
         self.notified_errors.add(1, &attributes);
     }
 
@@ -87,7 +89,7 @@ impl Meters {
 
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("id", self.id.to_string()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
                 KeyValue::new("status", status),
@@ -97,14 +99,14 @@ impl Meters {
     }
 
     fn increment_cancelled(&self) {
-        let attributes = [KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        let attributes = [KeyValue::new("id", self.id.to_string())];
         self.cancelled.add(1, &attributes);
     }
 
     fn increment_outgoing_started(&self, command: &Command) {
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("id", self.id.to_string()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
             ];
@@ -121,7 +123,7 @@ impl Meters {
 
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("vehicle_id", self.vehicle_id.to_string()),
+                KeyValue::new("id", self.id.to_string()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
                 KeyValue::new("status", status),
@@ -241,23 +243,25 @@ enum IncomingStatus {
 
 #[must_use]
 pub fn run(
+    car: &car::Config,
     tesla: &Config,
     rx: stateless::Receiver<Command>,
     rx_token: stateless::Receiver<Arc<Token>>,
 ) -> stateless::Receiver<Message> {
-    // let tesla_id = tesla.tesla_id;
-    let name = tesla.name.clone();
+    let car = car.clone();
     let tesla = tesla.clone();
     let (message_tx, message_rx) = stateless::create_pipe("tesla_command_processor");
 
     spawn(async move {
+        let name = &car.name;
+
         let mut s = rx.subscribe().await;
         let mut s_token = rx_token.subscribe().await;
 
         let mut maybe_try_command: Option<TryCommand> = None;
-        let mut errors = Errors::new(&tesla.audience.errors);
+        let mut errors = Errors::new(&car.audience.errors);
 
-        let meters = Meters::new(&tesla);
+        let meters = Meters::new(&car);
         let Ok(mut token) = s_token.recv().await else {
             error!("Failed to get token.");
             return;
@@ -269,7 +273,7 @@ pub fn run(
                     info!("{name}: Trying command: {:?}", try_command.command);
                     meters.increment_outgoing_started(&try_command.command);
 
-                    match try_send(&try_command, &tesla, &token, &meters).await {
+                    match try_send(&try_command, &car, &tesla, &token, &meters).await {
                         Ok(()) => {
                             meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Success);
                             maybe_try_command = if try_command.command.is_nil() {
@@ -393,12 +397,13 @@ async fn enable_teslamate_logging(config: &Config) -> Result<(), TeslamateError>
 #[instrument]
 async fn try_send(
     try_command: &TryCommand,
+    car: &car::Config,
     tesla: &Config,
     token: &Token,
     meters: &Meters,
 ) -> Result<(), SequenceError> {
     {
-        let name = &tesla.name;
+        let name = &car.name;
 
         // Construct sequence of commands to send to Tesla.
         let mut sequence = CommandSequence::new();

@@ -8,6 +8,7 @@
 #![allow(clippy::to_string_trait_impl)]
 
 mod amber;
+mod car;
 mod config;
 mod ha;
 mod hdmi;
@@ -25,7 +26,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use chrono::{Local, TimeZone};
-use config::TeslaConfig;
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_backend::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_backend::devices::{fake_switch, lifx};
@@ -217,7 +217,7 @@ async fn setup_pipes(
 
     monitor_bathroom_door(&mut state);
 
-    monitor_teslas(&config.teslas, &mut state, &postgres, &prices);
+    monitor_cars(&config.cars, &mut state, &postgres, &prices);
 
     let rooms = rooms::get();
     http::run(state.mqtt.clone(), rooms, config.http, postgres.clone())
@@ -366,8 +366,8 @@ fn monitor_hot_water(
     });
 }
 
-fn monitor_teslas(
-    teslas: &[TeslaConfig],
+fn monitor_cars(
+    cars: &[car::Config],
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
@@ -376,13 +376,18 @@ fn monitor_teslas(
         panic!("Error running tesla token generator: {e}");
     });
 
-    for tesla in teslas {
-        let teslamate_id = tesla.monitoring.teslamate_id;
+    let teslas = cars.iter().filter_map(|car| match car.make {
+        car::MakeConfig::Tesla(ref tesla) => Some((car, tesla)),
+        car::MakeConfig::Unknown => None,
+    });
 
-        let receivers = tesla::Receivers::new(&tesla.monitoring, state);
+    for (car, tesla) in teslas {
+        let teslamate_id = tesla.teslamate_id;
+
+        let receivers = tesla::Receivers::new(tesla, state);
 
         let locations = tesla::monitor_teslamate_location::monitor(
-            &tesla.monitoring,
+            car,
             receivers.location.clone(),
             postgres.clone(),
         );
@@ -395,8 +400,8 @@ fn monitor_teslas(
         );
 
         let charge_state = amber::car::run(
+            car,
             &state.persistent_state_database,
-            teslamate_id,
             prices.clone(),
             receivers.battery_level.clone(),
             receivers.min_charge_tomorrow.clone(),
@@ -412,8 +417,8 @@ fn monitor_teslas(
             &SendOptions::new(),
         );
 
-        if let Some(display) = &tesla.amber_display {
-            open_epaper_link::output_amber_car(display.clone(), charge_state.clone());
+        if let Some(display) = &car.amber_display {
+            open_epaper_link::output_amber_car(car, display.clone(), charge_state.clone());
         }
 
         let charge_request = charge_state.map(|(_, state)| state.get_result());
@@ -425,7 +430,7 @@ fn monitor_teslas(
         );
         let outputs = tesla::monitor_charging::monitor_charging(
             &state.persistent_state_database,
-            &tesla.monitoring,
+            car,
             monitor_charging_receivers,
         )
         .unwrap_or_else(|e| {
@@ -442,21 +447,20 @@ fn monitor_teslas(
         );
 
         let should_plugin_stream = tesla::monitor_location::monitor(
-            &tesla.monitoring,
+            car,
             state.message_sink.clone(),
             locations.location,
             outputs.charging_information,
         );
 
-        tesla::command_processor::run(&tesla.monitoring, outputs.commands, token.clone())
+        tesla::command_processor::run(car, tesla, outputs.commands, token.clone())
             .send_to(&state.message_sink);
 
         let monitor_doors_receivers =
             tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
 
-        tesla::monitor_doors::monitor(&tesla.monitoring, monitor_doors_receivers)
-            .send_to(&state.message_sink);
-        tesla::plug_in_reminder::plug_in_reminder(&tesla.monitoring, should_plugin_stream)
+        tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(&state.message_sink);
+        tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream)
             .send_to(&state.message_sink);
     }
 }

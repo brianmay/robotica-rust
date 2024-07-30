@@ -10,9 +10,9 @@ use tap::Pipe;
 use tokio::select;
 use tracing::{debug, error};
 
-use crate::amber::car::ChargeRequest;
+use crate::{amber::car::ChargeRequest, car};
 
-use super::{private::new_message, ChargingInformation, Config, ShouldPlugin};
+use super::{private::new_message, ChargingInformation, ShouldPlugin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChargingMessage {
@@ -50,12 +50,12 @@ impl ChargingMessage {
 }
 
 fn announce_charging_state(
-    tesla: &Config,
+    car: &car::Config,
     old_charging_info: &ChargingInformation,
     charging_info: &ChargingInformation,
     message_sink: &stateless::Sender<Message>,
 ) {
-    let name = &tesla.name;
+    let name = &car.name;
 
     let plugged_in_msg = {
         let was_plugged_in = old_charging_info.charging_state.is_plugged_in();
@@ -91,20 +91,20 @@ fn announce_charging_state(
             .join(" and ");
 
         let msg = format!("{name} {msg}");
-        let msg = new_message(msg, MessagePriority::DaytimeOnly, &tesla.audience.charging);
+        let msg = new_message(msg, MessagePriority::DaytimeOnly, &car.audience.charging);
         message_sink.try_send(msg);
     }
 }
 
 pub fn monitor(
-    tesla: &Config,
+    car: &car::Config,
     message_sink: stateless::Sender<Message>,
     location_stream: stateful::Receiver<LocationList>,
     charging_info: stateful::Receiver<ChargingInformation>,
 ) -> stateful::Receiver<ShouldPlugin> {
     let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
 
-    let tesla = tesla.clone();
+    let tesla = car.clone();
 
     spawn(async move {
         let mut location_s = location_stream.subscribe().await;

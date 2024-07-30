@@ -1,10 +1,7 @@
 use opentelemetry::{global, KeyValue};
 use robotica_backend::{
     pipes::{stateful, stateless, Subscriber, Subscription},
-    services::{
-        persistent_state,
-        tesla::api::{ChargingStateEnum, VehicleId},
-    },
+    services::{persistent_state, tesla::api::ChargingStateEnum},
     spawn,
 };
 use robotica_common::{
@@ -20,36 +17,36 @@ use thiserror::Error;
 use tokio::select;
 use tracing::{error, info};
 
-use crate::amber::car::ChargeRequest;
+use crate::{amber::car::ChargeRequest, car};
 
-use super::{command_processor, ChargingInformation, Config, Receivers};
+use super::{command_processor, ChargingInformation, Receivers};
 
 #[derive(Debug)]
 struct Meters {
     charging: opentelemetry::metrics::Gauge<u64>,
     battery: opentelemetry::metrics::Gauge<u64>,
-    vehicle_id: VehicleId,
+    id: String,
 }
 
 impl Meters {
-    fn new(config: &Config) -> Self {
+    fn new(config: &car::Config) -> Self {
         let meter = global::meter("tesla::monitor_charging");
 
         Self {
             charging: meter.u64_gauge("charging").init(),
             battery: meter.u64_gauge("battery").init(),
-            vehicle_id: config.tesla_id,
+            id: config.id.to_string(),
         }
     }
 
     fn set_charging(&self, value: ChargingStateEnum, limit: u8) {
-        let attributes = vec![KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        let attributes = vec![KeyValue::new("id", self.id.to_string())];
         let value = if value.is_charging() { limit } else { 0 };
         self.charging.record(u64::from(value), &attributes);
     }
 
     fn set_battery(&self, value: u8) {
-        let attributes = vec![KeyValue::new("vehicle_id", self.vehicle_id.to_string())];
+        let attributes = vec![KeyValue::new("id", self.id.to_string())];
         self.battery.record(u64::from(value), &attributes);
     }
 }
@@ -117,10 +114,10 @@ impl TeslaState {
 pub fn monitor_charging(
     // state: &InitState,
     persistent_state_database: &persistent_state::PersistentStateDatabase,
-    config: &Config,
+    car: &car::Config,
     receivers: Inputs,
 ) -> Result<Outputs, Error> {
-    let id = config.teslamate_id.to_string();
+    let id = car.id.to_string();
 
     let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
     let (tx_command, rx_command) = stateless::create_pipe("tesla_charging_command");
@@ -132,9 +129,9 @@ pub fn monitor_charging(
     // let mqtt = state.mqtt.clone();
     let auto_charge_rx = receivers.auto_charge;
 
-    let meters = Meters::new(config);
+    let meters = Meters::new(car);
 
-    let config = config.clone();
+    let config = car.clone();
     spawn(async move {
         let name = &config.name;
         let mut charge_request_s = receivers.charge_request.subscribe().await;
@@ -297,13 +294,13 @@ enum ChargingSummary {
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cognitive_complexity)]
 fn check_charge(
-    tesla: &Config,
+    car: &car::Config,
     tx: &stateless::Sender<command_processor::Command>,
     tesla_state: &TeslaState,
     charge_request: ChargeRequest,
 ) {
     info!("Checking charge");
-    let name = &tesla.name;
+    let name = &car.name;
 
     let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
 

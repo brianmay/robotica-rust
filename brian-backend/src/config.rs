@@ -1,7 +1,7 @@
 use crate::{
-    amber, influxdb,
+    amber, car, influxdb,
     lights::{self, Scene},
-    metrics, open_epaper_link, tesla, InitState,
+    metrics, open_epaper_link, InitState,
 };
 use envconfig::Envconfig;
 use robotica_backend::{
@@ -84,7 +84,7 @@ pub struct Config {
     pub influxdb: influxdb::Config,
     pub executor: executor::Config,
     pub persistent_state: persistent_state::Config,
-    pub teslas: Vec<TeslaConfig>,
+    pub cars: Vec<car::Config>,
     pub database_url: String,
     pub logging: crate::logging::Config,
     pub lights: Vec<LightConfig>,
@@ -181,15 +181,6 @@ pub struct LifxConfig {
 #[derive(Debug, Deserialize)]
 pub struct HotWaterConfig {
     pub amber_display: Option<open_epaper_link::Config>,
-}
-
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Deserialize)]
-pub struct TeslaConfig {
-    pub amber_display: Option<open_epaper_link::Config>,
-
-    #[serde(flatten)]
-    pub monitoring: tesla::Config,
 }
 
 #[cfg(test)]

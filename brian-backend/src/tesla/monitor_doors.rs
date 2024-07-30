@@ -13,9 +13,9 @@ use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
-use crate::tesla::private::new_message;
+use crate::{car, tesla::private::new_message};
 
-use super::{Config, Receivers};
+use super::Receivers;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DoorState {
@@ -128,12 +128,12 @@ impl MonitorInputs {
 }
 
 #[must_use]
-pub fn monitor(tesla: &Config, receivers: MonitorInputs) -> stateless::Receiver<Message> {
+pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiver<Message> {
     let (message_tx, message_rx) = stateless::create_pipe("tesla_doors_message");
 
     let (tx, rx) = stateful::create_pipe("tesla_doors");
 
-    let tesla_clone = tesla.clone();
+    let tesla_clone = car.clone();
     spawn(async move {
         let mut frunk_s = receivers.frunk.subscribe().await;
         let mut boot_s = receivers.boot.subscribe().await;
@@ -210,7 +210,7 @@ pub fn monitor(tesla: &Config, receivers: MonitorInputs) -> stateless::Receiver<
     let rx = rx.delay_repeat("tesla_doors (repeat)", duration, |(_, c)| !c.is_empty());
 
     // Output the message.
-    let tesla = tesla.clone();
+    let tesla = car.clone();
     spawn(async move {
         let mut s = rx.subscribe().await;
         while let Ok(open) = s.recv().await {
@@ -224,8 +224,8 @@ pub fn monitor(tesla: &Config, receivers: MonitorInputs) -> stateless::Receiver<
     message_rx
 }
 
-fn doors_to_message(tesla: &Config, open: &[Door]) -> String {
-    let name = &tesla.name;
+fn doors_to_message(car: &car::Config, open: &[Door]) -> String {
+    let name = &car.name;
 
     let msg = match open {
         [] => format!("{name} is secure"),

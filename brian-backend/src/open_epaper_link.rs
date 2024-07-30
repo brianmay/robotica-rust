@@ -8,7 +8,7 @@ use thiserror::Error;
 use tracing::{error, info};
 use url::Url;
 
-use crate::amber;
+use crate::{amber, car};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
@@ -135,16 +135,22 @@ fn line(y: &mut u16) -> Element {
     })
 }
 
-pub fn output_amber_car(config: Config, state: stateful::Receiver<amber::car::State>) {
+pub fn output_amber_car(
+    car: &car::Config,
+    config: Config,
+    state: stateful::Receiver<amber::car::State>,
+) {
+    let car = Arc::new(car.clone());
     let config = Arc::new(config);
     state.async_for_each(move |(_, state)| {
+        let car = car.clone();
         let config = config.clone();
         async move {
             let combined = &state.combined;
             let maybe_user_plan = combined.get_plan();
             let y: &mut u16 = &mut 5;
             let mut template = Template(vec![
-                header(y, "Amber Car".to_string()),
+                header(y, format!("Car: {}", car.name)),
                 line(y),
                 text(y, format!("B: {}%", state.battery_level)),
                 text(y, format!("MCT: {}%", state.min_charge_tomorrow)),

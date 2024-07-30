@@ -6,15 +6,17 @@ use robotica_backend::{
 use robotica_common::robotica::{audio::MessagePriority, message::Message};
 use std::time::Duration;
 
-use super::{private::new_message, Config, ShouldPlugin};
+use crate::car;
+
+use super::{private::new_message, ShouldPlugin};
 
 #[must_use]
 pub fn plug_in_reminder(
-    tesla: &Config,
+    car: &car::Config,
     should_plugin_stream: stateful::Receiver<ShouldPlugin>,
 ) -> stateless::Receiver<Message> {
     let (message_tx, message_rx) = stateless::create_pipe("tesla_plug_in_reminder");
-    let tesla = tesla.clone();
+    let car = car.clone();
 
     let should_plugin_stream = should_plugin_stream.delay_repeat(
         "tesla_should_plugin (repeat)",
@@ -28,11 +30,11 @@ pub fn plug_in_reminder(
             let time = chrono::Local::now();
             if time.hour() >= 18 && time.hour() <= 22 && should_plugin == ShouldPlugin::ShouldPlugin
             {
-                let name = &tesla.name;
+                let name = &car.name;
                 let msg = new_message(
                     format!("{name} might run away and should be leashed"),
                     MessagePriority::Low,
-                    &tesla.audience.charging,
+                    &car.audience.charging,
                 );
                 message_tx.try_send(msg);
             }

@@ -1,4 +1,4 @@
-use crate::{amber::combined, tesla::TeslamateId};
+use crate::{amber::combined, car};
 
 use super::{rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
@@ -102,8 +102,8 @@ impl Default for PersistentState {
 
 #[allow(clippy::too_many_arguments)]
 pub fn run(
+    car: &car::Config,
     persistent_state_database: &robotica_backend::services::persistent_state::PersistentStateDatabase,
-    teslamate_id: TeslamateId,
     rx: Receiver<Arc<Prices>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
@@ -111,10 +111,7 @@ pub fn run(
     rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 ) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/car");
-    let id = format!(
-        "tesla/{teslamate_id}",
-        teslamate_id = teslamate_id.to_string()
-    );
+    let id = car.id.to_string();
 
     let psr = persistent_state_database.for_name::<PersistentState>(&format!("tesla_amber_{id}"));
     let mut ps = psr.load().unwrap_or_default();
@@ -155,7 +152,7 @@ pub fn run(
             );
             ps = new_ps;
 
-            save_state(teslamate_id, &psr, &ps);
+            save_state(&id, &psr, &ps);
 
             info!(id, request=?request, "Charging request");
             tx_out.try_send(request);
@@ -173,12 +170,12 @@ pub fn run(
                 Ok(min_charge_tomorrow) = s_min_charge_tomorrow.recv() => {
                     debug!(id, min_charge_tomorrow = *min_charge_tomorrow, "Setting min charge tomorrow");
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
-                    save_state(teslamate_id, &psr, &ps);
+                    save_state(&id, &psr, &ps);
                 },
                 Ok(rules) = s_rules.recv() => {
                     debug!(id, ?rules, "Setting rules");
                     ps.rules = rules.into_inner();
-                    save_state(teslamate_id, &psr, &ps);
+                    save_state(&id, &psr, &ps);
                 },
                 Some(()) = ps.charge_plan.sleep_until_plan_start() => {
                     info!(id, "Plan start time elapsed");
@@ -199,12 +196,11 @@ pub fn run(
 }
 
 fn save_state(
-    teslamate_id: TeslamateId,
+    id: &str,
     psr: &robotica_backend::services::persistent_state::PersistentStateRow<PersistentState>,
     ps: &PersistentState,
 ) {
     psr.save(ps).unwrap_or_else(|e| {
-        let id = teslamate_id.to_string();
         error!("{id}: Failed to save persistent state: {:?}", e);
     });
 }

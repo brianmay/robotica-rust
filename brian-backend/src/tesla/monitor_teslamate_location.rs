@@ -9,7 +9,9 @@ use robotica_common::{
 };
 use tracing::error;
 
-use super::{private::new_message, Config};
+use crate::car;
+
+use super::private::new_message;
 
 mod state {
     use std::collections::{HashMap, HashSet};
@@ -112,13 +114,13 @@ pub struct Outputs {
 }
 
 pub fn monitor(
-    tesla: &Config,
+    car: &car::Config,
     location: stateful::Receiver<Json<teslamate::Location>>,
     postgres: sqlx::PgPool,
 ) -> Outputs {
     let (location_tx, location_rx) = stateful::create_pipe("teslamate_location");
     let (message_tx, message_rx) = stateless::create_pipe("teslamate_location_message");
-    let tesla = tesla.clone();
+    let tesla = car.clone();
 
     spawn(async move {
         let mut inputs = location.subscribe().await;

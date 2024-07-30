@@ -87,6 +87,8 @@ let
 
   tesla_type = types.submodule {
     options = {
+      id = mkOption { type = types.str; };
+      make = mkOption { type = types.enum [ "tesla" ]; };
       name = mkOption { type = types.str; };
       teslamate_id = mkOption { type = types.number; };
       tesla_id = mkOption { type = types.number; };

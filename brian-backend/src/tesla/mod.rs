@@ -12,7 +12,7 @@ use crate::amber::{car::ChargeRequest, rules};
 use monitor_doors::{DoorState, UserIsPresent};
 use reqwest::Url;
 use robotica_backend::services::tesla::api::{ChargingStateEnum, VehicleId};
-use robotica_common::robotica::{commands::Command, message::Audience};
+use robotica_common::robotica::commands::Command;
 use robotica_common::teslamate;
 use serde::{Deserialize, Serialize};
 
@@ -145,17 +145,6 @@ pub struct Config {
     pub teslamate_id: TeslamateId,
     pub tesla_id: VehicleId,
     pub teslamate: TeslamateConfig,
-    pub name: String,
-    pub audience: AudienceConfig,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct AudienceConfig {
-    pub errors: Audience,
-    pub locations: Audience,
-    pub doors: Audience,
-    pub charging: Audience,
-    pub private: Audience,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
