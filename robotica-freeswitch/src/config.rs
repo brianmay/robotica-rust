@@ -1,5 +1,5 @@
 use envconfig::Envconfig;
-use robotica_backend::services::mqtt;
+use robotica_tokio::services::mqtt;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -29,7 +29,7 @@ impl Environment {
 
         let config = if let Some(secrets_file) = &self.secrets_file {
             let secrets = load_file(secrets_file)?;
-            robotica_backend::serde::merge_yaml(config, secrets)?
+            robotica_tokio::serde::merge_yaml(config, secrets)?
         } else {
             config
         };
@@ -65,5 +65,5 @@ pub enum Error {
 
     /// Error merging the files
     #[error("Error merging files: {0}")]
-    Merge(#[from] robotica_backend::serde::Error),
+    Merge(#[from] robotica_tokio::serde::Error),
 }

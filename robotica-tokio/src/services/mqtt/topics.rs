@@ -9,7 +9,7 @@
 /// # Examples
 ///
 /// ```
-/// use robotica_backend::services::mqtt::topics::topic_matches;
+/// use robotica_tokio::services::mqtt::topics::topic_matches;
 ///
 /// assert!(topic_matches("foo/bar", "foo/bar"));
 /// assert!(topic_matches("foo", "foo/+"));
@@ -58,7 +58,7 @@ pub fn topic_matches(topic: &str, pattern: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// use robotica_backend::services::mqtt::topics::topic_matches_any;
+/// use robotica_tokio::services::mqtt::topics::topic_matches_any;
 ///
 /// let patterns = vec!["foo/bar", "foo/baz"];
 /// assert!(topic_matches_any("foo/bar", &patterns));

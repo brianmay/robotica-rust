@@ -44,16 +44,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'robotica-backend'",
+            "name": "Debug unit tests in library 'robotica-tokio'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=robotica-backend"
+                    "--package=robotica-tokio"
                 ],
                 "filter": {
-                    "name": "robotica-backend",
+                    "name": "robotica-tokio",
                     "kind": "lib"
                 }
             },

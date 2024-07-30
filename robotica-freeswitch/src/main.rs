@@ -10,11 +10,11 @@ mod freeswitch;
 mod phone_db;
 
 use config::Config;
-use robotica_backend::{
+use robotica_common::version;
+use robotica_tokio::{
     pipes::stateless,
     services::mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
 };
-use robotica_common::version;
 
 use tracing::{debug, info};
 

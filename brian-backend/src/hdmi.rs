@@ -1,11 +1,11 @@
-use robotica_backend::pipes::{Subscriber, Subscription};
+use robotica_tokio::pipes::{Subscriber, Subscription};
 use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
-use robotica_backend::{devices::hdmi::Command, pipes::stateless, spawn};
 use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::commands;
+use robotica_tokio::{devices::hdmi::Command, pipes::stateless, spawn};
 
 use crate::{robotica::Id, InitState};
 
@@ -51,10 +51,10 @@ pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
 
     let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
-    let (rx, _) = robotica_backend::devices::hdmi::run(
+    let (rx, _) = robotica_tokio::devices::hdmi::run(
         addr,
         rx,
-        &robotica_backend::devices::hdmi::Options::default(),
+        &robotica_tokio::devices::hdmi::Options::default(),
     );
 
     spawn(async move {

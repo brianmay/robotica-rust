@@ -19,7 +19,7 @@ use tracing::error;
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_backend::database::locations::list_locations;
+/// use robotica_tokio::database::locations::list_locations;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -75,7 +75,7 @@ pub async fn list_locations(postgres: &sqlx::PgPool) -> Result<Vec<Location>, sq
 /// ```no_run
 /// use sqlx::PgPool;
 /// use robotica_common::robotica::locations::CreateLocation;
-/// use robotica_backend::database::locations::create_location;
+/// use robotica_tokio::database::locations::create_location;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -137,7 +137,7 @@ pub async fn create_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_backend::database::locations::delete_location;
+/// use robotica_tokio::database::locations::delete_location;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -187,7 +187,7 @@ pub async fn delete_location(postgres: &sqlx::PgPool, id: i32) -> Result<(), sql
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_backend::database::locations::update_location;
+/// use robotica_tokio::database::locations::update_location;
 /// use robotica_common::robotica::locations::Location;
 ///
 /// #[tokio::main]
@@ -253,7 +253,7 @@ pub async fn update_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_backend::database::locations::get_location;
+/// use robotica_tokio::database::locations::get_location;
 /// use robotica_common::robotica::locations::Location;
 ///
 /// #[tokio::main]
@@ -323,7 +323,7 @@ pub async fn get_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_backend::database::locations::search_locations;
+/// use robotica_tokio::database::locations::search_locations;
 /// use robotica_common::robotica::locations::Location;
 /// use geo::Point;
 ///

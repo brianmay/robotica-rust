@@ -1,4 +1,4 @@
-//! Common stuff shared between robotica-backend and robotica-frontend
+//! Common stuff shared between robotica-tokio and robotica-frontend
 #![warn(missing_docs)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::nursery)]

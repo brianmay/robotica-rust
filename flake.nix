@@ -47,7 +47,7 @@
         p2n = import poetry2nix { inherit pkgs; };
         poetry_env = p2n.mkPoetryEnv {
           python = pkgs.python3;
-          projectDir = ./robotica-backend/python;
+          projectDir = ./robotica-tokio/python;
           overrides = p2n.defaultPoetryOverrides.extend (self: super: {
             x-wr-timezone = super.x-wr-timezone.overridePythonAttrs (old: {
               buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];

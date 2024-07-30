@@ -3,7 +3,7 @@ mod common;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
-use robotica_backend::{
+use robotica_tokio::{
     devices::hdmi::{Command, Options},
     pipes::{stateless, Subscriber, Subscription},
 };
@@ -122,7 +122,7 @@ async fn test_client_once() {
 
     println!("test: starting client");
     let (client, rx) = stateless::create_pipe("test");
-    let (rx, client_handle) = robotica_backend::devices::hdmi::run(addr, rx, &options);
+    let (rx, client_handle) = robotica_tokio::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");
@@ -158,7 +158,7 @@ async fn test_client_reconnect() {
 
     println!("test: starting client");
     let (client, rx) = stateless::create_pipe("test");
-    let (rx, client_handle) = robotica_backend::devices::hdmi::run(addr, rx, &options);
+    let (rx, client_handle) = robotica_tokio::devices::hdmi::run(addr, rx, &options);
     let mut rx_s = rx.subscribe().await;
 
     println!("test: sending test command");

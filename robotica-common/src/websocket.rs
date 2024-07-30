@@ -1,4 +1,4 @@
-//! Common structs shared between robotica-backend and robotica-frontend for websockets
+//! Common structs shared between robotica-tokio and robotica-frontend for websockets
 use crate::{mqtt::MqttMessage, user::User, version::Version};
 
 #[cfg(feature = "websockets")]

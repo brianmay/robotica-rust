@@ -21,7 +21,7 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
-COPY robotica-backend/python/pyproject.toml robotica-backend/python/poetry.lock ./
+COPY robotica-tokio/python/pyproject.toml robotica-tokio/python/poetry.lock ./
 RUN touch README.md
 RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --without dev --no-root
 

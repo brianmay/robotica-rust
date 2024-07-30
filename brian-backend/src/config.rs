@@ -4,15 +4,15 @@ use crate::{
     metrics, open_epaper_link, InitState,
 };
 use envconfig::Envconfig;
-use robotica_backend::{
+use robotica_common::{
+    mqtt::Json,
+    robotica::lights::{PowerColor, SceneName},
+};
+use robotica_tokio::{
     devices::lifx::LifxId,
     pipes::stateful,
     scheduling::executor,
     services::{http, mqtt, persistent_state},
-};
-use robotica_common::{
-    mqtt::Json,
-    robotica::lights::{PowerColor, SceneName},
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -47,7 +47,7 @@ impl Environment {
 
         let config = if let Some(secrets_file) = &self.secrets_file {
             let secrets = load_file(secrets_file)?;
-            robotica_backend::serde::merge_yaml(config, secrets)?
+            robotica_tokio::serde::merge_yaml(config, secrets)?
         } else {
             config
         };
@@ -57,7 +57,7 @@ impl Environment {
             if let Some(database_url) = &self.database_url {
                 env_config["database_url"] = serde_yml::Value::String(database_url.clone());
             }
-            robotica_backend::serde::merge_yaml(config, env_config)?
+            robotica_tokio::serde::merge_yaml(config, env_config)?
         };
 
         let mut config: Config =
@@ -107,7 +107,7 @@ pub enum Error {
 
     /// Error merging the files
     #[error("Error merging files: {0}")]
-    Merge(#[from] robotica_backend::serde::Error),
+    Merge(#[from] robotica_tokio::serde::Error),
 }
 
 #[allow(clippy::module_name_repetitions)]

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use freeswitch_esl::{Esl, EslConnection, EslError};
-use robotica_backend::{services::mqtt::MqttTx, spawn};
 use robotica_common::{
     mqtt::{MqttMessage, Retain},
     robotica::{
@@ -9,6 +8,7 @@ use robotica_common::{
         message::{Audience, Message},
     },
 };
+use robotica_tokio::{services::mqtt::MqttTx, spawn};
 use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info};

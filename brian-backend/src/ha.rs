@@ -1,7 +1,7 @@
-use robotica_backend::pipes::stateless;
-use robotica_backend::services::mqtt::MqttTx;
-use robotica_backend::services::mqtt::SendOptions;
 use robotica_common::robotica::message::Message;
+use robotica_tokio::pipes::stateless;
+use robotica_tokio::services::mqtt::MqttTx;
+use robotica_tokio::services::mqtt::SendOptions;
 use tracing::info;
 
 pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {

@@ -1,4 +1,4 @@
-/robotica-backend/python/__pycache__/
+/robotica-tokio/python/__pycache__/
 /local
 /target
 /.envrc-old
@@ -6,5 +6,5 @@
 /.direnv
 /.devenv
 /result
-*.yaml
+/*.yaml
 /mosquitto.conf

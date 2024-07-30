@@ -4,7 +4,7 @@
 
 [workspace]
 members = [
-    "robotica-backend",
+    "robotica-tokio",
     "robotica-frontend",
     "robotica-common",
     "robotica-slint",
