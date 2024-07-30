@@ -2,9 +2,13 @@ use robotica_backend::pipes::stateless;
 use robotica_backend::services::mqtt::MqttTx;
 use robotica_backend::services::mqtt::SendOptions;
 use robotica_common::robotica::message::Message;
+use tracing::info;
 
 pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
     let (tx, rx) = stateless::create_pipe::<Message>("messages");
+    rx.clone().for_each(|message| {
+        info!(?message, "Sending message");
+    });
     rx.send_to_mqtt_json(mqtt, "ha/event/message", &SendOptions::default());
     tx
 }
