@@ -17,7 +17,7 @@ pub struct Config {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
+#[serde(tag = "make")]
 pub enum MakeConfig {
     Tesla(tesla::Config),
     Unknown,
