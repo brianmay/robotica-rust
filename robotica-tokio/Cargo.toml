@@ -27,6 +27,7 @@ lalrpop-util = { version = "0.20.2", features = ["lexer"] }
 regex = "1.10.5"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
+robotica-macro = { path = "../robotica-macro" }
 lifx-core = "0.4.0"
 async-trait = "0.1.81"
 pyo3 = { version = "0.22.1", features = ["auto-initialize", "chrono"], optional = true }

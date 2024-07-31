@@ -303,6 +303,7 @@
               wasm-bindgen-cli
               slint-lsp
               rustPlatform
+              cargo-expand
               # https://github.com/NixOS/nixpkgs/issues/156890
               binaryen
               nodePackages

@@ -164,10 +164,10 @@ mod tests {
 
     use super::*;
     use chrono::TimeDelta;
-    use robotica_common::unsafe_duration;
+    use robotica_macro::duration_constant;
     use std::time::Duration;
 
-    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+    const INTERVAL: Duration = duration_constant!(30 minutes);
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()

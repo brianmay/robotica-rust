@@ -205,7 +205,7 @@ mod tests {
     use super::*;
     use chrono::{DateTime, FixedOffset, TimeDelta};
     use float_cmp::assert_approx_eq;
-    use robotica_common::unsafe_duration;
+    use robotica_macro::duration_constant;
     use std::time::Duration;
     use tracing::debug;
 
@@ -255,7 +255,7 @@ mod tests {
         assert_eq!(plan.is_current(dt), expected);
     }
 
-    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+    const INTERVAL: Duration = duration_constant!(30 minutes);
 
     fn pr(
         start_time: DateTime<Utc>,

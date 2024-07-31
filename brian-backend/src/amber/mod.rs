@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Timelike, Utc};
-use robotica_common::{datetime::utc_now, unsafe_duration, unsafe_time_delta};
+use robotica_common::datetime::utc_now;
+use robotica_macro::{duration_constant, time_delta_constant};
 use robotica_tokio::{
     pipes::stateful::{create_pipe, Receiver},
     spawn,
@@ -112,11 +113,11 @@ pub enum Error {
     Internal(String),
 }
 
-const ONE_DAY: TimeDelta = unsafe_time_delta!(days: 1);
-const RETRY_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
-const MIN_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
-const MAX_POLL_TIME: TimeDelta = unsafe_time_delta!(minutes: 5);
-const DEFAULT_INTERVAL: Duration = unsafe_duration!(minutes: 5);
+const ONE_DAY: TimeDelta = time_delta_constant!(1 days);
+const RETRY_TIME: TimeDelta = time_delta_constant!(1 minutes);
+const MIN_POLL_TIME: TimeDelta = time_delta_constant!(1 minutes);
+const MAX_POLL_TIME: TimeDelta = time_delta_constant!(5 minutes);
+const DEFAULT_INTERVAL: Duration = duration_constant!(5 minutes);
 
 type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
 
@@ -286,7 +287,6 @@ mod tests {
     use crate::amber::api::IntervalType;
     use chrono::Local;
     use float_cmp::assert_approx_eq;
-    use robotica_common::unsafe_duration;
     use std::time::Duration;
 
     use super::*;
@@ -524,7 +524,7 @@ mod tests {
         assert_eq!(prices[2].end_time, dt("2020-01-01T01:30:00Z"));
     }
 
-    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+    const INTERVAL: Duration = duration_constant!(30 minutes);
 
     #[test]
     fn test_get_weighted_price() {

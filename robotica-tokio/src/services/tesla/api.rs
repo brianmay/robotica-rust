@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use opentelemetry::{global, metrics::Counter, KeyValue};
-use robotica_common::{datetime::duration, mqtt::MqttMessage, unsafe_time_delta};
+use robotica_common::{datetime::duration, mqtt::MqttMessage};
+use robotica_macro::time_delta_constant;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tap::Pipe;
 use thiserror::Error;
@@ -662,8 +663,8 @@ impl Token {
         Ok(())
     }
 
-    const DEFAULT_EXPIRES_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
-    const DEFAULT_RENEW_TIME: TimeDelta = unsafe_time_delta!(minutes: 1);
+    const DEFAULT_EXPIRES_TIME: TimeDelta = time_delta_constant!(1 minutes);
+    const DEFAULT_RENEW_TIME: TimeDelta = time_delta_constant!(1 minutes);
 
     #[tracing::instrument]
     async fn renew(&self, meters: &Meters) -> Result<Self, Error> {

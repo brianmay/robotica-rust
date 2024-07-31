@@ -80,6 +80,7 @@
         "postgis",
         "protobuf",
         "protos",
+        "Punct",
         "ratelimit",
         "renewables",
         "reqwasm",

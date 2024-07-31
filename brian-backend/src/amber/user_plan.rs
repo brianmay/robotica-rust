@@ -329,13 +329,14 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::bool_assert_comparison)]
 
+    use robotica_macro::duration_constant;
+
     use crate::amber::api::IntervalType;
 
     use super::*;
-    use robotica_common::unsafe_duration;
     use std::time::Duration;
 
-    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+    const INTERVAL: Duration = duration_constant!(30 minutes);
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()

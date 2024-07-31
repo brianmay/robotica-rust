@@ -1,12 +1,10 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use opentelemetry::{global, metrics::Counter, KeyValue};
-use robotica_common::{
-    robotica::{
-        audio::MessagePriority,
-        message::{Audience, Message},
-    },
-    unsafe_time_delta,
+use robotica_common::robotica::{
+    audio::MessagePriority,
+    message::{Audience, Message},
 };
+use robotica_macro::time_delta_constant;
 use robotica_tokio::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
@@ -218,7 +216,7 @@ impl<'a> Errors<'a> {
         self.notified = false;
     }
 
-    const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = unsafe_time_delta!(minutes: 30);
+    const FAILURE_NOTIFICATION_INTERVAL: TimeDelta = time_delta_constant!(30 minutes);
 
     fn notify_errors(&mut self, message_sink: &stateless::Sender<Message>, meters: &Meters) {
         if !self.notified && self.last_success.add(Self::FAILURE_NOTIFICATION_INTERVAL) < Utc::now()

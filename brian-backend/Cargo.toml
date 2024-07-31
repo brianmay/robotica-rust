@@ -17,6 +17,7 @@ thiserror = "1.0.62"
 color-backtrace = "0.6.1"
 robotica-common = { path = "../robotica-common", features = ["websockets"] }
 robotica-tokio = { path = "../robotica-tokio", features = ["websockets", "scheduler"] }
+robotica-macro = { path = "../robotica-macro"}
 influxdb = { version = "0.7.2", features = ["derive"]}
 reqwest = { version = "0.12.5", features = ["json"] }
 envconfig = "0.10.0"

@@ -9,8 +9,8 @@ use opentelemetry::metrics::Meter;
 use robotica_common::{
     datetime::{time_delta, utc_now},
     mqtt::Json,
-    unsafe_time_delta,
 };
+use robotica_macro::time_delta_constant;
 use robotica_tokio::{
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
@@ -80,7 +80,7 @@ struct DayState {
     rules: rules::RuleSet<Request>,
 }
 
-const CHEAP_TIME: TimeDelta = unsafe_time_delta!(hours: 3);
+const CHEAP_TIME: TimeDelta = time_delta_constant!(3 hours);
 
 impl DayState {
     fn new<T: TimeZone>(now: DateTime<Utc>, timezone: &T) -> Self {
@@ -295,7 +295,7 @@ mod tests {
     };
     use chrono::FixedOffset;
     use float_cmp::assert_approx_eq;
-    use robotica_common::unsafe_duration;
+    use robotica_macro::duration_constant;
     use std::time::Duration;
 
     use super::*;
@@ -304,7 +304,7 @@ mod tests {
         dt.into().parse().unwrap()
     }
 
-    const INTERVAL: Duration = unsafe_duration!(minutes: 30);
+    const INTERVAL: Duration = duration_constant!(30 minutes);
 
     #[test]
     fn test_day_state_new() {

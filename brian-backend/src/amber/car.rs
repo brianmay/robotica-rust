@@ -6,8 +6,8 @@ use opentelemetry::metrics::Meter;
 use robotica_common::{
     datetime::time_delta,
     mqtt::{Json, Parsed},
-    unsafe_naive_time_hms,
 };
+use robotica_macro::naive_time_constant;
 use robotica_tokio::{
     pipes::{
         stateful::{self, create_pipe, Receiver},
@@ -205,7 +205,7 @@ fn save_state(
     });
 }
 
-const END_TIME: NaiveTime = unsafe_naive_time_hms!(6, 30, 0);
+const END_TIME: NaiveTime = naive_time_constant!(06:30:0);
 
 #[allow(clippy::too_many_arguments)]
 fn prices_to_charge_request<T: TimeZone>(
