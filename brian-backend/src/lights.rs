@@ -144,6 +144,7 @@ fn rainbow_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
             let colors: Vec<HSBK> = (0..num_per_cycle)
                 .map(|j| {
                     let mut hue = f32::from(i + j) * 360.0 / f32::from(num_per_cycle);
+                    #[allow(clippy::while_float)]
                     while hue >= 360.0 {
                         hue -= 360.0;
                     }
