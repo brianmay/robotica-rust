@@ -340,7 +340,7 @@ impl<T: TimeZone + Copy> State<T> {
         )
     }
 
-    fn set_tags(&mut self, today: Date) {
+    fn set_tags(&self, today: Date) {
         let tags = self.config.get_tags(today);
         self.publish_tags(&tags);
     }
