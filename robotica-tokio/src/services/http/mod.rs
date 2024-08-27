@@ -387,6 +387,7 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
 async fn oidc_callback(
     State(http_config): State<Arc<Config>>,
     State(oidc_client): State<Arc<ArcSwap<Option<Client>>>>,
+    State(postgresql): State<sqlx::PgPool>,
     Query(params): Query<HashMap<String, String>>,
     session: Session,
 ) -> Result<Response, ResponseError> {
@@ -402,7 +403,7 @@ async fn oidc_callback(
         return Err(ResponseError::OidcError());
     };
 
-    let user = oidc_client.login(&code).await?;
+    let user = oidc_client.login(&code, postgresql).await?;
 
     set_user(&session, user).await?;
     let url = http_config.generate_url_or_default(&state);

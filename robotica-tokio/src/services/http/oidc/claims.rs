@@ -15,7 +15,7 @@ pub struct StandardClaims {
     // Either an array of audiences, or just the client_id
     pub aud: SingleOrMultiple<String>,
     // Not perfectly accurate for what time values we can get back...
-    // By spec, this is an arbitrarilly large number. In practice, an
+    // By spec, this is an arbitrarily large number. In practice, an
     // i64 unix time is up to 293 billion years from 1970.
     //
     // Make sure this cannot silently underflow, see:

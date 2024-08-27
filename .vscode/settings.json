@@ -78,6 +78,7 @@
         "polyline",
         "popover",
         "postgis",
+        "prost",
         "protobuf",
         "protos",
         "Punct",

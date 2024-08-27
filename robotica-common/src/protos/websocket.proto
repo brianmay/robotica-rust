@@ -12,11 +12,18 @@ enum WsError {
     NOT_AUTHORIZED = 0;
 }
 
-message User {
-    string sub = 1;
+message Group {
+    int32 id = 1;
     string name = 2;
-    string email = 3;
-    bool is_admin = 4;
+}
+
+message User {
+    int32 id = 1;
+    string oidc_id = 2;
+    string name = 3;
+    string email = 4;
+    bool is_admin = 5;
+    repeated Group groups = 6;
 }
 
 message Version {

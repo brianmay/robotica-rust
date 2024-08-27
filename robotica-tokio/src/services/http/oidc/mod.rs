@@ -1,7 +1,7 @@
 mod claims;
 
 use openid::{error::ClientError, Discovered, Options};
-use robotica_common::user::User;
+use robotica_common::user::{Group, User};
 use thiserror::Error;
 use tracing::debug;
 
@@ -76,7 +76,7 @@ impl Client {
         auth_url.into()
     }
 
-    pub async fn login(&self, code: &str) -> Result<User, ResponseError> {
+    pub async fn login(&self, code: &str, postgres: sqlx::PgPool) -> Result<User, ResponseError> {
         let mut token: Token = self
             .oidc_client
             .request_token(code)
@@ -129,11 +129,51 @@ impl Client {
 
         let is_admin = groups.contains(&"admin".to_string());
 
-        Ok(User {
+        let user = sqlx::query!(
+            r#"
+            INSERT INTO users (oidc_id, name, email)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (oidc_id) DO UPDATE
+            SET name = $2, email = $3
+            RETURNING id, oidc_id, name, email
+            "#,
             sub,
             name,
-            email,
-            is_admin,
+            email
+        )
+        .fetch_one(&postgres)
+        .await
+        .map_err(ResponseError::sql_error)?;
+
+        let groups: Vec<_> = sqlx::query!(
+            r#"
+            SELECT groups.id, groups.name
+            FROM groups
+            JOIN user_groups ON groups.id = user_groups.group_id
+            WHERE user_groups.user_id = $1
+            "#,
+            user.id
+        )
+        .fetch_all(&postgres)
+        .await
+        .map_err(ResponseError::sql_error)?
+        .into_iter()
+        .map(|group| {
+            let id = group.id;
+            let name = group.name;
+            Group { id, name }
         })
+        .collect();
+
+        let user = User {
+            id: user.id,
+            oidc_id: user.oidc_id,
+            name: user.name,
+            email: user.email,
+            is_admin,
+            groups,
+        };
+
+        Ok(user)
     }
 }

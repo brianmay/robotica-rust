@@ -34,6 +34,9 @@ impl ResponseError {
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self::BadRequest(message.into())
     }
+    pub const fn sql_error(err: sqlx::Error) -> Self {
+        Self::SqlError(err)
+    }
 }
 
 impl IntoResponse for ResponseError {
