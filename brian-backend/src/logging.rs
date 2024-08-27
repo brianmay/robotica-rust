@@ -1,8 +1,8 @@
 use data_encoding::BASE64;
-use opentelemetry::KeyValue;
+use opentelemetry::{global, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{ExportConfig, WithExportConfig};
-use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace::Tracer, Resource};
+use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace::TracerProvider, Resource};
 use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
@@ -12,7 +12,7 @@ use serde::Deserialize;
 use tap::Pipe;
 use thiserror::Error;
 use tonic::metadata::{errors::InvalidMetadataValue, MetadataMap};
-use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
+use tracing_opentelemetry::MetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Deserialize)]
@@ -76,12 +76,13 @@ pub enum Error {
 }
 
 // Construct Tracer for OpenTelemetryLayer
-fn init_tracer(resource: &Resource, remote: &RemoteConfig) -> Result<Tracer, Error> {
+fn init_tracer(resource: &Resource, remote: &RemoteConfig) -> Result<TracerProvider, Error> {
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
+                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
                 .with_endpoint(remote.endpoint.clone())
                 .with_metadata(otlp_metadata(remote)?),
         )
@@ -105,6 +106,7 @@ fn init_metrics(
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
+                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
                 .with_export_config(export_config)
                 .with_metadata(otlp_metadata(remote)?),
         )
@@ -122,12 +124,11 @@ fn init_logs(
 ) -> Result<opentelemetry_sdk::logs::LoggerProvider, Error> {
     opentelemetry_otlp::new_pipeline()
         .logging()
-        .with_log_config(opentelemetry_sdk::logs::Config::default().with_resource(resource.clone()))
-        // Use after next release of opentelemetry-otlp
-        // .with_resource(resource.clone())
+        .with_resource(resource.clone())
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
+                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
                 .with_endpoint(remote.endpoint.clone())
                 .with_metadata(otlp_metadata(remote)?),
         )
@@ -162,9 +163,10 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         let meter_provider = init_metrics(&resource, remote)?;
         let logger_provider = init_logs(&resource, remote)?;
 
+        global::set_tracer_provider(init_tracer(&resource, remote)?);
+
         layer
             .with(MetricsLayer::new(meter_provider.clone()))
-            .with(OpenTelemetryLayer::new(init_tracer(&resource, remote)?))
             .with(OpenTelemetryTracingBridge::new(&logger_provider))
             .init();
 
