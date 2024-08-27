@@ -2622,15 +2622,15 @@ dependencies = [
 
 [[package]]
 name = "gloo-net"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43aaa242d1239a8822c15c645f02166398da4f8b5c4bae795c1f5b44e9eee173"
+checksum = "c06f627b1a58ca3d42b45d6104bf1e1a03799df472df00988b6ba21accc10580"
 dependencies = [
  "futures-channel",
  "futures-core",
  "futures-sink",
  "gloo-utils 0.2.0",
- "http 0.2.12",
+ "http 1.1.0",
  "js-sys",
  "pin-project",
  "serde",
@@ -5412,7 +5412,7 @@ name = "reqwasm"
 version = "0.5.0"
 source = "git+https://github.com/brianmay/reqwasm.git?branch=patch-1#2c40fb96f8d579ca29de83dc0cefba360495b4cb"
 dependencies = [
- "gloo-net 0.5.0",
+ "gloo-net 0.4.0",
 ]
 
 [[package]]
@@ -5613,7 +5613,7 @@ dependencies = [
  "eyre",
  "futures",
  "geo",
- "gloo-net 0.5.0",
+ "gloo-net 0.6.0",
  "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
  "itertools 0.13.0",

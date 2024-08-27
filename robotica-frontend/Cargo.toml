@@ -11,7 +11,7 @@ chrono = "0.4.38"
 console_error_panic_hook = "0.1.7"
 eyre = "0.6.12"
 futures = "0.3.30"
-gloo-net = "0.5.0"
+gloo-net = "0.6.0"
 gloo-timers = "0.3.0"
 itertools = "0.13.0"
 # See https://github.com/hamza1311/reqwasm/issues/35
