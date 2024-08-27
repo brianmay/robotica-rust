@@ -1,7 +1,7 @@
 use super::ActionLocation;
 use crate::components::locations::map::{MapComponent, ParamObject};
-use gloo_net::http::Request;
-use reqwasm::{http::Response, Error};
+use gloo_net::http::{Request, Response};
+use gloo_net::Error;
 use robotica_common::robotica::{
     http_api::ApiResponse,
     locations::{CreateLocation, Location},
