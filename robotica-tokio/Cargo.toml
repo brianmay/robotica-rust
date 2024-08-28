@@ -30,7 +30,7 @@ robotica-common = { path = "../robotica-common", features = ["chrono"] }
 robotica-macro = { path = "../robotica-macro" }
 lifx-core = "0.4.0"
 async-trait = "0.1.81"
-pyo3 = { version = "0.22.1", features = ["auto-initialize", "chrono"], optional = true }
+pyo3 = { version = "0.22.2", features = ["auto-initialize", "chrono"], optional = true }
 
 # http server
 axum-core = "0.4.3"
