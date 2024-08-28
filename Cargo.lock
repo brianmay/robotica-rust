@@ -5359,9 +5359,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.5"
+version = "1.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
+checksum = "4219d74c6b67a3654a9fbebc4b419e22126d13d2f3c4a07ee0cb61ff79a79619"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -5412,7 +5412,7 @@ name = "reqwasm"
 version = "0.5.0"
 source = "git+https://github.com/brianmay/reqwasm.git?branch=patch-1#2c40fb96f8d579ca29de83dc0cefba360495b4cb"
 dependencies = [
- "gloo-net 0.4.0",
+ "gloo-net 0.6.0",
 ]
 
 [[package]]
