@@ -1043,7 +1043,7 @@ mod tests {
     #![allow(clippy::similar_names)]
     use std::path::PathBuf;
 
-    use crate::services::persistent_state::PersistentStateDatabase;
+    use crate::{entities::Id, services::persistent_state::PersistentStateDatabase};
 
     use super::*;
 
@@ -1051,11 +1051,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_token() {
         let meters = Meters::new();
+        let id = Id::new("tesla/0");
 
         let state_path = PathBuf::from("state");
         let config = persistent_state::Config { state_path };
         let psd = PersistentStateDatabase::new(&config).unwrap();
-        let psr = psd.for_name("tesla_token");
+        let psr = psd.for_name(&id, "tesla_token");
 
         let token = Token::get(&psr).unwrap();
 

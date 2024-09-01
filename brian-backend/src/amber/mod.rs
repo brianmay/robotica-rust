@@ -4,6 +4,7 @@ use chrono::{DateTime, FixedOffset, TimeDelta, Timelike, Utc};
 use robotica_common::datetime::utc_now;
 use robotica_macro::{duration_constant, time_delta_constant};
 use robotica_tokio::{
+    entities::Id,
     pipes::stateful::{create_pipe, Receiver},
     spawn,
 };
@@ -43,9 +44,14 @@ impl Prices {
         get_current_price_response(&self.list, dt)
     }
 
-    fn get_next_period(&self, now: chrono::DateTime<Utc>) -> Option<chrono::DateTime<Utc>> {
+    fn get_next_period(
+        &self,
+        id: &Id,
+        now: chrono::DateTime<Utc>,
+    ) -> Option<chrono::DateTime<Utc>> {
         let Ok(interval) = i64::try_from(self.interval.as_secs()) else {
             error!(
+                %id,
                 "Failed to convert interval to i64: {}",
                 self.interval.as_secs()
             );
@@ -57,7 +63,7 @@ impl Prices {
         DateTime::from_timestamp(value, 0)
     }
 
-    fn get_weighted_price(&self, dt: DateTime<Utc>) -> Option<f32> {
+    fn get_weighted_price(&self, id: &Id, dt: DateTime<Utc>) -> Option<f32> {
         let prices = &self.list;
         let pos = prices.iter().position(|pr| pr.is_current(dt))?;
 
@@ -79,7 +85,7 @@ impl Prices {
             .sum::<f32>()
             .pipe(|x| x / total_weights);
 
-        info!("Get Weighted Price: {values:?} {weights:?} --> {result}");
+        info!(%id, "Get Weighted Price: {values:?} {weights:?} --> {result}");
         Some(result)
     }
 
@@ -121,12 +127,14 @@ const DEFAULT_INTERVAL: Duration = duration_constant!(5 minutes);
 
 type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
 
-pub fn run(config: api::Config) -> Result<Outputs, Error> {
+pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
     let (tx_prices, rx_prices) = create_pipe("amber_prices");
     let (tx_usage, rx_usage) = create_pipe("amber_usage");
 
     let nem_timezone = FixedOffset::east_opt(hours(10).into())
         .ok_or_else(|| Error::Internal("Failed to create NEM timezone".to_string()))?;
+
+    let id = id.clone();
 
     spawn(async move {
         // Update prices maximum every 5 minutes
@@ -188,17 +196,17 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                         Ok(prices) => {
 
                             let update_time = get_current_price_response(&prices, &now).map_or_else(|| {
-                                error!("No current price found in prices: {prices:?}");
+                                error!(%id, "No current price found in prices: {prices:?}");
                                 // If we failed to get a current price, try again in 1 minute
                                 now + RETRY_TIME
                             }, |current_price| {
-                                info!("Current price: {current_price:?}");
+                                info!(%id, "Current price: {current_price:?}");
                                 current_price.end_time
                             });
 
 
                             let interval = prices.last().map_or_else(|| {
-                                error!("No interval found in prices: {prices:?}");
+                                error!(%id, "No interval found in prices: {prices:?}");
                                 // If we failed to get an interval, just use default
                                 DEFAULT_INTERVAL
 
@@ -216,21 +224,21 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                                 // How long to the current interval expires?
                                 let now = utc_now();
                                 let duration: TimeDelta = update_time - now;
-                                info!("Next price update: {update_time:?} in {duration}");
+                                info!(%id, "Next price update: {update_time:?} in {duration}");
 
                                 // Ensure we update prices at least once once every 5 minutes.
                                 duration.clamp(MIN_POLL_TIME, MAX_POLL_TIME)
                             }
                         }
                         Err(err) => {
-                            error!("Failed to get prices: {}", err);
+                            error!(%id, "Failed to get prices: {}", err);
                             // If we failed to get prices, try again in 1 minute
                             RETRY_TIME
                         }
                     };
 
                     // Schedule the next update
-                    info!("Next poll in {}", next_delay);
+                    info!(%id, "Next poll in {}", next_delay);
                     let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_secs(300));
                     price_instant = Instant::now() + next_delay;
                 }
@@ -249,7 +257,7 @@ pub fn run(config: api::Config) -> Result<Outputs, Error> {
                             }));
                         }
                         Err(err) => {
-                            error!("Failed to get usage: {}", err);
+                            error!(%id, "Failed to get usage: {}", err);
                         }
                     }
                 }
@@ -307,8 +315,9 @@ mod tests {
             list: vec![],
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
-        let result = prices.get_next_period(now).unwrap();
+        let result = prices.get_next_period(&id, now).unwrap();
         assert_eq!(result, expected);
     }
 
@@ -528,6 +537,8 @@ mod tests {
 
     #[test]
     fn test_get_weighted_price() {
+        let id = Id::new("test");
+
         let pr = |start_time: DateTime<Utc>,
                   end_time: DateTime<Utc>,
                   price,
@@ -586,22 +597,22 @@ mod tests {
 
         let now = dt("2020-01-01T00:00:00Z");
         let prices = prices_fn(0);
-        let p = prices.get_weighted_price(now).unwrap();
+        let p = prices.get_weighted_price(&id, now).unwrap();
         assert_approx_eq!(f32, p, 1.25);
 
         let now = dt("2020-01-01T00:30:00Z");
         let prices = prices_fn(1);
-        let p = prices.get_weighted_price(now).unwrap();
+        let p = prices.get_weighted_price(&id, now).unwrap();
         assert_approx_eq!(f32, p, 2.25);
 
         let now = dt("2020-01-01T01:00:00Z");
         let prices = prices_fn(2);
-        let p = prices.get_weighted_price(now).unwrap();
+        let p = prices.get_weighted_price(&id, now).unwrap();
         assert_approx_eq!(f32, p, 3.5);
 
         let now = dt("2020-01-01T01:30:00Z");
         let prices = prices_fn(3);
-        let p = prices.get_weighted_price(now);
+        let p = prices.get_weighted_price(&id, now);
         assert!(p.is_none());
     }
 }

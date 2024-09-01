@@ -2,8 +2,9 @@ use std::{collections::HashSet, fmt::Debug};
 
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string};
-use robotica_tokio::conditions::ast::{
-    BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar,
+use robotica_tokio::{
+    conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar},
+    entities::Id,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,7 @@ pub struct Context {
 
 impl Context {
     pub fn new<TZ: TimeZone>(
+        id: &Id,
         prices: &Prices,
         now: DateTime<Utc>,
         is_on: bool,
@@ -32,7 +34,7 @@ impl Context {
         let date = local.date_naive();
 
         let current_price = prices.current(&now).map_or(100.0, |f| f.per_kwh);
-        let weighted_price = prices.get_weighted_price(now).unwrap_or(100.0);
+        let weighted_price = prices.get_weighted_price(id, now).unwrap_or(100.0);
 
         Self {
             days_since_epoch: num_days_from_ce(&date),
@@ -149,7 +151,8 @@ impl<T> RuleSet<T> {
         is_on: bool,
         timezone: &TZ,
     ) -> Option<&T> {
-        let context = Context::new(prices, now, is_on, timezone);
+        let id = Id::new("test");
+        let context = Context::new(&id, prices, now, is_on, timezone);
 
         self.rules
             .iter()

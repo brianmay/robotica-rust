@@ -120,9 +120,11 @@ pub fn monitor(
 ) -> Outputs {
     let (location_tx, location_rx) = stateful::create_pipe("teslamate_location");
     let (message_tx, message_rx) = stateless::create_pipe("teslamate_location_message");
-    let tesla = car.clone();
+    let car = car.clone();
 
     spawn(async move {
+        let id = &car.id;
+
         let mut inputs = location.subscribe().await;
         let mut locations = state::State::new(LocationList::new(vec![]));
         let mut first_time = true;
@@ -132,7 +134,7 @@ pub fn monitor(
             let inner_locations = match inner_locations {
                 Ok(locations) => locations,
                 Err(err) => {
-                    error!("Failed to search locations: {}", err);
+                    error!(%id, "Failed to search locations: {}", err);
                     continue;
                 }
             };
@@ -141,7 +143,7 @@ pub fn monitor(
             let outer_locations = match outer_locations {
                 Ok(locations) => locations,
                 Err(err) => {
-                    error!("Failed to search locations: {}", err);
+                    error!(%id, "Failed to search locations: {}", err);
                     continue;
                 }
             };
@@ -162,14 +164,14 @@ pub fn monitor(
                 .collect();
 
             if !first_time {
-                let name = &tesla.name;
+                let name = &car.name;
 
                 for location in &arrived {
                     let msg = format!("{name} arrived at {}", location.name);
                     let audience = if location.announce_on_enter {
-                        &tesla.audience.locations
+                        &car.audience.locations
                     } else {
-                        &tesla.audience.private
+                        &car.audience.private
                     };
                     let msg = new_message(msg, MessagePriority::Low, audience);
                     message_tx.try_send(msg);
@@ -178,9 +180,9 @@ pub fn monitor(
                 for location in left {
                     let msg = format!("{name} left {}", location.name);
                     let audience = if location.announce_on_exit {
-                        &tesla.audience.locations
+                        &car.audience.locations
                     } else {
-                        &tesla.audience.private
+                        &car.audience.private
                     };
                     let msg = new_message(msg, MessagePriority::Low, audience);
                     message_tx.try_send(msg);

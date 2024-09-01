@@ -1,11 +1,12 @@
 use robotica_common::robotica::message::Audience;
+use robotica_tokio::entities::Id;
 use serde::Deserialize;
 
 use crate::{open_epaper_link, tesla};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    pub id: String,
+    pub id: Id,
     pub name: String,
     pub amber_display: Option<open_epaper_link::Config>,
     pub audience: AudienceConfig,

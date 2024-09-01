@@ -7,7 +7,14 @@ use tracing::info;
 pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
     let (tx, rx) = stateless::create_pipe::<Message>("messages");
     rx.clone().for_each(|message| {
-        info!(msg=?message, "Sending message");
+        info!(
+            title = message.title,
+            body = message.body,
+            priority = ?message.priority,
+            audience = ?message.audience,
+            flash_lights = message.flash_lights,
+            "Sending message"
+        );
     });
     rx.send_to_mqtt_json(mqtt, "ha/event/message", &SendOptions::default());
     tx

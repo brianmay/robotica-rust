@@ -7,6 +7,7 @@ use robotica_common::{
     },
 };
 use robotica_tokio::{
+    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{persistent_state, tesla::api::ChargingStateEnum},
     spawn,
@@ -25,7 +26,7 @@ use super::{command_processor, ChargingInformation, Receivers};
 struct Meters {
     charging: opentelemetry::metrics::Gauge<u64>,
     battery: opentelemetry::metrics::Gauge<u64>,
-    id: String,
+    id: Id,
 }
 
 impl Meters {
@@ -35,7 +36,7 @@ impl Meters {
         Self {
             charging: meter.u64_gauge("charging").init(),
             battery: meter.u64_gauge("battery").init(),
-            id: config.id.to_string(),
+            id: config.id.clone(),
         }
     }
 
@@ -117,13 +118,13 @@ pub fn monitor_charging(
     car: &car::Config,
     receivers: Inputs,
 ) -> Result<Outputs, Error> {
-    let id = car.id.to_string();
+    let id = car.id.clone();
 
     let (tx_summary, rx_summary) = stateful::create_pipe("tesla_charging_summary");
     let (tx_command, rx_command) = stateless::create_pipe("tesla_charging_command");
     let (tx_auto_charge, rx_auto_charge) = stateful::create_pipe("tesla_auto_charge");
 
-    let psr = persistent_state_database.for_name::<PersistentState>(&format!("tesla_{id}"));
+    let psr = persistent_state_database.for_name::<PersistentState>(&id, "tesla_monitor_charging");
     let ps = psr.load().unwrap_or_default();
 
     // let mqtt = state.mqtt.clone();
@@ -133,7 +134,6 @@ pub fn monitor_charging(
 
     let config = car.clone();
     spawn(async move {
-        let name = &config.name;
         let mut charge_request_s = receivers.charge_request.subscribe().await;
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut is_home_s = receivers.is_home.subscribe().await;
@@ -157,7 +157,7 @@ pub fn monitor_charging(
             is_at_home: is_home_s.recv().await.unwrap_or(false),
         };
 
-        info!("{name}: Initial Tesla state: {:?}", tesla_state);
+        info!(%id, "Initial Tesla state: {:?}", tesla_state);
 
         tx_summary.try_send(ChargingInformation {
             battery_level: tesla_state.battery_level,
@@ -174,7 +174,7 @@ pub fn monitor_charging(
 
             select! {
                 Ok(new_charge_request) = charge_request_s.recv() => {
-                    info!("{name}: New price summary: {:?}", new_charge_request);
+                    info!(%id, "New price summary: {:?}", new_charge_request);
                     amber_charge_request = new_charge_request;
                 }
                 Ok(cmd) = auto_charge_s.recv() => {
@@ -184,30 +184,30 @@ pub fn monitor_charging(
                             DeviceAction::TurnOff => false,
                         };
                         psr.save(&ps).unwrap_or_else(|e| {
-                            error!("{name}: Error saving persistent state: {}", e);
+                            error!(%id, "Error saving persistent state: {}", e);
                         });
-                        info!("{name}: Auto charge: {}", ps.auto_charge);
+                        info!(%id, "Auto charge: {}", ps.auto_charge);
                         update_auto_charge(ps.auto_charge, &tesla_state, &tx_auto_charge);
                     } else {
-                        info!("{name}: Ignoring invalid auto_charge command: {cmd:?}");
+                        info!(%id, "Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
                 Ok(Parsed(new_charge_limit)) = charge_limit_s.recv() => {
-                    info!("{name}: Charge limit: {new_charge_limit}");
+                    info!(%id, "Charge limit: {new_charge_limit}");
                     tesla_state.charge_limit = new_charge_limit;
                 }
                 Ok(Parsed(new_charge_level)) = battery_level_s.recv() => {
-                    info!("{name}: Charge level: {new_charge_level}");
+                    info!(%id, "Charge level: {new_charge_level}");
                     tesla_state.battery_level = new_charge_level;
                     meters.set_battery(tesla_state.battery_level);
                 }
                 Ok(new_is_at_home) = is_home_s.recv() => {
-                    info!("{name}: Location is at home: {new_is_at_home}");
+                    info!(%id, "Location is at home: {new_is_at_home}");
                     tesla_state.is_at_home = new_is_at_home;
                 }
 
                 Ok(charging_state) = charging_state_s.recv() => {
-                    info!("{name}: Charging state: {charging_state:?}");
+                    info!(%id, "Charging state: {charging_state:?}");
                     tesla_state.charging_state = charging_state;
                     meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
                 }
@@ -299,8 +299,9 @@ fn check_charge(
     tesla_state: &TeslaState,
     charge_request: ChargeRequest,
 ) {
+    let id = &car.id;
+
     info!("Checking charge");
-    let name = &car.name;
 
     let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
 
@@ -308,8 +309,8 @@ fn check_charge(
     let charging_state = tesla_state.charging_state;
     let can_start_charge = charging_state != ChargingStateEnum::Complete;
 
-    info!("{name}: Current data: {charge_request:?}, {tesla_state:?}",);
-    info!("{name}: Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
+    info!(%id, "Current data: {charge_request:?}, {tesla_state:?}",);
+    info!(%id, "Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
 
     // Do we need to set the charge limit?
     let set_charge_limit =
@@ -320,7 +321,7 @@ fn check_charge(
 
     // Set the charge limit if required.
     if set_charge_limit {
-        info!("{name}: Setting charge limit to {}", charge_limit);
+        info!(%id, "Setting charge limit to {}", charge_limit);
         sequence = sequence.set_charge_limit(charge_limit);
     }
 
@@ -342,24 +343,24 @@ fn check_charge(
         #[allow(clippy::match_same_arms)]
         match charging_summary {
             ChargingSummary::Charging if should_charge == DoNotCharge => {
-                info!("{name}: Stopping charge");
+                info!(%id, "Stopping charge");
                 sequence = sequence.set_should_charge(false);
             }
             ChargingSummary::Charging => {}
             ChargingSummary::NotCharging if should_charge == DoCharge && can_start_charge => {
-                info!("{name}: Starting charge");
+                info!(%id, "Starting charge");
                 sequence = sequence.set_should_charge(true);
             }
             ChargingSummary::NotCharging => {}
-            ChargingSummary::Disconnected => info!("{name}: is disconnected"),
+            ChargingSummary::Disconnected => info!(%id, "is disconnected"),
         }
     }
 
     // Send the commands.
-    info!("{name}: Sending commands: {sequence:?}");
+    info!(%id, "Sending commands: {sequence:?}");
     tx.try_send(sequence);
 
-    info!("{name}: All done.");
+    info!(%id, "All done.");
 }
 
 #[derive(Debug, Error)]

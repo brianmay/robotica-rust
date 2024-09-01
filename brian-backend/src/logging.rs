@@ -1,8 +1,8 @@
 use data_encoding::BASE64;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::{global, trace::TracerProvider, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::{ExportConfig, WithExportConfig};
-use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace::TracerProvider, Resource};
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace as sdktrace, Resource};
 use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
@@ -12,7 +12,7 @@ use serde::Deserialize;
 use tap::Pipe;
 use thiserror::Error;
 use tonic::metadata::{errors::InvalidMetadataValue, MetadataMap};
-use tracing_opentelemetry::MetricsLayer;
+use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Deserialize)]
@@ -73,10 +73,16 @@ pub enum Error {
 
     #[error("Log error: {0}")]
     Log(#[from] opentelemetry::logs::LogError),
+
+    #[error("TryInitError error: {0}")]
+    TryInit(#[from] tracing_subscriber::util::TryInitError),
 }
 
 // Construct Tracer for OpenTelemetryLayer
-fn init_tracer(resource: &Resource, remote: &RemoteConfig) -> Result<TracerProvider, Error> {
+fn init_tracer_provider(
+    resource: &Resource,
+    remote: &RemoteConfig,
+) -> Result<sdktrace::TracerProvider, Error> {
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
@@ -84,6 +90,10 @@ fn init_tracer(resource: &Resource, remote: &RemoteConfig) -> Result<TracerProvi
                 .tonic()
                 .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
                 .with_endpoint(remote.endpoint.clone())
+                // .with_interceptor(|request| {
+                //     println!("xxxxx {request:?}");
+                //     Ok(request)
+                // })
                 .with_metadata(otlp_metadata(remote)?),
         )
         .with_trace_config(
@@ -97,17 +107,13 @@ fn init_metrics(
     resource: &Resource,
     remote: &RemoteConfig,
 ) -> Result<opentelemetry_sdk::metrics::SdkMeterProvider, Error> {
-    let export_config = ExportConfig {
-        endpoint: remote.endpoint.clone(),
-        ..ExportConfig::default()
-    };
     let provider = opentelemetry_otlp::new_pipeline()
         .metrics(runtime::Tokio)
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
                 .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
-                .with_export_config(export_config)
+                .with_endpoint(remote.endpoint.clone())
                 .with_metadata(otlp_metadata(remote)?),
         )
         .with_resource(resource.clone())
@@ -162,13 +168,18 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         let resource = resource(config);
         let meter_provider = init_metrics(&resource, remote)?;
         let logger_provider = init_logs(&resource, remote)?;
+        let tracer_provider = init_tracer_provider(&resource, remote)?;
 
-        global::set_tracer_provider(init_tracer(&resource, remote)?);
+        global::set_tracer_provider(tracer_provider.clone());
+        global::set_meter_provider(meter_provider.clone());
+
+        let tracer = tracer_provider.tracer_builder("brian-backend").build();
 
         layer
             .with(MetricsLayer::new(meter_provider.clone()))
+            .with(OpenTelemetryLayer::new(tracer))
             .with(OpenTelemetryTracingBridge::new(&logger_provider))
-            .init();
+            .try_init()?;
 
         Ok(OtelGuard {
             meter_provider: Some(meter_provider),
@@ -191,6 +202,8 @@ pub struct OtelGuard {
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
+        global::shutdown_tracer_provider();
+
         if let Some(provider) = self.meter_provider.take() {
             if let Err(err) = provider.shutdown() {
                 eprintln!("{err:?}");

@@ -12,6 +12,7 @@ use robotica_common::{
 };
 use robotica_macro::time_delta_constant;
 use robotica_tokio::{
+    entities::Id,
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
         stateless, Subscriber, Subscription,
@@ -115,7 +116,7 @@ impl DayState {
 
     fn calculate_required_time_left<T: TimeZone>(
         &mut self,
-        id: &str,
+        id: &Id,
         now: DateTime<Utc>,
         cheap_time: TimeDelta,
         timezone: &T,
@@ -134,7 +135,7 @@ impl DayState {
         if self.is_on {
             let duration = now - self.last_cheap_update;
             info!(
-                id,
+                %id,
                 "Adding {duration:?} to cheap power for day {now:?} - {last_cheap_update:?}",
                 last_cheap_update = self.last_cheap_update,
             );
@@ -146,7 +147,7 @@ impl DayState {
             .unwrap_or_else(TimeDelta::zero);
 
         info!(
-            id,
+            %id,
             "Cheap power for day: {}, time left: {}",
             time_delta::to_string(self.cheap_power_for_day),
             time_delta::to_string(duration),
@@ -177,7 +178,7 @@ impl State {
 
 #[allow(clippy::too_many_arguments)]
 fn process<T: TimeZone>(
-    id: &str,
+    id: &Id,
     mut day: DayState,
     prices: &Prices,
     tx_out: &Sender<State>,
@@ -196,7 +197,7 @@ fn process<T: TimeZone>(
 
     let state = State { combined: state };
 
-    info!(id, ?request, "Sending request");
+    info!(%id, ?request, "Sending request");
     tx_out.try_send(state);
     day.plan = plan;
     day.save(psr);
@@ -205,16 +206,25 @@ fn process<T: TimeZone>(
 
 fn get_new_plan(
     day: &mut DayState,
-    id: &str,
+    id: &Id,
     now: DateTime<Utc>,
     timezone: &impl TimeZone,
     prices: &Prices,
 ) -> MaybeUserPlan<Request> {
     let required_time_left = day.calculate_required_time_left(id, now, CHEAP_TIME, timezone);
-    MaybeUserPlan::get_cheapest(3.6, now, day.end, required_time_left, prices, Request::Heat)
+    MaybeUserPlan::get_cheapest(
+        id,
+        3.6,
+        now,
+        day.end,
+        required_time_left,
+        prices,
+        Request::Heat,
+    )
 }
 
 pub fn run(
+    id: &Id,
     persistent_state_database: &persistent_state::PersistentStateDatabase,
     rx: Receiver<Arc<Prices>>,
     is_on: Receiver<bool>,
@@ -222,9 +232,9 @@ pub fn run(
 ) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/hot_water");
     let timezone = &Local;
-    let id = "hot_water";
+    let id = id.clone();
 
-    let psr = persistent_state_database.for_name::<DayState>("hot_water_amber");
+    let psr = persistent_state_database.for_name::<DayState>(&id, "amber_hot_water");
 
     let mut day = DayState::load(&psr, utc_now(), timezone);
 
@@ -234,15 +244,15 @@ pub fn run(
         let mut s_rules = rules.subscribe().await;
 
         let Ok(mut prices) = s.recv().await else {
-            error!(id, "Failed to get initial prices");
+            error!(%id, "Failed to get initial prices");
             return;
         };
 
-        let meters = combined::Meters::new("hot_water");
+        let meters = combined::Meters::new(&id);
 
-        info!(id, "Received initial prices");
+        info!(%id, "Received initial prices");
         day = process(
-            id,
+            &id,
             day,
             &prices,
             &tx_out,
@@ -255,28 +265,28 @@ pub fn run(
         loop {
             select! {
                 Ok(is_on) = s_is_on.recv() => {
-                    let _required_time = day.calculate_required_time_left(id, utc_now(), CHEAP_TIME, timezone);
+                    let _required_time = day.calculate_required_time_left(&id, utc_now(), CHEAP_TIME, timezone);
                     day.is_on = is_on;
                     day.save(&psr);
                 },
                 Ok(new_prices) = s.recv() => {
-                    info!(id, "Received new prices");
+                    info!(%id, "Received new prices");
                     prices = new_prices;
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
+                    day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Ok(Json(new_rules)) = s_rules.recv() => {
-                    info!(id, "Received new rules");
+                    info!(%id, "Received new rules");
                     day.rules = new_rules;
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
+                    day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_start() => {
-                    info!(id, "Plan start time elapsed");
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
+                    info!(%id, "Plan start time elapsed");
+                    day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Some(()) = day.plan.sleep_until_plan_end() => {
-                    info!(id, "Plan end time elapsed");
+                    info!(%id, "Plan end time elapsed");
                     day.plan = HeatPlan::new_none();
-                    day = process(id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
+                    day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 else => break,
             }
@@ -367,7 +377,7 @@ mod tests {
         #[case] expected_time_left: TimeDelta,
     ) {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-        let id = "test";
+        let id = Id::new("test");
 
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
@@ -380,7 +390,7 @@ mod tests {
         };
 
         let cheap_time = TimeDelta::minutes(180);
-        let actual = ds.calculate_required_time_left(id, now, cheap_time, &timezone);
+        let actual = ds.calculate_required_time_left(&id, now, cheap_time, &timezone);
         assert_eq!(ds.last_cheap_update, now);
         assert_eq!(ds.cheap_power_for_day, expected_time_used);
         assert_eq!(actual, expected_time_left);
@@ -404,6 +414,7 @@ mod tests {
         #[case] expected_cost: f32,
     ) {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+        let id = Id::new("test");
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&timezone).date_naive();
@@ -493,6 +504,7 @@ mod tests {
         };
 
         let maybe_new_plan = MaybeUserPlan::get_cheapest(
+            &id,
             3.6,
             start_time,
             end_time,
@@ -501,10 +513,10 @@ mod tests {
             Request::Heat,
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);
+        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan);
 
         let plan = user_plan.get_plan().unwrap();
-        let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
+        let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
         assert_eq!(plan.get_start_time(), expected_start_time);
@@ -594,6 +606,7 @@ mod tests {
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+        let id = Id::new("test");
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,
@@ -657,7 +670,7 @@ mod tests {
 
         // Act
         let request =
-            combined::get_request("test", &plan, &rules, &prices, is_on, None, now, &timezone)
+            combined::get_request(&id, &plan, &rules, &prices, is_on, None, now, &timezone)
                 .get_result();
 
         // Assert

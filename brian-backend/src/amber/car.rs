@@ -9,6 +9,7 @@ use robotica_common::{
 };
 use robotica_macro::naive_time_constant;
 use robotica_tokio::{
+    entities::Id,
     pipes::{
         stateful::{self, create_pipe, Receiver},
         stateless, Subscriber, Subscription,
@@ -111,9 +112,9 @@ pub fn run(
     rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 ) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/car");
-    let id = car.id.to_string();
+    let id = car.id.clone();
 
-    let psr = persistent_state_database.for_name::<PersistentState>(&format!("tesla_amber_{id}"));
+    let psr = persistent_state_database.for_name::<PersistentState>(&id, "amber_car");
     let mut ps = psr.load().unwrap_or_default();
 
     let meters: combined::Meters<ChargeRequest> = combined::Meters::new(&id);
@@ -126,20 +127,20 @@ pub fn run(
         let mut s_rules = rules.subscribe().await;
 
         let Ok(mut v_prices) = s.recv().await else {
-            error!(id, "Failed to get initial prices");
+            error!(%id, "Failed to get initial prices");
             return;
         };
         let Ok(mut v_battery_level) = s_battery_level.recv().await.as_deref().copied() else {
-            error!(id, "Failed to get initial battery level");
+            error!(%id, "Failed to get initial battery level");
             return;
         };
         let Ok(mut v_is_charging) = s_is_charging.recv().await else {
-            error!(id, "Failed to get initial charging state");
+            error!(%id, "Failed to get initial charging state");
             return;
         };
 
         loop {
-            info!(id, ?ps, "Persistent State");
+            info!(%id, ?ps, "Persistent State");
             let (request, new_ps) = prices_to_charge_request(
                 &id,
                 &v_prices,
@@ -154,7 +155,7 @@ pub fn run(
 
             save_state(&id, &psr, &ps);
 
-            info!(id, request=?request, "Charging request");
+            info!(%id, request=?request, "Charging request");
             tx_out.try_send(request);
 
             select! {
@@ -168,22 +169,22 @@ pub fn run(
                     v_is_charging = is_charging;
                 },
                 Ok(min_charge_tomorrow) = s_min_charge_tomorrow.recv() => {
-                    debug!(id, min_charge_tomorrow = *min_charge_tomorrow, "Setting min charge tomorrow");
+                    debug!(%id, min_charge_tomorrow = *min_charge_tomorrow, "Setting min charge tomorrow");
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
                     save_state(&id, &psr, &ps);
                 },
                 Ok(rules) = s_rules.recv() => {
-                    debug!(id, ?rules, "Setting rules");
+                    debug!(%id, ?rules, "Setting rules");
                     ps.rules = rules.into_inner();
                     save_state(&id, &psr, &ps);
                 },
                 Some(()) = ps.charge_plan.sleep_until_plan_start() => {
-                    info!(id, "Plan start time elapsed");
+                    info!(%id, "Plan start time elapsed");
                 },
                 Some(()) = ps.charge_plan.sleep_until_plan_end() => {
-                    info!(id, "Plan end time elapsed");
+                    info!(%id, "Plan end time elapsed");
                     if v_is_charging {
-                        info!(id, "Plan ended, but was still charging, estimated time was too short");
+                        info!(%id, "Plan ended, but was still charging, estimated time was too short");
                     }
                     ps.charge_plan = MaybeUserPlan::none();
                 },
@@ -196,12 +197,12 @@ pub fn run(
 }
 
 fn save_state(
-    id: &str,
+    id: &Id,
     psr: &robotica_tokio::services::persistent_state::PersistentStateRow<PersistentState>,
     ps: &PersistentState,
 ) {
     psr.save(ps).unwrap_or_else(|e| {
-        error!("{id}: Failed to save persistent state: {:?}", e);
+        error!(%id, "Failed to save persistent state: {:?}", e);
     });
 }
 
@@ -209,7 +210,7 @@ const END_TIME: NaiveTime = naive_time_constant!(06:30:0);
 
 #[allow(clippy::too_many_arguments)]
 fn prices_to_charge_request<T: TimeZone>(
-    id: &str,
+    id: &Id,
     prices: &Prices,
     battery_level: u8,
     is_charging: bool,
@@ -242,7 +243,7 @@ fn prices_to_charge_request<T: TimeZone>(
 }
 
 fn get_new_plan_to_min_charge(
-    id: &str,
+    id: &Id,
     battery_level: u8,
     now: DateTime<Utc>,
     timezone: &impl TimeZone,
@@ -255,6 +256,7 @@ fn get_new_plan_to_min_charge(
         let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
         let request = ChargeRequest::ChargeTo(limit);
         MaybeUserPlan::get_cheapest(
+            id,
             7.68,
             now,
             end_time,
@@ -267,7 +269,7 @@ fn get_new_plan_to_min_charge(
 
 #[allow(clippy::cognitive_complexity)]
 fn get_new_plan(
-    id: &str,
+    id: &Id,
     battery_level: u8,
     now: DateTime<Utc>,
     ps: &PersistentState,
@@ -293,7 +295,7 @@ fn get_new_plan(
 
             if propose_plan {
                 info!(
-                    id,
+                    %id,
                     ?new_plan,
                     total_cost = new_plan.get_total_cost(),
                     average_cost_per_hour = new_plan.get_average_cost_per_hour(),
@@ -305,7 +307,7 @@ fn get_new_plan(
             }
 
             info!(
-                id,
+                %id,
                 ?new_plan,
                 total_cost = new_plan.get_total_cost(),
                 average_cost_per_hour = new_plan.get_average_cost_per_hour(),
@@ -314,16 +316,16 @@ fn get_new_plan(
                 "Skipping plan as too expensive"
             );
         } else {
-            info!(id, limit, "No plan to charge to specified limit");
+            info!(%id, limit, "No plan to charge to specified limit");
         }
     }
 
-    info!(id, "No plan found");
+    info!(%id, "No plan found");
     MaybeUserPlan::none()
 }
 
 fn estimate_to_limit<T: TimeZone>(
-    id: &str,
+    id: &Id,
     battery_level: u8,
     dt: DateTime<Utc>,
     limit: u8,
@@ -333,8 +335,8 @@ fn estimate_to_limit<T: TimeZone>(
     if let Some(estimated_charge_time) = estimated_charge_time {
         let estimated_finish = dt + estimated_charge_time;
         debug!(
-            "{id}: Estimated charge time to {limit} is {time}, should finish at {finish:?}",
-            id = id,
+            %id,
+            "Estimated charge time to {limit} is {time}, should finish at {finish:?}",
             time = time_delta::to_string(estimated_charge_time),
             finish = estimated_finish.with_timezone(tz).to_rfc3339()
         );

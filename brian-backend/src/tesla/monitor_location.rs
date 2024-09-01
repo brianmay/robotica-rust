@@ -104,26 +104,29 @@ pub fn monitor(
 ) -> stateful::Receiver<ShouldPlugin> {
     let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
 
-    let tesla = car.clone();
+    let car = car.clone();
 
     spawn(async move {
+        let id = &car.id;
+        let name = &car.name;
+
         let mut location_s = location_stream.subscribe().await;
         let mut charging_info_s = charging_info.subscribe().await;
-        let name = &tesla.name;
 
         let Ok(mut old_location) = location_s.recv().await else {
-            error!("{name}: Failed to get initial Tesla location");
+            error!(%id, "Failed to get initial Tesla location");
             return;
         };
 
         let Ok(mut old_charging_info) = charging_info_s.recv().await else {
-            error!("{name}: Failed to get initial Tesla charging information");
+            error!(%id, "Failed to get initial Tesla charging information");
             return;
         };
 
-        debug!("{name}: Initial Tesla location: {:?}", old_location);
+        debug!(%id, "Initial Tesla location: {:?}", old_location);
         debug!(
-            "{name}: Initial Tesla charging information: {:?}",
+            %id,
+            "Initial Tesla charging information: {:?}",
             old_charging_info
         );
 
@@ -141,7 +144,7 @@ pub fn monitor(
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
                     if old_location.is_at_home()  {
-                        announce_charging_state(&tesla, &old_charging_info, &new_charging_info, &message_sink);
+                        announce_charging_state(&car, &old_charging_info, &new_charging_info, &message_sink);
                     }
                     old_charging_info = new_charging_info;
                 },
@@ -158,7 +161,7 @@ pub fn monitor(
                         } else {
                             format!("{name} is at {level}% and the {limit_type} limit is {limit}%")
                         };
-                        let msg = new_message(msg, MessagePriority::DaytimeOnly, &tesla.audience.locations);
+                        let msg = new_message(msg, MessagePriority::DaytimeOnly, &car.audience.locations);
                         message_sink.try_send(msg);
                     }
 

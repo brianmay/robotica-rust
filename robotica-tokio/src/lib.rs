@@ -11,11 +11,10 @@
 #[macro_use]
 extern crate lalrpop_util;
 
-// extern crate robotica_tokioacros;
-
 pub mod conditions;
 pub mod database;
 pub mod devices;
+pub mod entities;
 pub mod pipes;
 pub mod serde;
 pub mod services;

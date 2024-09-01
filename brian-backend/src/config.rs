@@ -10,6 +10,7 @@ use robotica_common::{
 };
 use robotica_tokio::{
     devices::lifx::LifxId,
+    entities::Id,
     pipes::stateful,
     scheduling::executor,
     services::{http, mqtt, persistent_state},
@@ -136,6 +137,7 @@ impl LightSceneConfig {
 #[derive(Debug, Deserialize)]
 pub struct LightConfig {
     pub device: LightDeviceConfig,
+    pub id: Id,
     pub topic_substr: String,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
@@ -146,6 +148,7 @@ pub struct LightConfig {
 #[derive(Debug, Deserialize)]
 pub struct StripConfig {
     pub device: LightDeviceConfig,
+    pub id: Id,
     pub topic_substr: String,
     pub number_of_lights: usize,
     pub splits: Vec<SplitLightConfig>,
@@ -164,6 +167,7 @@ pub enum LightDeviceConfig {
 #[derive(Debug, Deserialize)]
 pub struct SplitLightConfig {
     pub name: String,
+    pub id: Id,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,

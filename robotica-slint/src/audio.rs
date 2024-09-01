@@ -17,6 +17,7 @@ use robotica_common::{
     },
 };
 use robotica_tokio::{
+    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{
         mqtt::{self, MqttTx, Subscriptions},
@@ -26,7 +27,7 @@ use robotica_tokio::{
 };
 use serde::Deserialize;
 use tokio::{select, sync::mpsc};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     command::{self, ErrorKind},
@@ -95,6 +96,7 @@ impl TryFrom<Config> for LoadedConfig {
 }
 
 pub fn run(
+    id: Id,
     tx_screen_command: mpsc::Sender<ScreenCommand>,
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
@@ -107,8 +109,8 @@ pub fn run(
         subscriptions.subscribe_into_stateless(topic);
     let messages_enabled_rx: stateful::Receiver<Json<Command>> = subscriptions
         .subscribe_into_stateful(format!("command/{}", config.messages_enabled_subtopic));
-    let psr = database.for_name::<State>(topic_substr);
-    let mut state = psr.load().unwrap_or_default();
+    let psr = database.for_name::<State>(&id, topic_substr);
+    let state = psr.load().unwrap_or_default();
 
     let (state_tx, state_rx) = stateful::create_pipe("audio_state");
     state_rx.send_to_mqtt_json(
@@ -125,83 +127,112 @@ pub fn run(
     );
 
     spawn(async move {
-        let mut command_s = command_rx.subscribe().await;
-        let mut messages_enabled_s = messages_enabled_rx.subscribe().await;
-
-        init_all(&state, &config).await.unwrap_or_else(|err| {
-            state.error = Some(err);
-            state.play_list = None;
-        });
-        send_state(&state, &state_tx, &power_tx);
-
-        #[allow(clippy::match_same_arms)]
-        loop {
-            select! {
-                Ok(Json(command)) = command_s.recv() => {
-                    if let Command::Audio(command) = command {
-                        state.error = None;
-                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
-                        send_state(&state, &state_tx, &power_tx);
-                        psr.save(&state).unwrap_or_else(|e| {
-                            error!("Failed to save state: {}", e);
-                        });
-                    } else if let Command::Message(command) = command {
-                        let pre_tasks = if command.flash_lights {
-                            vec![SubTask{
-                                title: "Flash lights".to_string(),
-                                target: "light".to_string(),
-                                payload: Payload::Command(Command::Light(LightCommand::Flash)),
-                                qos: QoS::ExactlyOnce,
-                                retain: Retain::NoRetain,
-                            }]
-                        } else {
-                            vec![]
-                        };
-                        let command = AudioCommand {
-                            priority: command.priority,
-                            sound: None,
-                            pre_tasks: Some(pre_tasks),
-                            post_tasks: None,
-                            message: Some(Message {
-                                title: command.title,
-                                body: command.body,
-                            }),
-                            music: None,
-                            volume: None,
-                        };
-                        state.error = None;
-                        handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
-                        send_state(&state, &state_tx, &power_tx);
-                        psr.save(&state).unwrap_or_else(|e| {
-                            error!("Failed to save state: {}", e);
-                        });
-                    } else {
-                        error!("Got unexpected audio command: {command:?}");
-                        state.error = Some(format!("Unexpected command: {command:?}"));
-                        state.play_list = None;
-                    }
-                }
-                Ok(me) = messages_enabled_s.recv() => {
-                    match me {
-                        Json(Command::Device(command)) => {
-                            state.messages_enabled = match command.action {
-                                DeviceAction::TurnOn => true,
-                                DeviceAction::TurnOff => false,
-                            };
-                            send_state(&state, &state_tx, &power_tx);
-                            psr.save(&state).unwrap_or_else(|e| {
-                                error!("Failed to save state: {}", e);
-                            });
-                        },
-                        _ => {
-                            error!("Invalid messages_enabled command, expected switch, got {:?}", me);
-                        }
-                    };
-                }
-                else => break,
-            }
-        }
+        watch_audio(
+            id,
+            command_rx,
+            messages_enabled_rx,
+            state,
+            config,
+            state_tx,
+            power_tx,
+            tx_screen_command,
+            mqtt,
+            psr,
+        )
+        .await;
     });
+}
+
+#[allow(clippy::too_many_arguments)]
+#[instrument(fields(id=%id), skip_all)]
+async fn watch_audio(
+    id: Id,
+    command_rx: stateless::Receiver<Json<Command>>,
+    messages_enabled_rx: stateful::Receiver<Json<Command>>,
+    mut state: State,
+    config: Arc<LoadedConfig>,
+    state_tx: stateful::Sender<State>,
+    power_tx: stateful::Sender<DevicePower>,
+    tx_screen_command: mpsc::Sender<ScreenCommand>,
+    mqtt: MqttTx,
+    psr: robotica_tokio::services::persistent_state::PersistentStateRow<State>,
+) {
+    let mut command_s = command_rx.subscribe().await;
+    let mut messages_enabled_s = messages_enabled_rx.subscribe().await;
+
+    init_all(&state, &config).await.unwrap_or_else(|err| {
+        state.error = Some(err);
+        state.play_list = None;
+    });
+    send_state(&state, &state_tx, &power_tx);
+
+    #[allow(clippy::match_same_arms)]
+    loop {
+        select! {
+            Ok(Json(command)) = command_s.recv() => {
+                if let Command::Audio(command) = command {
+                    state.error = None;
+                    handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
+                    send_state(&state, &state_tx, &power_tx);
+                    psr.save(&state).unwrap_or_else(|e| {
+                        error!("Failed to save state: {}", e);
+                    });
+                } else if let Command::Message(command) = command {
+                    let pre_tasks = if command.flash_lights {
+                        vec![SubTask{
+                            title: "Flash lights".to_string(),
+                            target: "light".to_string(),
+                            payload: Payload::Command(Command::Light(LightCommand::Flash)),
+                            qos: QoS::ExactlyOnce,
+                            retain: Retain::NoRetain,
+                        }]
+                    } else {
+                        vec![]
+                    };
+                    let command = AudioCommand {
+                        priority: command.priority,
+                        sound: None,
+                        pre_tasks: Some(pre_tasks),
+                        post_tasks: None,
+                        message: Some(Message {
+                            title: command.title,
+                            body: command.body,
+                        }),
+                        music: None,
+                        volume: None,
+                    };
+                    state.error = None;
+                    handle_command(&tx_screen_command, &mut state, &config, &mqtt, command).await;
+                    send_state(&state, &state_tx, &power_tx);
+                    psr.save(&state).unwrap_or_else(|e| {
+                        error!("Failed to save state: {}", e);
+                    });
+                } else {
+                    error!("Got unexpected audio command: {command:?}");
+                    state.error = Some(format!("Unexpected command: {command:?}"));
+                    state.play_list = None;
+                }
+            }
+            Ok(me) = messages_enabled_s.recv() => {
+                match me {
+                    Json(Command::Device(command)) => {
+                        state.messages_enabled = match command.action {
+                            DeviceAction::TurnOn => true,
+                            DeviceAction::TurnOff => false,
+                        };
+                        send_state(&state, &state_tx, &power_tx);
+                        psr.save(&state).unwrap_or_else(|e| {
+                            error!("Failed to save state: {}", e);
+                        });
+                    },
+                    _ => {
+                        error!("Invalid messages_enabled command, expected switch, got {:?}", me);
+                    }
+                };
+            }
+            else => break,
+        }
+    }
 }
 
 async fn init_all(state: &State, config: &LoadedConfig) -> Result<(), String> {

@@ -5,6 +5,7 @@ use std::{
 
 use chrono::{TimeDelta, Utc};
 use robotica_common::datetime::{datetime_to_string, time_delta};
+use robotica_tokio::entities::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
@@ -89,7 +90,12 @@ impl Plan {
         self.start_time <= dt && self.end_time > dt
     }
 
-    pub fn get_forecast_cost(&self, now: chrono::DateTime<Utc>, prices: &Prices) -> Option<f32> {
+    pub fn get_forecast_cost(
+        &self,
+        id: &Id,
+        now: chrono::DateTime<Utc>,
+        prices: &Prices,
+    ) -> Option<f32> {
         // We can't go back in time unfortunately.
         if self.end_time <= self.start_time {
             return None;
@@ -103,7 +109,7 @@ impl Plan {
         let mut now = now;
         while now < self.end_time {
             let Some(p) = prices.find(now) else {
-                debug!("Cannot find price for {now}");
+                debug!(%id, "Cannot find price for {now}");
                 return None;
             };
 
@@ -117,10 +123,10 @@ impl Plan {
             };
 
             total += new_cost;
-            now = if let Some(next) = prices.get_next_period(now) {
+            now = if let Some(next) = prices.get_next_period(id, now) {
                 next
             } else {
-                debug!("Cannot find next period for {now}");
+                debug!(%id, "Cannot find next period for {now}");
                 return None;
             }
         }
@@ -141,6 +147,7 @@ impl std::fmt::Debug for Plan {
 }
 
 pub fn get_cheapest(
+    id: &Id,
     kw: f32,
     start_search: chrono::DateTime<Utc>,
     end_search: chrono::DateTime<Utc>,
@@ -159,7 +166,7 @@ pub fn get_cheapest(
 
     // Get the time of the next 30 minute interval from now
     #[allow(clippy::cast_possible_wrap)]
-    let Some(next_interval) = prices.get_next_period(start_search) else {
+    let Some(next_interval) = prices.get_next_period(id, start_search) else {
         error!("Cannot find next interval for {start_search}");
         return None;
     };
@@ -180,7 +187,7 @@ pub fn get_cheapest(
     now_time
         .chain(rest_times)
         .filter_map(|plan| {
-            let price = plan.get_forecast_cost(start_search, prices);
+            let price = plan.get_forecast_cost(id, start_search, prices);
             // error!("Plan: {:?} Price: {:?}", plan, price);
             price.map(|price| {
                 // We need the largest value, hence we get the negative duration.
@@ -429,10 +436,11 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
         debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
         let plan = Plan::new(20.0, start_time, start_time + duration);
-        let price = plan.get_forecast_cost(now, &prices).unwrap();
+        let price = plan.get_forecast_cost(&id, now, &prices).unwrap();
         assert_approx_eq!(f32, price, expected);
     }
 
@@ -462,10 +470,11 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
         debug!("{start_time:?} {end_time:?} {now:?} {expected:?}");
         let plan = Plan::new(20.0, start_time, end_time);
-        let result = plan.get_forecast_cost(now, &prices);
+        let result = plan.get_forecast_cost(&id, now, &prices);
         assert!(result.is_none());
     }
 
@@ -534,13 +543,22 @@ mod tests {
         #[case] expected_end_time: chrono::DateTime<Utc>,
         #[case] expected_price: f32,
     ) {
+        let id = Id::new("test");
+
         let prices = Prices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
 
-        let (plan, cost) =
-            get_cheapest(kw, start_search, end_search, required_duration, &prices).unwrap();
+        let (plan, cost) = get_cheapest(
+            &id,
+            kw,
+            start_search,
+            end_search,
+            required_duration,
+            &prices,
+        )
+        .unwrap();
         assert_approx_eq!(f32, plan.kw, kw);
         assert_eq!(plan.start_time, expected_start_time);
         assert_eq!(plan.end_time, expected_end_time);
@@ -619,9 +637,17 @@ mod tests {
             list: pr_list_constant(50.0),
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
-        let (plan, cost) =
-            get_cheapest(kw, start_search, end_search, required_duration, &prices).unwrap();
+        let (plan, cost) = get_cheapest(
+            &id,
+            kw,
+            start_search,
+            end_search,
+            required_duration,
+            &prices,
+        )
+        .unwrap();
         assert_approx_eq!(f32, plan.kw, kw);
         assert_eq!(plan.start_time, expected_start_time);
         assert_eq!(plan.end_time, expected_end_time);
@@ -647,8 +673,16 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
-        let result = get_cheapest(kw, start_search, end_search, required_duration, &prices);
+        let result = get_cheapest(
+            &id,
+            kw,
+            start_search,
+            end_search,
+            required_duration,
+            &prices,
+        );
         assert!(result.is_none());
     }
 
@@ -675,9 +709,17 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
+        let id = Id::new("test");
 
-        let (plan, cost) =
-            get_cheapest(kw, start_search, end_search, required_duration, &prices).unwrap();
+        let (plan, cost) = get_cheapest(
+            &id,
+            kw,
+            start_search,
+            end_search,
+            required_duration,
+            &prices,
+        )
+        .unwrap();
 
         assert_approx_eq!(f32, plan.kw, kw);
         assert_eq!(plan.start_time, start_search);

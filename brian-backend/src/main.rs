@@ -38,13 +38,14 @@ use robotica_common::shelly;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
 use robotica_tokio::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_tokio::devices::{fake_switch, lifx};
+use robotica_tokio::entities::Id;
 use robotica_tokio::pipes::{stateful, stateless, Subscriber};
 use robotica_tokio::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_tokio::scheduling::executor::executor;
 use robotica_tokio::scheduling::sequencer::Sequence;
 use robotica_tokio::services::persistent_state::PersistentStateDatabase;
 use robotica_tokio::spawn;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument, span};
 
 use crate::amber::hot_water;
 
@@ -205,7 +206,7 @@ async fn setup_pipes(
     config: config::Config,
     postgres: sqlx::PgPool,
 ) {
-    let (prices, usage) = amber::run(config.amber).unwrap_or_else(|e| {
+    let (prices, usage) = amber::run(&Id::new("amber_account"), config.amber).unwrap_or_else(|e| {
         panic!("Error running amber: {e}");
     });
     amber::logging::log_prices(prices.clone(), &config.influxdb);
@@ -305,6 +306,9 @@ fn monitor_hot_water(
     hot_water: config::HotWaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
+    let span = tracing::info_span!("Hot Water");
+    let _guard = span.enter();
+
     let is_on = state
         .subscriptions
         .subscribe_into_stateful::<Json<shelly::SwitchStatus>>("hotwater/status/switch:0")
@@ -318,6 +322,7 @@ fn monitor_hot_water(
 
     let mqtt_clone = state.mqtt.clone();
     let hot_water_state = amber::hot_water::run(
+        &Id::new("hot_water"),
         &state.persistent_state_database,
         prices.clone(),
         is_on,
@@ -372,7 +377,8 @@ fn monitor_cars(
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
-    let token = tesla::token::run(state).unwrap_or_else(|e| {
+    let id = Id::new("tesla_account");
+    let token = tesla::token::run(&id, state).unwrap_or_else(|e| {
         panic!("Error running tesla token generator: {e}");
     });
 
@@ -382,87 +388,98 @@ fn monitor_cars(
     });
 
     for (car, tesla) in teslas {
-        let teslamate_id = tesla.teslamate_id;
-
-        let receivers = tesla::Receivers::new(tesla, state);
-
-        let locations = tesla::monitor_teslamate_location::monitor(
-            car,
-            receivers.location.clone(),
-            postgres.clone(),
-        );
-
-        locations.messages.send_to(&state.message_sink);
-        locations.location_message.send_to_mqtt_json(
-            &state.mqtt,
-            format!("state/Tesla/{id}/Locations", id = teslamate_id.to_string()),
-            &SendOptions::new(),
-        );
-
-        let charge_state = amber::car::run(
-            car,
-            &state.persistent_state_database,
-            prices.clone(),
-            receivers.battery_level.clone(),
-            receivers.min_charge_tomorrow.clone(),
-            receivers.is_charging.clone(),
-            receivers.rules.clone(),
-        );
-        charge_state.clone().send_to_mqtt_json(
-            &state.mqtt,
-            format!(
-                "robotica/state/tesla/{id}/amber",
-                id = teslamate_id.to_string()
-            ),
-            &SendOptions::new(),
-        );
-
-        if let Some(display) = &car.amber_display {
-            open_epaper_link::output_amber_car(car, display.clone(), charge_state.clone());
-        }
-
-        let charge_request = charge_state.map(|(_, state)| state.get_result());
-
-        let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
-            &receivers,
-            charge_request,
-            locations.is_home,
-        );
-        let outputs = tesla::monitor_charging::monitor_charging(
-            &state.persistent_state_database,
-            car,
-            monitor_charging_receivers,
-        )
-        .unwrap_or_else(|e| {
-            panic!("Error running tesla charging monitor: {e}");
-        });
-
-        outputs.auto_charge.send_to_mqtt_string(
-            &state.mqtt,
-            format!(
-                "state/Tesla/{id}/AutoCharge/power",
-                id = teslamate_id.to_string()
-            ),
-            &SendOptions::new(),
-        );
-
-        let should_plugin_stream = tesla::monitor_location::monitor(
-            car,
-            state.message_sink.clone(),
-            locations.location,
-            outputs.charging_information,
-        );
-
-        tesla::command_processor::run(car, tesla, outputs.commands, token.clone())
-            .send_to(&state.message_sink);
-
-        let monitor_doors_receivers =
-            tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
-
-        tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(&state.message_sink);
-        tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream)
-            .send_to(&state.message_sink);
+        monitor_tesla(car, tesla, state, postgres, prices, &token);
     }
+}
+
+#[instrument(fields(id=%car.id), skip_all)]
+fn monitor_tesla(
+    car: &car::Config,
+    tesla: &tesla::Config,
+    state: &mut InitState,
+    postgres: &sqlx::Pool<sqlx::Postgres>,
+    prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    token: &stateless::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
+) {
+    let teslamate_id = tesla.teslamate_id;
+
+    let receivers = tesla::Receivers::new(tesla, state);
+
+    let locations = tesla::monitor_teslamate_location::monitor(
+        car,
+        receivers.location.clone(),
+        postgres.clone(),
+    );
+
+    locations.messages.send_to(&state.message_sink);
+    locations.location_message.send_to_mqtt_json(
+        &state.mqtt,
+        format!("state/Tesla/{id}/Locations", id = teslamate_id.to_string()),
+        &SendOptions::new(),
+    );
+
+    let charge_state = amber::car::run(
+        car,
+        &state.persistent_state_database,
+        prices.clone(),
+        receivers.battery_level.clone(),
+        receivers.min_charge_tomorrow.clone(),
+        receivers.is_charging.clone(),
+        receivers.rules.clone(),
+    );
+    charge_state.clone().send_to_mqtt_json(
+        &state.mqtt,
+        format!(
+            "robotica/state/tesla/{id}/amber",
+            id = teslamate_id.to_string()
+        ),
+        &SendOptions::new(),
+    );
+
+    if let Some(display) = &car.amber_display {
+        open_epaper_link::output_amber_car(car, display.clone(), charge_state.clone());
+    }
+
+    let charge_request = charge_state.map(|(_, state)| state.get_result());
+
+    let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
+        &receivers,
+        charge_request,
+        locations.is_home,
+    );
+    let outputs = tesla::monitor_charging::monitor_charging(
+        &state.persistent_state_database,
+        car,
+        monitor_charging_receivers,
+    )
+    .unwrap_or_else(|e| {
+        panic!("Error running tesla charging monitor: {e}");
+    });
+
+    outputs.auto_charge.send_to_mqtt_string(
+        &state.mqtt,
+        format!(
+            "state/Tesla/{id}/AutoCharge/power",
+            id = teslamate_id.to_string()
+        ),
+        &SendOptions::new(),
+    );
+
+    let should_plugin_stream = tesla::monitor_location::monitor(
+        car,
+        state.message_sink.clone(),
+        locations.location,
+        outputs.charging_information,
+    );
+
+    tesla::command_processor::run(car, tesla, outputs.commands, token.clone())
+        .send_to(&state.message_sink);
+
+    let monitor_doors_receivers = tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
+
+    tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(&state.message_sink);
+    tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream)
+        .send_to(&state.message_sink);
 }
 
 fn fake_switch(state: &mut InitState, topic_substr: &str) {
@@ -548,7 +565,7 @@ fn auto_light(
         &init_state.persistent_state_database,
         scene_map,
         config.flash_color.clone(),
-        topic_substr,
+        &config.id,
     );
 
     scene.send_to_mqtt_string(
@@ -557,10 +574,18 @@ fn auto_light(
         &SendOptions::new(),
     );
 
-    send_to_device(&config.device, topic_substr, pc, discover, init_state);
+    send_to_device(
+        &config.id,
+        &config.device,
+        topic_substr,
+        pc,
+        discover,
+        init_state,
+    );
 }
 
 fn split_light(
+    id: &Id,
     init_state: &mut InitState,
     shared: &SceneMap,
     topic_substr: &str,
@@ -603,7 +628,7 @@ fn split_light(
         &init_state.persistent_state_database,
         scene_map,
         flash_color.clone(),
-        topic_substr,
+        id,
         priority,
     );
 
@@ -620,9 +645,11 @@ fn strip_light(
     init_state: &mut InitState,
     discover: &stateless::Receiver<lifx::Device>,
     shared: &SceneMap,
-    // topic_substr: &str,
     config: &config::StripConfig,
 ) {
+    let span = span!(tracing::Level::INFO, "strip_light", id = %config.id);
+    let _guard = span.enter();
+
     let (combined_tx, combined_rx) = stateful::create_pipe(&config.topic_substr);
     let topic_substr = &config.topic_substr;
 
@@ -634,6 +661,7 @@ fn strip_light(
             format!("{topic_substr}/split/{name}")
         };
         split_light(
+            &split.id,
             init_state,
             shared,
             &topic_substr,
@@ -658,18 +686,28 @@ fn strip_light(
         number_of_lights: config.number_of_lights,
     };
 
-    let pc = lights::run_merge_light(combined_rx, topic_substr, merge_config);
+    let pc = lights::run_merge_light(combined_rx, &config.id, merge_config);
 
-    send_to_device(&config.device, topic_substr, pc, discover, init_state);
+    send_to_device(
+        &config.id,
+        &config.device,
+        topic_substr,
+        pc,
+        discover,
+        init_state,
+    );
 }
 
+#[instrument(skip_all)]
 fn send_to_device(
+    id: &Id,
     device: &config::LightDeviceConfig,
     topic_substr: &str,
     pc: stateful::Receiver<PowerColor>,
     discover: &stateless::Receiver<lifx::Device>,
     init_state: &InitState,
 ) {
+    let id = id.clone();
     let output = match device {
         config::LightDeviceConfig::Lifx { lifx_id } => lifx::device_entity(
             pc,
@@ -680,7 +718,7 @@ fn send_to_device(
         config::LightDeviceConfig::Debug { lifx_id } => {
             let lifx_id = *lifx_id;
             pc.map(move |(_, pc)| {
-                info!("Debug {lifx_id}: {pc:?}");
+                info!(%id, "Debug {lifx_id}: {pc:?}");
                 State::Online(pc)
             })
         }

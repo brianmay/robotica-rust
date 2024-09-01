@@ -32,7 +32,7 @@ pub fn plug_in_reminder(
             {
                 let name = &car.name;
                 let msg = new_message(
-                    format!("{name} might run away and should be leashed"),
+                    format!("{name} might fly away and should be leashed"),
                     MessagePriority::Low,
                     &car.audience.charging,
                 );

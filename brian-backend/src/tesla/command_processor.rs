@@ -251,7 +251,7 @@ pub fn run(
     let (message_tx, message_rx) = stateless::create_pipe("tesla_command_processor");
 
     spawn(async move {
-        let name = &car.name;
+        let id = &car.id;
 
         let mut s = rx.subscribe().await;
         let mut s_token = rx_token.subscribe().await;
@@ -268,18 +268,18 @@ pub fn run(
         loop {
             select! {
                 Some(try_command) = sleep_until(&mut maybe_try_command) => {
-                    info!("{name}: Trying command: {:?}", try_command.command);
+                    info!(%id, "Trying command: {:?}", try_command.command);
                     meters.increment_outgoing_started(&try_command.command);
 
                     match try_send(&try_command, &car, &tesla, &token, &meters).await {
                         Ok(()) => {
                             meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Success);
                             maybe_try_command = if try_command.command.is_nil() {
-                                info!("{name}: Nil command succeeded.");
+                                info!(%id, "Nil command succeeded.");
                                 // If we didn't actually have a command, don't rate limit.
                                 None
                                 } else {
-                                    info!("{name}: Command succeeded.");
+                                    info!(%id, "Command succeeded.");
                                     // If we did have a command, rate limit next command to 5 minutes.
                                     Some(TryCommand {
                                     command: Command::new(),
@@ -289,7 +289,7 @@ pub fn run(
                             errors.notify_success(&message_tx, &meters);
                         }
                         Err(SequenceError::WaitRetry(duration)) => {
-                            info!("{name}: WaitRetry, retrying in {duration:?}.", );
+                            info!(%id, "WaitRetry, retrying in {duration:?}.", );
                             meters.increment_outgoing_done(&try_command.command, OutgoingStatus::RateLimited);
                             maybe_try_command = Some(TryCommand {
                                 command: try_command.command,
@@ -300,7 +300,7 @@ pub fn run(
                         }
                         Err(err) => {
                             let duration = Duration::from_secs(60);
-                            error!("{name}: Command failed: {err}, retrying in {duration:?}.");
+                            error!(%id, "Command failed: {err}, retrying in {duration:?}.");
                             meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Error);
                             maybe_try_command = Some(TryCommand {
                                 command: try_command.command,
@@ -318,12 +318,12 @@ pub fn run(
                     }
 
                     if command.is_nil() {
-                        info!("{name}: Received empty command: {:?}, forgetting errors.", command);
+                        info!(%id, "Received empty command: {:?}, forgetting errors.", command);
                         errors.forget_errors(&meters);
                     } else if maybe_try_command.is_none() {
                         // There may have been a large gap since we tried talking to the car
                         // last, hence we cannot rely on the last success time.
-                        info!("{name}: Received command: {:?}, forgetting errors.", command);
+                        info!(%id, "Received command: {:?}, forgetting errors.", command);
                         errors.forget_errors(&meters);
                     }
 
@@ -350,19 +350,19 @@ pub fn run(
 
 
                     if let Some(retry_time) = retry_time {
-                        info!("{name}: Received command: {:?}, trying at {:?}.", command, retry_time - Instant::now());
+                        info!(%id, "Received command: {:?}, trying at {:?}.", command, retry_time - Instant::now());
 
                         maybe_try_command = Some(TryCommand {
                             command,
                             next_try_instant: retry_time,
                         });
                     } else {
-                        info!("{name}: Received empty command: {:?}, ignoring.", command);
+                        info!(%id, "Received empty command: {:?}, ignoring.", command);
                     }
                 }
 
                 Ok(new_token) = s_token.recv() => {
-                    info!("{name}: Received new token.");
+                    info!(%id, "Received new token.");
                     token = new_token;
                 }
             }
@@ -401,7 +401,7 @@ async fn try_send(
     meters: &Meters,
 ) -> Result<(), SequenceError> {
     {
-        let name = &car.name;
+        let id = &car.id;
 
         // Construct sequence of commands to send to Tesla.
         let mut sequence = CommandSequence::new();
@@ -422,12 +422,12 @@ async fn try_send(
         }
 
         // Send the commands.
-        info!("{name}: Sending commands: {sequence:?}");
+        info!(%id, "Sending commands: {sequence:?}");
         let result = sequence
             .execute(token, tesla.tesla_id, &meters.api)
             .await
             .map_err(|err| {
-                info!("{name}: Error executing command sequence: {}", err);
+                info!(%id, "Error executing command sequence: {}", err);
                 err
             });
 
@@ -435,11 +435,11 @@ async fn try_send(
         if !sequence.is_empty() {
             // Any errors here should be logged and forgotten.
             if let Err(err) = enable_teslamate_logging(tesla).await {
-                error!("{name}: Failed to enable teslamate logging: {}", err);
+                error!(%id, "Failed to enable teslamate logging: {}", err);
             }
         }
 
-        info!("{name}: All done. {result:?}");
+        info!(%id, "All done. {result:?}");
 
         result
     }

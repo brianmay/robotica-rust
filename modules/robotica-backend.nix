@@ -137,6 +137,7 @@ let
 
   light_type = types.submodule {
     options = {
+      id = mkOption { type = types.str; };
       device = mkOption { type = light_device_type; };
       topic_substr = mkOption { type = types.str; };
       scenes = mkOption {
@@ -149,6 +150,7 @@ let
 
   split_type = types.submodule {
     options = {
+      id = mkOption { type = types.str; };
       name = mkOption { type = types.str; };
       scenes = mkOption {
         type = types.attrsOf light_scene_type;
@@ -162,6 +164,7 @@ let
 
   strip_type = types.submodule {
     options = {
+      id = mkOption { type = types.str; };
       device = mkOption { type = light_device_type; };
       topic_substr = mkOption { type = types.str; };
       number_of_lights = mkOption { type = types.number; };

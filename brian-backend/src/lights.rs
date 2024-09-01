@@ -12,6 +12,7 @@ use robotica_common::{
     },
 };
 use robotica_tokio::{
+    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::persistent_state::PersistentStateRow,
     spawn,
@@ -181,7 +182,7 @@ pub fn run_auto_light(
     // discover: stateless::Receiver<Device>,
     scene_map: SceneMap,
     flash_color: PowerColor,
-    id: &str,
+    id: &Id,
 ) -> Outputs {
     // let (state_tx, state_rx) = stateful::create_pipe(format!("{lifx_id}-state"));
     let (pc_rx, scene_rx) = switch_entity(
@@ -220,7 +221,7 @@ pub fn run_split_light(
     scene_map: SceneMap,
     flash_color: PowerColor,
     // id: impl Into<String>,
-    id: &str,
+    id: &Id,
     // lifx_id: LifxId,
     priority: usize,
 ) -> SplitOutputs {
@@ -259,7 +260,7 @@ pub fn run_merge_light(
     split_rx: stateful::Receiver<SplitPowerColor>,
     // discover: stateless::Receiver<Device>,
     // lifx_id: LifxId,
-    id: &str,
+    id: &Id,
     config: MergeLightConfig,
 ) -> stateful::Receiver<PowerColor> {
     let (merged_tx, merged_rx) = stateful::create_pipe(format!("{id}/merged"));
@@ -325,24 +326,18 @@ struct LightState {
 fn switch_entity(
     rx_command: stateless::Receiver<Json<Command>>,
     persistent_state_database: &crate::PersistentStateDatabase,
-    // topic_substr: impl Into<String>,
-    // id: impl Into<String>,
-    id: &str,
+    id: &Id,
     scene_map: SceneMap,
     flash_color: PowerColor,
-    // name: impl Into<String>,
 ) -> (
     stateful::Receiver<PowerColor>,
     stateful::Receiver<SceneName>,
 ) {
-    // let name = name.into();
-    // let id = id.into();
     let (pc_tx, pc_rx) = stateful::create_pipe(format!("{id}/pc"));
     let (scene_tx, scene_rx) = stateful::create_pipe(format!("{id}/scenes"));
 
-    // let id: String = id.into();
     {
-        let psr = persistent_state_database.for_name(id);
+        let psr = persistent_state_database.for_name(id, "scene");
         let scene_name: SceneName = psr.load().unwrap_or_default();
         let scene = scene_map.get(&scene_name).cloned().unwrap_or_default();
 
@@ -352,9 +347,6 @@ fn switch_entity(
                 let entity_s = entity.subscribe().await;
 
                 LightState {
-                    // scene_map,
-                    // scene,
-                    // entity,
                     entity_s,
                     psr,
                     pc_tx,

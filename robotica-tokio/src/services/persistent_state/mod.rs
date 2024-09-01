@@ -4,6 +4,8 @@ use std::{io::Write, marker::PhantomData, path::PathBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::entities::Id;
+
 /// Configuration for `PersistentState`.
 #[derive(Deserialize)]
 pub struct Config {
@@ -48,13 +50,14 @@ impl PersistentStateDatabase {
 
     /// Get a `PersistentState` instance for a given name.
     #[must_use]
-    pub fn for_name<T>(&self, name: &str) -> PersistentStateRow<T>
+    pub fn for_name<T>(&self, id: &Id, name: &str) -> PersistentStateRow<T>
     where
         T: Serialize + DeserializeOwned,
     {
+        let id = id.as_str().replace('/', "_");
         let name = name.replace('/', "_");
         let name = format!("{name}.json");
-        let path = self.path.join(name);
+        let path = self.path.join(id).join(name);
         PersistentStateRow::new(path)
     }
 }
@@ -80,6 +83,14 @@ impl<T: Serialize + DeserializeOwned> PersistentStateRow<T> {
     /// This function will return an error if the value cannot be serialized to JSON or if the file
     /// cannot be written.
     pub fn save(&self, value: &T) -> Result<(), Error> {
+        let parent = &self.path.parent();
+        if let Some(parent) = parent {
+            if !parent.is_dir() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| Error::IoError(parent.to_string_lossy().to_string(), e))?;
+            }
+        }
+
         let tmp_file = self.path.with_extension("tmp");
 
         let file = std::fs::File::create(&tmp_file)

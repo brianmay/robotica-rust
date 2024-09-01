@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeDelta, Utc};
+use robotica_tokio::entities::Id;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, time::Duration};
 use tokio::time::{sleep_until, Instant};
@@ -18,6 +19,7 @@ pub struct UserPlan<R> {
 
 impl<R> UserPlan<R> {
     fn get_cheapest(
+        id: &Id,
         kw: f32,
         start_search: DateTime<Utc>,
         end_search: DateTime<Utc>,
@@ -25,7 +27,7 @@ impl<R> UserPlan<R> {
         prices: &Prices,
         request: R,
     ) -> Option<Self> {
-        let plan = get_cheapest(kw, start_search, end_search, required_duration, prices);
+        let plan = get_cheapest(id, kw, start_search, end_search, required_duration, prices);
         plan.map(|(plan, cost)| Self {
             plan,
             request,
@@ -62,16 +64,21 @@ impl<R> UserPlan<R> {
     }
 
     #[cfg(test)]
-    pub fn get_forecast_cost(&self, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
-        self.plan.get_forecast_cost(now, prices)
+    pub fn get_forecast_cost(&self, id: &Id, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
+        self.plan.get_forecast_cost(id, now, prices)
     }
 
-    pub fn get_forecast_average_cost(&self, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
+    pub fn get_forecast_average_cost(
+        &self,
+        id: &Id,
+        now: DateTime<Utc>,
+        prices: &Prices,
+    ) -> Option<f32> {
         let duration = self.plan.get_timedelta();
         #[allow(clippy::cast_precision_loss)]
         let duration = duration.num_seconds() as f32 / 3600.0;
         self.plan
-            .get_forecast_cost(now, prices)
+            .get_forecast_cost(id, now, prices)
             .map(|cost| cost / duration)
     }
 
@@ -106,6 +113,7 @@ impl<R> MaybeUserPlan<R> {
     }
 
     pub fn get_cheapest(
+        id: &Id,
         kw: f32,
         start_search: DateTime<Utc>,
         end_search: DateTime<Utc>,
@@ -114,6 +122,7 @@ impl<R> MaybeUserPlan<R> {
         request: R,
     ) -> Self {
         let maybe_plan = UserPlan::get_cheapest(
+            id,
             kw,
             start_search,
             end_search,
@@ -170,7 +179,7 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
     // #[allow(clippy::too_many_arguments)]
     pub fn update_plan(
         self,
-        id: &str,
+        id: &Id,
         prices: &Prices,
         now: DateTime<Utc>,
         maybe_new_user_plan: Self,
@@ -178,12 +187,13 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
         let old_user_plan = self;
 
         let Some(old_user_plan) = old_user_plan.0 else {
-            info!(id, plan = ?maybe_new_user_plan, "No old plan available, using new Plan");
+            info!(%id, plan = ?maybe_new_user_plan, "No old plan available, using new Plan");
             return maybe_new_user_plan;
         };
 
-        let Some(old_average_cost) = old_user_plan.get_forecast_average_cost(now, prices) else {
-            info!(id, plan = ?maybe_new_user_plan, "Old plan available but cannot get cost; using new plan");
+        let Some(old_average_cost) = old_user_plan.get_forecast_average_cost(id, now, prices)
+        else {
+            info!(%id, plan = ?maybe_new_user_plan, "Old plan available but cannot get cost; using new plan");
             return maybe_new_user_plan;
         };
 
@@ -191,16 +201,16 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
             // No new plan.
             // This has to be a special case; we can't use a nil plan because a nil plan has no average cost.
             let old_average_cost = old_user_plan.get_average_cost_per_hour();
-            let new_current_cost = old_user_plan.get_forecast_average_cost(now, prices);
+            let new_current_cost = old_user_plan.get_forecast_average_cost(id, now, prices);
             let discard_plan = new_current_cost.map_or(true, |new_average_cost| {
                 old_average_cost > new_average_cost * 0.8
             });
 
             let result = if discard_plan {
-                info!(id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; price rise too much; discarding plan");
+                info!(%id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; price rise too much; discarding plan");
                 Self(None)
             } else {
-                info!(id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; keeping old plan");
+                info!(%id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; keeping old plan");
                 Self(Some(old_user_plan))
             };
             return result;
@@ -248,7 +258,7 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
 
         if use_new_plan {
             info!(
-                id,
+                %id,
                 ?old_user_plan,
                 old_average_cost,
                 old_plan_is_on,
@@ -264,7 +274,7 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
             Self(Some(new_user_plan))
         } else {
             info!(
-                id,
+                %id,
                 ?old_user_plan,
                 old_average_cost,
                 old_plan_is_on,
@@ -368,6 +378,7 @@ mod tests {
         use crate::amber::api::{ChannelType, PeriodType, PriceResponse, TariffInformation};
 
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
+        let id = Id::new("test");
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&timezone).date_naive();
@@ -457,6 +468,7 @@ mod tests {
         };
 
         let maybe_new_plan = MaybeUserPlan::get_cheapest(
+            &id,
             7.68,
             start_time,
             end_time,
@@ -465,10 +477,10 @@ mod tests {
             Request {},
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan("test", &prices, start_time, maybe_new_plan);
+        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan);
 
         let plan = user_plan.0.unwrap();
-        let cost = plan.get_forecast_cost(start_time, &prices).unwrap();
+        let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();
         assert_approx_eq!(f32, plan.get_kw(), 7.680);
         assert_eq!(plan.get_start_time(), expected_start_time);
         assert_eq!(plan.get_end_time(), expected_end_time);

@@ -1,5 +1,6 @@
 use chrono::{DateTime, TimeZone, Utc};
 use opentelemetry::{global, metrics::Meter, KeyValue};
+use robotica_tokio::entities::Id;
 use serde::Serialize;
 use std::fmt::Debug;
 use tracing::info;
@@ -28,17 +29,17 @@ pub trait RequestTrait {
 #[derive(Debug)]
 pub struct Meters<R: RequestTrait> {
     request: opentelemetry::metrics::Gauge<R::GaugeType>,
-    id: String,
+    id: Id,
     phantom: std::marker::PhantomData<R>,
 }
 
 impl<R: RequestTrait> Meters<R> {
-    pub fn new(id: &str) -> Self {
-        let meter = global::meter(id.to_string());
+    pub fn new(id: &Id) -> Self {
+        let meter = global::meter(id.meter_name("amber_combined"));
 
         Self {
             request: R::init_gauge(&meter),
-            id: id.to_string(),
+            id: id.clone(),
             phantom: std::marker::PhantomData,
         }
     }
@@ -97,7 +98,7 @@ impl<R: Copy> State<R> {
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn get_request<R, TZ>(
-    id: &str,
+    id: &Id,
     plan: &MaybeUserPlan<R>,
     rules: &RuleSet<R>,
     prices: &Prices,
@@ -131,7 +132,7 @@ where
     };
 
     info!(
-        id,
+        %id,
         ?plan_request,
         ?rules_request,
         ?combined_request,
@@ -300,8 +301,9 @@ mod tests {
         .pipe(rules::RuleSet::new);
 
         let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(72));
+        let id = Id::new("test");
 
-        let state = get_request("test", &plan, &rules, &prices, false, None, now, &timezone);
+        let state = get_request(&id, &plan, &rules, &prices, false, None, now, &timezone);
 
         assert_eq!(state.time, now);
         assert_eq!(state.plan_request, expected_plan);

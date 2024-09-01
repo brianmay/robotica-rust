@@ -129,18 +129,18 @@ impl MonitorInputs {
 
 #[must_use]
 pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiver<Message> {
+    let id = car.id.clone();
+
     let (message_tx, message_rx) = stateless::create_pipe("tesla_doors_message");
 
     let (tx, rx) = stateful::create_pipe("tesla_doors");
 
-    let tesla_clone = car.clone();
     spawn(async move {
         let mut frunk_s = receivers.frunk.subscribe().await;
         let mut boot_s = receivers.boot.subscribe().await;
         let mut doors_s = receivers.doors.subscribe().await;
         let mut windows_s = receivers.windows.subscribe().await;
         let mut user_present_s = receivers.user_present.subscribe().await;
-        let name = &tesla_clone.name;
 
         loop {
             select! {
@@ -162,7 +162,7 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
                 let maybe_windows = receivers.windows.get().await;
 
                 debug!(
-                    "{name}: fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
+                    %id, "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
                     maybe_frunk, maybe_boot, maybe_doors, maybe_windows, maybe_user_present
                 );
 
@@ -183,10 +183,10 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
                 //     open.push(Door::Windows)
                 // }
             } else {
-                debug!("{name}: up: {:?}", maybe_user_present);
+                debug!(%id, "up: {:?}", maybe_user_present);
             }
 
-            debug!("{name}: open: {:?}", open);
+            debug!(%id, "open: {:?}", open);
             tx.try_send(open);
         }
     });
