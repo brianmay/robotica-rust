@@ -58,9 +58,8 @@ impl Task {
             Payload::String(s) => Some(s.to_string()),
             Payload::Json(v) => Some(v.to_string()),
             Payload::Command(c) => serde_json::to_string(c)
-                .map_err(|err| {
-                    error!("Failed to serialize command: {:?}", c);
-                    err
+                .inspect_err(|err| {
+                    error!("Failed to serialize command {c:?}: {err:?}");
                 })
                 .ok(),
         }

@@ -64,10 +64,7 @@ pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
             select! {
                 Ok(status) = rx_s.recv() => {
                     debug!("HDMI {status:?}");
-                    let status = match status {
-                        Ok(values) => values,
-                        Err(_err) => [None; 4],
-                    };
+                    let status = status.unwrap_or_default();
 
                     let iter = status.iter().map(|x| map_input(*x));
                     for (output, input) in iter.enumerate() {

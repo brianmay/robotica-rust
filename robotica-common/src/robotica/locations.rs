@@ -43,7 +43,7 @@ pub struct LocationList(Vec<Location>);
 impl LocationList {
     /// Create a new location list
     #[must_use]
-    pub fn new(list: Vec<Location>) -> Self {
+    pub const fn new(list: Vec<Location>) -> Self {
         Self(list)
     }
 

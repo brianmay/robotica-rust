@@ -140,7 +140,7 @@ impl<T: PartialEq> PartialEq for RuleSet<T> {
 }
 
 impl<T> RuleSet<T> {
-    pub fn new(rules: Vec<Rule<T>>) -> Self {
+    pub const fn new(rules: Vec<Rule<T>>) -> Self {
         Self { rules }
     }
 
