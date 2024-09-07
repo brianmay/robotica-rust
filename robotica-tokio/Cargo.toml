@@ -52,7 +52,7 @@ geozero = { version = "0.13.0", features = ["with-postgis-sqlx"] }
 geo = { version = "0.28.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 opentelemetry = { version = "0.24.0", features = ["metrics"] }
-rstest = "0.21.0"
+rstest = "0.22.0"
 
 [build-dependencies]
 lalrpop = "0.21.0"
