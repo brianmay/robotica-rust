@@ -32,7 +32,7 @@ tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-core = "0.1.17"
 tracing-opentelemetry = "0.25.0"
-opentelemetry = { version = "0.24.0", features = ["metrics"] }
+opentelemetry = { version = "0.25.0", features = ["metrics"] }
 opentelemetry_sdk = { version = "0.24.1", features = ["rt-tokio"] }
 opentelemetry-semantic-conventions = "0.16.0"
 opentelemetry-otlp = { version = "0.17.0", features = ["logs", "metrics", "tls-webpki-roots"] }
