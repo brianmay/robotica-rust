@@ -3,9 +3,9 @@
   pkgs,
   lib,
   ...
-}:
-with lib; let
+}: let
   cfg = config.services.sway;
+  inherit (lib) types mkOption mkEnableOption mkIf literalExpression escapeShellArgs mkDefault;
 in {
   options.services.sway.enable =
     mkEnableOption (lib.mdDoc "sway kiosk service");

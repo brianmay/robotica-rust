@@ -3,8 +3,9 @@
   pkgs,
   config,
   ...
-}:
-with lib; let
+}: let
+  inherit (lib) types boolToString mkOption mkEnableOption mkIf;
+
   cfg = config.services.robotica-backend;
 
   system = pkgs.system;

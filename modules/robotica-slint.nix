@@ -3,8 +3,9 @@
   pkgs,
   config,
   ...
-}:
-with lib; let
+}: let
+  inherit (lib) types mkOption mkEnableOption mkIf mkOptionType isAttrs;
+
   system = pkgs.system;
   robotica-slint = self.packages.${system}.robotica-slint;
 
@@ -86,8 +87,6 @@ with lib; let
       sound_path = mkOption {type = types.path;};
     };
   };
-
-  controller_str_type = types.enum ["light"];
 
   controller_light_type = types.submodule {
     options = {
