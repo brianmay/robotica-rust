@@ -1,8 +1,11 @@
-{ config, pkgs, lib, ... }:
-
-with lib;
-
-let cfg = config.services.sway;
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
+with lib; let
+  cfg = config.services.sway;
 in {
   options.services.sway.enable =
     mkEnableOption (lib.mdDoc "sway kiosk service");
@@ -17,11 +20,11 @@ in {
 
   options.services.sway.extraArguments = mkOption {
     type = types.listOf types.str;
-    default = [ ];
+    default = [];
     defaultText = literalExpression "[]";
     description =
       lib.mdDoc "Additional command line arguments to pass to sway.";
-    example = [ "-d" ];
+    example = ["-d"];
   };
 
   options.services.sway.program = mkOption {
@@ -53,11 +56,10 @@ in {
         "systemd-logind.service"
         "getty@tty1.service"
       ];
-      before = [ "graphical.target" ];
-      wants =
-        [ "dbus.socket" "systemd-logind.service" "plymouth-quit.service" ];
-      wantedBy = [ "graphical.target" ];
-      conflicts = [ "getty@tty1.service" ];
+      before = ["graphical.target"];
+      wants = ["dbus.socket" "systemd-logind.service" "plymouth-quit.service"];
+      wantedBy = ["graphical.target"];
+      conflicts = ["getty@tty1.service"];
 
       restartIfChanged = false;
       unitConfig.ConditionPathExists = "/dev/tty1";
@@ -101,11 +103,10 @@ in {
 
     hardware.opengl.enable = mkDefault true;
 
-    systemd.targets.graphical.wants = [ "sway-tty1.service" ];
+    systemd.targets.graphical.wants = ["sway-tty1.service"];
 
     systemd.defaultUnit = "graphical.target";
   };
 
-  meta.maintainers = with lib.maintainers; [ matthewbauer ];
-
+  meta.maintainers = with lib.maintainers; [matthewbauer];
 }

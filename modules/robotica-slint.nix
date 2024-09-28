@@ -1,7 +1,10 @@
-{ self }:
-{ lib, pkgs, config, ... }:
-with lib;
-let
+{self}: {
+  lib,
+  pkgs,
+  config,
+  ...
+}:
+with lib; let
   system = pkgs.system;
   robotica-slint = self.packages.${system}.robotica-slint;
 
@@ -45,27 +48,27 @@ let
     options = {
       init = mkOption {
         type = types.listOf types.str;
-        default = [ "${init}" ];
+        default = ["${init}"];
       };
       set_volume = mkOption {
         type = types.listOf types.str;
-        default = [ "${pkgs.alsa-utils}/bin/amixer" "set" "Speaker" ];
+        default = ["${pkgs.alsa-utils}/bin/amixer" "set" "Speaker"];
       };
       mpc = mkOption {
         type = types.listOf types.str;
-        default = [ "${pkgs.mpc-cli}/bin/mpc" ];
+        default = ["${pkgs.mpc-cli}/bin/mpc"];
       };
       pre_say = mkOption {
         type = types.listOf types.str;
-        default = [ "${pre_speech}" ];
+        default = ["${pre_speech}"];
       };
       say = mkOption {
         type = types.listOf types.str;
-        default = [ "${speech}" ];
+        default = ["${speech}"];
       };
       play_sound = mkOption {
         type = types.listOf types.str;
-        default = [ "${pkgs.alsa-utils}/bin/aplay" ];
+        default = ["${pkgs.alsa-utils}/bin/aplay"];
       };
     };
   };
@@ -75,105 +78,104 @@ let
     options = {
       programs = mkOption {
         type = audio_programs_type;
-        default = { };
+        default = {};
       };
-      messages_enabled_subtopic = mkOption { type = types.str; };
-      topic_substr = mkOption { type = types.str; };
-      targets = mkOption { type = audio_targets_type; };
-      sound_path = mkOption { type = types.path; };
+      messages_enabled_subtopic = mkOption {type = types.str;};
+      topic_substr = mkOption {type = types.str;};
+      targets = mkOption {type = audio_targets_type;};
+      sound_path = mkOption {type = types.path;};
     };
   };
 
-  controller_str_type = types.enum [ "light" ];
+  controller_str_type = types.enum ["light"];
 
   controller_light_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "light" ]; };
-      topic_substr = mkOption { type = types.str; };
-      action = mkOption { type = types.enum [ "toggle" ]; };
-      scene = mkOption { type = types.str; };
+      type = mkOption {type = types.enum ["light"];};
+      topic_substr = mkOption {type = types.str;};
+      action = mkOption {type = types.enum ["toggle"];};
+      scene = mkOption {type = types.str;};
     };
   };
 
   controller_music_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "music" ]; };
-      topic_substr = mkOption { type = types.str; };
-      action = mkOption { type = types.enum [ "toggle" ]; };
-      play_list = mkOption { type = types.str; };
+      type = mkOption {type = types.enum ["music"];};
+      topic_substr = mkOption {type = types.str;};
+      action = mkOption {type = types.enum ["toggle"];};
+      play_list = mkOption {type = types.str;};
     };
   };
 
   controller_switch_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "switch" ]; };
-      topic_substr = mkOption { type = types.str; };
-      action = mkOption { type = types.enum [ "toggle" ]; };
+      type = mkOption {type = types.enum ["switch"];};
+      topic_substr = mkOption {type = types.str;};
+      action = mkOption {type = types.enum ["toggle"];};
     };
   };
 
   controller_zwave_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "zwave" ]; };
-      topic_substr = mkOption { type = types.str; };
-      action = mkOption { type = types.enum [ "toggle" ]; };
+      type = mkOption {type = types.enum ["zwave"];};
+      topic_substr = mkOption {type = types.str;};
+      action = mkOption {type = types.enum ["toggle"];};
     };
   };
 
   controller_tasmota_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "tasmota" ]; };
-      topic_substr = mkOption { type = types.str; };
-      action = mkOption { type = types.enum [ "toggle" ]; };
-      power_postfix = mkOption { type = types.str; };
+      type = mkOption {type = types.enum ["tasmota"];};
+      topic_substr = mkOption {type = types.str;};
+      action = mkOption {type = types.enum ["toggle"];};
+      power_postfix = mkOption {type = types.str;};
     };
   };
 
   hdmi_type = types.submodule {
     options = {
-      type = mkOption { type = types.enum [ "hdmi" ]; };
-      topic_substr = mkOption { type = types.str; };
-      input = { type = types.int; };
-      output = { type = types.int; };
+      type = mkOption {type = types.enum ["hdmi"];};
+      topic_substr = mkOption {type = types.str;};
+      input = {type = types.int;};
+      output = {type = types.int;};
     };
   };
 
   controller_type = mkOptionType {
     name = "controller-type";
     check = x:
-      if !isAttrs x then
-        throw "Controller type should be attrs"
-      else if x.type == "light" then
-        controller_light_type.check x
-      else if x.type == "music" then
-        controller_music_type.check x
-      else if x.type == "switch" then
-        controller_switch_type.check x
-      else if x.type == "zwave" then
-        controller_zwave_type.check x
-      else if x.type == "tasmota" then
-        controller_tasmota_type.check x
-      else if x.type == "hdmi" then
-        hdmi_type.check x
-      else
-        throw "Unknown type ${x.type}";
+      if !isAttrs x
+      then throw "Controller type should be attrs"
+      else if x.type == "light"
+      then controller_light_type.check x
+      else if x.type == "music"
+      then controller_music_type.check x
+      else if x.type == "switch"
+      then controller_switch_type.check x
+      else if x.type == "zwave"
+      then controller_zwave_type.check x
+      else if x.type == "tasmota"
+      then controller_tasmota_type.check x
+      else if x.type == "hdmi"
+      then hdmi_type.check x
+      else throw "Unknown type ${x.type}";
   };
   # types.oneOf [ controller_light_type controller_music_type ];
 
   button_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
-      title = mkOption { type = types.str; };
-      controller = mkOption { type = controller_type; };
-      icon = mkOption { type = types.str; };
+      id = mkOption {type = types.str;};
+      title = mkOption {type = types.str;};
+      controller = mkOption {type = controller_type;};
+      icon = mkOption {type = types.str;};
     };
   };
 
   button_row_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
-      title = mkOption { type = types.str; };
-      buttons = mkOption { type = types.listOf button_type; };
+      id = mkOption {type = types.str;};
+      title = mkOption {type = types.str;};
+      buttons = mkOption {type = types.listOf button_type;};
     };
   };
 
@@ -189,54 +191,53 @@ let
     options = {
       turn_screen_on = mkOption {
         type = types.listOf types.str;
-        default = [ "${screen_on}" ];
+        default = ["${screen_on}"];
       };
       turn_screen_off = mkOption {
         type = types.listOf types.str;
-        default = [ "${screen_off}" ];
+        default = ["${screen_off}"];
       };
     };
   };
 
   ui_type = types.submodule {
     options = {
-      instance = mkOption { type = types.str; };
+      instance = mkOption {type = types.str;};
       programs = mkOption {
         type = ui_programs_type;
-        default = { };
+        default = {};
       };
-      number_per_row = mkOption { type = types.int; };
+      number_per_row = mkOption {type = types.int;};
       backlight_on_time = mkOption {
         type = types.int;
         default = 0;
       };
-      buttons = mkOption { type = types.listOf button_row_type; };
+      buttons = mkOption {type = types.listOf button_row_type;};
     };
   };
 
   persistent_state_type = types.submodule {
-    options = { state_path = mkOption { type = types.path; }; };
+    options = {state_path = mkOption {type = types.path;};};
   };
 
   config_type = types.submodule {
     options = {
-      audio = mkOption { type = audio_type; };
-      ui = mkOption { type = ui_type; };
+      audio = mkOption {type = audio_type;};
+      ui = mkOption {type = ui_type;};
       persistent_state = mkOption {
         type = persistent_state_type;
-        default = { };
+        default = {};
       };
     };
   };
-
 in {
-  imports = [ ./sway.nix ];
+  imports = [./sway.nix];
 
   options.services.robotica-slint = {
     enable = mkEnableOption "robotica-slint service";
-    config = mkOption { type = config_type; };
-    secrets_path = mkOption { type = types.path; };
-    user = mkOption { type = types.str; };
+    config = mkOption {type = config_type;};
+    secrets_path = mkOption {type = types.path;};
+    user = mkOption {type = types.str;};
   };
 
   config = mkIf cfg.enable (let
@@ -249,7 +250,7 @@ in {
     '';
     config_file = pkgs.writeTextFile {
       name = "robotica-slint.yaml";
-      text = (lib.generators.toYAML { } cfg.config);
+      text = lib.generators.toYAML {} cfg.config;
     };
   in {
     services.sway = {

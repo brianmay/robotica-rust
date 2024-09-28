@@ -1,7 +1,10 @@
-{ self }:
-{ lib, pkgs, config, ... }:
-with lib;
-let
+{self}: {
+  lib,
+  pkgs,
+  config,
+  ...
+}:
+with lib; let
   cfg = config.services.robotica-freeswitch;
 
   system = pkgs.stdenv.system;
@@ -21,21 +24,20 @@ let
         type = types.str;
         default = "[::]:8084";
       };
-      topic = mkOption { type = types.str; };
-      audience = mkOption { type = types.str; };
+      topic = mkOption {type = types.str;};
+      audience = mkOption {type = types.str;};
     };
   };
 
   config_type = types.submodule {
-    options = { freeswitch = mkOption { type = freeswitch_type; }; };
+    options = {freeswitch = mkOption {type = freeswitch_type;};};
   };
-
 in {
   options.services.robotica-freeswitch = {
     enable = mkEnableOption "robotica-freeswitch service";
-    config = mkOption { type = config_type; };
-    debug = mkOption { type = types.bool; };
-    secrets = mkOption { type = types.path; };
+    config = mkOption {type = config_type;};
+    debug = mkOption {type = types.bool;};
+    secrets = mkOption {type = types.path;};
     data_dir = mkOption {
       type = types.str;
       default = "/var/lib/robotica";
@@ -51,14 +53,14 @@ in {
       home = "${cfg.data_dir}";
     };
 
-    users.groups.robotica = { };
+    users.groups.robotica = {};
 
     environment.etc."robotica-freeswitch.yaml" = {
-      text = (lib.generators.toYAML { } cfg.config);
+      text = lib.generators.toYAML {} cfg.config;
     };
 
     systemd.services.robotica-freeswitch = {
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = ["multi-user.target"];
       serviceConfig = {
         User = "robotica";
         ExecStart = "${wrapper}/bin/robotica-freeswitch";
