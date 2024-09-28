@@ -262,7 +262,7 @@ in {
 
     systemd.services.robotica-backend = {
       wantedBy = ["multi-user.target"];
-      after = ["network.target"];
+      after = ["network.target" "postgresql.service"];
       serviceConfig = {
         User = "robotica";
         ExecStart = "${wrapper}/bin/robotica-backend";
