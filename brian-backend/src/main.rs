@@ -218,15 +218,19 @@ async fn setup_pipes(
 
     monitor_bathroom_door(&mut state);
 
+    info!("main::221");
     monitor_cars(&config.cars, &mut state, &postgres, &prices);
 
+    info!("main::224");
     let rooms = rooms::get();
     http::run(state.mqtt.clone(), rooms, config.http, postgres.clone())
         .await
         .unwrap_or_else(|e| panic!("Error running http server: {e}"));
 
+    info!("main::230");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
 
+    info!("main::233");
     let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
     for metric in config.metrics {
         let raw: Vec<metrics::RawMetric> = metric.into();
@@ -236,6 +240,7 @@ async fn setup_pipes(
         metric.monitor(&mut state.subscriptions, &config.influxdb);
     }
 
+    info!("main::243");
     executor(
         &mut state.subscriptions,
         state.mqtt.clone(),
@@ -249,13 +254,18 @@ async fn setup_pipes(
         panic!("Failed to start executor: {err}");
     });
 
+    info!("main::257");
     fake_switch(&mut state, "Brian/Night");
 
+    info!("main::260");
     setup_lights(&mut state, &config.lifx, &config.lights, &config.strips).await;
 
+    info!("main::263");
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
     });
+
+    info!("main::268");
 }
 
 fn monitor_bathroom_door(state: &mut InitState) {
