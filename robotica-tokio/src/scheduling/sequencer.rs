@@ -184,7 +184,7 @@ impl GetValues for Context {
     fn get_fields() -> Fields<Self> {
         let mut fields: Fields<Self> = Fields::default();
         fields.hash_sets.insert("today".to_string());
-        fields.hash_sets.insert("tomorrow`".to_string());
+        fields.hash_sets.insert("tomorrow".to_string());
         fields.hash_sets.insert("options".to_string());
         fields
     }
