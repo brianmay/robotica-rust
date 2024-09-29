@@ -98,14 +98,25 @@ impl FromPyObject<'_> for CalendarEntry {
 
 pub(crate) type Calendar = Vec<CalendarEntry>;
 
-pub(crate) fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result<Calendar, PyErr> {
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum Error {
+    #[error("Python error: {0}")]
+    Python(#[from] PyErr),
+
+    #[error("Reqwest error: {0}")]
+    Reqest(#[from] reqwest::Error),
+}
+
+pub(crate) async fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result<Calendar, Error> {
     #![allow(clippy::unwrap_used)]
+
+    let text = reqwest::get(url).await?.error_for_status()?.text().await?;
 
     let py_app = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/python/robotica.py"));
 
     Python::with_gil(|py| {
         let app = PyModule::from_code_bound(py, py_app, "robotica.py", "robotica")?;
-        let args = (url, start, stop);
+        let args = (text, start, stop);
         let calendar: Calendar = app.getattr("read_calendar")?.call1(args)?.extract()?;
         Ok(calendar)
     })
@@ -116,37 +127,40 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
 
-    #[test]
-    fn test_calendar() {
+    #[tokio::test]
+    async fn test_calendar() {
         let c = load(
-            "http://tinyurl.com/y24m3r8f",
+            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 5).unwrap(),
             NaiveDate::from_ymd_opt(2019, 4, 1).unwrap(),
         )
+        .await
         .unwrap();
         assert!(c.len() == 7);
         println!("{c:?}");
     }
 
-    #[test]
-    fn test_calendar_stop_same_date() {
+    #[tokio::test]
+    async fn test_calendar_stop_same_date() {
         let c = load(
-            "http://tinyurl.com/y24m3r8f",
+            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
         )
+        .await
         .unwrap();
         assert!(c.is_empty());
         println!("{c:?}");
     }
 
-    #[test]
-    fn test_calendar_stop_next_day() {
+    #[tokio::test]
+    async fn test_calendar_stop_next_day() {
         let c = load(
-            "http://tinyurl.com/y24m3r8f",
+            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 19).unwrap(),
         )
+        .await
         .unwrap();
         assert!(c.len() == 1);
         println!("{c:?}");

@@ -60,11 +60,13 @@ struct InternalConfig<T: TimeZone> {
     timezone: T,
 }
 impl<T: TimeZone + Copy> InternalConfig<T> {
-    fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
-        let calendar = calendar::load(&self.extra.calendar_url, start, stop).unwrap_or_else(|e| {
-            error!("Error loading calendar: {e}");
-            Vec::new()
-        });
+    async fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
+        let calendar = calendar::load(&self.extra.calendar_url, start, stop)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Error loading calendar: {e}");
+                Vec::new()
+            });
 
         let mut sequences = Vec::new();
 
@@ -124,14 +126,14 @@ impl<T: TimeZone + Copy> InternalConfig<T> {
         Tags(tags)
     }
 
-    fn get_sequences_all(&self, today: Date) -> Vec<Sequence> {
+    async fn get_sequences_all(&self, today: Date) -> Vec<Sequence> {
         let first_date = today + FIRST_OFFSET;
         let last_date = today + LAST_OFFSET;
 
         let s = NaiveDateIter::new(first_date, last_date)
             .flat_map(|date| self.get_sequences_for_date(date));
 
-        let calendar = self.load_calendar(first_date, last_date);
+        let calendar = self.load_calendar(first_date, last_date).await;
         let mut sequences = Vec::new();
         sequences.extend(s);
         sequences.extend(calendar);
@@ -224,18 +226,18 @@ struct State<T: TimeZone> {
 const REFRESH_TIME: TimeDelta = time_delta_constant!(5 minutes);
 
 impl<T: TimeZone + Copy> State<T> {
-    fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
+    async fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
         if today != self.date {
             self.set_tags(today);
-            self.set_sequences_all();
+            self.set_sequences_all().await;
             self.calendar_refresh_time = *now;
             self.publish_all_sequences();
             self.all_marks.expire(now);
         } else if *now > self.calendar_refresh_time + REFRESH_TIME {
             self.calendar_refresh_time = *now;
-            self.set_sequences_all();
+            self.set_sequences_all().await;
             self.publish_all_sequences();
         } else if publish_sequences {
             self.publish_all_sequences();
@@ -345,9 +347,9 @@ impl<T: TimeZone + Copy> State<T> {
         self.publish_tags(&tags);
     }
 
-    fn set_sequences_all(&mut self) {
+    async fn set_sequences_all(&mut self) {
         let today = self.date;
-        self.sequences = self.config.get_sequences_all(today);
+        self.sequences = self.config.get_sequences_all(today).await;
         let start = self
             .sequences
             .first()
@@ -498,6 +500,12 @@ pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
     spawn(async move {
         let mut mark_s = mark_rx.subscribe().await;
 
+        state.set_tags(state.date);
+        state.set_sequences_all().await;
+        // Don't do this here, will happen after first timer.
+        // state.publish_sequences(&state.sequences);
+        // state.finalize(&now);
+
         loop {
             select! {
                 () = tokio::time::sleep_until(state.timer) => {
@@ -526,7 +534,7 @@ pub fn executor<T: TimeZone + Copy + Send + Sync + 'static>(
 
 
                     let now = utc_now();
-                    state.finalize(&now, publish_sequences);
+                    state.finalize(&now, publish_sequences).await;
 
                     {
                     let front = state.events.front();
@@ -587,15 +595,6 @@ fn get_initial_state<T: TimeZone + Copy + 'static>(
             publish_important_hash: None,
             publish_pending_hash: None,
         }
-    };
-    let state = {
-        let mut state = state;
-        state.set_tags(date);
-        state.set_sequences_all();
-        // Don't do this here, will happen after first timer.
-        // state.publish_sequences(&state.sequences);
-        // state.finalize(&now);
-        state
     };
 
     debug!(

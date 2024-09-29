@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-from datetime import timezone, date, datetime, timedelta
+import urllib.request
+from datetime import date, datetime, timedelta, timezone
+
 import icalendar
 import recurring_ical_events
-import urllib.request
 
 
-def read_calendar(url, start_date, end_date):
-    ical_string = urllib.request.urlopen(url).read()
+def read_calendar(ical_string, start_date, end_date):
     calendar = icalendar.Calendar.from_ical(ical_string)
     events = recurring_ical_events.of(calendar).between(start_date, end_date)
     result = []
@@ -37,6 +37,5 @@ def read_calendar(url, start_date, end_date):
 
 
 if __name__ == "__main__":
-    print(
-        read_calendar("http://tinyurl.com/y24m3r8f", date(2019, 3, 5), date(2019, 4, 1))
-    )
+    ical_string = urllib.request.urlopen("http://tinyurl.com/y24m3r8f").read()
+    print(read_calendar(ical_string, date(2019, 3, 5), date(2019, 4, 1)))
