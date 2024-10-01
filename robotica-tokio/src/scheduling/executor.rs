@@ -59,7 +59,7 @@ struct InternalConfig<T: TimeZone> {
     calendar_to_sequence: Box<CalendarToSequence<T>>,
     timezone: T,
 }
-impl<T: TimeZone + Copy> InternalConfig<T> {
+impl<T: TimeZone + Copy + Sync> InternalConfig<T> {
     async fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
         let calendar = calendar::load(&self.extra.calendar_url, start, stop)
             .await
@@ -225,7 +225,7 @@ struct State<T: TimeZone> {
 
 const REFRESH_TIME: TimeDelta = time_delta_constant!(5 minutes);
 
-impl<T: TimeZone + Copy> State<T> {
+impl<T: TimeZone + Copy + Send + Sync> State<T> {
     async fn finalize(&mut self, now: &DateTime<Utc>, publish_sequences: bool) {
         let today = now.with_timezone::<T>(&self.config.timezone).date_naive();
 
