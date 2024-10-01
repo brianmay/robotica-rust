@@ -322,7 +322,7 @@
               pkgs.prefetch-npm-deps
               pkgs.gcc
               pkgs.sqlx-cli
-              pkgs.influxdb
+              pkgs.influxdb2
               pkgs.mosquitto
             ];
             process-managers.process-compose.package =
@@ -338,7 +338,7 @@
             processes.mqtt = {
               exec = "${pkgs.mosquitto}/bin/mosquitto -c mosquitto.conf";
             };
-            processes.influxdb = {exec = "${pkgs.influxdb}/bin/influxd";};
+            processes.influxdb = {exec = "${pkgs.influxdb2}/bin/influxd";};
             services.postgres = {
               enable = true;
               package = pkgs.postgresql_15.withPackages (ps: [ps.postgis]);
