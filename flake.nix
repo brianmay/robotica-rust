@@ -279,22 +279,30 @@
         coverage =
           craneLib.cargoTarpaulin ({cargoArtifacts = clippy;} // common);
 
+        libPath = pkgs.lib.makeLibraryPath [
+          pkgs.libGL
+          pkgs.libxkbcommon
+          pkgs.dbus.lib
+          pkgs.wayland
+          pkgs.fontconfig
+        ];
+
         # Build the actual crate itself.
         pkg = craneLib.buildPackage ({
             inherit cargoArtifacts;
             doCheck = true;
+
+            postFixup = pkgs.lib.optional pkgs.stdenv.isLinux ''
+              rpath=$(patchelf --print-rpath $out/bin/robotica-slint)
+              patchelf --set-rpath "$rpath:${libPath}" $out/bin/robotica-slint
+            '';
           }
           // common
           // build_env);
-
-        wrapper = pkgs.writeShellScriptBin "robotica-slint" ''
-          export LD_LIBRARY_PATH="${pkgs.libGL}/lib:${pkgs.libxkbcommon}/lib:${pkgs.dbus.lib}/lib:${pkgs.wayland}/lib:$LD_LIBRARY_PATH"
-          exec ${pkg}/bin/robotica-slint "$@"
-        '';
       in {
         clippy = clippy;
         coverage = coverage;
-        pkg = wrapper;
+        pkg = pkg;
       };
 
       devShell = devenv.lib.mkShell {
