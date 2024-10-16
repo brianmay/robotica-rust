@@ -35,8 +35,7 @@ pub struct Meters<R: RequestTrait> {
 
 impl<R: RequestTrait> Meters<R> {
     pub fn new(id: &Id) -> Self {
-        let meter = global::meter(id.meter_name("amber_combined"));
-
+        let meter = global::meter("amber_combined");
         Self {
             request: R::init_gauge(&meter),
             id: id.clone(),
