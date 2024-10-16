@@ -16,12 +16,6 @@ impl Id {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-
-    /// Construct the name of a meter
-    #[must_use]
-    pub fn meter_name(&self, postfix: &str) -> String {
-        format!("{}_{}", self.0, postfix)
-    }
 }
 
 impl std::fmt::Display for Id {

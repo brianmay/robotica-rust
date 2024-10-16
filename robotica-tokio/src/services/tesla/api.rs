@@ -29,12 +29,7 @@ impl Meters {
     #[must_use]
     pub fn new() -> Self {
         let attributes = vec![];
-        let meter = global::meter_with_version(
-            "tesla::api",
-            None::<String>,
-            None::<String>,
-            Some(attributes),
-        );
+        let meter = global::meter_with_version("tesla::api", None, None, Some(attributes));
 
         Meters {
             auth_requests: meter.u64_counter("auth_requests").init(),
