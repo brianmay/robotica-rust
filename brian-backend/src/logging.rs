@@ -1,10 +1,10 @@
 use data_encoding::BASE64;
-use opentelemetry::{global, trace::TracerProvider, KeyValue};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace as sdktrace, Resource};
 use opentelemetry_semantic_conventions::{
-    resource::{DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION},
+    resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
 };
 use robotica_common::version::Version;
@@ -12,7 +12,6 @@ use serde::Deserialize;
 use tap::Pipe;
 use thiserror::Error;
 use tonic::metadata::{errors::InvalidMetadataValue, MetadataMap};
-use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Deserialize)]
@@ -52,7 +51,7 @@ fn resource(config: &Config) -> Resource {
             KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
             KeyValue::new(SERVICE_VERSION, Version::get().vcs_ref),
             KeyValue::new(
-                DEPLOYMENT_ENVIRONMENT,
+                DEPLOYMENT_ENVIRONMENT_NAME,
                 config.deployment_environment.clone(),
             ),
         ],
@@ -170,14 +169,14 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         let logger_provider = init_logs(&resource, remote)?;
         let tracer_provider = init_tracer_provider(&resource, remote)?;
 
-        global::set_tracer_provider(tracer_provider.clone());
+        global::set_tracer_provider(tracer_provider);
         global::set_meter_provider(meter_provider.clone());
 
-        let tracer = tracer_provider.tracer_builder("brian-backend").build();
+        // let tracer = tracer_provider.tracer_builder("brian-backend").build();
 
         layer
-            .with(MetricsLayer::new(meter_provider.clone()))
-            .with(OpenTelemetryLayer::new(tracer))
+            // .with(MetricsLayer::new(meter_provider.clone()))
+            // .with(OpenTelemetryLayer::new(tracer))
             .with(OpenTelemetryTracingBridge::new(&logger_provider))
             .try_init()?;
 
