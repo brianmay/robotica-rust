@@ -23,7 +23,7 @@
     hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
     filename="$HOME/cache/$hash.mp3"
     if ! test -f "$filename"; then
-      ${pkgs.python310Packages.gtts}/bin/gtts-cli --output "$filename" "$*"
+      ${pkgs.python312Packages.gtts}/bin/gtts-cli --output "$filename" "$*"
     fi
   '';
   speech = pkgs.writeShellScript "speech" ''
