@@ -17,7 +17,7 @@ tokio = { version = "1.38.0", features = ["full"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.127"
 serde_yml = "0.0.10"
-anyhow = "1.0.86"
+anyhow = "1.0.90"
 reqwest = { version = "0.12.5", features = ["json"] }
 # serde_path_to_error = "0.1.11"
 gethostname = "0.5.0"
