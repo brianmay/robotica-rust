@@ -41,7 +41,7 @@ base64 = "0.22.1"
 url = "2.5.2"
 futures = "0.3.30"
 tower = { version = "0.5.1", features = ["util"] }
-tower-http = { version = "0.5.2", features = ["fs", "trace"] }
+tower-http = { version = "0.6.1", features = ["fs", "trace"] }
 tower-sessions = { version = "0.12.3" }
 tower-sessions-sqlx-store = { version = "0.12.0", features = ["postgres"] }
 arc-swap = "1.7.1"
