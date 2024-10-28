@@ -15,7 +15,7 @@ anyhow = "1.0.91"
 color-backtrace = "0.6.1"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 robotica-tokio = { path = "../robotica-tokio" }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
 serde_yml = "0.0.10"
 slint = "1.0.0"
