@@ -14,7 +14,7 @@ bytes = "1.8.0"
 rumqttc = "0.24.0"
 rustls-native-certs = "0.7.1"
 tokio = { version = "1.41.0", features = ["full"] }
-serde = { version = "1.0.214", features = ["derive"] }
+serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.132"
 serde_yml = "0.0.10"
 anyhow = "1.0.91"
@@ -42,13 +42,13 @@ url = "2.5.2"
 futures = "0.3.31"
 tower = { version = "0.5.1", features = ["util"] }
 tower-http = { version = "0.6.1", features = ["fs", "trace"] }
-tower-sessions = { version = "0.12.3" }
-tower-sessions-sqlx-store = { version = "0.12.0", features = ["postgres"] }
+tower-sessions = { version = "0.13.0" }
+tower-sessions-sqlx-store = { version = "0.14.2", features = ["postgres"] }
 arc-swap = "1.7.1"
 hyper = "1.4.1"
 time = "0.3.36"
-sqlx = { version = "0.7.4", features = ["migrate", "postgres", "runtime-tokio"] }
-geozero = { version = "0.13.0", features = ["with-postgis-sqlx"] }
+sqlx = { version = "0.8.2", features = ["migrate", "postgres", "runtime-tokio"] }
+geozero = { version = "0.14.0", features = ["with-postgis-sqlx"] }
 geo = { version = "0.28.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 opentelemetry = { version = "0.26.0", features = ["metrics"] }
