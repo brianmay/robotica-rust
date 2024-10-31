@@ -4,5 +4,6 @@
 #![allow(clippy::missing_const_for_fn)]
 #![allow(clippy::trivially_copy_pass_by_ref)]
 #![allow(clippy::ignored_unit_patterns)]
+#![allow(clippy::derive_partial_eq_without_eq)]
 
 include!(concat!(env!("OUT_DIR"), "/protos.websocket.rs"));
