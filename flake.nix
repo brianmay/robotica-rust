@@ -333,8 +333,6 @@
               pkgs.influxdb2
               pkgs.mosquitto
             ];
-            process-managers.process-compose.package =
-              pkgs_unstable.process-compose;
             enterShell = ''
               export ROBOTICA_DEBUG=true
               export PYTHONPATH="${poetry_env}/lib/python3.11/site-packages"
