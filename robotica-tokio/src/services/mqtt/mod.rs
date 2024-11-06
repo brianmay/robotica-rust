@@ -339,16 +339,14 @@ pub fn run_client(
 fn get_root_store() -> RootCertStore {
     let mut root_store = rustls::RootCertStore::empty();
 
-    let certs = match rustls_native_certs::load_native_certs() {
-        Ok(certs) => certs,
-        Err(err) => {
-            error!("Failed to load native certs: {:?}", err);
-            return root_store;
-        }
-    };
+    let result = rustls_native_certs::load_native_certs();
+    if !result.errors.is_empty() {
+        error!("Failed to load native certs: {:?}", result.errors);
+        return root_store;
+    }
 
     // Add all certificates to the root store.
-    for cert in certs {
+    for cert in result.certs {
         _ = root_store.add(cert).map_err(|err| {
             error!("Failed to add certificate: {:?}", err);
         });
