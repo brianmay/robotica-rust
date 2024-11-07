@@ -13,7 +13,7 @@ anyhow = "1.0.91"
 serde_yml = "0.0.10"
 chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.10.0"
-thiserror = "1.0.62"
+thiserror = "1.0.65"
 color-backtrace = "0.6.1"
 robotica-common = { path = "../robotica-common", features = ["websockets"] }
 robotica-tokio = { path = "../robotica-tokio", features = ["websockets", "scheduler"] }
