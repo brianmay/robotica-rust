@@ -24,7 +24,7 @@ envconfig = "0.11.0"
 tap = "1.0.1"
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "postgres"] }
 geo = { version = "0.28.0" }
-url = "2.5.2"
+url = "2.5.3"
 serde_tuple = "1.0.0"
 
 data-encoding = "2.6.0"
