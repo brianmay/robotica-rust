@@ -45,7 +45,7 @@ tower-http = { version = "0.6.1", features = ["fs", "trace"] }
 tower-sessions = { version = "0.13.0" }
 tower-sessions-sqlx-store = { version = "0.14.2", features = ["postgres"] }
 arc-swap = "1.7.1"
-hyper = "1.4.1"
+hyper = "1.5.0"
 time = "0.3.36"
 sqlx = { version = "0.8.2", features = ["migrate", "postgres", "runtime-tokio"] }
 geozero = { version = "0.14.0", features = ["with-postgis-sqlx"] }
