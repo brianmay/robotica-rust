@@ -3993,7 +3993,7 @@ dependencies = [
  "bit-set",
  "ena",
  "itertools 0.13.0",
- "lalrpop-util 0.22.0",
+ "lalrpop-util",
  "petgraph",
  "pico-args",
  "regex",
@@ -4003,15 +4003,6 @@ dependencies = [
  "term",
  "unicode-xid",
  "walkdir",
-]
-
-[[package]]
-name = "lalrpop-util"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "108dc8f5dabad92c65a03523055577d847f5dcc00f3e7d3a68bc4d48e01d8fe1"
-dependencies = [
- "regex-automata 0.4.8",
 ]
 
 [[package]]
@@ -5861,7 +5852,7 @@ dependencies = [
  "gethostname 0.5.0",
  "hyper 1.4.1",
  "lalrpop",
- "lalrpop-util 0.21.0",
+ "lalrpop-util",
  "lifx-core",
  "maud",
  "openid",
