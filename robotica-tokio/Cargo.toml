@@ -23,7 +23,7 @@ reqwest = { version = "0.12.5", features = ["json"] }
 gethostname = "0.5.0"
 thiserror = "1.0.65"
 chrono = "0.4.38"
-lalrpop-util = { version = "0.21.0", features = ["lexer"] }
+lalrpop-util = { version = "0.22.0", features = ["lexer"] }
 regex = "1.11.1"
 tracing = "0.1.35"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
