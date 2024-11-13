@@ -2,9 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Timelike, Utc};
 use robotica_common::datetime::utc_now;
+use robotica_common::robotica::entities::Id;
 use robotica_macro::{duration_constant, time_delta_constant};
 use robotica_tokio::{
-    entities::Id,
     pipes::stateful::{create_pipe, Receiver},
     spawn,
 };
@@ -23,7 +23,7 @@ mod private;
 pub mod rules;
 mod user_plan;
 
-pub use user_plan::MaybeUserPlan;
+// pub use user_plan::MaybeUserPlan;
 
 #[derive(Debug)]
 pub struct Prices {

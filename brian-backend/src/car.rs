@@ -1,5 +1,5 @@
+use robotica_common::robotica::entities::Id;
 use robotica_common::robotica::message::Audience;
-use robotica_tokio::entities::Id;
 use serde::Deserialize;
 
 use crate::{open_epaper_link, tesla};

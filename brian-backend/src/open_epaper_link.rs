@@ -1,14 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use robotica_common::datetime::{datetime_to_time_string, time_delta};
+use robotica_common::robotica::locations::LocationList;
 use robotica_tokio::pipes::stateful;
 use serde::{Deserialize, Serialize};
 use serde_tuple::Serialize_tuple;
 use thiserror::Error;
 use tracing::{error, info};
 use url::Url;
-
-use crate::{amber, car};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
@@ -107,9 +105,9 @@ fn post_inc(y: &mut u16, inc: u16) -> u16 {
 fn header(y: &mut u16, t: String) -> Element {
     Element::Text(Text {
         x: 5,
-        y: post_inc(y, 14),
+        y: post_inc(y, 30),
         content: t,
-        font: "fonts/bahnschrift20".to_string(),
+        font: "fonts/bahnschrift30".to_string(),
         color: 2,
     })
 }
@@ -117,9 +115,9 @@ fn header(y: &mut u16, t: String) -> Element {
 fn text(y: &mut u16, t: String) -> Element {
     Element::Text(Text {
         x: 5,
-        y: pre_inc(y, 14),
+        y: pre_inc(y, 30),
         content: t,
-        font: "7x14_tf".to_string(),
+        font: "fonts/calibrib30".to_string(),
         color: 1,
     })
 }
@@ -135,28 +133,22 @@ fn line(y: &mut u16) -> Element {
     })
 }
 
-pub fn output_amber_car(
-    car: &car::Config,
+pub fn output_location(
+    name: impl Into<String>,
     config: Config,
-    state: stateful::Receiver<amber::car::State>,
+    state: stateful::Receiver<LocationList>,
 ) {
-    let car = Arc::new(car.clone());
     let config = Arc::new(config);
+    let name = name.into();
     state.async_for_each(move |(_, state)| {
-        let car = car.clone();
         let config = config.clone();
+        let name = name.clone();
         async move {
-            let combined = &state.combined;
-            let maybe_user_plan = combined.get_plan();
-            let y: &mut u16 = &mut 5;
-            let mut template = Template(vec![
-                header(y, format!("Car: {}", car.name)),
-                line(y),
-                text(y, format!("B: {}%", state.battery_level)),
-                text(y, format!("MCT: {}%", state.min_charge_tomorrow)),
-                text(y, format!("R: {:?}", state.get_result())),
-            ]);
-            add_plan_to_template(&mut template, y, maybe_user_plan);
+            let mut y = 5;
+            let mut template = Template(vec![header(&mut y, name), line(&mut y)]);
+            for location in state.into_iter().filter(|l| l.announce_on_enter) {
+                template.0.push(text(&mut y, location.name.clone()));
+            }
             if let Err(e) = template.send(&config).await {
                 error!("Failed to send template: {}", e);
             }
@@ -164,52 +156,81 @@ pub fn output_amber_car(
     });
 }
 
-pub fn output_amber_hotwater(config: Config, state: stateful::Receiver<amber::hot_water::State>) {
-    let config = Arc::new(config);
-    state.async_for_each(move |(_, state)| {
-        let config = config.clone();
-        async move {
-            let combined = &state.combined;
-            let maybe_user_plan = combined.get_plan();
-            let y: &mut u16 = &mut 5;
-            let mut template = Template(vec![
-                header(y, "Hot Water".to_string()),
-                line(y),
-                // text(y, format!("B: {}%", state.battery_level)),
-                // text(y, format!("MCT: {}%", state.min_charge_tomorrow)),
-                text(y, format!("R: {:?}", state.get_result())),
-            ]);
-            add_plan_to_template(&mut template, y, maybe_user_plan);
-            if let Err(e) = template.send(&config).await {
-                error!("Failed to send template: {}", e);
-            }
-        }
-    });
-}
+// pub fn output_amber_car(
+//     car: &car::Config,
+//     config: Config,
+//     state: stateful::Receiver<amber::car::State>,
+// ) {
+//     let car = Arc::new(car.clone());
+//     let config = Arc::new(config);
+//     state.async_for_each(move |(_, state)| {
+//         let car = car.clone();
+//         let config = config.clone();
+//         async move {
+//             let combined = &state.combined;
+//             let maybe_user_plan = combined.get_plan();
+//             let y: &mut u16 = &mut 5;
+//             let mut template = Template(vec![
+//                 header(y, format!("Car: {}", car.name)),
+//                 line(y),
+//                 text(y, format!("B: {}%", state.battery_level)),
+//                 text(y, format!("MCT: {}%", state.min_charge_tomorrow)),
+//                 text(y, format!("R: {:?}", state.get_result())),
+//             ]);
+//             add_plan_to_template(&mut template, y, maybe_user_plan);
+//             if let Err(e) = template.send(&config).await {
+//                 error!("Failed to send template: {}", e);
+//             }
+//         }
+//     });
+// }
 
-fn add_plan_to_template<R: std::fmt::Debug>(
-    template: &mut Template,
-    y: &mut u16,
-    maybe_user_plan: &amber::MaybeUserPlan<R>,
-) {
-    if let Some(plan) = &maybe_user_plan.get() {
-        template.0.push(text(
-            y,
-            format!("PS: {}", datetime_to_time_string(plan.get_start_time())),
-        ));
-        template.0.push(text(
-            y,
-            format!("PE: {}", datetime_to_time_string(plan.get_end_time())),
-        ));
-        template
-            .0
-            .push(text(y, format!("PR: {:?}", plan.get_request())));
-        template.0.push(text(
-            y,
-            format!("PD: {}", time_delta::to_string(plan.get_timedelta())),
-        ));
-    }
-}
+// pub fn output_amber_hotwater(config: Config, state: stateful::Receiver<amber::hot_water::State>) {
+//     let config = Arc::new(config);
+//     state.async_for_each(move |(_, state)| {
+//         let config = config.clone();
+//         async move {
+//             let combined = &state.combined;
+//             let maybe_user_plan = combined.get_plan();
+//             let y: &mut u16 = &mut 5;
+//             let mut template = Template(vec![
+//                 header(y, "Hot Water".to_string()),
+//                 line(y),
+//                 // text(y, format!("B: {}%", state.battery_level)),
+//                 // text(y, format!("MCT: {}%", state.min_charge_tomorrow)),
+//                 text(y, format!("R: {:?}", state.get_result())),
+//             ]);
+//             add_plan_to_template(&mut template, y, maybe_user_plan);
+//             if let Err(e) = template.send(&config).await {
+//                 error!("Failed to send template: {}", e);
+//             }
+//         }
+//     });
+// }
+
+// fn add_plan_to_template<R: std::fmt::Debug>(
+//     template: &mut Template,
+//     y: &mut u16,
+//     maybe_user_plan: &amber::MaybeUserPlan<R>,
+// ) {
+//     if let Some(plan) = &maybe_user_plan.get() {
+//         template.0.push(text(
+//             y,
+//             format!("PS: {}", datetime_to_time_string(plan.get_start_time())),
+//         ));
+//         template.0.push(text(
+//             y,
+//             format!("PE: {}", datetime_to_time_string(plan.get_end_time())),
+//         ));
+//         template
+//             .0
+//             .push(text(y, format!("PR: {:?}", plan.get_request())));
+//         template.0.push(text(
+//             y,
+//             format!("PD: {}", time_delta::to_string(plan.get_timedelta())),
+//         ));
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use robotica_common::robotica::entities::Id;
 use robotica_common::{
     mqtt::Json,
     robotica::{
@@ -12,7 +13,6 @@ use robotica_common::{
     },
 };
 use robotica_tokio::{
-    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::persistent_state::PersistentStateRow,
     spawn,

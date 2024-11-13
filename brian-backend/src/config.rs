@@ -1,16 +1,16 @@
 use crate::{
     amber, car, influxdb,
     lights::{self, Scene},
-    metrics, open_epaper_link, InitState,
+    metrics, InitState,
 };
 use envconfig::Envconfig;
 use robotica_common::{
     mqtt::Json,
+    robotica::entities::Id,
     robotica::lights::{PowerColor, SceneName},
 };
 use robotica_tokio::{
     devices::lifx::LifxId,
-    entities::Id,
     pipes::stateful,
     scheduling::executor,
     services::{http, mqtt, persistent_state},
@@ -138,7 +138,6 @@ impl LightSceneConfig {
 pub struct LightConfig {
     pub device: LightDeviceConfig,
     pub id: Id,
-    pub topic_substr: String,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,
@@ -149,7 +148,6 @@ pub struct LightConfig {
 pub struct StripConfig {
     pub device: LightDeviceConfig,
     pub id: Id,
-    pub topic_substr: String,
     pub number_of_lights: usize,
     pub splits: Vec<SplitLightConfig>,
 }
@@ -166,7 +164,6 @@ pub enum LightDeviceConfig {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
 pub struct SplitLightConfig {
-    pub name: String,
     pub id: Id,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
@@ -184,7 +181,7 @@ pub struct LifxConfig {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
 pub struct HotWaterConfig {
-    pub amber_display: Option<open_epaper_link::Config>,
+    pub id: Id,
 }
 
 #[cfg(test)]

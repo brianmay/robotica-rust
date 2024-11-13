@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeDelta, Utc};
-use robotica_tokio::entities::Id;
+use robotica_common::robotica::entities::Id;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, time::Duration};
 use tokio::time::{sleep_until, Instant};
@@ -51,9 +51,9 @@ impl<R> UserPlan<R> {
         self.plan.get_end_time()
     }
 
-    pub fn get_timedelta(&self) -> TimeDelta {
-        self.plan.get_timedelta()
-    }
+    // pub fn get_timedelta(&self) -> TimeDelta {
+    //     self.plan.get_timedelta()
+    // }
 
     pub fn get_time_left(&self, now: DateTime<Utc>) -> TimeDelta {
         self.plan.get_time_left(now)

@@ -19,6 +19,7 @@ mod robotica_wasm;
 mod services;
 
 use paste::paste;
+use tracing::debug;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -37,6 +38,8 @@ use yew_router::prelude::*;
 
 use robotica_common::version;
 
+use components::car::CarComponent;
+use components::hot_water::HotWaterComponent;
 use components::locations::locations_view::LocationsView;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
@@ -50,6 +53,10 @@ enum Route {
     Welcome,
     #[at("/room/:id")]
     Room { id: String },
+    #[at("/car/:id")]
+    Car { id: String },
+    #[at("/hot_water/:id")]
+    HotWater { id: String },
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -65,6 +72,8 @@ fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
         Route::Room { id } => html! { <Room id={id}/> },
+        Route::Car { id } => html! { <CarComponent id={id}/> },
+        Route::HotWater { id } => html! { <HotWaterComponent id={id}/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::Locations => return html! { <><NavBar/><LocationsView/></> },
@@ -131,8 +140,9 @@ impl Component for App {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            AppMsg::Config(rooms) => {
-                self.config = Some(rooms);
+            AppMsg::Config(config) => {
+                debug!("!!!Got config: {:?}", config.cars);
+                self.config = Some(config);
                 true
             }
         }
@@ -178,6 +188,16 @@ fn nav_bar() -> Html {
             .map(|room| (room.menu.as_str(), room))
             .into_group_map(),
         None => HashMap::new(),
+    };
+
+    let cars = match &config {
+        Some(config) => config.cars.clone(),
+        None => vec![],
+    };
+
+    let hot_water = match &config {
+        Some(config) => config.hot_water.clone(),
+        None => vec![],
     };
 
     // turn menus into a vector of tuples sorted by menu name
@@ -249,6 +269,26 @@ fn nav_bar() -> Html {
                                 </li>
                             }).collect::<Html>()
                         }
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            { "Cars" }
+                            </a>
+                            <ul class="dropdown-menu">
+                                { cars.iter().map(|car| html! {
+                                    <li>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.to_string())}</li>
+                                }).collect::<Html>() }
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            { "Hot Water" }
+                            </a>
+                            <ul class="dropdown-menu">
+                                { hot_water.iter().map(|hot_water| html! {
+                                    <li>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.to_string())}</li>
+                                }).collect::<Html>() }
+                            </ul>
+                        </li>
                         <li class="nav-item">
                             { link(Route::Schedule, "Schedule") }
                         </li>

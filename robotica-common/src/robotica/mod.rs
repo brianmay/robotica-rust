@@ -1,6 +1,8 @@
 //! Robotica structs
+pub mod amber;
 pub mod audio;
 pub mod commands;
+pub mod entities;
 pub mod hdmi;
 pub mod http_api;
 pub mod lights;

@@ -4,7 +4,7 @@ use std::{io::Write, marker::PhantomData, path::PathBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::entities::Id;
+use robotica_common::robotica::entities::Id;
 
 /// Configuration for `PersistentState`.
 #[derive(Deserialize)]

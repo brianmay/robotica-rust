@@ -7,17 +7,16 @@ pub mod plug_in_reminder;
 mod private;
 pub mod token;
 
-use crate::amber::{car::ChargeRequest, rules};
+use crate::amber::car::ChargeRequest;
 
 use monitor_doors::{DoorState, UserIsPresent};
 use reqwest::Url;
-use robotica_common::robotica::commands::Command;
 use robotica_common::teslamate;
 use robotica_tokio::services::tesla::api::{ChargingStateEnum, VehicleId};
 use serde::{Deserialize, Serialize};
 
 use robotica_common::mqtt::{Json, Parsed};
-use robotica_tokio::pipes::{stateful, stateless};
+use robotica_tokio::pipes::stateful;
 
 use super::InitState;
 
@@ -41,9 +40,6 @@ pub struct Receivers {
     pub doors: stateful::Receiver<DoorState>,
     pub windows: stateful::Receiver<DoorState>,
     pub user_present: stateful::Receiver<UserIsPresent>,
-    pub auto_charge: stateless::Receiver<Json<Command>>,
-    pub min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
-    pub rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 }
 
 impl Receivers {
@@ -86,21 +82,6 @@ impl Receivers {
                 "teslamate/cars/{id}/is_user_present"
             ));
 
-        let auto_charge = state
-            .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(&format!("command/Tesla/{id}/AutoCharge"));
-        let min_charge_tomorrow =
-            state
-                .subscriptions
-                .subscribe_into_stateless::<Parsed<u8>>(&format!(
-                    "robotica/command/tesla/{id}/min_charge_tomorrow"
-                ));
-        let rules = state
-            .subscriptions
-            .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(&format!(
-                "robotica/command/tesla/{id}/rules"
-            ));
-
         let is_charging = charging_state.clone().map(|(_, c)| c.is_charging());
 
         Self {
@@ -114,9 +95,6 @@ impl Receivers {
             doors,
             windows,
             user_present,
-            auto_charge,
-            min_charge_tomorrow,
-            rules,
         }
     }
 }

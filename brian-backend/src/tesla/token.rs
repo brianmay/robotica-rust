@@ -1,5 +1,5 @@
+use robotica_common::robotica::entities::Id;
 use robotica_tokio::{
-    entities::Id,
     pipes::stateless,
     services::{
         persistent_state::{self, PersistentStateRow},

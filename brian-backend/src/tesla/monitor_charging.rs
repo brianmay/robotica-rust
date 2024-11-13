@@ -1,4 +1,5 @@
 use opentelemetry::{global, KeyValue};
+use robotica_common::robotica::entities::Id;
 use robotica_common::{
     mqtt::{Json, Parsed},
     robotica::{
@@ -7,7 +8,6 @@ use robotica_common::{
     },
 };
 use robotica_tokio::{
-    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{persistent_state, tesla::api::ChargingStateEnum},
     spawn,
@@ -73,12 +73,13 @@ impl Inputs {
     pub fn from_receivers(
         receivers: &Receivers,
         charge_request: stateful::Receiver<ChargeRequest>,
+        auto_charge: stateless::Receiver<Json<Command>>,
         is_home: stateful::Receiver<bool>,
     ) -> Self {
         Self {
             charge_request,
             is_home,
-            auto_charge: receivers.auto_charge.clone(),
+            auto_charge,
             charging_state: receivers.charging_state.clone(),
             battery_level: receivers.battery_level.clone(),
             charge_limit: receivers.charge_limit.clone(),

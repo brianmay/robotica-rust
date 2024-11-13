@@ -24,12 +24,15 @@ mod tesla;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use amber::car::ChargeRequest;
+use amber::rules;
 use anyhow::Result;
 use chrono::{Local, TimeZone};
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
-use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
+use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::entities::Id;
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
 use robotica_common::robotica::message::{Audience, Message};
 use robotica_common::robotica::tasks::{Payload, Task};
@@ -38,7 +41,6 @@ use robotica_common::shelly;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
 use robotica_tokio::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_tokio::devices::{fake_switch, lifx};
-use robotica_tokio::entities::Id;
 use robotica_tokio::pipes::{stateful, stateless, Subscriber};
 use robotica_tokio::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_tokio::scheduling::executor::executor;
@@ -311,11 +313,14 @@ fn monitor_bathroom_door(state: &mut InitState) {
     });
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn monitor_hot_water(
     state: &mut InitState,
     hot_water: config::HotWaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
 ) {
+    let id = hot_water.id;
+
     let span = tracing::info_span!("Hot Water");
     let _guard = span.enter();
 
@@ -327,12 +332,12 @@ fn monitor_hot_water(
     let rules = state
         .subscriptions
         .subscribe_into_stateless::<Json<amber::rules::RuleSet<amber::hot_water::Request>>>(
-            "robotica/command/hot_water/rules",
+            id.get_command_topic("amber_rules"),
         );
 
     let mqtt_clone = state.mqtt.clone();
     let hot_water_state = amber::hot_water::run(
-        &Id::new("hot_water"),
+        &id,
         &state.persistent_state_database,
         prices.clone(),
         is_on,
@@ -340,12 +345,9 @@ fn monitor_hot_water(
     );
     hot_water_state.clone().send_to_mqtt_json(
         &state.mqtt,
-        "robotica/state/hot_water/amber",
+        id.get_state_topic("amber"),
         &SendOptions::new(),
     );
-    if let Some(display) = hot_water.amber_display {
-        open_epaper_link::output_amber_hotwater(display, hot_water_state.clone());
-    }
     let hot_water_request = hot_water_state
         .map(|(_, state)| state.get_result())
         .rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300));
@@ -411,7 +413,19 @@ fn monitor_tesla(
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
     token: &stateless::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
 ) {
-    let teslamate_id = tesla.teslamate_id;
+    let auto_charge = state
+        .subscriptions
+        .subscribe_into_stateless::<Json<Command>>(car.id.get_command_topic("auto_charge"));
+
+    let min_charge_tomorrow = state
+        .subscriptions
+        .subscribe_into_stateless::<Parsed<u8>>(car.id.get_command_topic("min_charge_tomorrow"));
+
+    let rules = state
+        .subscriptions
+        .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(
+            car.id.get_command_topic("rules"),
+        );
 
     let receivers = tesla::Receivers::new(tesla, state);
 
@@ -424,7 +438,7 @@ fn monitor_tesla(
     locations.messages.send_to(&state.message_sink);
     locations.location_message.send_to_mqtt_json(
         &state.mqtt,
-        format!("state/Tesla/{id}/Locations", id = teslamate_id.to_string()),
+        car.id.get_state_topic("locations"),
         &SendOptions::new(),
     );
 
@@ -433,21 +447,18 @@ fn monitor_tesla(
         &state.persistent_state_database,
         prices.clone(),
         receivers.battery_level.clone(),
-        receivers.min_charge_tomorrow.clone(),
+        min_charge_tomorrow,
         receivers.is_charging.clone(),
-        receivers.rules.clone(),
+        rules,
     );
     charge_state.clone().send_to_mqtt_json(
         &state.mqtt,
-        format!(
-            "robotica/state/tesla/{id}/amber",
-            id = teslamate_id.to_string()
-        ),
+        car.id.get_state_topic("amber"),
         &SendOptions::new(),
     );
 
     if let Some(display) = &car.amber_display {
-        open_epaper_link::output_amber_car(car, display.clone(), charge_state.clone());
+        open_epaper_link::output_location(&car.name, display.clone(), locations.location.clone());
     }
 
     let charge_request = charge_state.map(|(_, state)| state.get_result());
@@ -455,6 +466,7 @@ fn monitor_tesla(
     let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
         &receivers,
         charge_request,
+        auto_charge,
         locations.is_home,
     );
     let outputs = tesla::monitor_charging::monitor_charging(
@@ -468,10 +480,7 @@ fn monitor_tesla(
 
     outputs.auto_charge.send_to_mqtt_string(
         &state.mqtt,
-        format!(
-            "state/Tesla/{id}/AutoCharge/power",
-            id = teslamate_id.to_string()
-        ),
+        car.id.get_state_topic("auto_charge/power"),
         &SendOptions::new(),
     );
 
@@ -494,12 +503,12 @@ fn monitor_tesla(
 
 fn fake_switch(state: &mut InitState, topic_substr: &str) {
     let topic_substr: String = topic_substr.into();
-    let topic = format!("command/{topic_substr}");
+    let topic = format!("robotica/command/{topic_substr}");
     let rx = state
         .subscriptions
         .subscribe_into_stateless::<Json<Command>>(&topic);
 
-    let topic = format!("state/{topic_substr}/power");
+    let topic = format!("robotica/state/{topic_substr}/power");
     fake_switch::run(rx).send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
 }
 
@@ -537,12 +546,10 @@ fn auto_light(
     shared: &SceneMap,
     config: &config::LightConfig,
 ) {
-    let topic_substr = &config.topic_substr;
-
     let inputs = lights::Inputs {
         commands: init_state
             .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(format!("command/{topic_substr}")),
+            .subscribe_into_stateless::<Json<Command>>(config.id.get_command_topic("")),
     };
 
     let hash_map: HashMap<SceneName, Scene> = config
@@ -557,7 +564,7 @@ fn auto_light(
     let auto_scene = Scene::new(
         init_state
             .subscriptions
-            .subscribe_into_stateful::<Json<PowerColor>>(format!("command/{topic_substr}/auto"))
+            .subscribe_into_stateful::<Json<PowerColor>>(config.id.get_command_topic("auto"))
             .map(|(_, Json(pc))| pc),
         SceneName::new("auto"),
     );
@@ -580,25 +587,17 @@ fn auto_light(
 
     scene.send_to_mqtt_string(
         &init_state.mqtt,
-        format!("state/{topic_substr}/scene"),
+        config.id.get_state_topic("scene"),
         &SendOptions::new(),
     );
 
-    send_to_device(
-        &config.id,
-        &config.device,
-        topic_substr,
-        pc,
-        discover,
-        init_state,
-    );
+    send_to_device(&config.id, &config.device, pc, discover, init_state);
 }
 
 fn split_light(
     id: &Id,
     init_state: &mut InitState,
     shared: &SceneMap,
-    topic_substr: &str,
     scenes: &HashMap<SceneName, config::LightSceneConfig>,
     flash_color: &PowerColor,
     priority: usize,
@@ -606,7 +605,7 @@ fn split_light(
     let inputs = lights::Inputs {
         commands: init_state
             .subscriptions
-            .subscribe_into_stateless::<Json<Command>>(format!("command/{topic_substr}")),
+            .subscribe_into_stateless::<Json<Command>>(id.get_command_topic("")),
     };
 
     let hash_map: HashMap<SceneName, Scene> = scenes
@@ -620,7 +619,7 @@ fn split_light(
     let auto_scene = Scene::new(
         init_state
             .subscriptions
-            .subscribe_into_stateful::<Json<PowerColor>>(format!("command/{topic_substr}/auto"))
+            .subscribe_into_stateful::<Json<PowerColor>>(id.get_command_topic("auto"))
             .map(|(_, Json(pc))| pc),
         SceneName::new("auto"),
     );
@@ -644,7 +643,7 @@ fn split_light(
 
     scene.send_to_mqtt_string(
         &init_state.mqtt,
-        format!("state/{topic_substr}/scene"),
+        id.get_state_topic("scene"),
         &SendOptions::new(),
     );
 
@@ -660,21 +659,13 @@ fn strip_light(
     let span = span!(tracing::Level::INFO, "strip_light", id = %config.id);
     let _guard = span.enter();
 
-    let (combined_tx, combined_rx) = stateful::create_pipe(&config.topic_substr);
-    let topic_substr = &config.topic_substr;
+    let (combined_tx, combined_rx) = stateful::create_pipe("combined");
 
     for (priority, split) in config.splits.iter().enumerate() {
-        let name = &split.name;
-        let topic_substr = if name == "all" {
-            topic_substr.to_string()
-        } else {
-            format!("{topic_substr}/split/{name}")
-        };
         split_light(
             &split.id,
             init_state,
             shared,
-            &topic_substr,
             &split.scenes,
             &split.flash_color,
             priority,
@@ -698,26 +689,18 @@ fn strip_light(
 
     let pc = lights::run_merge_light(combined_rx, &config.id, merge_config);
 
-    send_to_device(
-        &config.id,
-        &config.device,
-        topic_substr,
-        pc,
-        discover,
-        init_state,
-    );
+    send_to_device(&config.id, &config.device, pc, discover, init_state);
 }
 
 #[instrument(skip_all)]
 fn send_to_device(
     id: &Id,
     device: &config::LightDeviceConfig,
-    topic_substr: &str,
     pc: stateful::Receiver<PowerColor>,
     discover: &stateless::Receiver<lifx::Device>,
     init_state: &InitState,
 ) {
-    let id = id.clone();
+    let id_clone = id.clone();
     let output = match device {
         config::LightDeviceConfig::Lifx { lifx_id } => lifx::device_entity(
             pc,
@@ -728,7 +711,7 @@ fn send_to_device(
         config::LightDeviceConfig::Debug { lifx_id } => {
             let lifx_id = *lifx_id;
             pc.map(move |(_, pc)| {
-                info!(%id, "Debug {lifx_id}: {pc:?}");
+                info!(%id_clone, "Debug {lifx_id}: {pc:?}");
                 State::Online(pc)
             })
         }
@@ -736,7 +719,7 @@ fn send_to_device(
 
     output.clone().send_to_mqtt_json(
         &init_state.mqtt,
-        format!("state/{topic_substr}/status"),
+        id.get_state_topic("status"),
         &SendOptions::new(),
     );
 
@@ -748,7 +731,7 @@ fn send_to_device(
         })
         .send_to_mqtt_json(
             &init_state.mqtt,
-            format!("state/{topic_substr}/power"),
+            id.get_state_topic("power"),
             &SendOptions::new(),
         );
 }

@@ -212,7 +212,7 @@ const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
     "zwave/#",
     "workgroup/#",
 ];
-const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "cmnd/#", "zwave/#"];
+const ALLOWED_SEND_TOPICS: &[&str] = &["command/#", "robotica/command/#", "cmnd/#", "zwave/#"];
 
 #[must_use]
 #[allow(clippy::cognitive_complexity)]

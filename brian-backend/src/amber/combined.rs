@@ -1,6 +1,6 @@
 use chrono::{DateTime, TimeZone, Utc};
 use opentelemetry::{global, metrics::Meter, KeyValue};
-use robotica_tokio::entities::Id;
+use robotica_common::robotica::entities::Id;
 use serde::Serialize;
 use std::fmt::Debug;
 use tracing::info;
@@ -75,9 +75,9 @@ pub struct State<R> {
 }
 
 impl<R> State<R> {
-    pub const fn get_plan(&self) -> &MaybeUserPlan<R> {
-        &self.plan
-    }
+    // pub const fn get_plan(&self) -> &MaybeUserPlan<R> {
+    //     &self.plan
+    // }
 
     // pub const fn get_rules(&self) -> &RuleSet<R> {
     //     &self.rules

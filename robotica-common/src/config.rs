@@ -2,9 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::controllers::{
-    robotica::{hdmi, lights, music, switch},
-    tasmota, zwave,
+use crate::{
+    controllers::{
+        robotica::{hdmi, lights, music, switch},
+        tasmota, zwave,
+    },
+    robotica::entities::Id,
 };
 
 /// Configuration for a button Controller
@@ -90,6 +93,25 @@ pub struct RoomConfig {
     pub rows: Vec<ButtonRowConfig>,
 }
 
+/// Configuration for a car
+
+#[derive(Deserialize, Serialize, Clone, Eq, PartialEq, Debug)]
+pub struct CarConfig {
+    /// The id of the car
+    pub id: Id,
+    /// The name of the car
+    pub title: String,
+}
+
+/// Hotwater configuration
+#[derive(Deserialize, Serialize, Clone, Eq, PartialEq)]
+pub struct HotWaterConfig {
+    /// The id of the hot water
+    pub id: Id,
+    /// The name of the hot water
+    pub title: String,
+}
+
 /// A number of rooms indexed by id
 pub type Rooms = Vec<RoomConfig>;
 
@@ -98,6 +120,12 @@ pub type Rooms = Vec<RoomConfig>;
 pub struct Config {
     /// The rooms for this UI
     pub rooms: Rooms,
+
+    /// The cars for this UI
+    pub cars: Vec<CarConfig>,
+
+    /// The hotwater config for this UI
+    pub hot_water: Vec<HotWaterConfig>,
 
     /// The name of the server in MQTT topics
     pub instance: String,

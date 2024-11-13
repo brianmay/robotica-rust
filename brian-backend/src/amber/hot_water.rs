@@ -9,10 +9,10 @@ use opentelemetry::metrics::Meter;
 use robotica_common::{
     datetime::{time_delta, utc_now},
     mqtt::Json,
+    robotica::entities::Id,
 };
 use robotica_macro::time_delta_constant;
 use robotica_tokio::{
-    entities::Id,
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
         stateless, Subscriber, Subscription,

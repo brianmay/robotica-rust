@@ -90,6 +90,15 @@ impl LocationList {
     }
 }
 
+impl IntoIterator for LocationList {
+    type Item = Location;
+    type IntoIter = std::vec::IntoIter<Location>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 /// A request to create a new location.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct CreateLocation {

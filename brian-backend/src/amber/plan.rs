@@ -5,7 +5,7 @@ use std::{
 
 use chrono::{TimeDelta, Utc};
 use robotica_common::datetime::{datetime_to_string, time_delta};
-use robotica_tokio::entities::Id;
+use robotica_common::robotica::entities::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 

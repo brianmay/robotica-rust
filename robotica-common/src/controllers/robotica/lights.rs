@@ -56,14 +56,14 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr, "scene"];
+        let p = ["robotica", "state", &config.topic_substr, "scene"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Scene as u32,
         };
         result.push(s);
 
-        let p = ["state", &config.topic_substr, "power"];
+        let p = ["robotica", "state", &config.topic_substr, "power"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Power as u32,
@@ -114,7 +114,7 @@ impl ControllerTrait for Controller {
         };
 
         let payload = Json(Command::Light(action));
-        let topic = format!("command/{}", self.config.topic_substr);
+        let topic = format!("robotica/command/{}", self.config.topic_substr);
         mqtt_command_vec(&topic, &payload)
     }
 

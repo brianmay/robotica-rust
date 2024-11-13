@@ -50,7 +50,7 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr, "power"];
+        let p = ["robotica", "state", &config.topic_substr, "power"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::Power as u32,
@@ -98,7 +98,7 @@ impl ControllerTrait for Controller {
             TurnOnOff::TurnOff => DeviceAction::TurnOff,
         };
 
-        let topic = format!("command/{}", self.config.topic_substr);
+        let topic = format!("robotica/command/{}", self.config.topic_substr);
         let command = DeviceCommand { action };
         let payload = Json(Command::Device(command));
         mqtt_command_vec(&topic, &payload)

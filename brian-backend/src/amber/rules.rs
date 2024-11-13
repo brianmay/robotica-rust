@@ -2,9 +2,9 @@ use std::{collections::HashSet, fmt::Debug};
 
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string};
-use robotica_tokio::{
-    conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar},
-    entities::Id,
+use robotica_common::robotica::entities::Id;
+use robotica_tokio::conditions::ast::{
+    BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar,
 };
 use serde::{Deserialize, Serialize};
 

@@ -14,9 +14,9 @@ mod ui;
 
 use std::sync::Arc;
 
+use robotica_common::robotica::entities::Id;
 use robotica_common::version;
 use robotica_tokio::{
-    entities::Id,
     pipes::stateless::{self, Started},
     services::{
         mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},

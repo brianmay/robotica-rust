@@ -1038,7 +1038,8 @@ mod tests {
     #![allow(clippy::similar_names)]
     use std::path::PathBuf;
 
-    use crate::{entities::Id, services::persistent_state::PersistentStateDatabase};
+    use crate::services::persistent_state::PersistentStateDatabase;
+    use robotica_common::robotica::entities::Id;
 
     use super::*;
 

@@ -76,12 +76,6 @@ pub fn get() -> Rooms {
             menu: "Common".to_string(),
             rows: passage_config(&passage_light).into(),
         },
-        RoomConfig {
-            id: "tesla".to_string(),
-            title: "Tesla".to_string(),
-            menu: "Common".to_string(),
-            rows: tesla_config().into(),
-        },
     ];
 
     rooms
@@ -345,27 +339,6 @@ fn passage_config(passage_light: &LightConfig) -> UiConfig {
         lights: vec![passage_light.clone()],
         music: vec![],
         switches: vec![],
-        hdmi_matrix: vec![],
-    }
-}
-
-fn tesla_config() -> UiConfig {
-    UiConfig {
-        lights: vec![],
-        music: vec![],
-        switches: vec![ButtonRowConfig {
-            id: "switches".to_string(),
-            title: "Switches".to_string(),
-            buttons: vec![ButtonConfig {
-                id: "charge".to_string(),
-                title: "Charge".to_string(),
-                icon: Icon::Light,
-                controller: ControllerConfig::Switch(switch::Config {
-                    action: Action::Toggle,
-                    topic_substr: "Tesla/1/AutoCharge".to_string(),
-                }),
-            }],
-        }],
         hdmi_matrix: vec![],
     }
 }

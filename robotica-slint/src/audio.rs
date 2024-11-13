@@ -11,13 +11,13 @@ use robotica_common::{
     robotica::{
         audio::{AudioCommand, Message, State},
         commands::Command,
+        entities::Id,
         lights::LightCommand,
         switch::{DeviceAction, DevicePower},
         tasks::{Payload, SubTask, Task},
     },
 };
 use robotica_tokio::{
-    entities::Id,
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{
         mqtt::{self, MqttTx, Subscriptions},
@@ -108,14 +108,17 @@ pub fn run(
     let command_rx: stateless::Receiver<Json<Command>> =
         subscriptions.subscribe_into_stateless(topic);
     let messages_enabled_rx: stateful::Receiver<Json<Command>> = subscriptions
-        .subscribe_into_stateful(format!("command/{}", config.messages_enabled_subtopic));
+        .subscribe_into_stateful(format!(
+            "robotica/command/{}",
+            config.messages_enabled_subtopic
+        ));
     let psr = database.for_name::<State>(&id, topic_substr);
     let state = psr.load().unwrap_or_default();
 
     let (state_tx, state_rx) = stateful::create_pipe("audio_state");
     state_rx.send_to_mqtt_json(
         &mqtt,
-        format!("state/{topic_substr}"),
+        format!("robotica/state/{topic_substr}"),
         &mqtt::SendOptions::default(),
     );
 
