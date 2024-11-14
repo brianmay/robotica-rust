@@ -100,7 +100,11 @@ impl Component for HotWaterComponent {
         let id = Id::new(&props.id);
 
         let hot_water = if let Some(config) = &self.config {
-            config.cars.iter().find(|car| car.id == id).cloned()
+            config
+                .hot_waters
+                .iter()
+                .find(|hot_water| hot_water.id == id)
+                .cloned()
         } else {
             None
         };

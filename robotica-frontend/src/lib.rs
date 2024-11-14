@@ -19,7 +19,6 @@ mod robotica_wasm;
 mod services;
 
 use paste::paste;
-use tracing::debug;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -141,7 +140,6 @@ impl Component for App {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AppMsg::Config(config) => {
-                debug!("!!!Got config: {:?}", config.cars);
                 self.config = Some(config);
                 true
             }
@@ -196,7 +194,7 @@ fn nav_bar() -> Html {
     };
 
     let hot_water = match &config {
-        Some(config) => config.hot_water.clone(),
+        Some(config) => config.hot_waters.clone(),
         None => vec![],
     };
 
@@ -281,7 +279,7 @@ fn nav_bar() -> Html {
                         </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            { "Hot Water" }
+                            { "Hot Waters" }
                             </a>
                             <ul class="dropdown-menu">
                                 { hot_water.iter().map(|hot_water| html! {

@@ -125,7 +125,7 @@ pub struct Config {
     pub cars: Vec<CarConfig>,
 
     /// The hotwater config for this UI
-    pub hot_water: Vec<HotWaterConfig>,
+    pub hot_waters: Vec<HotWaterConfig>,
 
     /// The name of the server in MQTT topics
     pub instance: String,

@@ -25,7 +25,7 @@ pub async fn config_handler(
             title: "My Tesla".to_string(),
         }],
         // FIXME: This should not be hardcoded.
-        hot_water: vec![config::HotWaterConfig {
+        hot_waters: vec![config::HotWaterConfig {
             id: Id::new("hot_water"),
             title: "Hot Water Bathroom".to_string(),
         }],
