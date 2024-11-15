@@ -118,14 +118,14 @@ pub fn run(
     let (state_tx, state_rx) = stateful::create_pipe("audio_state");
     state_rx.send_to_mqtt_json(
         &mqtt,
-        format!("robotica/state/{topic_substr}"),
+        format!("state/{topic_substr}"),
         &mqtt::SendOptions::default(),
     );
 
     let (power_tx, power_rx) = stateful::create_pipe("audio_messages_enabled");
     power_rx.send_to_mqtt_string(
         &mqtt,
-        format!("state/{}/power", config.messages_enabled_subtopic),
+        format!("robotica/state/{}/power", config.messages_enabled_subtopic),
         &mqtt::SendOptions::default(),
     );
 
