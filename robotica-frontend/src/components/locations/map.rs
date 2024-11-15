@@ -15,7 +15,10 @@ use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
-    robotica::locations::{CreateLocation, Location, LocationMessage},
+    robotica::{
+        entities::Id,
+        locations::{CreateLocation, Location, LocationMessage},
+    },
     user::User,
 };
 use tap::{Pipe, Tap};
@@ -686,7 +689,8 @@ fn subscribe_to_car(ctx: &Context<MapComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = "state/Tesla/1/Locations".to_string();
+    let id = Id::new("tesla_1");
+    let topic = id.get_state_topic("locations");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         let Json(location): Json<LocationMessage> = msg.try_into().unwrap();
         Msg::Car(location)

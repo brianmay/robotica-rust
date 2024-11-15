@@ -200,8 +200,10 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
     debug!("websocket: ending socket");
 }
 
-const ADMIN_SUBSCRIBE_TOPICS: &[&str] = &["state/Tesla/+/Locations", "state/Tesla/+/Location"];
+// FIXME: Revise
+const ADMIN_SUBSCRIBE_TOPICS: &[&str] = &[];
 
+// FIXME: Revise
 const ALLOWED_SUBSCRIBE_TOPICS: &[&str] = &[
     "state/#",
     "stat/#",
