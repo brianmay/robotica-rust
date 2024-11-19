@@ -297,7 +297,7 @@ fn monitor_bathroom_door(state: &mut InitState) {
                     DoorState::Closed => "The bathroom is occupied",
                 };
                 mqtt.try_serialize_send(
-                    "command/Passage/Light/split/bathroom",
+                    "robotica/command/Passage/Light/split/bathroom",
                     &Json(command),
                     Retain::NoRetain,
                     QoS::ExactlyOnce,
