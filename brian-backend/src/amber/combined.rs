@@ -234,7 +234,7 @@ mod tests {
         type GaugeType = f64;
 
         fn init_gauge(meter: &Meter) -> opentelemetry::metrics::Gauge<Self::GaugeType> {
-            meter.f64_gauge("test").with_description("test").init()
+            meter.f64_gauge("test").with_description("test").build()
         }
 
         fn get_meter_value(&self) -> Self::GaugeType {

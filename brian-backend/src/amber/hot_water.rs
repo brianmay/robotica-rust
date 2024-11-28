@@ -51,7 +51,7 @@ impl combined::RequestTrait for Request {
     type GaugeType = u64;
 
     fn init_gauge(meter: &Meter) -> opentelemetry::metrics::Gauge<Self::GaugeType> {
-        meter.u64_gauge("charge_request").init()
+        meter.u64_gauge("charge_request").build()
     }
 
     fn get_meter_value(&self) -> Self::GaugeType {

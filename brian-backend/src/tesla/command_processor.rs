@@ -56,12 +56,12 @@ impl Meters {
         let meter = global::meter("tesla::command_processor");
         Self {
             api: api::Meters::new(),
-            outgoing_attempt: meter.u64_counter("outgoing_attempt").init(),
-            outgoing_requests: meter.u64_counter("outgoing_requests").init(),
-            incoming_requests: meter.u64_counter("incoming_requests").init(),
-            notified_errors: meter.u64_counter("notified_errors").init(),
-            cleared_errors: meter.u64_counter("cleared_errors").init(),
-            cancelled: meter.u64_counter("cancelled").init(),
+            outgoing_attempt: meter.u64_counter("outgoing_attempt").build(),
+            outgoing_requests: meter.u64_counter("outgoing_requests").build(),
+            incoming_requests: meter.u64_counter("incoming_requests").build(),
+            notified_errors: meter.u64_counter("notified_errors").build(),
+            cleared_errors: meter.u64_counter("cleared_errors").build(),
+            cancelled: meter.u64_counter("cancelled").build(),
             id: car.id.to_string(),
         }
     }

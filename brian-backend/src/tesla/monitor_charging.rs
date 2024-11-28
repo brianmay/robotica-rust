@@ -34,8 +34,8 @@ impl Meters {
         let meter = global::meter("tesla::monitor_charging");
 
         Self {
-            charging: meter.u64_gauge("charging").init(),
-            battery: meter.u64_gauge("battery").init(),
+            charging: meter.u64_gauge("charging").build(),
+            battery: meter.u64_gauge("battery").build(),
             id: config.id.clone(),
         }
     }

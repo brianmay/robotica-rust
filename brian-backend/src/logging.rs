@@ -1,8 +1,14 @@
 use data_encoding::BASE64;
-use opentelemetry::{global, trace::TracerProvider, KeyValue};
+use opentelemetry::{global, trace::TracerProvider, InstrumentationScope, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{metrics::SdkMeterProvider, runtime, trace as sdktrace, Resource};
+use opentelemetry_otlp::{
+    LogExporter, MetricExporter, SpanExporter, WithExportConfig, WithTonicConfig,
+};
+use opentelemetry_sdk::{
+    logs::LoggerProvider,
+    metrics::{PeriodicReader, SdkMeterProvider},
+    runtime, trace as sdktrace, Resource,
+};
 use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
@@ -69,10 +75,10 @@ pub enum Error {
     Trace(#[from] opentelemetry::trace::TraceError),
 
     #[error("Metrics error: {0}")]
-    Metrics(#[from] opentelemetry::metrics::MetricsError),
+    Metrics(#[from] opentelemetry_sdk::metrics::MetricError),
 
     #[error("Log error: {0}")]
-    Log(#[from] opentelemetry::logs::LogError),
+    Log(#[from] opentelemetry_sdk::logs::LogError),
 
     #[error("TryInitError error: {0}")]
     TryInit(#[from] tracing_subscriber::util::TryInitError),
@@ -83,23 +89,20 @@ fn init_tracer_provider(
     resource: &Resource,
     remote: &RemoteConfig,
 ) -> Result<sdktrace::TracerProvider, Error> {
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
-                .with_endpoint(remote.endpoint.clone())
-                // .with_interceptor(|request| {
-                //     println!("xxxxx {request:?}");
-                //     Ok(request)
-                // })
-                .with_metadata(otlp_metadata(remote)?),
-        )
-        .with_trace_config(
-            opentelemetry_sdk::trace::Config::default().with_resource(resource.clone()),
-        )
-        .install_batch(runtime::Tokio)?
+    let exporter = SpanExporter::builder()
+        .with_tonic()
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
+        .with_endpoint(remote.endpoint.clone())
+        // .with_interceptor(|request| {
+        //     println!("xxxxx {request:?}");
+        //     Ok(request)
+        // })
+        .with_metadata(otlp_metadata(remote)?)
+        .build()?;
+    sdktrace::TracerProvider::builder()
+        .with_batch_exporter(exporter, runtime::Tokio)
+        .with_resource(resource.clone())
+        .build()
         .pipe(Ok)
 }
 
@@ -107,38 +110,37 @@ fn init_metrics(
     resource: &Resource,
     remote: &RemoteConfig,
 ) -> Result<opentelemetry_sdk::metrics::SdkMeterProvider, Error> {
-    let provider = opentelemetry_otlp::new_pipeline()
-        .metrics(runtime::Tokio)
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
-                .with_endpoint(remote.endpoint.clone())
-                .with_metadata(otlp_metadata(remote)?),
-        )
+    let exporter = MetricExporter::builder()
+        .with_tonic()
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
+        .with_endpoint(remote.endpoint.clone())
+        .with_metadata(otlp_metadata(remote)?)
+        .build()?;
+
+    let reader = PeriodicReader::builder(exporter, runtime::Tokio).build();
+
+    SdkMeterProvider::builder()
+        .with_reader(reader)
         .with_resource(resource.clone())
-        .build();
-    match provider {
-        Ok(provider) => Ok(provider),
-        Err(err) => Err(err.into()),
-    }
+        .build()
+        .pipe(Ok)
 }
 
 fn init_logs(
     resource: &Resource,
     remote: &RemoteConfig,
 ) -> Result<opentelemetry_sdk::logs::LoggerProvider, Error> {
-    opentelemetry_otlp::new_pipeline()
-        .logging()
+    let exporter = LogExporter::builder()
+        .with_tonic()
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
+        .with_endpoint(remote.endpoint.clone())
+        .with_metadata(otlp_metadata(remote)?)
+        .build()?;
+
+    LoggerProvider::builder()
         .with_resource(resource.clone())
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
-                .with_endpoint(remote.endpoint.clone())
-                .with_metadata(otlp_metadata(remote)?),
-        )
-        .install_batch(runtime::Tokio)?
+        .with_batch_exporter(exporter, runtime::Tokio)
+        .build()
         .pipe(Ok)
 }
 
@@ -173,8 +175,11 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         global::set_tracer_provider(tracer_provider.clone());
         global::set_meter_provider(meter_provider.clone());
 
-        let tracer = tracer_provider.tracer_builder("brian-backend").build();
-        // let tracer = tracer_provider.tracer("brian-backend");
+        let scope = InstrumentationScope::builder("brian-backend")
+            .with_version("1.0")
+            .build();
+
+        let tracer = tracer_provider.tracer_with_scope(scope);
 
         layer
             .with(MetricsLayer::new(meter_provider.clone()))
