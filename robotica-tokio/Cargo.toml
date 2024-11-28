@@ -34,7 +34,7 @@ pyo3 = { version = "0.22.6", features = ["auto-initialize", "chrono"], optional 
 
 # http server
 axum-core = "0.4.3"
-axum = { version = "0.7.7", features = ["ws", "macros"] }
+axum = { version = "0.7.9", features = ["ws", "macros"] }
 openid = "0.15.0"
 maud = { version = "0.26.0", features = ["axum"] }
 base64 = "0.22.1"
