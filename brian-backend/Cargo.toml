@@ -28,7 +28,7 @@ url = "2.5.3"
 serde_tuple = "1.0.0"
 
 data-encoding = "2.6.0"
-tracing = "0.1.35"
+tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-core = "0.1.33"
 tracing-opentelemetry = "0.28.0"
