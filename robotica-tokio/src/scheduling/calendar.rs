@@ -1,6 +1,7 @@
 //! Provide ability to load from Google Calendar.
 
 use chrono::{DateTime, NaiveDate, Utc};
+use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::{FromPyObject, PyAny};
 
@@ -104,7 +105,7 @@ pub(crate) enum Error {
     Python(#[from] PyErr),
 
     #[error("Reqwest error: {0}")]
-    Reqest(#[from] reqwest::Error),
+    Reqwest(#[from] reqwest::Error),
 }
 
 pub(crate) async fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result<Calendar, Error> {
@@ -112,10 +113,13 @@ pub(crate) async fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result
 
     let text = reqwest::get(url).await?.error_for_status()?.text().await?;
 
-    let py_app = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/python/robotica.py"));
+    let py_app = c_str!(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/python/robotica.py"
+    )));
 
     Python::with_gil(|py| {
-        let app = PyModule::from_code_bound(py, py_app, "robotica.py", "robotica")?;
+        let app = PyModule::from_code(py, py_app, c_str!("robotica.py"), c_str!("robotica"))?;
         let args = (text, start, stop);
         let calendar: Calendar = app.getattr("read_calendar")?.call1(args)?.extract()?;
         Ok(calendar)
