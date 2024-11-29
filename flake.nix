@@ -504,7 +504,6 @@
             robotica-freeswitch-clippy = robotica-freeswitch.clippy;
             # freeswitch-coverage = robotica-freeswitch.coverage;
             robotica-freeswitch = robotica-freeswitch.pkg;
-            inherit test_robotica_backend;
           };
 
           devShells.default = devShell;
