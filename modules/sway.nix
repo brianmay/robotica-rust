@@ -3,12 +3,21 @@
   pkgs,
   lib,
   ...
-}: let
+}:
+let
   cfg = config.services.sway;
-  inherit (lib) types mkOption mkEnableOption mkIf literalExpression escapeShellArgs mkDefault;
-in {
-  options.services.sway.enable =
-    mkEnableOption (lib.mdDoc "sway kiosk service");
+  inherit (lib)
+    types
+    mkOption
+    mkEnableOption
+    mkIf
+    literalExpression
+    escapeShellArgs
+    mkDefault
+    ;
+in
+{
+  options.services.sway.enable = mkEnableOption (lib.mdDoc "sway kiosk service");
 
   options.services.sway.user = mkOption {
     type = types.str;
@@ -20,11 +29,10 @@ in {
 
   options.services.sway.extraArguments = mkOption {
     type = types.listOf types.str;
-    default = [];
+    default = [ ];
     defaultText = literalExpression "[]";
-    description =
-      lib.mdDoc "Additional command line arguments to pass to sway.";
-    example = ["-d"];
+    description = lib.mdDoc "Additional command line arguments to pass to sway.";
+    example = [ "-d" ];
   };
 
   options.services.sway.program = mkOption {
@@ -56,10 +64,14 @@ in {
         "systemd-logind.service"
         "getty@tty1.service"
       ];
-      before = ["graphical.target"];
-      wants = ["dbus.socket" "systemd-logind.service" "plymouth-quit.service"];
-      wantedBy = ["graphical.target"];
-      conflicts = ["getty@tty1.service"];
+      before = [ "graphical.target" ];
+      wants = [
+        "dbus.socket"
+        "systemd-logind.service"
+        "plymouth-quit.service"
+      ];
+      wantedBy = [ "graphical.target" ];
+      conflicts = [ "getty@tty1.service" ];
 
       restartIfChanged = false;
       unitConfig.ConditionPathExists = "/dev/tty1";
@@ -101,12 +113,12 @@ in {
       session required ${config.systemd.package}/lib/security/pam_systemd.so
     '';
 
-    hardware.opengl.enable = mkDefault true;
+    hardware.graphics.enable = mkDefault true;
 
-    systemd.targets.graphical.wants = ["sway-tty1.service"];
+    systemd.targets.graphical.wants = [ "sway-tty1.service" ];
 
     systemd.defaultUnit = "graphical.target";
   };
 
-  meta.maintainers = with lib.maintainers; [matthewbauer];
+  meta.maintainers = with lib.maintainers; [ matthewbauer ];
 }

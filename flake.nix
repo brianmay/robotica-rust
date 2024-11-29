@@ -2,8 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -23,7 +22,6 @@
       rust-overlay,
       crane,
       poetry2nix,
-      nixpkgs-unstable,
       flockenzeit,
       devenv,
     }:
@@ -52,7 +50,6 @@
             inherit system;
             overlays = [ (import rust-overlay) ];
           };
-          pkgs_unstable = nixpkgs-unstable.legacyPackages.${system};
           nodejs = pkgs.nodejs_20;
 
           p2n = import poetry2nix { inherit pkgs; };
@@ -351,7 +348,7 @@
                 packages = [
                   pkgs.poetry
                   poetry_env
-                  pkgs_unstable.rust-analyzer
+                  pkgs.rust-analyzer
                   pkgs.pkg-config
                   pkgs.openssl
                   pkgs.protobuf
