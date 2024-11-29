@@ -65,7 +65,9 @@ impl Environment {
             serde_yml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         if let Some(static_path) = &self.static_path {
-            config.http.static_path.clone_from(static_path);
+            if let Some(http_config) = &mut config.http {
+                http_config.static_path.clone_from(static_path);
+            }
         }
 
         Ok(config)
@@ -80,17 +82,17 @@ impl Environment {
 #[derive(Deserialize)]
 pub struct Config {
     pub mqtt: mqtt::Config,
-    pub amber: amber::api::Config,
-    pub http: http::Config,
+    pub amber: Option<amber::api::Config>,
+    pub http: Option<http::Config>,
     pub influxdb: influxdb::Config,
-    pub executor: executor::Config,
+    pub executor: Option<executor::Config>,
     pub persistent_state: persistent_state::Config,
     pub cars: Vec<car::Config>,
     pub database_url: String,
     pub logging: crate::logging::Config,
     pub lights: Vec<LightConfig>,
     pub strips: Vec<StripConfig>,
-    pub lifx: LifxConfig,
+    pub lifx: Option<LifxConfig>,
     pub metrics: Vec<metrics::ConfigMetric>,
     pub hot_water: Option<HotWaterConfig>,
 }

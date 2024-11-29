@@ -208,31 +208,34 @@ async fn setup_pipes(
     config: config::Config,
     postgres: sqlx::PgPool,
 ) {
-    let (prices, usage) = amber::run(&Id::new("amber_account"), config.amber).unwrap_or_else(|e| {
-        panic!("Error running amber: {e}");
-    });
-    amber::logging::log_prices(prices.clone(), &config.influxdb);
-    amber::logging::log_usage(usage, &config.influxdb);
+    if let Some(amber_config) = config.amber {
+        let (prices, usage) =
+            amber::run(&Id::new("amber_account"), amber_config).unwrap_or_else(|e| {
+                panic!("Error running amber: {e}");
+            });
+        amber::logging::log_prices(prices.clone(), &config.influxdb);
+        amber::logging::log_usage(usage, &config.influxdb);
 
-    if let Some(hot_water) = config.hot_water {
-        monitor_hot_water(&mut state, hot_water, &prices);
+        if let Some(hot_water) = config.hot_water {
+            monitor_hot_water(&mut state, hot_water, &prices);
+        }
+
+        monitor_cars(&config.cars, &mut state, &postgres, &prices);
+    } else {
+        info!("No amber configuration found; skipping hot water and car monitoring");
     }
 
     monitor_bathroom_door(&mut state);
 
-    info!("main::221");
-    monitor_cars(&config.cars, &mut state, &postgres, &prices);
+    if let Some(http_config) = config.http {
+        let rooms = rooms::get();
+        http::run(state.mqtt.clone(), rooms, http_config, postgres.clone())
+            .await
+            .unwrap_or_else(|e| panic!("Error running http server: {e}"));
+    }
 
-    info!("main::224");
-    let rooms = rooms::get();
-    http::run(state.mqtt.clone(), rooms, config.http, postgres.clone())
-        .await
-        .unwrap_or_else(|e| panic!("Error running http server: {e}"));
-
-    info!("main::230");
     hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
 
-    info!("main::233");
     let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
     for metric in config.metrics {
         let raw: Vec<metrics::RawMetric> = metric.into();
@@ -242,32 +245,32 @@ async fn setup_pipes(
         metric.monitor(&mut state.subscriptions, &config.influxdb);
     }
 
-    info!("main::243");
-    executor(
-        &mut state.subscriptions,
-        state.mqtt.clone(),
-        config.executor,
-        Box::new(move |event, timezone| {
-            calendar_to_sequence(event, timezone, &Audience::new("everyone"))
-        }),
-        Local,
-    )
-    .unwrap_or_else(|err| {
-        panic!("Failed to start executor: {err}");
-    });
+    if let Some(executor_config) = config.executor {
+        executor(
+            &mut state.subscriptions,
+            state.mqtt.clone(),
+            executor_config,
+            Box::new(move |event, timezone| {
+                calendar_to_sequence(event, timezone, &Audience::new("everyone"))
+            }),
+            Local,
+        )
+        .unwrap_or_else(|err| {
+            panic!("Failed to start executor: {err}");
+        });
+    }
 
-    info!("main::257");
     fake_switch(&mut state, "Brian/Night");
 
-    info!("main::260");
-    setup_lights(&mut state, &config.lifx, &config.lights, &config.strips).await;
+    if let Some(lifx_config) = &config.lifx {
+        setup_lights(&mut state, lifx_config, &config.lights, &config.strips).await;
+    } else {
+        info!("No lifx configuration found; skipping light setup");
+    }
 
-    info!("main::263");
     run_client(state.subscriptions, mqtt_rx, config.mqtt).unwrap_or_else(|e| {
         panic!("Error running mqtt client: {e}");
     });
-
-    info!("main::268");
 }
 
 fn monitor_bathroom_door(state: &mut InitState) {

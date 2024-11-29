@@ -80,7 +80,10 @@ let
   logging_type = types.submodule {
     options = {
       deployment_environment = mkOption { type = types.str; };
-      remote = mkOption { type = logging_remote_type; };
+      remote = mkOption {
+        type = lib.types.nullOr logging_remote_type;
+        default = null;
+      };
     };
   };
 
@@ -231,12 +234,12 @@ let
   config_type = types.submodule {
     options = {
       executor = mkOption {
-        type = executor_type;
-        default = { };
+        type = lib.types.nullOr executor_type;
+        default = null;
       };
       http = mkOption {
-        type = http_type;
-        default = { };
+        type = lib.types.nullOr http_type;
+        default = null;
       };
       persistent_state = mkOption {
         type = persistent_state_type;
@@ -244,7 +247,10 @@ let
       };
       cars = mkOption { type = types.listOf car_type; };
       logging = mkOption { type = logging_type; };
-      lifx = mkOption { type = lifx_type; };
+      lifx = mkOption {
+        type = lib.types.nullOr lifx_type;
+        default = null;
+      };
       lights = mkOption { type = types.listOf light_type; };
       strips = mkOption { type = types.listOf strip_type; };
       metrics = mkOption { type = types.listOf metric_type; };
@@ -283,6 +289,8 @@ in
       after = [
         "network.target"
         "postgresql.service"
+        "influxdb2.service"
+        "mosquitto.service"
       ];
       serviceConfig = {
         User = "robotica";
