@@ -71,14 +71,6 @@ impl LocationList {
         self.0.iter().map(|l| l.id).collect()
     }
 
-    /// Turn the list into a sorted list
-    // #[must_use]
-    // pub fn to_vec(&self) -> Vec<Location> {
-    //     let mut list = self.0.clone();
-    //     list.sort_by_key(|k| k.id);
-    //     list
-    // }
-
     /// Filter out items from list
     pub fn retain(&mut self, f: impl Fn(&Location) -> bool) {
         self.0.retain(f);

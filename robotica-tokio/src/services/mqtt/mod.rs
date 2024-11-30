@@ -111,7 +111,7 @@ impl MqttTx {
     }
 
     /// Serialize and send
-
+    ///
     /// Subscribe to a topic and return a receiver for the messages.
     /// The receiver will be closed when the MQTT connection is closed.
     ///

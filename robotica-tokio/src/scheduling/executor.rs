@@ -274,7 +274,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
             .collect();
 
         let topic = format!("schedule/{}/all", self.config.extra.instance);
-        self.publish_sequences(&sequences, topic, &self.publish_all_hash)
+        self.publish_sequences(&sequences, topic, self.publish_all_hash.as_ref())
     }
 
     #[must_use]
@@ -286,7 +286,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
             .map(|sequence| self.fill_sequence(sequence))
             .collect();
         let topic = format!("schedule/{}/important", self.config.extra.instance);
-        self.publish_sequences(&important, topic, &self.publish_important_hash)
+        self.publish_sequences(&important, topic, self.publish_important_hash.as_ref())
     }
 
     #[must_use]
@@ -299,7 +299,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
             .filter(|sequence| sequence.status != Some(Status::Completed))
             .collect();
         let topic = format!("schedule/{}/pending", self.config.extra.instance);
-        self.publish_sequences(&pending, topic, &self.publish_pending_hash)
+        self.publish_sequences(&pending, topic, self.publish_pending_hash.as_ref())
     }
 
     #[must_use]
@@ -307,7 +307,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
         &self,
         sequences: &[Sequence],
         topic: String,
-        old_hash: &Option<ObjectHash>,
+        old_hash: Option<&ObjectHash>,
     ) -> Option<ObjectHash> {
         let msg = Json(sequences);
         let Ok(message) = msg.serialize(topic, Retain::Retain, QoS::ExactlyOnce) else {
@@ -316,7 +316,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
         };
 
         let new_hash = ObjectHash::calculate(&message);
-        let changed = old_hash.map_or(true, |old_hash| new_hash != old_hash);
+        let changed = old_hash.map_or(true, |old_hash| new_hash != *old_hash);
         if changed {
             self.mqtt.try_send(message);
         }
