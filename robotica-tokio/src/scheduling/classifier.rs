@@ -162,17 +162,6 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
     tags
 }
 
-/// Classify a date.
-///
-/// # Errors
-///
-/// Returns an error if the environment variable `CLASSIFICATIONS_FILE` is not set or if the file
-/// cannot be read or parsed.
-// pub fn classify_date(date: &Date) -> Result<HashSet<String>, ConfigError> {
-//     let config = load_config_from_default_file()?;
-//     Ok(classify_date_with_config(date, &config))
-// }
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

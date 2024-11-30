@@ -133,7 +133,7 @@ fn is_condition_ok(
     })
 }
 
-fn is_tag_ok(c: &HashSet<String>, requirements: &Option<Vec<String>>) -> bool {
+fn is_tag_ok(c: &HashSet<String>, requirements: Option<&Vec<String>>) -> bool {
     #[allow(clippy::option_if_let_else)]
     if let Some(requirements) = requirements {
         requirements.iter().any(|r| c.contains(r))
@@ -142,7 +142,7 @@ fn is_tag_ok(c: &HashSet<String>, requirements: &Option<Vec<String>>) -> bool {
     }
 }
 fn is_tags_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<String>) -> bool {
-    is_tag_ok(today, &config.today) && is_tag_ok(tomorrow, &config.tomorrow)
+    is_tag_ok(today, config.today.as_ref()) && is_tag_ok(tomorrow, config.tomorrow.as_ref())
 }
 
 /// A scheduling error occurred
@@ -204,23 +204,6 @@ pub enum GetScheduleError {
     #[error("{0}")]
     ScheduleError(#[from] ScheduleError),
 }
-
-/// Create a schedule for given date based on the given tags.
-///
-/// # Errors
-///
-/// Returns an error if config file cannot be loaded or error processing schedule.
-// #[allow(clippy::implicit_hasher)]
-// pub fn get_schedule<T: TimeZone>(
-//     date: Date,
-//     today: &HashSet<String>,
-//     tomorrow: &HashSet<String>,
-//     timezone: &T,
-// ) -> Result<Vec<Schedule>, GetScheduleError> {
-//     let config_list = load_config_from_default_file()?;
-//     let schedule = get_schedule_with_config(&date, today, tomorrow, &config_list, timezone)?;
-//     Ok(schedule)
-// }
 
 /// Create test schedule for testing.
 ///

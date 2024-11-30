@@ -153,15 +153,15 @@ pub struct Sequence {
     /// The importance of the sequence.
     pub importance: Importance,
 
-    /// The name of this sequence.
+    // The name of this sequence.
     // #[serde(skip)]
     // pub sequence_name: String,
 
-    /// The conditions that must be true before this is scheduled.
+    // The conditions that must be true before this is scheduled.
     // #[serde(skip)]
     // if_cond: Option<Vec<Boolean<Context>>>,
 
-    /// The required classifications for this step.
+    // The required classifications for this step.
     // #[serde(skip)]
     // classifications: Option<HashSet<String>>,
 
@@ -169,10 +169,10 @@ pub struct Sequence {
     // #[serde(skip)]
     // options: Option<HashSet<String>>,
 
-    /// If true this is considered the "zero time" for this sequence.
+    // If true this is considered the "zero time" for this sequence.
     // #[serde(skip)]
     // zero_time: bool,
-
+    //
     /// The start time of this step.
     pub start_time: DateTime<Utc>,
 

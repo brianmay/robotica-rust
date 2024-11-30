@@ -238,17 +238,6 @@ pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
     Ok(config)
 }
 
-/// Load the classification config from the environment variable `SEQUENCES_FILE`.
-///
-/// # Errors
-///
-/// Returns an error if the environment variable `SEQUENCES_FILE` is not set or if the file cannot be read.
-// pub fn load_config_from_default_file() -> Result<ConfigMap, ConfigError> {
-//     let env_name = "SEQUENCES_FILE";
-//     let filename = get_env_os(env_name)?;
-//     load_config(Path::new(&filename))
-// }
-
 /// Check the config for errors.
 ///
 /// # Errors
