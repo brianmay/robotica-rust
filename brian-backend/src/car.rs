@@ -8,7 +8,7 @@ use crate::{open_epaper_link, tesla};
 pub struct Config {
     pub id: Id,
     pub name: String,
-    pub amber_display: Option<open_epaper_link::Config>,
+    pub oel_display: Option<open_epaper_link::Config>,
     pub audience: AudienceConfig,
 
     #[serde(flatten)]

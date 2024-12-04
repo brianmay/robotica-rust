@@ -460,7 +460,7 @@ fn monitor_tesla(
         &SendOptions::new(),
     );
 
-    if let Some(display) = &car.amber_display {
+    if let Some(display) = &car.oel_display {
         open_epaper_link::output_location(&car.name, display.clone(), locations.location.clone());
     }
 

@@ -112,7 +112,7 @@ let
       tesla_id = mkOption { type = types.number; };
       teslamate = mkOption { type = teslamate_type; };
       audience = mkOption { type = tesla_audience_type; };
-      amber_display = mkOption {
+      oel_display = mkOption {
         type = lib.types.nullOr display_type;
         default = null;
       };
