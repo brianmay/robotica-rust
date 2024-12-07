@@ -18,7 +18,6 @@ mod logging;
 mod metrics;
 mod open_epaper_link;
 mod robotica;
-mod rooms;
 mod tesla;
 
 use std::collections::HashMap;
@@ -228,8 +227,7 @@ async fn setup_pipes(
     monitor_bathroom_door(&mut state);
 
     if let Some(http_config) = config.http {
-        let rooms = rooms::get();
-        http::run(state.mqtt.clone(), rooms, http_config, postgres.clone())
+        http::run(state.mqtt.clone(), http_config, postgres.clone())
             .await
             .unwrap_or_else(|e| panic!("Error running http server: {e}"));
     }

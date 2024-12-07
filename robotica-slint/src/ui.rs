@@ -4,6 +4,8 @@
 
 use itertools::Itertools;
 use std::{sync::Arc, time::Duration};
+use tap::Pipe;
+use tokio_util::sync::CancellationToken;
 
 mod slint {
     #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
@@ -20,7 +22,7 @@ use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
 use robotica_common::{
-    config::{ButtonConfig, ButtonRowConfig, ControllerConfig, Icon},
+    config::{ButtonConfig, ButtonRowConfig, Config as CommonConfig, ControllerConfig, Icon},
     scheduler::{Importance, Status},
 };
 use robotica_common::{
@@ -38,7 +40,7 @@ use tokio::{
     sync::mpsc,
     time::{sleep, sleep_until, Instant},
 };
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 #[derive(Deserialize)]
 pub struct ProgramsConfig {
@@ -50,9 +52,8 @@ pub struct ProgramsConfig {
 pub struct Config {
     number_per_row: u8,
     backlight_on_time: u64,
-    buttons: Vec<ButtonRowConfig>,
+    name: String,
     programs: ProgramsConfig,
-    instance: String,
 }
 
 #[derive()]
@@ -65,9 +66,8 @@ pub struct LoadedProgramsConfig {
 pub struct LoadedConfig {
     number_per_row: u8,
     backlight_on_time: u64,
-    buttons: Vec<ButtonRowConfig>,
+    name: String,
     programs: LoadedProgramsConfig,
-    instance: String,
 }
 
 pub struct Button {
@@ -88,9 +88,8 @@ impl TryFrom<Config> for LoadedConfig {
         Ok(Self {
             number_per_row: config.number_per_row,
             backlight_on_time: config.backlight_on_time,
-            buttons: config.buttons,
+            name: config.name,
             programs,
-            instance: config.instance,
         })
     }
 }
@@ -155,17 +154,124 @@ pub fn run_gui(
     rx_screen_command: mpsc::Receiver<ScreenCommand>,
 ) {
     let state = Arc::new(state);
+    let (tx_room, rx_room) = mpsc::channel::<String>(1);
 
     let ui = slint::AppWindow::new().unwrap();
     ui.set_screen_on(true);
     ui.set_number_per_row(i32::from(config.number_per_row));
     ui.hide().unwrap();
 
+    {
+        let handle_weak = ui.as_weak();
+        let name = config.name.clone();
+        let mqtt = state.mqtt.clone();
+        tokio::spawn(async move {
+            let topic = format!("robotica/config/{name}");
+            let rx = mqtt
+                .subscribe_into_stateless::<Json<Arc<CommonConfig>>>(topic)
+                .await
+                .unwrap();
+            let mut rx = rx.subscribe().await;
+            let mut rx_room = rx_room;
+
+            #[allow(clippy::collection_is_never_read)]
+            let mut _guard = None;
+            let mut maybe_common_config: Option<Arc<CommonConfig>> = None;
+            let mut maybe_selected_room = None;
+
+            loop {
+                select! {
+                    msg = rx_room.recv() => if let Some(room) = msg {
+                        if let Some(common_config) = &maybe_common_config {
+                            maybe_selected_room = common_config.rooms.iter().find(|r| r.title == room).map(|r| r.id.clone());
+                        } else {
+                            maybe_selected_room = None;
+                        }
+                    } else {
+                        error!("Error receiving room");
+                        break;
+                    },
+                    msg = rx.recv() => match msg {
+                        Ok(Json(common_config)) => {
+                            maybe_common_config = Some(common_config);
+                        }
+                        Err(err) => {
+                            error!("Error receiving config: {}", err);
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(common_config) = maybe_common_config.clone() {
+                    let mqtt = mqtt.clone();
+                    let cancellation = CancellationToken::new();
+                    _guard = cancellation.clone().drop_guard().pipe(Some);
+
+                    let rooms = common_config
+                        .rooms
+                        .iter()
+                        .map(|r| r.title.clone().pipe(SharedString::from))
+                        .collect::<Vec<_>>();
+
+                    let selected_room = common_config
+                        .rooms
+                        .iter()
+                        .find(|r| Some(&r.id) == maybe_selected_room.as_ref())
+                        .cloned()
+                        .or_else(|| common_config.rooms.first().cloned());
+
+                    handle_weak
+                        .upgrade_in_event_loop(move |handle| {
+                            handle.set_rooms(ModelRc::new(VecModel::from(rooms)));
+
+                            let id = if let Some(selected_room) = selected_room {
+                                handle.set_selected_room(selected_room.title.into());
+                                Some(selected_room.id)
+                            } else {
+                                handle.set_selected_room("".into());
+                                None
+                            };
+
+                            setup_config(
+                                &handle,
+                                &common_config,
+                                id.as_ref(),
+                                &mqtt,
+                                &cancellation,
+                            );
+                        })
+                        .unwrap();
+                }
+            }
+        });
+    }
+
+    monitor_room_change(&ui, tx_room);
+    monitor_screen_reset(&state, &ui);
+    monitor_display(config, &ui, rx_screen_command);
+    monitor_time(&ui);
+
+    ui.run().unwrap();
+}
+
+fn setup_config(
+    ui: &slint::AppWindow,
+    config: &Arc<CommonConfig>,
+    room: Option<&String>,
+    mqtt: &MqttTx,
+    cancellation: &CancellationToken,
+) {
     let icons = ui.get_all_icons();
     let mut id = 0;
 
-    let all_buttons: Vec<slint::ButtonRowData> = config
-        .buttons
+    let no_room = vec![];
+    let buttons: &[ButtonRowConfig] = config
+        .rooms
+        .iter()
+        .find(|r| Some(&r.id) == room)
+        .map_or(&no_room, |r| &r.rows);
+
+    let all_buttons: Vec<slint::ButtonRowData> = buttons
         .iter()
         .map(|rc| {
             let buttons: Vec<slint::ButtonData> = rc
@@ -191,8 +297,7 @@ pub fn run_gui(
     ui.set_buttons(ModelRc::new(VecModel::from(all_buttons)));
 
     let tx_buttons: Vec<(mpsc::Sender<()>, Button)> = {
-        config
-            .buttons
+        buttons
             .iter()
             .enumerate()
             .flat_map(|(row, rc)| {
@@ -213,16 +318,19 @@ pub fn run_gui(
     };
 
     let (tx_clicks, buttons): (Vec<_>, Vec<_>) = tx_buttons.into_iter().unzip();
-    monitor_buttons_presses(&ui, tx_clicks);
-    monitor_buttons_state(buttons, &state, &ui);
+    monitor_buttons_presses(ui, tx_clicks);
+    monitor_buttons_state(buttons, mqtt, ui, cancellation);
 
-    monitor_screen_reset(&state, &ui);
-    monitor_tags(config.clone(), &state.mqtt, &ui);
-    monitor_schedule(config.clone(), &state.mqtt, &ui);
-    monitor_time(&ui);
-    monitor_display(config, &ui, rx_screen_command);
+    monitor_tags(config.clone(), mqtt.clone(), ui, cancellation.clone());
+    monitor_schedule(config.clone(), mqtt.clone(), ui, cancellation.clone());
+}
 
-    ui.run().unwrap();
+fn monitor_room_change(ui: &slint::AppWindow, tx_room: mpsc::Sender<String>) {
+    ui.on_room_changed(move |room| {
+        tx_room.try_send(room.to_string()).unwrap_or_else(|_| {
+            error!("Failed to send room change event");
+        });
+    });
 }
 
 fn monitor_screen_reset(state: &Arc<RunningState>, ui: &slint::AppWindow) {
@@ -249,9 +357,15 @@ fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>
     });
 }
 
-fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &slint::AppWindow) {
+fn monitor_buttons_state(
+    buttons: Vec<Button>,
+    mqtt: &MqttTx,
+    ui: &slint::AppWindow,
+    cancellation: &CancellationToken,
+) {
     for (id, button) in buttons.into_iter().enumerate() {
-        let state = state.clone();
+        let mqtt = mqtt.clone();
+        let cancellation = cancellation.clone();
         let handle_weak = ui.as_weak();
 
         tokio::spawn(async move {
@@ -273,7 +387,7 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
             let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
             for s in controller.get_subscriptions() {
                 let label = s.label;
-                let s = state.mqtt.subscribe_into_stateful(s.topic).await.unwrap();
+                let s = mqtt.subscribe_into_stateful(s.topic).await.unwrap();
                 let s = s.subscribe().await;
                 subscriptions.push((label, s));
             }
@@ -285,11 +399,19 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
                     .map(futures::FutureExt::boxed);
 
                 select! {
-                    _ = rx_click.recv() => {
+                    result = rx_click.recv() => if result == Some(()) {
                         controller.get_press_commands().into_iter().for_each(|message| {
-                            state.mqtt.try_send(message);
+                            mqtt.try_send(message);
                         });
-                    }
+                    } else {
+                        debug!("Exiting button press loop");
+                        break;
+                    },
+
+                    () = cancellation.cancelled() => {
+                        debug!("Cancelled; Exiting button press loop");
+                        break;
+                    },
 
                     Ok((label, msg)) = select_ok(f) => {
                         controller.process_message(label, msg);
@@ -316,8 +438,12 @@ fn monitor_buttons_state(buttons: Vec<Button>, state: &Arc<RunningState>, ui: &s
     }
 }
 
-fn monitor_tags(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow) {
-    let mqtt = mqtt.clone();
+fn monitor_tags(
+    config: Arc<CommonConfig>,
+    mqtt: MqttTx,
+    ui: &slint::AppWindow,
+    cancellation: CancellationToken,
+) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         let topic = format!("robotica/{}/tags", config.instance);
@@ -328,14 +454,26 @@ fn monitor_tags(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow)
         let mut rx = rx.subscribe().await;
 
         loop {
-            let msg = rx.recv().await.unwrap();
+            select! {
+                () = cancellation.cancelled() => {
+                    debug!("Cancelled; Exiting tags loop");
+                    break;
+                }
 
-            handle_weak
-                .upgrade_in_event_loop(move |handle| {
-                    let tags = tags_to_slint(&msg);
-                    handle.set_tags(tags);
-                })
-                .unwrap();
+                msg = rx.recv() => match msg {
+                    Ok(msg) => {
+                        handle_weak
+                        .upgrade_in_event_loop(move |handle| {
+                                let tags = tags_to_slint(&msg);
+                                handle.set_tags(tags);
+                            })
+                            .unwrap();
+                    }
+                    Err(err) => {
+                        error!("Error receiving tags: {}", err);
+                    }
+                }
+            }
         }
     });
 }
@@ -373,8 +511,12 @@ fn sequences_to_slint<'a>(
         .collect()
 }
 
-fn monitor_schedule(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWindow) {
-    let mqtt = mqtt.clone();
+fn monitor_schedule(
+    config: Arc<CommonConfig>,
+    mqtt: MqttTx,
+    ui: &slint::AppWindow,
+    cancellation: CancellationToken,
+) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
         let topic = format!("schedule/{}/pending", config.instance);
@@ -384,29 +526,43 @@ fn monitor_schedule(config: Arc<LoadedConfig>, mqtt: &MqttTx, ui: &slint::AppWin
             .unwrap();
         let mut rx = rx.subscribe().await;
 
-        while let Ok(msg) = rx.recv().await {
-            handle_weak
-                .upgrade_in_event_loop(move |handle| {
-                    let Json(schedule) = msg.as_ref();
-                    let schedule = schedule
-                        .iter()
-                        .chunk_by(|s| get_local_date_for_sequence(s))
-                        .into_iter()
-                        .map(|(date, sequences)| {
-                            let date = date.format("%A, %e %B, %Y").to_string();
-                            let sequences: Vec<slint::SequenceData> = sequences_to_slint(sequences);
-                            slint::ScheduleData {
-                                date: date.into(),
-                                sequences: ModelRc::new(VecModel::from(sequences)),
-                            }
-                        })
-                        .collect::<Vec<_>>();
+        loop {
+            select! {
+                () = cancellation.cancelled() => {
+                    debug!("Cancelled; Exiting schedule loop");
+                    break;
+                }
 
-                    let b: VecModel<slint::ScheduleData> = VecModel::from(schedule);
-                    let c: ModelRc<slint::ScheduleData> = ModelRc::new(b);
-                    handle.set_schedule_list(c);
-                })
-                .unwrap();
+                msg = rx.recv() => match msg {
+                    Ok(msg) => {
+                        handle_weak
+                        .upgrade_in_event_loop(move |handle| {
+                                let schedule = msg.as_ref();
+                                let schedule = schedule
+                                    .iter()
+                                    .chunk_by(|s| get_local_date_for_sequence(s))
+                                    .into_iter()
+                                    .map(|(date, sequences)| {
+                                        let date = date.format("%A, %e %B, %Y").to_string();
+                                        let sequences: Vec<slint::SequenceData> = sequences_to_slint(sequences);
+                                        slint::ScheduleData {
+                                            date: date.into(),
+                                            sequences: ModelRc::new(VecModel::from(sequences)),
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+
+                                let b: VecModel<slint::ScheduleData> = VecModel::from(schedule);
+                                let c: ModelRc<slint::ScheduleData> = ModelRc::new(b);
+                                handle.set_schedule_list(c);
+                            })
+                            .unwrap();
+                    }
+                    Err(err) => {
+                        error!("Error receiving schedule: {}", err);
+                    }
+                }
+            }
         }
     });
 }

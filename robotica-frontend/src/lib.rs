@@ -19,19 +19,21 @@ mod robotica_wasm;
 mod services;
 
 use paste::paste;
+use robotica_common::mqtt::Json;
+use robotica_common::mqtt::MqttMessage;
+use services::websocket::Subscription;
+use tracing::debug;
 
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::services::websocket::WebsocketService;
-use gloo_net::http::Request;
 use itertools::Itertools;
 use robotica_common::config::Config;
 use robotica_common::config::RoomConfig;
 use tracing::info;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -108,11 +110,27 @@ fn footer() -> Html {
 
 enum AppMsg {
     Config(Arc<Config>),
+    ConfigSubscription(Subscription),
 }
 
 struct App {
     wss: WebsocketService,
     config: Option<Arc<Config>>,
+    config_subscription: Option<Subscription>,
+}
+
+fn subscribe_to_config(ctx: &Context<App>, wss: WebsocketService, name: &str) {
+    let topic = format!("robotica/config/{name}");
+    let callback = ctx.link().callback(move |msg: MqttMessage| {
+        debug!("Got config message");
+        let Json(state): Json<Arc<Config>> = msg.try_into().unwrap();
+        AppMsg::Config(state)
+    });
+    let mut wss = wss;
+    ctx.link().send_future(async move {
+        let s = wss.subscribe_mqtt(topic, callback).await;
+        AppMsg::ConfigSubscription(s)
+    });
 }
 
 impl Component for App {
@@ -121,27 +139,26 @@ impl Component for App {
 
     fn create(ctx: &Context<Self>) -> Self {
         let wss = WebsocketService::new();
-        let link = ctx.link().clone();
-        spawn_local(async move {
-            let config = Arc::new(
-                Request::get("/config")
-                    .send()
-                    .await
-                    .unwrap()
-                    .json::<Config>()
-                    .await
-                    .unwrap(),
-            );
-            link.send_message(AppMsg::Config(config));
-        });
-        App { wss, config: None }
+        subscribe_to_config(ctx, wss.clone(), "default");
+        App {
+            wss,
+            config: None,
+            config_subscription: None,
+        }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AppMsg::Config(config) => {
+                debug!("Got config");
                 self.config = Some(config);
                 true
+            }
+            AppMsg::ConfigSubscription(subscription) => {
+                debug!("Got config subscription");
+                self.config_subscription = Some(subscription);
+
+                false
             }
         }
     }

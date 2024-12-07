@@ -18,7 +18,6 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::{extract::Query, routing::get, Router};
 use hyper::{Method, StatusCode};
 use maud::{html, Markup, DOCTYPE};
-use robotica_common::config as ui_config;
 use robotica_common::version;
 use serde::Deserialize;
 use tap::Pipe;
@@ -41,7 +40,6 @@ use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
 use crate::spawn;
 
-use self::api::config::config_handler;
 use self::api::locations;
 use self::errors::ResponseError;
 use self::oidc::Client;
@@ -138,7 +136,6 @@ struct HttpState {
     mqtt: MqttTx,
     config: Arc<Config>,
     oidc_client: Arc<ArcSwap<Option<Client>>>,
-    rooms: Arc<ui_config::Rooms>,
     manifest: Arc<Manifest>,
     postgres: sqlx::PgPool,
 }
@@ -157,12 +154,7 @@ pub enum HttpError {
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(
-    mqtt: MqttTx,
-    rooms: ui_config::Rooms,
-    config: Config,
-    postgres: sqlx::PgPool,
-) -> Result<(), HttpError> {
+pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result<(), HttpError> {
     let session_store = PostgresStore::new(postgres.clone());
 
     tokio::task::spawn(
@@ -189,7 +181,6 @@ pub async fn run(
     let oidc_client = Arc::new(ArcSwap::new(Arc::new(None)));
 
     let config = Arc::new(config);
-    let rooms = Arc::new(rooms);
     let manifest = Arc::new(Manifest::load_or_default(&config.static_path).await);
 
     {
@@ -216,7 +207,6 @@ pub async fn run(
         mqtt,
         config,
         oidc_client,
-        rooms,
         manifest,
         postgres,
     };
@@ -227,7 +217,6 @@ pub async fn run(
         .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
-        .route("/config", get(config_handler))
         .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
         .with_state(state.clone())

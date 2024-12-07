@@ -1,4 +1,4 @@
-import { ScrollView, TabWidget, VerticalBox , HorizontalBox} from "std-widgets.slint";
+import { ScrollView, TabWidget, VerticalBox , HorizontalBox, ComboBox} from "std-widgets.slint";
 
 struct Icon {
     on: image,
@@ -453,10 +453,13 @@ export component AppWindow inherits Window {
     in property<int> hour;
     in property<int> minute;
     in property<int> second;
-    in property <[ScheduleData]> schedule_list;
+    in property<[ScheduleData]> schedule_list;
+    in property<[string]> rooms;
+    in property<string> selected_room;
 
     callback clicked_widget(int);
     callback screen_reset;
+    callback room_changed(string);
     background: black;
 
     out property<AllIcons> all_icons: {
@@ -479,11 +482,24 @@ export component AppWindow inherits Window {
         }
     }
 
+    ComboBox {
+        x: 10px;
+        y: 10px;
+        width: 200px;
+        height: 40px;
+        model: root.rooms;
+        current-value: root.selected_room;
+        selected(selected) => {
+            root.screen_reset();
+            root.room_changed(selected);
+        }
+    }
+
     TabWidget {
         x: 0px;
-        y: 0px;
+        y: 80px;
         width: parent.width;
-        height: parent.height;
+        height: parent.height - 80px;
 
         Tab {
             title: "Clock";
