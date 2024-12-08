@@ -126,6 +126,7 @@ let
         type = ui_programs_type;
         default = { };
       };
+      ui_config_name = mkOption { type = types.str; };
       number_per_row = mkOption { type = types.int; };
       backlight_on_time = mkOption {
         type = types.int;

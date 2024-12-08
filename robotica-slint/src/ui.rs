@@ -52,7 +52,7 @@ pub struct ProgramsConfig {
 pub struct Config {
     number_per_row: u8,
     backlight_on_time: u64,
-    name: String,
+    ui_config_name: String,
     programs: ProgramsConfig,
 }
 
@@ -66,7 +66,7 @@ pub struct LoadedProgramsConfig {
 pub struct LoadedConfig {
     number_per_row: u8,
     backlight_on_time: u64,
-    name: String,
+    ui_config_name: String,
     programs: LoadedProgramsConfig,
 }
 
@@ -88,7 +88,7 @@ impl TryFrom<Config> for LoadedConfig {
         Ok(Self {
             number_per_row: config.number_per_row,
             backlight_on_time: config.backlight_on_time,
-            name: config.name,
+            ui_config_name: config.ui_config_name,
             programs,
         })
     }
@@ -163,7 +163,7 @@ pub fn run_gui(
 
     {
         let handle_weak = ui.as_weak();
-        let name = config.name.clone();
+        let name = config.ui_config_name.clone();
         let mqtt = state.mqtt.clone();
         tokio::spawn(async move {
             let topic = format!("robotica/config/{name}");
