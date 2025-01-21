@@ -12,7 +12,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: nixbuild/nix-quick-install-action@v29
       with: {load_nixConfig: false}
-    - uses: DeterminateSystems/magic-nix-cache-action@v8
+    - uses: DeterminateSystems/magic-nix-cache-action@v9
     - run: nix flake check --impure
     - run: nix build '.#brian-backend'
     - run: nix build '.#robotica-frontend'
