@@ -64,12 +64,6 @@ async fn main() -> Result<(), anyhow::Error> {
         version::BUILD_DATE
     );
 
-    info!(
-        "Starting brian-backend, version = {:?}, build time = {:?}",
-        version::VCS_REF,
-        version::BUILD_DATE
-    );
-
     let env = config::Environment::load().unwrap_or_else(|e| {
         panic!("Error loading environment: {e}");
     });
