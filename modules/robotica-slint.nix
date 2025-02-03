@@ -19,13 +19,15 @@ let
   cfg = config.services.robotica-slint;
   sound_path = cfg.config.audio.sound_path;
   piperVoice = {
-    onnx = builtins.fetchurl {
-      url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx?download=true";
-      sha256 = "sha256:063c43bbs0nb09f86l4avnf9mxah38b1h9ffl3kgpixqaxxy99mk";
+    onnx = pkgs.fetchurl {
+      url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx";
+      hash = "sha256-1tq287kttD6j94x/INyOrbR6HxXYocnUUc88zSAaL2Y=";
+      # hash = lib.fakeHash;
     };
-    json = builtins.fetchurl {
-      url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx.json";
-      sha256 = "sha256:0xvxjxk59byydx9gj6rdvvydp5zm8mzsrf9vyy6x6299sjs3x8lm";
+    json = pkgs.fetchurl {
+      url = "https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_GB/semaine/medium/en_GB-semaine-medium.onnx.json";
+      hash = "sha256-ZCXcuHhoQEO3fXcrFzrgBthqWDsRAwPt2ki4Q47O5e4=";
+      # hash = lib.fakeHash;
     };
   };
   init = pkgs.writeShellScript "init" ''
