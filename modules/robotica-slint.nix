@@ -18,6 +18,16 @@ let
 
   cfg = config.services.robotica-slint;
   sound_path = cfg.config.audio.sound_path;
+  piperVoice = {
+    onnx = builtins.fetchurl {
+      url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx?download=true";
+      sha256 = "sha256:063c43bbs0nb09f86l4avnf9mxah38b1h9ffl3kgpixqaxxy99mk";
+    };
+    json = builtins.fetchurl {
+      url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx.json";
+      sha256 = "sha256:0xvxjxk59byydx9gj6rdvvydp5zm8mzsrf9vyy6x6299sjs3x8lm";
+    };
+  };
   init = pkgs.writeShellScript "init" ''
     for i in {1..10}; do
       mpc repeat on && exit
@@ -28,15 +38,20 @@ let
   pre_speech = pkgs.writeShellScript "pre-speech" ''
     mkdir -p "$HOME/cache"
     hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
-    filename="$HOME/cache/$hash.mp3"
+    tmp1="$HOME/cache/$hash.1.wav"
+    tmp2="$HOME/cache/$hash.2.wav"
+    filename="$HOME/cache/$hash.wav"
     if ! test -f "$filename"; then
-      ${pkgs.python312Packages.gtts}/bin/gtts-cli --output "$filename" "$*"
+      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${piperVoice.onnx} --config ${piperVoice.json} --output_file "$tmp1"
+      ${pkgs.sox}/bin/sox -G "$tmp1" -r 44100 -c 2 "$tmp2"
+      rm "$tmp1"
+      mv "$tmp2" "$filename"
     fi
   '';
   speech = pkgs.writeShellScript "speech" ''
     mkdir -p "$HOME/cache"
     hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
-    filename="$HOME/cache/$hash.mp3"
+    filename="$HOME/cache/$hash.wav"
     if ! test -f "$filename"; then
       ${pkgs.espeak}/bin/espeak -ven+f5 -k5 -s 130 -w /tmp/out.wav "$*"
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
@@ -46,9 +61,9 @@ let
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
     else
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
-      ${pkgs.mpg123}/bin/mpg123 $filename
+      ${pkgs.alsa-utils}/bin/aplay -q "$filename"
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
-      ${pkgs.mpg123}/bin/mpg123 $filename
+      ${pkgs.alsa-utils}/bin/aplay -q "$filename"
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
     fi
   '';
