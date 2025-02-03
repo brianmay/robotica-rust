@@ -168,8 +168,6 @@ let
   };
 in
 {
-  imports = [ ./sway.nix ];
-
   options.services.robotica-slint = {
     enable = mkEnableOption "robotica-slint service";
     config = mkOption { type = config_type; };
@@ -192,7 +190,7 @@ in
       };
     in
     {
-      services.sway = {
+      services.cage = {
         enable = true;
         program = "${wrapper}";
         user = cfg.user;
