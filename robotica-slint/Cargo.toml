@@ -33,7 +33,7 @@ tap = "1.0.1"
 
 [dependencies.openssl]
 optional = true
-version = "0.10.68"
+version = "0.10.70"
 
 [build-dependencies]
 slint-build = "1.0.0"
