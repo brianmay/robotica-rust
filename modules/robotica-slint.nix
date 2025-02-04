@@ -44,7 +44,7 @@ let
     tmp2="$HOME/cache/$hash.2.wav"
     filename="$HOME/cache/$hash.wav"
     if ! test -f "$filename"; then
-      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${piperVoice.onnx} --config ${piperVoice.json} --output_file "$tmp1"
+      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${cfg.voice.onnx_file} --config ${cfg.voice.json_file} --output_file "$tmp1"
       ${pkgs.sox}/bin/sox -G "$tmp1" -r 44100 -c 2 "$tmp2"
       rm "$tmp1"
       mv "$tmp2" "$filename"
@@ -158,6 +158,13 @@ let
     };
   };
 
+  voice_type = types.submodule {
+    options = {
+      onnx_file = mkOption { type = types.path; };
+      json_file = mkOption { type = types.path; };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       audio = mkOption { type = audio_type; };
@@ -175,6 +182,13 @@ in
     config = mkOption { type = config_type; };
     secrets_path = mkOption { type = types.path; };
     user = mkOption { type = types.str; };
+    voice = mkOption {
+      type = voice_type;
+      default = {
+        onnx_file = piperVoice.onnx;
+        json_file = piperVoice.json;
+      };
+    };
   };
 
   config = mkIf cfg.enable (
