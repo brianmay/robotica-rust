@@ -6,8 +6,19 @@
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
-    poetry2nix = {
-      url = "github:nix-community/poetry2nix";
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flockenzeit.url = "github:balsoft/flockenzeit";
@@ -21,7 +32,9 @@
       flake-utils,
       rust-overlay,
       crane,
-      poetry2nix,
+      pyproject-nix,
+      uv2nix,
+      pyproject-build-systems,
       flockenzeit,
       devenv,
     }:
@@ -50,23 +63,74 @@
             inherit system;
             overlays = [ (import rust-overlay) ];
           };
+          python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
 
-          p2n = import poetry2nix { inherit pkgs; };
-          poetry_env = p2n.mkPoetryEnv {
-            python = pkgs.python3;
-            projectDir = ./robotica-tokio/python;
-            overrides = p2n.defaultPoetryOverrides.extend (
-              self: super: {
-                x-wr-timezone = super.x-wr-timezone.overridePythonAttrs (old: {
-                  buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];
-                });
-                recurring-ical-events = super.recurring-ical-events.overridePythonAttrs (old: {
-                  buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ];
-                });
-              }
-            );
-          };
+          python_venv =
+            let
+              inherit (nixpkgs) lib;
+              workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./robotica-tokio/python; };
+
+              # Create package overlay from workspace.
+              overlay = workspace.mkPyprojectOverlay {
+                sourcePreference = "sdist";
+              };
+
+              # Extend generated overlay with build fixups
+              #
+              # Uv2nix can only work with what it has, and uv.lock is missing essential metadata to perform some builds.
+              # This is an additional overlay implementing build fixups.
+              # See:
+              # - https://pyproject-nix.github.io/uv2nix/FAQ.html
+              pyprojectOverrides =
+                final: prev:
+                # Implement build fixups here.
+                # Note that uv2nix is _not_ using Nixpkgs buildPythonPackage.
+                # It's using https://pyproject-nix.github.io/pyproject.nix/build.html
+                let
+                  inherit (final) resolveBuildSystem;
+                  inherit (builtins) mapAttrs;
+
+                  # Build system dependencies specified in the shape expected by resolveBuildSystem
+                  # The empty lists below are lists of optional dependencies.
+                  #
+                  # A package `foo` with specification written as:
+                  # `setuptools-scm[toml]` in pyproject.toml would be written as
+                  # `foo.setuptools-scm = [ "toml" ]` in Nix
+                  buildSystemOverrides = {
+                    x-wr-timezone.setuptools = [ ];
+                    recurring-ical-events.setuptools = [ ];
+                    icalendar.setuptools = [ ];
+                    python-dateutil.setuptools = [ ];
+                    pytz.setuptools = [ ];
+                    six.setuptools = [ ];
+                  };
+
+                in
+                mapAttrs (
+                  name: spec:
+                  prev.${name}.overrideAttrs (old: {
+                    nativeBuildInputs = old.nativeBuildInputs ++ resolveBuildSystem spec;
+                  })
+                ) buildSystemOverrides;
+
+              pythonSet =
+                (pkgs.callPackage pyproject-nix.build.packages {
+                  inherit python;
+                }).overrideScope
+                  (
+                    lib.composeManyExtensions [
+                      pyproject-build-systems.overlays.default
+                      overlay
+                      pyprojectOverrides
+                    ]
+                  );
+
+              venv = pythonSet.mkVirtualEnv "robotica-python" workspace.deps.default;
+
+            in
+            venv;
+
           rustPlatform = pkgs.rust-bin.stable.latest.default.override {
             targets = [ "wasm32-unknown-unknown" ];
             extensions = [ "rust-src" ];
@@ -208,7 +272,7 @@
               );
 
               wrapper = pkgs.writeShellScriptBin "brian-backend" ''
-                export PATH="${poetry_env}/bin:$PATH"
+                export PATH="${python_venv}/bin:$PATH"
                 exec ${pkg}/bin/brian-backend "$@"
               '';
             in
@@ -261,7 +325,7 @@
               );
 
               wrapper = pkgs.writeShellScriptBin "robotica-freeswitch" ''
-                export PATH="${poetry_env}/bin:$PATH"
+                export PATH="${python_venv}/bin:$PATH"
                 exec ${pkg}/bin/robotica-freeswitch "$@"
               '';
             in
@@ -346,8 +410,8 @@
             modules = [
               {
                 packages = [
-                  pkgs.poetry
-                  poetry_env
+                  pkgs.uv
+                  python_venv
                   pkgs.rust-analyzer
                   pkgs.pkg-config
                   pkgs.openssl
@@ -371,7 +435,8 @@
                 ];
                 enterShell = ''
                   export ROBOTICA_DEBUG=true
-                  export PYTHONPATH="${poetry_env}/lib/python3.11/site-packages"
+                  echo "Python path: ${python_venv}"
+                  # export PYTHONPATH="${python_venv}/lib/python3.11/site-packages"
                   export CONFIG_FILE="$PWD/robotica-backend.yaml"
                   export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
                   export STATIC_PATH="robotica-frontend/dist"

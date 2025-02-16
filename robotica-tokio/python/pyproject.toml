@@ -1,19 +1,17 @@
-[tool.poetry]
+[project]
 name = "robotica"
 version = "0.1.0"
 description = ""
-authors = ["Brian May <brian@linuxpenguins.xyz>"]
+authors = [ {name="Brian May", email="brian@linuxpenguins.xyz"}, ]
 readme = "README.md"
+dependencies = [
+    "icalendar == 5.0.8",
+    "recurring-ical-events == 2.0.2",]
+requires-python = ">=3.9"
 
-[tool.poetry.dependencies]
-python = "^3.9"
-icalendar = "^5.0.8"
-recurring-ical-events = "^2.0.2"
-
-
-[tool.poetry.group.dev.dependencies]
-black = "^24.3.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "python-lsp-server == 1.12.2",
+    "python-lsp-ruff == 2.2.2",
+    "python-lsp-black == 2.0.0",
+    "pylsp-mypy == 0.7.0",]
