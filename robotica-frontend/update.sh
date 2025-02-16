@@ -6,7 +6,7 @@ if ! git diff-index --quiet HEAD --; then
 	exit 1
 fi
 
-npm --prefix robotica-frontend --lockfile-version 2 update
+npm --prefix robotica-frontend update
 rm -rf robotica-frontend/node_modules
 hash="$(prefetch-npm-deps ./robotica-frontend/package-lock.json)"
 echo "updated npm dependency hash: $hash" >&2
