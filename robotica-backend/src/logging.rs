@@ -175,7 +175,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         global::set_tracer_provider(tracer_provider.clone());
         global::set_meter_provider(meter_provider.clone());
 
-        let scope = InstrumentationScope::builder("brian-backend")
+        let scope = InstrumentationScope::builder("robotica-backend")
             .with_version("1.0")
             .build();
 

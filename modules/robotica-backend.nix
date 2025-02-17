@@ -17,7 +17,7 @@ let
   cfg = config.services.robotica-backend;
 
   system = pkgs.system;
-  robotica-backend = self.packages.${system}.brian-backend;
+  robotica-backend = self.packages.${system}.robotica-backend;
   robotica-frontend = self.packages.${system}.robotica-frontend;
 
   robotica_config = pkgs.writeTextFile {
@@ -33,7 +33,7 @@ let
 
     mkdir -p "${cfg.data_dir}"
     mkdir -p "${cfg.data_dir}/state"
-    exec "${robotica-backend}/bin/brian-backend"
+    exec "${robotica-backend}/bin/robotica-backend"
   '';
 
   executor_type = types.submodule {

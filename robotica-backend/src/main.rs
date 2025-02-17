@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
         panic!("Error initializing tracing subscriber: {e}");
     });
 
-    info!("Starting brian-backend",);
+    info!("Starting robotica-backend",);
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();

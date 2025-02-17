@@ -8,7 +8,7 @@ members = [
     "robotica-frontend",
     "robotica-common",
     "robotica-slint",
-    "brian-backend",
+    "robotica-backend",
     "robotica-freeswitch",
     "robotica-macro",
 ]

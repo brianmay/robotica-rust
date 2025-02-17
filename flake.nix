@@ -225,13 +225,13 @@
             '';
           };
 
-          brian-backend =
+          robotica-backend =
             let
               common = {
                 src = ./.;
-                pname = "brian-backend";
+                pname = "robotica-backend";
                 version = "0.0.0";
-                cargoExtraArgs = "-p brian-backend";
+                cargoExtraArgs = "-p robotica-backend";
                 nativeBuildInputs = with pkgs; [ pkg-config ];
                 buildInputs = with pkgs; [
                   openssl
@@ -271,9 +271,9 @@
                 // build_env
               );
 
-              wrapper = pkgs.writeShellScriptBin "brian-backend" ''
+              wrapper = pkgs.writeShellScriptBin "robotica-backend" ''
                 export PATH="${python_venv}/bin:$PATH"
-                exec ${pkg}/bin/brian-backend "$@"
+                exec ${pkg}/bin/robotica-backend "$@"
               '';
             in
             {
@@ -562,9 +562,9 @@
             robotica-slint = robotica-slint.pkg;
             robotica-frontend-clippy = robotica-frontend.clippy;
             robotica-frontend = robotica-frontend.pkg;
-            brian-backend-clippy = brian-backend.clippy;
-            # brian-backend-coverage = brian-backend.coverage;
-            brian-backend = brian-backend.pkg;
+            robotica-backend-clippy = robotica-backend.clippy;
+            # robotica-backend-coverage = robotica-backend.coverage;
+            robotica-backend = robotica-backend.pkg;
             robotica-freeswitch-clippy = robotica-freeswitch.clippy;
             # freeswitch-coverage = robotica-freeswitch.coverage;
             robotica-freeswitch = robotica-freeswitch.pkg;
@@ -573,7 +573,7 @@
           devShells.default = devShell;
           packages = {
             robotica-frontend = robotica-frontend-bindgen;
-            brian-backend = brian-backend.pkg;
+            robotica-backend = robotica-backend.pkg;
             robotica-slint = robotica-slint.pkg;
             robotica-freeswitch = robotica-freeswitch.pkg;
             devenv-up = devShell.config.procfileScript;

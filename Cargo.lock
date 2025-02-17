@@ -827,47 +827,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfa8873f51c92e232f9bac4065cddef41b714152812bfc5f7672ba16d6ef8cd9"
 
 [[package]]
-name = "brian-backend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "chrono-tz",
- "color-backtrace",
- "data-encoding",
- "envconfig",
- "float-cmp 0.10.0",
- "geo",
- "influxdb",
- "opentelemetry",
- "opentelemetry-appender-tracing",
- "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
- "opentelemetry-stdout",
- "opentelemetry_sdk",
- "reqwest 0.12.5",
- "robotica-common",
- "robotica-macro",
- "robotica-tokio",
- "rstest",
- "serde",
- "serde_json",
- "serde_tuple",
- "serde_yml",
- "sqlx",
- "tap",
- "test-log",
- "thiserror 2.0.4",
- "tokio",
- "tonic",
- "tracing",
- "tracing-core",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5721,6 +5680,47 @@ dependencies = [
  "byteorder",
  "rmp",
  "serde",
+]
+
+[[package]]
+name = "robotica-backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "chrono-tz",
+ "color-backtrace",
+ "data-encoding",
+ "envconfig",
+ "float-cmp 0.10.0",
+ "geo",
+ "influxdb",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry-semantic-conventions",
+ "opentelemetry-stdout",
+ "opentelemetry_sdk",
+ "reqwest 0.12.5",
+ "robotica-common",
+ "robotica-macro",
+ "robotica-tokio",
+ "rstest",
+ "serde",
+ "serde_json",
+ "serde_tuple",
+ "serde_yml",
+ "sqlx",
+ "tap",
+ "test-log",
+ "thiserror 2.0.4",
+ "tokio",
+ "tonic",
+ "tracing",
+ "tracing-core",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

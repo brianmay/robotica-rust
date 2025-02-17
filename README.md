@@ -4,7 +4,7 @@ Manipulate asynchronous events, using asynchronous tasks.
 
 ## Getting started
 
-Sample backend code in the `brian-backend` directory. Sample yew based front end code in the `brian-backend` directory.
+This needs to be written still.
 
 ## Rationale
 
