@@ -436,7 +436,6 @@
                 enterShell = ''
                   export ROBOTICA_DEBUG=true
                   echo "Python path: ${python_venv}"
-                  # export PYTHONPATH="${python_venv}/lib/python3.11/site-packages"
                   export CONFIG_FILE="$PWD/robotica-backend.yaml"
                   export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
                   export STATIC_PATH="robotica-frontend/dist"
