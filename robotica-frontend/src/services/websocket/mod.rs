@@ -7,8 +7,8 @@ use futures::{
     future::{select, Either},
     SinkExt, StreamExt,
 };
+use gloo_net::websocket::{futures::WebSocket, Message, WebSocketError};
 use gloo_timers::callback::Timeout;
-use reqwasm::websocket::{futures::WebSocket, Message, WebSocketError};
 use thiserror::Error;
 use tracing::{debug, error, info};
 use wasm_bindgen_futures::spawn_local;
