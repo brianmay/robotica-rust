@@ -5705,7 +5705,7 @@ dependencies = [
  "sqlx",
  "tap",
  "test-log",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "tokio",
  "tonic",
  "tracing",
@@ -5730,7 +5730,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tap",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "tracing",
 ]
 
@@ -5753,7 +5753,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yml",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -5780,7 +5780,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tap",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
@@ -5821,7 +5821,7 @@ dependencies = [
  "slint",
  "slint-build",
  "tap",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5866,7 +5866,7 @@ dependencies = [
  "serde_yml",
  "sqlx",
  "tap",
- "thiserror 2.0.4",
+ "thiserror 2.0.11",
  "time",
  "tokio",
  "tower 0.5.1",
@@ -7194,11 +7194,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.4"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f49a1853cf82743e3b7950f77e0f4d622ca36cf4317cba00c767838bac8d490"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
 dependencies = [
- "thiserror-impl 2.0.4",
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -7214,9 +7214,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.4"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8381894bb3efe0c4acac3ded651301ceee58a15d47c2e34885ed1908ad667061"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",
