@@ -23,7 +23,7 @@ reqwest = { version = "0.12.5", features = ["json"] }
 envconfig = "0.11.0"
 tap = "1.0.1"
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "postgres"] }
-geo = { version = "0.29.2" }
+geo = { version = "0.29.3" }
 url = "2.5.4"
 serde_tuple = "1.1.0"
 

@@ -49,7 +49,7 @@ hyper = "1.5.0"
 time = "0.3.37"
 sqlx = { version = "0.8.2", features = ["migrate", "postgres", "runtime-tokio"] }
 geozero = { version = "0.14.0", features = ["with-postgis-sqlx"] }
-geo = { version = "0.29.2", features = ["serde", "use-serde"] }
+geo = { version = "0.29.3", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 rstest = "0.22.0"
 opentelemetry = { version = "0.27.0", features = ["metrics"] }
