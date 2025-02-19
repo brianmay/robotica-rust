@@ -22,7 +22,7 @@ prost-build = { version = "0.13.3", optional = true }
 
 [dev-dependencies]
 approx = "0.5.1"
-chrono-tz = "0.10.0"
+chrono-tz = "0.10.1"
 
 [features]
 chrono = ["dep:chrono"]
