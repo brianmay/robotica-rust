@@ -203,7 +203,7 @@ impl Sequence {
     /// Returns true if the sequence is done.
     #[must_use]
     pub fn is_done(&self) -> bool {
-        self.status.map_or(false, |status| status.is_done())
+        self.status.is_some_and(|status| status.is_done())
     }
 }
 

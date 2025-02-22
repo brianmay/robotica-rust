@@ -65,6 +65,13 @@
           };
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
+          wasm-bindgen-cli = pkgs.wasm-bindgen-cli.override (old: {
+            version = "0.2.100";
+            hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog";
+            cargoHash = "sha256-tD0OY2PounRqsRiFh8Js5nyknQ809ZcHMvCOLrvYHRE=";
+            # hash = pkgs.lib.fakeHash;
+            # cargoHash = pkgs.lib.fakeHash;
+          });
 
           python_venv =
             let
@@ -208,7 +215,7 @@
             src = ./robotica-frontend;
 
             buildPhase = ''
-              ${pkgs.wasm-bindgen-cli}/bin/wasm-bindgen \
+              ${wasm-bindgen-cli}/bin/wasm-bindgen \
                 --target bundler \
                 --out-dir pkg \
                 --omit-default-module-path \
@@ -420,7 +427,7 @@
                   pkgs.freetype
                   nodejs
                   pkgs.wasm-pack
-                  pkgs.wasm-bindgen-cli
+                  wasm-bindgen-cli
                   pkgs.slint-lsp
                   rustPlatform
                   pkgs.cargo-expand
