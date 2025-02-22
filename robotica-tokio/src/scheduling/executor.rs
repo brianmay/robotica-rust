@@ -316,7 +316,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
         };
 
         let new_hash = ObjectHash::calculate(&message);
-        let changed = old_hash.map_or(true, |old_hash| new_hash != *old_hash);
+        let changed = old_hash.is_none_or(|old_hash| new_hash != *old_hash);
         if changed {
             self.mqtt.try_send(message);
         }

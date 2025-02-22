@@ -202,9 +202,8 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
             // This has to be a special case; we can't use a nil plan because a nil plan has no average cost.
             let old_average_cost = old_user_plan.get_average_cost_per_hour();
             let new_current_cost = old_user_plan.get_forecast_average_cost(id, now, prices);
-            let discard_plan = new_current_cost.map_or(true, |new_average_cost| {
-                old_average_cost > new_average_cost * 0.8
-            });
+            let discard_plan = new_current_cost
+                .is_none_or(|new_average_cost| old_average_cost > new_average_cost * 0.8);
 
             let result = if discard_plan {
                 info!(%id, old_average_cost, new_current_cost, plan = ?old_user_plan, "No new plan available; price rise too much; discarding plan");

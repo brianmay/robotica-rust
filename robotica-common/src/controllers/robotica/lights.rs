@@ -127,7 +127,7 @@ fn get_display_state_internal(lb: &Controller) -> DisplayState {
     let scene = lb.scene.as_ref();
 
     let off = scene == Some(&SceneName::new("off"));
-    let scene_selected = scene.map_or(false, |scene| *scene == lb.config.scene);
+    let scene_selected = scene.is_some_and(|scene| *scene == lb.config.scene);
 
     match lb.power {
         None => DisplayState::Unknown,

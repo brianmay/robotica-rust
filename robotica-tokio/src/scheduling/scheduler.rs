@@ -118,7 +118,7 @@ fn is_condition_ok(
     today: &HashSet<String>,
     tomorrow: &HashSet<String>,
 ) -> bool {
-    config.if_cond.as_ref().map_or(true, |s_if| {
+    config.if_cond.as_ref().is_none_or(|s_if| {
         s_if.iter().any(|s_if| {
             let context = Context {
                 today: today.clone(),

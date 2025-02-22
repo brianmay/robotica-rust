@@ -596,7 +596,7 @@ impl Component for MapComponent {
         let select_location = ctx.link().callback(Msg::SelectLocation);
 
         // Don't show connection error if user is not admin.
-        let is_admin = self.user.as_ref().map_or(true, |user| user.is_admin);
+        let is_admin = self.user.as_ref().is_none_or(|user| user.is_admin);
 
         let mut messages = vec![];
 

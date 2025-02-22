@@ -53,7 +53,7 @@ where
                     #[allow(clippy::single_match_else)]
                     match msg {
                         Some(SendMessage::Set(data)) => {
-                            let changed = current_data.as_ref().map_or(true, |saved_data| data != *saved_data);
+                            let changed = current_data.as_ref().is_none_or(|saved_data| data != *saved_data);
                             if changed {
                                 let prev_data = current_data;
                                 current_data = Some(data.clone());

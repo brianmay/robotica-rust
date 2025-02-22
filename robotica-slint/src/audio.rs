@@ -317,7 +317,7 @@ enum Action<'a> {
     Stop,
 }
 
-impl<'a> Action<'a> {
+impl Action<'_> {
     async fn execute(
         self,
         state: &State,
