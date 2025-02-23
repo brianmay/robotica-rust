@@ -592,7 +592,7 @@ fn auto_light(
         &SendOptions::new(),
     );
 
-    send_to_device(&config.id, &config.device, pc, discover, init_state);
+    send_to_device(&config.id, &config.device, pc, discover, init_state, false);
 }
 
 fn split_light(
@@ -690,7 +690,7 @@ fn strip_light(
 
     let pc = lights::run_merge_light(combined_rx, &config.id, merge_config);
 
-    send_to_device(&config.id, &config.device, pc, discover, init_state);
+    send_to_device(&config.id, &config.device, pc, discover, init_state, true);
 }
 
 #[instrument(skip_all)]
@@ -700,6 +700,7 @@ fn send_to_device(
     pc: stateful::Receiver<PowerColor>,
     discover: &stateless::Receiver<lifx::Device>,
     init_state: &InitState,
+    multiple_zones: bool,
 ) {
     let id_clone = id.clone();
     let output = match device {
@@ -707,7 +708,7 @@ fn send_to_device(
             pc,
             *lifx_id,
             discover,
-            DeviceConfig::default().set_multiple_zones(true),
+            DeviceConfig::default().set_multiple_zones(multiple_zones),
         ),
         config::LightDeviceConfig::Debug { lifx_id } => {
             let lifx_id = *lifx_id;
