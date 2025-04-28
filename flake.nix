@@ -343,13 +343,28 @@
             };
 
           robotica-slint =
+            crossSystem: localSystem:
             let
+              pkgs = nixpkgs.legacyPackages.${crossSystem};
+              crossPkgs = import nixpkgs {
+                inherit crossSystem localSystem;
+                overlays = [ (import rust-overlay) ];
+              };
+
+              # rustPlatform = crossPkgs.rust-bin.stable.latest.default.override {
+              #   targets = [ "wasm32-unknown-unknown" ];
+              #   extensions = [ "rust-src" ];
+              # };
+
+              # craneLib = (crane.mkLib crossPkgs).overrideToolchain rustPlatform;
+              craneLib = (crane.mkLib crossPkgs).overrideToolchain (p: p.rust-bin.stable.latest.default);
+
               common = {
                 src = ./.;
                 pname = "robotica-slint";
                 version = "0.0.0";
                 cargoExtraArgs = "-p robotica-slint";
-                nativeBuildInputs = with pkgs; [ pkg-config ];
+                nativeBuildInputs = with crossPkgs; [ pkg-config ];
                 buildInputs = with pkgs; [
                   openssl
                   protobuf
@@ -564,9 +579,9 @@
           # Mar 27 05:16:41.965 ERROR cargo_tarpaulin: Error while parsing binary or DWARF info.
           # Error: "Error while parsing binary or DWARF info."
           checks = {
-            robotica-slint-clippy = robotica-slint.clippy;
-            # robotica-slint-coverage = robotica-slint.coverage;
-            robotica-slint = robotica-slint.pkg;
+            robotica-slint-clippy = (robotica-slint system system).clippy;
+            # robotica-slint-coverage = (robotica-slint system system).coverage;
+            robotica-slint = (robotica-slint system system).pkg;
             robotica-frontend-clippy = robotica-frontend.clippy;
             robotica-frontend = robotica-frontend.pkg;
             robotica-backend-clippy = robotica-backend.clippy;
@@ -581,7 +596,8 @@
           packages = {
             robotica-frontend = robotica-frontend-bindgen;
             robotica-backend = robotica-backend.pkg;
-            robotica-slint = robotica-slint.pkg;
+            robotica-slint = (robotica-slint system system).pkg;
+            robotica-slint-aarch64 = (robotica-slint "aarch64-linux" system).pkg;
             robotica-freeswitch = robotica-freeswitch.pkg;
             devenv-up = devShell.config.procfileScript;
           };
