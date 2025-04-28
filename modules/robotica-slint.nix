@@ -14,9 +14,9 @@ let
     ;
 
   system = pkgs.system;
-  robotica-slint = self.packages.${system}.robotica-slint;
 
   cfg = config.services.robotica-slint;
+  robotica-slint = cfg.package;
   sound_path = cfg.config.audio.sound_path;
   piperVoice = {
     onnx = pkgs.fetchurl {
@@ -179,6 +179,7 @@ in
 {
   options.services.robotica-slint = {
     enable = mkEnableOption "robotica-slint service";
+    package = lib.mkPackageOption self.packages.${system} "robotica-slint" { };
     config = mkOption { type = config_type; };
     secrets_path = mkOption { type = types.path; };
     user = mkOption { type = types.str; };
