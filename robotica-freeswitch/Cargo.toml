@@ -32,4 +32,4 @@ reqwest = "0.12.5"
 
 [dependencies.openssl]
 optional = true
-version = "0.10.70"
+version = "0.10.72"
