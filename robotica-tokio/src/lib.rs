@@ -46,7 +46,7 @@ where
                 error!("The thread aborted with error: {err}");
                 std::process::exit(1);
             }
-        };
+        }
     })
 }
 

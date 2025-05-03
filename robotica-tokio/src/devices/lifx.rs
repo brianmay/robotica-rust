@@ -182,7 +182,7 @@ impl DeviceState {
         }
     }
 
-    fn set_offline(&mut self) {
+    const fn set_offline(&mut self) {
         *self = DeviceState::Offline;
     }
 

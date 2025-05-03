@@ -129,7 +129,7 @@ impl DayState {
             self.cheap_power_for_day = TimeDelta::zero();
             self.last_cheap_update = start_day;
             self.plan = HeatPlan::new_none();
-        };
+        }
 
         // Add recent time to total cheap_power_for_day
         if self.is_on {

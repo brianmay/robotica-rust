@@ -13,6 +13,7 @@ impl Id {
 
     /// Get the id as a str
     #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn as_str(&self) -> &str {
         &self.0
     }

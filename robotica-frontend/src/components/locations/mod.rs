@@ -33,14 +33,14 @@ impl ActionLocation {
         }
     }
 
-    fn set_announce_on_enter(&mut self, announce_on_enter: bool) {
+    const fn set_announce_on_enter(&mut self, announce_on_enter: bool) {
         match self {
             ActionLocation::Create(location) => location.announce_on_enter = announce_on_enter,
             ActionLocation::Update(location) => location.announce_on_enter = announce_on_enter,
         }
     }
 
-    fn set_announce_on_exit(&mut self, announce_on_exit: bool) {
+    const fn set_announce_on_exit(&mut self, announce_on_exit: bool) {
         match self {
             ActionLocation::Create(location) => location.announce_on_exit = announce_on_exit,
             ActionLocation::Update(location) => location.announce_on_exit = announce_on_exit,

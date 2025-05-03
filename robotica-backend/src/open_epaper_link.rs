@@ -90,13 +90,13 @@ impl Template {
     }
 }
 
-fn pre_inc(y: &mut u16, inc: u16) -> u16 {
+const fn pre_inc(y: &mut u16, inc: u16) -> u16 {
     let old_y = *y;
     *y = old_y + inc;
     *y
 }
 
-fn post_inc(y: &mut u16, inc: u16) -> u16 {
+const fn post_inc(y: &mut u16, inc: u16) -> u16 {
     let old_y = *y;
     *y = old_y + inc;
     old_y
@@ -122,7 +122,7 @@ fn text(y: &mut u16, t: String) -> Element {
     })
 }
 
-fn line(y: &mut u16) -> Element {
+const fn line(y: &mut u16) -> Element {
     *y += 0;
     Element::Line(Line {
         x1: 0,

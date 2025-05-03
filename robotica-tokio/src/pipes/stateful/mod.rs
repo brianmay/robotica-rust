@@ -60,7 +60,7 @@ where
                                 if let Err(_err) = out_tx.send((prev_data.clone(), data)) {
                                     // It is not an error if there are no subscribers.
                                 }
-                            };
+                            }
                         }
                         None => {
                             debug!("stateful::create_pipe({name}): send channel closed");
@@ -74,13 +74,13 @@ where
                             let data = current_data.clone();
                             if tx.send(data).is_err() {
                                 error!("stateful::create_pipe({name}): get send failed");
-                            };
+                            }
                         }
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
                             if tx.send((rx, current_data.clone())).is_err() {
                                 error!("stateful::create_pipe{name}): subscribe send failed");
-                            };
+                            }
                         }
                         None => {
                             debug!("stateful::create_pipe({name}): receive channel closed");

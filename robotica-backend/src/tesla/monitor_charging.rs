@@ -225,7 +225,7 @@ pub fn monitor_charging(
                 let charge_request =
                     should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
                 check_charge(&config, &tx_command, &tesla_state, charge_request);
-            };
+            }
 
             tx_summary.try_send(ChargingInformation {
                 battery_level: tesla_state.battery_level,

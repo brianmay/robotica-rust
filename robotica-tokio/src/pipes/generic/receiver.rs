@@ -83,7 +83,7 @@ impl<T> Receiver<T> {
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
             return None;
-        };
+        }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);

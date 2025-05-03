@@ -196,6 +196,7 @@ impl MqttMessage {
     /// # Errors
     ///
     /// If the payload is not valid UTF-8.
+    #[allow(clippy::missing_const_for_fn)]
     pub fn payload_as_str(&self) -> Result<&str, Utf8Error> {
         std::str::from_utf8(&self.payload)
     }
