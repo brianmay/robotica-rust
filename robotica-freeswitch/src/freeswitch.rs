@@ -186,7 +186,7 @@ async fn set_caller_name(
         debug!("Setting caller id name to {}", name);
         conn.execute("set", &format!("effective_caller_id_name={name}"))
             .await?;
-    };
+    }
     Ok(())
 }
 

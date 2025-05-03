@@ -56,7 +56,7 @@ where
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
             return Subscription::null(self.tx.clone());
-        };
+        }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);

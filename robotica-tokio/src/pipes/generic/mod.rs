@@ -70,7 +70,7 @@ where
                             let rx = out_tx.subscribe();
                             if tx.send((rx, current_data.clone())).is_err() {
                                 error!("generic::create_pipe{name}): subscribe send failed");
-                            };
+                            }
                         }
                         None => {
                             debug!("generic::create_pipe({name}): receive channel closed");

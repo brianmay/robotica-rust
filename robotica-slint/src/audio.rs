@@ -231,7 +231,7 @@ async fn watch_audio(
                     _ => {
                         error!("Invalid messages_enabled command, expected switch, got {:?}", me);
                     }
-                };
+                }
             }
             else => break,
         }
@@ -401,7 +401,7 @@ async fn process_command(
     } else {
         if let Some(music) = &command.music {
             state.play_list.clone_from(&music.play_list);
-        };
+        }
 
         let play_action = actions
             .iter()
@@ -442,7 +442,7 @@ async fn set_volume(volume: u8, programs: &LoadedProgramsConfig) -> Result<(), S
     if let Err(err) = cl.run().await {
         error!("Failed to set volume: {err}");
         return Err(format!("Failed to set volume: {err}"));
-    };
+    }
 
     Ok(())
 }
@@ -467,7 +467,7 @@ async fn music_resume(programs: &LoadedProgramsConfig) -> Result<(), String> {
     if let Err(err) = cl.run().await {
         error!("Failed to resume music: {err}");
         return Err(format!("Failed to resume music: {err}"));
-    };
+    }
     Ok(())
 }
 
@@ -486,7 +486,7 @@ async fn play_sound(
     if let Err(err) = cl.run().await {
         error!("Failed to play sound: {err}");
         return Err(format!("Failed to play sound: {err}"));
-    };
+    }
     Ok(())
 }
 async fn pre_say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
@@ -494,7 +494,7 @@ async fn pre_say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), S
     if let Err(err) = cl.run().await {
         error!("Failed to pre say message: {err}");
         return Err(format!("Failed to pre say message: {err}"));
-    };
+    }
     Ok(())
 }
 
@@ -503,7 +503,7 @@ async fn say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), Strin
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
-    };
+    }
     Ok(())
 }
 
@@ -518,7 +518,7 @@ async fn play_music(play_list: &str, programs: &LoadedProgramsConfig) -> Result<
         if let Err(err) = cl.run().await {
             error!("Failed to play music: {err}");
             return Err(format!("Failed to play music: {err}"));
-        };
+        }
     }
 
     Ok(())
@@ -529,7 +529,7 @@ async fn stop_music(programs: &LoadedProgramsConfig) -> Result<(), String> {
     if let Err(err) = cl.run().await {
         error!("Failed to stop music: {err}");
         return Err(format!("Failed to stop music: {err}"));
-    };
+    }
     Ok(())
 }
 
@@ -538,6 +538,6 @@ async fn init(programs: &LoadedProgramsConfig) -> Result<(), String> {
     if let Err(err) = cl.run().await {
         error!("Failed to init music: {err}");
         return Err(format!("Failed to init music: {err}"));
-    };
+    }
     Ok(())
 }

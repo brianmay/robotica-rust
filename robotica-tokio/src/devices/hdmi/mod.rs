@@ -101,7 +101,7 @@ where
                             }
                         }
                         Command::Shutdown => { break; },
-                    };
+                    }
                 }
             }
         }

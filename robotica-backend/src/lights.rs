@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    iter::{empty, repeat, zip},
+    iter::{empty, zip},
     time::Duration,
 };
 
@@ -430,7 +430,7 @@ async fn set_scene(state: &mut LightState, scene: &Scene) {
 
 fn copy_colors_to_pos(add_colors: &PowerColor, colors: &mut [HSBK], offset: usize, number: usize) {
     let x: Box<dyn Iterator<Item = HSBK>> = match add_colors {
-        PowerColor::On(Colors::Single(color)) => Box::new(repeat(*color).take(number)),
+        PowerColor::On(Colors::Single(color)) => Box::new(std::iter::repeat_n(*color, number)),
         PowerColor::On(Colors::Sequence(colors)) => {
             Box::new(colors.iter().copied().cycle().take(number))
         }

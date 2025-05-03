@@ -32,7 +32,7 @@ pub async fn list_handler(
 ) -> Result<Json<ApiResponse<Vec<Location>>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
-    };
+    }
 
     list_locations(&postgres)
         .await?
@@ -131,7 +131,7 @@ pub async fn get_handler(
 ) -> Result<Json<Location>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
-    };
+    }
 
     get_location(&postgres, id)
         .await?
@@ -147,7 +147,7 @@ pub async fn search_handler(
 ) -> Result<Json<Vec<Location>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
-    };
+    }
 
     search_locations(&postgres, location, 0.0)
         .await?

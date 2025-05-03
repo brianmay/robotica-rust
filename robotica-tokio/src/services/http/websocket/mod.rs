@@ -192,7 +192,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
                     Err(err) => {
                         tracing::error!("websocket: Error parsing message: {}", err);
                     }
-                };
+                }
             },
         }
     }

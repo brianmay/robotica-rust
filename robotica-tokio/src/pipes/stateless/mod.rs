@@ -166,7 +166,7 @@ where
                             let rx = out_tx.subscribe();
                             if tx.send(rx).is_err() {
                                 error!("stateless::create_pipe({name}): subscribe send failed");
-                            };
+                            }
                         }
                         None => {
                             debug!("stateless::create_pipe({name}): receive channel closed");

@@ -123,6 +123,7 @@ impl Eq for FieldRef<String, Scalar> {}
 impl<T, F> FieldRef<T, F> {
     /// Returns the name of the field.
     #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn get_name(&self) -> &str {
         &self.name
     }
