@@ -189,40 +189,40 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
             .try_init()?;
 
         Ok(OtelGuard {
-            tracer_provider: Some(tracer_provider),
-            meter_provider: Some(meter_provider),
-            logger_provider: Some(logger_provider),
+            tracer: Some(tracer_provider),
+            meter: Some(meter_provider),
+            logger: Some(logger_provider),
         })
     } else {
         layer.init();
 
         Ok(OtelGuard {
-            tracer_provider: None,
-            meter_provider: None,
-            logger_provider: None,
+            tracer: None,
+            meter: None,
+            logger: None,
         })
     }
 }
 
 pub struct OtelGuard {
-    tracer_provider: Option<SdkTracerProvider>,
-    meter_provider: Option<SdkMeterProvider>,
-    logger_provider: Option<SdkLoggerProvider>,
+    tracer: Option<SdkTracerProvider>,
+    meter: Option<SdkMeterProvider>,
+    logger: Option<SdkLoggerProvider>,
 }
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        if let Some(provider) = self.tracer_provider.take() {
+        if let Some(provider) = self.tracer.take() {
             if let Err(err) = provider.shutdown() {
                 eprintln!("{err:?}");
             }
         }
-        if let Some(provider) = self.meter_provider.take() {
+        if let Some(provider) = self.meter.take() {
             if let Err(err) = provider.shutdown() {
                 eprintln!("{err:?}");
             }
         }
-        if let Some(provider) = self.logger_provider.take() {
+        if let Some(provider) = self.logger.take() {
             if let Err(err) = provider.shutdown() {
                 eprintln!("{err:?}");
             }
