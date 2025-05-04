@@ -2,19 +2,19 @@ use data_encoding::BASE64;
 use opentelemetry::{global, trace::TracerProvider, InstrumentationScope, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{
-    LogExporter, MetricExporter, SpanExporter, WithExportConfig, WithTonicConfig,
+    ExporterBuildError, LogExporter, MetricExporter, SpanExporter, WithExportConfig,
+    WithTonicConfig,
 };
 use opentelemetry_sdk::{
-    logs::LoggerProvider,
+    logs::SdkLoggerProvider,
     metrics::{PeriodicReader, SdkMeterProvider},
-    runtime, trace as sdktrace, Resource,
+    trace::SdkTracerProvider,
+    Resource,
 };
-use opentelemetry_semantic_conventions::{
-    resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
-    SCHEMA_URL,
-};
+use opentelemetry_semantic_conventions::resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION};
 use robotica_common::version::Version;
 use serde::Deserialize;
+use std::sync::OnceLock;
 use tap::Pipe;
 use thiserror::Error;
 use tonic::metadata::{errors::InvalidMetadataValue, MetadataMap};
@@ -53,17 +53,21 @@ fn otlp_metadata(config: &RemoteConfig) -> Result<MetadataMap, InvalidMetadataVa
 
 // Create a Resource that captures information about the entity for which telemetry is recorded.
 fn resource(config: &Config) -> Resource {
-    Resource::from_schema_url(
-        [
-            KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
-            KeyValue::new(SERVICE_VERSION, Version::get().vcs_ref),
-            KeyValue::new(
-                DEPLOYMENT_ENVIRONMENT_NAME,
-                config.deployment_environment.clone(),
-            ),
-        ],
-        SCHEMA_URL,
-    )
+    static RESOURCE: OnceLock<Resource> = OnceLock::new();
+    RESOURCE
+        .get_or_init(|| {
+            Resource::builder()
+                .with_service_name(env!("CARGO_PKG_NAME"))
+                .with_attributes([
+                    KeyValue::new(SERVICE_VERSION, Version::get().vcs_ref),
+                    KeyValue::new(
+                        DEPLOYMENT_ENVIRONMENT_NAME,
+                        config.deployment_environment.clone(),
+                    ),
+                ])
+                .build()
+        })
+        .clone()
 }
 
 #[derive(Error, Debug)]
@@ -72,13 +76,13 @@ pub enum Error {
     InvalidMetadataValue(#[from] InvalidMetadataValue),
 
     #[error("Trace error: {0}")]
-    Trace(#[from] opentelemetry::trace::TraceError),
+    Trace(#[from] opentelemetry_sdk::trace::TraceError),
 
     #[error("Metrics error: {0}")]
     Metrics(#[from] opentelemetry_sdk::metrics::MetricError),
 
-    #[error("Log error: {0}")]
-    Log(#[from] opentelemetry_sdk::logs::LogError),
+    #[error("Exporter build error: {0}")]
+    Log(#[from] ExporterBuildError),
 
     #[error("TryInitError error: {0}")]
     TryInit(#[from] tracing_subscriber::util::TryInitError),
@@ -88,7 +92,7 @@ pub enum Error {
 fn init_tracer_provider(
     resource: &Resource,
     remote: &RemoteConfig,
-) -> Result<sdktrace::TracerProvider, Error> {
+) -> Result<SdkTracerProvider, Error> {
     let exporter = SpanExporter::builder()
         .with_tonic()
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
@@ -99,8 +103,8 @@ fn init_tracer_provider(
         // })
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
-    sdktrace::TracerProvider::builder()
-        .with_batch_exporter(exporter, runtime::Tokio)
+    SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .with_resource(resource.clone())
         .build()
         .pipe(Ok)
@@ -117,7 +121,7 @@ fn init_metrics(
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
 
-    let reader = PeriodicReader::builder(exporter, runtime::Tokio).build();
+    let reader = PeriodicReader::builder(exporter).build();
 
     SdkMeterProvider::builder()
         .with_reader(reader)
@@ -126,10 +130,7 @@ fn init_metrics(
         .pipe(Ok)
 }
 
-fn init_logs(
-    resource: &Resource,
-    remote: &RemoteConfig,
-) -> Result<opentelemetry_sdk::logs::LoggerProvider, Error> {
+fn init_logs(resource: &Resource, remote: &RemoteConfig) -> Result<SdkLoggerProvider, Error> {
     let exporter = LogExporter::builder()
         .with_tonic()
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
@@ -137,9 +138,9 @@ fn init_logs(
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
 
-    LoggerProvider::builder()
+    SdkLoggerProvider::builder()
         .with_resource(resource.clone())
-        .with_batch_exporter(exporter, runtime::Tokio)
+        .with_batch_exporter(exporter)
         .build()
         .pipe(Ok)
 }
@@ -188,6 +189,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
             .try_init()?;
 
         Ok(OtelGuard {
+            tracer_provider: Some(tracer_provider),
             meter_provider: Some(meter_provider),
             logger_provider: Some(logger_provider),
         })
@@ -195,6 +197,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
         layer.init();
 
         Ok(OtelGuard {
+            tracer_provider: None,
             meter_provider: None,
             logger_provider: None,
         })
@@ -202,14 +205,18 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
 }
 
 pub struct OtelGuard {
+    tracer_provider: Option<SdkTracerProvider>,
     meter_provider: Option<SdkMeterProvider>,
-    logger_provider: Option<opentelemetry_sdk::logs::LoggerProvider>,
+    logger_provider: Option<SdkLoggerProvider>,
 }
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        global::shutdown_tracer_provider();
-
+        if let Some(provider) = self.tracer_provider.take() {
+            if let Err(err) = provider.shutdown() {
+                eprintln!("{err:?}");
+            }
+        }
         if let Some(provider) = self.meter_provider.take() {
             if let Err(err) = provider.shutdown() {
                 eprintln!("{err:?}");
@@ -220,7 +227,5 @@ impl Drop for OtelGuard {
                 eprintln!("{err:?}");
             }
         }
-
-        opentelemetry::global::shutdown_tracer_provider();
     }
 }
