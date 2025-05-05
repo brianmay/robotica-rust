@@ -13,10 +13,7 @@ jobs:
           token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          determinate: true
-
+      - uses: nixbuild/nix-quick-install-action@v30
       - name: Nix binary cache
         uses: nix-community/cache-nix-action@135667ec418502fa5a3598af6fb9eb733888ce6a # v6.1.3
         with:
@@ -44,7 +41,7 @@ jobs:
         if: failure() && github.event_name == 'pull_request'
         id: fix-hashes
         run: |
-          determinate-nixd fix hashes --auto-apply
+          nix run 'https://flakehub.com/f/DeterminateSystems/determinate/0.1' fix hashes --auto-apply
 
       - uses: EndBug/add-and-commit@v9
         if: failure() && github.event_name == 'pull_request'
