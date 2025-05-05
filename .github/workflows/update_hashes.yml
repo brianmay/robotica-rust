@@ -41,7 +41,7 @@ jobs:
         if: failure() && github.event_name == 'pull_request'
         id: fix-hashes
         run: |
-          nix run 'https://flakehub.com/f/DeterminateSystems/determinate/0.1' fix hashes --auto-apply
+          nix run 'https://flakehub.com/f/DeterminateSystems/determinate/0.1' -- fix hashes --auto-apply
 
       - uses: EndBug/add-and-commit@v9
         if: failure() && github.event_name == 'pull_request'
