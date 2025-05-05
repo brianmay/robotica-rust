@@ -4,11 +4,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: ${{ github.actor != 'github-actions[bot]' && github.event_name != 'push' || github.event.pusher.name != 'github-actions[bot]' }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
- 
+        with:
+          token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
@@ -40,19 +44,11 @@ jobs:
         if: failure() && github.event_name == 'pull_request'
         id: fix-hashes
         run: |
-          git stash --include-untracked
-          git fetch --depth=1 origin "$GITHUB_HEAD_REF"
-          git checkout -B "$GITHUB_HEAD_REF" "${{ github.event.pull_request.head.sha }}"
- 
           determinate-nixd fix hashes --auto-apply
- 
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add --update --ignore-removal .
-            git commit -m "[dependabot skip] Automatically fix Nix hashes"
-            git push origin "$GITHUB_HEAD_REF"
-          fi
- 
-          git checkout -
-          git stash pop || true
+
+      - uses: EndBug/add-and-commit@v9
+        if: failure() && github.event_name == 'pull_request'
+        with:
+          message: "[dependabot skip] Automatically fix Nix hashes"
+          committer_name: GitHub Actions
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
