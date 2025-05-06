@@ -8,6 +8,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
