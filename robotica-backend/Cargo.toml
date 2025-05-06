@@ -14,7 +14,7 @@ serde_yml = "0.0.10"
 chrono = { version = "0.4.41", features = ["serde"] }
 chrono-tz = "0.10.3"
 thiserror = "2.0.11"
-color-backtrace = "0.6.1"
+color-backtrace = "0.7.0"
 robotica-common = { path = "../robotica-common", features = ["websockets"] }
 robotica-tokio = { path = "../robotica-tokio", features = ["websockets", "scheduler"] }
 robotica-macro = { path = "../robotica-macro"}
