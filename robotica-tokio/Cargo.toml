@@ -42,7 +42,7 @@ url = "2.5.4"
 futures = "0.3.31"
 tower = { version = "0.5.2", features = ["util"] }
 tower-http = { version = "0.6.4", features = ["fs", "trace"] }
-tower-sessions = { version = "0.13.0" }
+tower-sessions = { version = "0.14.0" }
 tower-sessions-sqlx-store = { version = "0.14.2", features = ["postgres"] }
 arc-swap = "1.7.1"
 hyper = "1.6.0"
