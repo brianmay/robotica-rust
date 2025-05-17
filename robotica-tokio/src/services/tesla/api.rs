@@ -17,6 +17,7 @@ use crate::{
 };
 
 /// A set of meter counters for the Tesla API
+#[allow(clippy::struct_field_names)]
 #[derive(Debug)]
 pub struct Meters {
     auth_requests: Counter<u64>,
@@ -343,6 +344,7 @@ impl std::fmt::Debug for RawToken {
 }
 
 /// Token to access the Tesla API
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Token {
     access_token: String,
@@ -1020,7 +1022,7 @@ impl CommandSequence {
 
     /// Is the sequence empty?
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }
 }

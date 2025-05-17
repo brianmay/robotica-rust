@@ -56,6 +56,7 @@ fn publish_to_mqtt_message(msg: &Publish) -> Result<MqttMessage, Utf8Error> {
 }
 
 /// An error occurred during a `Mqtt` subscribe operation.
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum SubscribeError {
     /// Send error
