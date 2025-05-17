@@ -218,9 +218,9 @@ impl Line {
 
 impl Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.command.to_string_lossy())?;
+        write!(f, "{}", self.command.display())?;
         for arg in &self.args {
-            write!(f, " {}", arg.to_string_lossy())?;
+            write!(f, " {}", arg.display())?;
         }
         Ok(())
     }
@@ -228,9 +228,9 @@ impl Display for Line {
 
 impl std::fmt::Debug for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{:?}", self.command)?;
+        write!(f, "CommandLine(\"{}", self.command.display())?;
         for arg in &self.args {
-            write!(f, " {arg:?}")?;
+            write!(f, " {}", arg.display())?;
         }
         write!(f, "\")")?;
         Ok(())

@@ -52,7 +52,6 @@ pub enum DevicePower {
 
 impl From<DevicePower> for String {
     /// Convert the power state to a string.
-    #[must_use]
     fn from(power: DevicePower) -> Self {
         match power {
             DevicePower::On => "ON".to_string(),

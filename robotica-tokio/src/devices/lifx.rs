@@ -127,6 +127,7 @@ fn hsbk_to_lifx(hsbk: HSBK) -> lifx_core::HSBK {
 }
 
 /// A LIFX device
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug)]
 pub struct Device {
     target: LifxId,
