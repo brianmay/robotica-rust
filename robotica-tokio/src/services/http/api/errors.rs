@@ -1,5 +1,7 @@
-use axum::Json;
-use axum_core::response::{IntoResponse, Response};
+use axum::{
+    response::{IntoResponse, Response},
+    Json,
+};
 use hyper::StatusCode;
 use robotica_common::robotica::http_api::api_error;
 use thiserror::Error;

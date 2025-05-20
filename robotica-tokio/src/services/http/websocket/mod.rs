@@ -55,7 +55,7 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
             return;
         }
     };
-    if let Err(e) = stream.send(Message::Binary(message.into())).await {
+    if let Err(e) = stream.send(Message::Binary(message)).await {
         error!("Error sending websocket error: {}", e);
     }
 }
@@ -78,7 +78,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
         }
     };
 
-    if let Err(e) = stream.send(Message::Binary(message.into())).await {
+    if let Err(e) = stream.send(Message::Binary(message)).await {
         error!("Error sending websocket status: {}", e);
     }
 
@@ -137,7 +137,7 @@ async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt:
                         }
                     };
 
-                    if let Err(err) = stream.send(Message::Binary(msg.into())).await {
+                    if let Err(err) = stream.send(Message::Binary(msg)).await {
                         error!("websocket: failed to send message to web socket, stopping: {}", err);
                         break;
                     }
