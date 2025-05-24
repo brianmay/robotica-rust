@@ -2,7 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -65,13 +65,7 @@
           };
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
-          wasm-bindgen-cli = pkgs.wasm-bindgen-cli.override (old: {
-            version = "0.2.100";
-            hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog";
-            cargoHash = "sha256-tD0OY2PounRqsRiFh8Js5nyknQ809ZcHMvCOLrvYHRE=";
-            # hash = pkgs.lib.fakeHash;
-            # cargoHash = pkgs.lib.fakeHash;
-          });
+          wasm-bindgen-cli = pkgs.wasm-bindgen-cli_0_2_100;
 
           python_venv =
             let
