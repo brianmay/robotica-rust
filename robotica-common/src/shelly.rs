@@ -78,9 +78,6 @@ impl Params {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Em0 {
-    /// The id of the message
-    pub id: i64,
-
     /// The Active Power for Phase A
     pub a_act_power: f64,
 
