@@ -10,7 +10,7 @@ pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
         // DO NOT set body attribute, it will overwrite the "Sending message"
         info!(
             title = message.title,
-            message = message.body,
+            message_body = message.body,
             priority = ?message.priority,
             audience = ?message.audience,
             flash_lights = message.flash_lights,
