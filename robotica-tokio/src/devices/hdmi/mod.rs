@@ -127,6 +127,7 @@ where
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn poll<A>(addr: A) -> Result<Status, std::io::Error>
 where
     A: ToSocketAddrs + Send + Sync + Debug,

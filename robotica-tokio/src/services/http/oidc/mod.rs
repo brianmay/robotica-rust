@@ -76,6 +76,7 @@ impl Client {
         auth_url.into()
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub async fn login(&self, code: &str, postgres: sqlx::PgPool) -> Result<User, ResponseError> {
         let mut token: Token = self
             .oidc_client

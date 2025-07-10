@@ -112,6 +112,7 @@ fn message_to_bytes(msg: Message) -> Option<Bytes> {
 const KEEP_ALIVE_DURATION_MILLIS: u32 = 15_000;
 const RECONNECT_DELAY_MILLIS: u32 = 5_000;
 
+#[allow(clippy::large_enum_variant)]
 enum BackendState {
     /// Backend is connected
     Connected(Backend),
@@ -393,6 +394,7 @@ impl ProcessCommandResult {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn process_command(command: Option<Command>, state: &mut State) -> ProcessCommandResult {
     let is_connected = state.backend.is_connected();
 
@@ -527,6 +529,7 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, ConnectError> {
     info!("ws: Reconnecting to websocket.");
     let mut ws = WebSocket::open(url).map_err(|err| RetryableError::AnyError(err.into()))?;
