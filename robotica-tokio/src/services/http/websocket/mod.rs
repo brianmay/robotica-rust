@@ -62,6 +62,7 @@ async fn websocket_error(stream: WebSocket, error: WsError) {
 
 // FIXME: function is too long
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::cognitive_complexity)]
 async fn websocket(mut stream: WebSocket, config: Arc<Config>, user: User, mqtt: MqttTx) {
     // Send Connect message.
     let message = WsStatus::Connected {
