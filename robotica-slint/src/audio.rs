@@ -351,7 +351,7 @@ impl Action<'_> {
     }
 }
 
-fn get_actions_for_command(command: &AudioCommand) -> Vec<Action> {
+fn get_actions_for_command(command: &AudioCommand) -> Vec<Action<'_>> {
     let mut actions = Vec::new();
 
     if let Some(tasks) = &command.pre_tasks {

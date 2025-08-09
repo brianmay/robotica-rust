@@ -8,7 +8,7 @@ use tap::Pipe;
 use tokio_util::sync::CancellationToken;
 
 mod slint {
-    #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+    #![allow(clippy::all, clippy::pedantic, clippy::nursery, dead_code)]
     slint::include_modules!();
 }
 

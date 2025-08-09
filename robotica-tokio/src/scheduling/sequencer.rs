@@ -413,7 +413,7 @@ struct ExpandedConfig<'a> {
     duration: Duration,
 }
 
-fn expand_config((n, config): (usize, &Config)) -> Vec<ExpandedConfig> {
+fn expand_config((n, config): (usize, &Config)) -> Vec<ExpandedConfig<'_>> {
     let repeat_count = config.repeat_count() as usize;
     let mut out = Vec::with_capacity(repeat_count);
 
