@@ -364,15 +364,6 @@ fn check_charge(
     info!(%id, "All done.");
 }
 
-#[derive(Debug, Error)]
-enum TeslamateError {
-    #[error("Failed to enable logging: {0}")]
-    Error(#[from] reqwest::Error),
-
-    #[error("Failed to parse teslamate url: {0}")]
-    ParseError(#[from] url::ParseError),
-}
-
 #[derive(Debug, Eq, PartialEq)]
 enum ShouldCharge {
     DoCharge,

@@ -8,7 +8,6 @@ use robotica_macro::time_delta_constant;
 use robotica_tokio::{
     pipes::{stateless, Subscriber, Subscription},
     services::{
-        persistent_state,
         tesla::api::{self, CommandSequence, SequenceError, Token},
     },
     spawn,
@@ -23,14 +22,6 @@ use crate::car;
 
 use super::private::new_message;
 use super::{Config, TeslamateAuth};
-
-/// Errors that can occur when monitoring charging.
-#[derive(Debug, Error)]
-pub enum MonitorChargingError {
-    /// An error occurred when loading the persistent state.
-    #[error("failed to load persistent state: {0}")]
-    LoadPersistentState(#[from] persistent_state::Error),
-}
 
 #[derive(Debug)]
 struct Meters {

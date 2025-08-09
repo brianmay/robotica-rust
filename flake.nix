@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -29,6 +30,7 @@
     inputs@{
       self,
       nixpkgs,
+      nixpkgs-unstable,
       flake-utils,
       rust-overlay,
       crane,
@@ -63,6 +65,7 @@
             inherit system;
             overlays = [ (import rust-overlay) ];
           };
+          pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
           wasm-bindgen-cli = pkgs.wasm-bindgen-cli_0_2_100;
@@ -428,7 +431,7 @@
                 packages = [
                   pkgs.uv
                   python_venv
-                  pkgs.rust-analyzer
+                  pkgs-unstable.rust-analyzer
                   pkgs.pkg-config
                   pkgs.openssl
                   pkgs.protobuf

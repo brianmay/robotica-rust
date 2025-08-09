@@ -1,5 +1,4 @@
 use robotica_tokio::pipes::{Subscriber, Subscription};
-use thiserror::Error;
 use tokio::select;
 use tracing::debug;
 
@@ -8,17 +7,6 @@ use robotica_common::robotica::commands;
 use robotica_tokio::{devices::hdmi::Command, pipes::stateless, spawn};
 
 use crate::{robotica::Id, InitState};
-
-#[derive(Error, Debug)]
-pub enum CommandErr {
-    /// The Mark is invalid.
-    #[error("Invalid mark {0}")]
-    ParseError(#[from] serde_json::Error),
-
-    /// UTF-8 error in Mark.
-    #[error("Invalid UTF8")]
-    Utf8Error(#[from] std::str::Utf8Error),
-}
 
 pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
     let id = Id::new(location, device);
