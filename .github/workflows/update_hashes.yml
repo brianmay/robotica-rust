@@ -6,7 +6,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor != 'brianmay-actions'
     permissions:
-      contents: write
+      id-token: "write"
+      contents: "write"
     steps:
       - name: Dump GitHub context
         env:
