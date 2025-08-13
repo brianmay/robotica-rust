@@ -10,7 +10,7 @@ edition = "2021"
 static_ssl = ['openssl/vendored']
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 color-backtrace = "0.7.0"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 robotica-tokio = { path = "../robotica-tokio" }
