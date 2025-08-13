@@ -370,7 +370,7 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
                 ( footer() )
             }
         }
-    ).into_response()
+    ).pipe(axum_core::response::IntoResponse::into_response).into_response()
 }
 
 async fn oidc_callback(

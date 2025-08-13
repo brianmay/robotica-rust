@@ -1,6 +1,7 @@
-use axum_core::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Response};
 use hyper::StatusCode;
 use maud::{html, DOCTYPE};
+use tap::Pipe;
 use thiserror::Error;
 use tracing::error;
 
@@ -82,7 +83,7 @@ fn error_page(status: StatusCode, message: &str) -> Response {
                 (footer() )
             }
         };
-    ).into_response();
+    ).pipe(axum_core::response::IntoResponse::into_response);
 
     (status, body).into_response()
 }
