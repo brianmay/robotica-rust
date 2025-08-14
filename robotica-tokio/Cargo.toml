@@ -47,7 +47,7 @@ tower-sessions-sqlx-store = { version = "0.15.0", features = ["postgres"] }
 arc-swap = "1.7.1"
 hyper = "1.6.0"
 time = "0.3.41"
-sqlx = { version = "0.8.5", features = ["migrate", "postgres", "runtime-tokio"] }
+sqlx = { version = "0.8.6", features = ["migrate", "postgres", "runtime-tokio"] }
 geozero = { version = "0.14.0", features = ["with-postgis-sqlx"] }
 geo = { version = "0.30.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
