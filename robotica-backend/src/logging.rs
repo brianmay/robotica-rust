@@ -78,9 +78,6 @@ pub enum Error {
     #[error("Trace error: {0}")]
     Trace(#[from] opentelemetry_sdk::trace::TraceError),
 
-    #[error("Metrics error: {0}")]
-    Metrics(#[from] opentelemetry_sdk::metrics::MetricError),
-
     #[error("Exporter build error: {0}")]
     Log(#[from] ExporterBuildError),
 
