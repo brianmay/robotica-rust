@@ -29,7 +29,7 @@ tracing = "0.1.41"
 robotica-common = { path = "../robotica-common", features = ["chrono"] }
 robotica-macro = { path = "../robotica-macro" }
 lifx-core = "0.4.0"
-async-trait = "0.1.86"
+async-trait = "0.1.89"
 pyo3 = { version = "0.25.0", features = ["auto-initialize", "chrono"], optional = true }
 
 # http server
