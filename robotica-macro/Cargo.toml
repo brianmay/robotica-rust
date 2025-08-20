@@ -9,7 +9,7 @@ proc-macro = true
 [dependencies]
 quote = "1.0.40"
 chrono = "0.4.41"
-syn = "2.0.101"
+syn = "2.0.106"
 
 [dev-dependencies]
 macrotest = "1"
