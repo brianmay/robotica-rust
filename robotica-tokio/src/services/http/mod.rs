@@ -166,7 +166,8 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::days(7)))
-        .with_same_site(SameSite::Lax);
+        .with_same_site(SameSite::Lax)
+        .with_always_save(true);
 
     let redirect = config.generate_url_or_default("/openid_connect_redirect_uri");
 
