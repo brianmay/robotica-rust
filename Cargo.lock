@@ -4773,7 +4773,7 @@ dependencies = [
  "futures-sink",
  "js-sys",
  "pin-project-lite",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -4815,7 +4815,7 @@ dependencies = [
  "opentelemetry_sdk",
  "prost 0.13.5",
  "reqwest 0.12.5",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tonic",
  "tracing",
@@ -4863,7 +4863,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.9.1",
  "serde_json",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-stream",
 ]
@@ -5791,7 +5791,7 @@ dependencies = [
  "sqlx",
  "tap",
  "test-log",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tonic",
  "tracing",
@@ -5816,7 +5816,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tap",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -5839,7 +5839,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yml",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -5866,7 +5866,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tap",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
@@ -5907,7 +5907,7 @@ dependencies = [
  "slint",
  "slint-build",
  "tap",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5952,7 +5952,7 @@ dependencies = [
  "serde_yml",
  "sqlx",
  "tap",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tokio",
  "tower 0.5.2",
@@ -6908,7 +6908,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "smallvec",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tokio",
  "tokio-stream",
@@ -6991,7 +6991,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tracing",
  "whoami",
@@ -7029,7 +7029,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tracing",
  "whoami",
@@ -7054,7 +7054,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tracing",
  "url",
@@ -7308,11 +7308,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
 dependencies = [
- "thiserror-impl 2.0.12",
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -7328,9 +7328,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7808,7 +7808,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "time",
  "tokio",
  "tracing",
@@ -7962,7 +7962,7 @@ dependencies = [
  "log",
  "rand 0.9.1",
  "sha1",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "utf-8",
 ]
 
