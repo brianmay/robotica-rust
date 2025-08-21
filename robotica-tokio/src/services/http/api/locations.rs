@@ -21,8 +21,8 @@ pub fn router(state: HttpState) -> axum::Router {
         .route("/", put(update_handler))
         .route("/create", post(create_handler))
         .route("/search", post(search_handler))
-        .route("/:id", delete(delete_handler))
-        .route("/:id", get(get_handler))
+        .route("/{id}", delete(delete_handler))
+        .route("/{id}", get(get_handler))
         .with_state(state)
 }
 
