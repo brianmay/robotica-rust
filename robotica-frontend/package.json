@@ -23,7 +23,7 @@
     "webpack-manifest-plugin": "^5.0.1"
   },
   "dependencies": {
-    "bootstrap": "^5.3.7",
+    "bootstrap": "^5.3.8",
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4"
   }
