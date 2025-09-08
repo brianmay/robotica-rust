@@ -8,7 +8,7 @@ proc-macro = true
 
 [dependencies]
 quote = "1.0.40"
-chrono = "0.4.41"
+chrono = "0.4.42"
 syn = "2.0.106"
 
 [dev-dependencies]
