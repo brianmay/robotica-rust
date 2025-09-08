@@ -118,7 +118,7 @@ pub(crate) async fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result
         "/python/robotica.py"
     )));
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let app = PyModule::from_code(py, py_app, c_str!("robotica.py"), c_str!("robotica"))?;
         let args = (text, start, stop);
         let calendar: Calendar = app.getattr("read_calendar")?.call1(args)?.extract()?;
