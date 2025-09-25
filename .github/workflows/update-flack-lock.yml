@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-      - uses: nixbuild/nix-quick-install-action@v33
+      - uses: nixbuild/nix-quick-install-action@v34
       - name: Update flake.lock
         id: update
         uses: DeterminateSystems/update-flake-lock@main
