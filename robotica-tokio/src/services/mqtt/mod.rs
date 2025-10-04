@@ -6,7 +6,6 @@ use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::Transport;
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str;
 use std::str::Utf8Error;
@@ -19,6 +18,7 @@ use tracing::{debug, error};
 use robotica_common::mqtt::{Json, MqttMessage, MqttSerializer, QoS, Retain};
 
 use crate::pipes::{generic, stateful, stateless};
+use crate::services::mqtt::topics::topic_matches;
 use crate::spawn;
 
 const NUMBER_OF_STARTUP_MESSAGES: usize = 100;
@@ -273,7 +273,7 @@ pub fn run_client(
 
     // error!("Number of subscriptions: {}", subscriptions.0.len());
 
-    for subscription in subscriptions.iter() {
+    for subscription in subscriptions.0.iter() {
         watch_tx_closed(
             subscription.tx.clone(),
             channel.tx.clone(),
@@ -302,7 +302,8 @@ pub fn run_client(
                 Some(msg) = rx.recv() => {
                     match msg {
                         MqttCommand::MqttOut(msg) => {
-                            if let Some(subscription) = subscriptions.get(&msg.topic) {
+                            let subscription_list = subscriptions.get_as_iter(&msg.topic);
+                            for subscription in subscription_list {
                                 debug!("Looping message: {:?}", msg);
                                 subscription.tx.try_send(msg.clone());
                             }
@@ -320,12 +321,12 @@ pub fn run_client(
                             process_subscribe(&client, &mut subscriptions, &topic, tx, channel.tx.clone());
                         }
                         MqttCommand::Unsubscribe(topic) => {
+                            // Unsubscribe from exact match
                             debug!("Unsubscribing from topic: {}.", topic);
-                            if let Some(subscription) = subscriptions.unsubscribe(&topic) {
+                            if let Ok(()) = subscriptions.unsubscribe(&topic) {
                                 if let Err(err) = client.try_unsubscribe(&topic) {
                                     error!("Failed to unsubscribe from topic: {:?}.", err);
                                 }
-                                drop(subscription);
                             }
                         }
                     }
@@ -367,7 +368,7 @@ fn process_subscribe(
     let topic: String = topic.into();
 
     debug!("Subscribing to topic: {}.", topic);
-    let subscription = subscriptions.0.get(&topic);
+    let subscription = subscriptions.0.iter().find(|s| s.topic == topic);
     let maybe_rx = subscription.and_then(|s| s.rx.upgrade());
 
     let response = if let Some(rx) = maybe_rx {
@@ -385,13 +386,13 @@ fn process_subscribe(
         match client.try_subscribe_many([filter]) {
             Ok(()) => {
                 debug!("Subscribed to topic: {:?}.", topic);
-                subscriptions.0.insert(topic.to_string(), subscription);
+                subscriptions.0.push(subscription);
                 watch_tx_closed(tx, channel_tx, topic);
                 Ok(rx)
             }
             Err(err) => {
                 error!("Failed to subscribe to topics: {:?}.", err);
-                subscriptions.0.remove(&topic);
+                subscriptions.0.retain(|s| s.topic != topic);
                 Err(err.into())
             }
         }
@@ -426,8 +427,9 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
                 let msg: MqttMessage = msg;
                 let topic = &msg.topic;
                 // debug!("Received message: {msg:?}.");
-                if let Some(subscription) = subscriptions.get(topic) {
-                    subscription.tx.try_send(msg);
+                let subscription_list = subscriptions.get_as_iter(topic);
+                for subscription in subscription_list {
+                    subscription.tx.try_send(msg.clone());
                 }
             }
             Err(err) => error!("Invalid message received: {err}"),
@@ -448,24 +450,24 @@ struct Subscription {
 }
 
 /// List of all required subscriptions.
-pub struct Subscriptions(HashMap<String, Subscription>);
+pub struct Subscriptions(Vec<Subscription>);
 
 impl Subscriptions {
     /// Create a new set of subscriptions.
     #[must_use]
     pub fn new() -> Self {
-        Subscriptions(HashMap::new())
+        Subscriptions(Vec::new())
     }
 
-    fn get(&self, topic: &str) -> Option<&Subscription> {
-        self.0.get(topic)
+    fn get_as_iter<'a>(&'a self, topic: &'a str) -> impl Iterator<Item = &'a Subscription> + 'a {
+        self.0.iter().filter(|s| topic_matches(topic, &s.topic))
     }
 
     /// Add a new subscription.
     pub fn subscribe(&mut self, topic: impl Into<String>) -> generic::Receiver<MqttMessage> {
         // Per subscription incoming MQTT queue.
         let topic = topic.into();
-        let subscription = self.0.get(&topic);
+        let subscription = self.0.iter().find(|s| s.topic == topic);
         let maybe_rx = subscription.and_then(|s| s.rx.upgrade());
 
         if let Some(rx) = maybe_rx {
@@ -479,7 +481,7 @@ impl Subscriptions {
                 rx: rx.downgrade(),
             };
 
-            self.0.insert(topic, subscription);
+            self.0.push(subscription);
             rx
         }
     }
@@ -506,13 +508,19 @@ impl Subscriptions {
     }
 
     /// Iterate over all subscriptions.
-    fn iter(&self) -> impl Iterator<Item = &Subscription> {
-        self.0.values()
-    }
+    // fn iter(&self) -> impl Iterator<Item = &Subscription> {
+    //     self.0.iter()
+    // }
 
-    /// Remove a subscription from the list.
-    fn unsubscribe(&mut self, topic: &str) -> Option<Subscription> {
-        self.0.remove(topic)
+    /// Remove a subscription using exact match from the list.
+    fn unsubscribe(&mut self, topic: &str) -> Result<(), ()> {
+        let old_len = self.0.len();
+        self.0.retain(|s| s.topic != topic);
+        if self.0.len() == old_len {
+            Err(())
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -537,8 +545,7 @@ fn subscribe_topics(client: &AsyncClient, subscriptions: &Subscriptions) {
         return;
     }
 
-    let topics = subscriptions.0.keys().map(|topic| topic_to_filter(topic));
-
+    let topics = subscriptions.0.iter().map(|s| topic_to_filter(&s.topic));
     if let Err(e) = client.try_subscribe_many(topics) {
         error!("Error subscribing to topics: {:?}", e);
     }
