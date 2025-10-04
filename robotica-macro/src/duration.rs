@@ -67,6 +67,7 @@ pub(crate) fn units_to_seconds(input: TokenStream) -> TokenStream {
         "days" => number * 24 * 3600,
         "hours" => number * 3600,
         "minutes" => number * 60,
+        "seconds" => number,
         _ => return error!("Invalid time unit {unit}"),
     };
 
