@@ -223,7 +223,6 @@ mod tests {
             "params": {
                 "ts": 1684470932558,
                 "em:0": {
-                    "id": 0,
                     "a_act_power": 0.0,
                     "a_aprt_power": 0.0,
                     "a_current": 0.0,
@@ -265,7 +264,6 @@ mod tests {
 
         assert_abs_diff_eq!(ts, 1_684_470_932_558.0);
 
-        assert_abs_diff_eq!(em_0.id, 0);
         assert_abs_diff_eq!(em_0.a_act_power, 0.0);
         assert_abs_diff_eq!(em_0.a_aprt_power, 0.0);
         assert_abs_diff_eq!(em_0.a_current, 0.0);
