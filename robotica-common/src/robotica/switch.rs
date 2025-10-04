@@ -50,6 +50,14 @@ pub enum DevicePower {
     DeviceError,
 }
 
+impl DevicePower {
+    /// Returns true if the device is on.
+    #[must_use]
+    pub const fn is_on(&self) -> bool {
+        matches!(self, DevicePower::On)
+    }
+}
+
 impl From<DevicePower> for String {
     /// Convert the power state to a string.
     fn from(power: DevicePower) -> Self {

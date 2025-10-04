@@ -39,7 +39,9 @@ use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
 use robotica_common::zigbee2mqtt::{Door, DoorState};
 use robotica_tokio::devices::lifx::{DeviceConfig, DiscoverConfig};
-use robotica_tokio::devices::{fake_switch, lifx};
+use robotica_tokio::devices::occupancy::{self, OccupiedState};
+use robotica_tokio::devices::presence_tracker::{is_any_presence_in_room, PresenceTrackerValue};
+use robotica_tokio::devices::{fake_switch, lifx, presence_tracker};
 use robotica_tokio::pipes::{stateful, stateless, Subscriber};
 use robotica_tokio::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_tokio::scheduling::executor::executor;
@@ -49,6 +51,7 @@ use robotica_tokio::spawn;
 use tracing::{debug, error, info, instrument, span};
 
 use crate::amber::hot_water;
+use crate::lights::{auto_brightness_level, auto_light_color, auto_temperature_level};
 
 use robotica_tokio::services::http;
 use robotica_tokio::services::mqtt::{mqtt_channel, run_client, SendOptions, Subscriptions};
@@ -205,6 +208,7 @@ fn calendar_start_top_times(
     Some((start_time, end_time))
 }
 
+#[allow(clippy::too_many_lines)]
 async fn setup_pipes(
     mut state: InitState,
     mqtt_rx: MqttRx,
@@ -229,6 +233,39 @@ async fn setup_pipes(
     }
 
     monitor_bathroom_door(&mut state);
+
+    let presence_trackers: Vec<stateful::Receiver<PresenceTrackerValue>> = config
+        .presence_trackers
+        .into_iter()
+        .map(|tracker| {
+            // println!("presence {} {}", tracker.config.id, tracker.topic);
+            let subscription = state.subscriptions.subscribe_into_stateless(tracker.topic);
+            presence_tracker::run(tracker.config, subscription)
+        })
+        .collect();
+
+    // presence_trackers[0].clone().for_each(|(_, present)| {
+    //     error!("Is Brian present? {present:#?}");
+    // });
+
+    let occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>> = config
+        .occupancy_sensors
+        .into_iter()
+        .map(|room| {
+            let rx = occupancy::subscribe(&room.config, &mut state.subscriptions);
+            (room.room, rx)
+        })
+        .collect();
+
+    // is_any_presence_in_room("brian", presence_trackers.clone()).for_each(|(_, present)| {
+    //     error!("Is anyone present in brian? {present}");
+    // });
+    // auto_brightness_level().for_each(|(_, level)| {
+    //     error!("Auto brightness level: {level}");
+    // });
+    // auto_temperature_level().for_each(|(_, level)| {
+    //     error!("Auto temperature level: {level}");
+    // });
 
     if let Some(http_config) = config.http {
         http::run(state.mqtt.clone(), http_config, postgres.clone())
@@ -262,10 +299,32 @@ async fn setup_pipes(
         });
     }
 
-    fake_switch(&mut state, "Brian/Night");
+    let night_mode_for_room: HashMap<String, stateful::Receiver<bool>> = config
+        .night_mode
+        .into_iter()
+        .map(|mode| {
+            let rx = fake_switch(&mut state, &mode.topic);
+            (mode.room, rx)
+        })
+        .collect();
 
     if let Some(lifx_config) = &config.lifx {
-        setup_lights(&mut state, lifx_config, &config.lights, &config.strips).await;
+        let shared = SharedAutoLight {
+            brightness: auto_brightness_level(),
+            temperature: auto_temperature_level(),
+            night_mode_for_room,
+            presence_trackers,
+            occupancy_sensors,
+        };
+
+        setup_lights(
+            &mut state,
+            lifx_config,
+            &config.lights,
+            &config.strips,
+            &shared,
+        )
+        .await;
     } else {
         info!("No lifx configuration found; skipping light setup");
     }
@@ -506,7 +565,8 @@ fn monitor_tesla(
         .send_to(&state.message_sink);
 }
 
-fn fake_switch(state: &mut InitState, topic_substr: &str) {
+#[must_use]
+fn fake_switch(state: &mut InitState, topic_substr: &str) -> stateful::Receiver<bool> {
     let topic_substr: String = topic_substr.into();
     let topic = format!("robotica/command/{topic_substr}");
     let rx = state
@@ -514,7 +574,10 @@ fn fake_switch(state: &mut InitState, topic_substr: &str) {
         .subscribe_into_stateless::<Json<Command>>(&topic);
 
     let topic = format!("robotica/state/{topic_substr}/power");
-    fake_switch::run(rx).send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
+    let rx = fake_switch::run(rx);
+    rx.clone()
+        .send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
+    rx.map(|(_, power)| power.is_on())
 }
 
 async fn setup_lights(
@@ -522,6 +585,7 @@ async fn setup_lights(
     lifx: &config::LifxConfig,
     lights: &[config::LightConfig],
     strips: &[config::StripConfig],
+    shared: &SharedAutoLight,
 ) {
     let lifx_config = DiscoverConfig {
         broadcast: lifx.broadcast.clone(),
@@ -534,21 +598,75 @@ async fn setup_lights(
         .await
         .unwrap_or_else(|e| panic!("Error discovering lifx devices: {e}"));
 
-    let shared = lights::get_default_scenes();
+    let shared_scenes = lights::get_default_scenes();
 
     for light_config in lights {
-        auto_light(state, &discover, &shared, light_config);
+        auto_light(state, &discover, &shared_scenes, shared, light_config);
     }
 
     for strip_config in strips {
-        strip_light(state, &discover, &shared, strip_config);
+        strip_light(state, &discover, &shared_scenes, shared, strip_config);
+    }
+}
+
+struct SharedAutoLight {
+    brightness: stateful::Receiver<f32>,
+    temperature: stateful::Receiver<u16>,
+    night_mode_for_room: HashMap<String, stateful::Receiver<bool>>,
+    presence_trackers: Vec<stateful::Receiver<PresenceTrackerValue>>,
+    occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>>,
+}
+
+impl SharedAutoLight {
+    fn get_auto_scene(&self, room: &str, fixed_brightness: Option<f32>) -> Scene {
+        let brightness = fixed_brightness.map_or_else(
+            || self.brightness.clone(),
+            |level| {
+                stateful::static_entity(
+                    level,
+                    format!("auto_brightness_for_room_{room}_fixed_{level}"),
+                )
+            },
+        );
+
+        let night_mode = self
+            .night_mode_for_room
+            .get(room)
+            .cloned()
+            .unwrap_or_else(|| {
+                stateful::static_entity(false, format!("night_mode_for_room_{room}_default"))
+            });
+
+        let presence = is_any_presence_in_room(room, self.presence_trackers.clone());
+
+        let occupied = self
+            .occupancy_sensors
+            .get(room)
+            .cloned()
+            .unwrap_or_else(|| {
+                stateful::static_entity(
+                    OccupiedState::Vacant,
+                    format!("occupied_for_room_{room}_default"),
+                )
+            });
+
+        let rx = auto_light_color(
+            brightness,
+            self.temperature.clone(),
+            night_mode,
+            presence,
+            occupied,
+        );
+
+        Scene::new(rx, SceneName::new("auto"))
     }
 }
 
 fn auto_light(
     init_state: &mut InitState,
     discover: &stateless::Receiver<lifx::Device>,
-    shared: &SceneMap,
+    shared_scenes: &SceneMap,
+    shared: &SharedAutoLight,
     config: &config::LightConfig,
 ) {
     let inputs = lights::Inputs {
@@ -566,17 +684,11 @@ fn auto_light(
         })
         .collect();
 
-    let auto_scene = Scene::new(
-        init_state
-            .subscriptions
-            .subscribe_into_stateful::<Json<PowerColor>>(config.id.get_command_topic("auto"))
-            .map(|(_, Json(pc))| pc),
-        SceneName::new("auto"),
-    );
+    let auto_scene = shared.get_auto_scene(&config.room, config.fixed_brightness);
 
     let scene_map = {
         let mut scene_map = SceneMap::new(HashMap::new());
-        scene_map.merge(shared.clone());
+        scene_map.merge(shared_scenes.clone());
         scene_map.merge(SceneMap::new(hash_map));
         scene_map.insert(SceneName::new("auto"), auto_scene);
         scene_map
@@ -600,13 +712,17 @@ fn auto_light(
 }
 
 fn split_light(
-    id: &Id,
     init_state: &mut InitState,
-    shared: &SceneMap,
-    scenes: &HashMap<SceneName, config::LightSceneConfig>,
-    flash_color: &PowerColor,
+    shared_scenes: &SceneMap,
+    shared: &SharedAutoLight,
     priority: usize,
+    strip_config: &config::StripConfig,
+    split_config: &config::SplitLightConfig,
 ) -> stateful::Receiver<SplitPowerColor> {
+    let id = &split_config.id;
+    let scenes = &split_config.scenes;
+    let flash_color = &split_config.flash_color;
+
     let inputs = lights::Inputs {
         commands: init_state
             .subscriptions
@@ -621,17 +737,11 @@ fn split_light(
         })
         .collect();
 
-    let auto_scene = Scene::new(
-        init_state
-            .subscriptions
-            .subscribe_into_stateful::<Json<PowerColor>>(id.get_command_topic("auto"))
-            .map(|(_, Json(pc))| pc),
-        SceneName::new("auto"),
-    );
+    let auto_scene = shared.get_auto_scene(&strip_config.room, strip_config.fixed_brightness);
 
     let scene_map = {
         let mut scene_map = SceneMap::new(HashMap::new());
-        scene_map.merge(shared.clone());
+        scene_map.merge(shared_scenes.clone());
         scene_map.merge(SceneMap::new(hash_map));
         scene_map.insert(SceneName::new("auto"), auto_scene);
         scene_map
@@ -658,7 +768,8 @@ fn split_light(
 fn strip_light(
     init_state: &mut InitState,
     discover: &stateless::Receiver<lifx::Device>,
-    shared: &SceneMap,
+    shared_scenes: &SceneMap,
+    shared: &SharedAutoLight,
     config: &config::StripConfig,
 ) {
     let span = span!(tracing::Level::INFO, "strip_light", id = %config.id);
@@ -667,15 +778,8 @@ fn strip_light(
     let (combined_tx, combined_rx) = stateful::create_pipe("combined");
 
     for (priority, split) in config.splits.iter().enumerate() {
-        split_light(
-            &split.id,
-            init_state,
-            shared,
-            &split.scenes,
-            &split.flash_color,
-            priority,
-        )
-        .send_to(&combined_tx);
+        split_light(init_state, shared_scenes, shared, priority, config, split)
+            .send_to(&combined_tx);
     }
 
     let splits: Vec<_> = config

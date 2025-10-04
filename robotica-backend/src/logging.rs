@@ -155,7 +155,7 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
 
     // FIXME - don't use unwrap!
     #[allow(clippy::unwrap_used)]
-    let filter = EnvFilter::new("info")
+    let filter = EnvFilter::from_default_env()
         .add_directive("hyper=error".parse().unwrap())
         .add_directive("tonic=error".parse().unwrap())
         .add_directive("reqwest=error".parse().unwrap());

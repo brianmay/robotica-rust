@@ -111,3 +111,16 @@ pub fn static_pipe<T: Clone + PartialEq + Send + 'static>(
     });
     rx
 }
+
+/// Create a pipe that always returns the same value.
+pub fn static_entity<T: 'static + Clone + PartialEq + Send>(
+    pc: T,
+    name: impl Into<String>,
+) -> Receiver<T> {
+    let (tx, rx) = create_pipe(name);
+    spawn(async move {
+        tx.try_send(pc);
+        tx.closed().await;
+    });
+    rx
+}

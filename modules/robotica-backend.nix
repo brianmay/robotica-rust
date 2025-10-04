@@ -174,6 +174,11 @@ let
         default = { };
       };
       flash_color = mkOption { type = power_color_type; };
+      room = mkOption { type = types.str; };
+      fixed_brightness = mkOption {
+        type = lib.types.nullOr types.float;
+        default = null;
+      };
     };
   };
 
@@ -196,6 +201,11 @@ let
       device = mkOption { type = light_device_type; };
       number_of_lights = mkOption { type = types.number; };
       splits = mkOption { type = types.listOf split_type; };
+      room = mkOption { type = types.str; };
+      fixed_brightness = mkOption {
+        type = lib.types.nullOr types.float;
+        default = null;
+      };
     };
   };
 
@@ -231,6 +241,33 @@ let
     };
   };
 
+  presence_tracker_type = types.submodule {
+    options = {
+      id = mkOption { type = types.str; };
+      topic = mkOption { type = types.str; };
+    };
+  };
+
+  occupancy_sensor_type = types.submodule {
+    options = {
+      room = mkOption { type = types.str; };
+      sensor_type = mkOption {
+        type = types.enum [
+          "Zigbee"
+          "Zwave"
+        ];
+      };
+      topic = mkOption { type = types.str; };
+    };
+  };
+
+  night_mode_type = types.submodule {
+    options = {
+      room = mkOption { type = types.str; };
+      topic = mkOption { type = types.str; };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       executor = mkOption {
@@ -258,8 +295,12 @@ let
         type = lib.types.nullOr hot_water_type;
         default = null;
       };
+      presence_trackers = mkOption { type = types.listOf presence_tracker_type; };
+      occupancy_sensors = mkOption { type = types.listOf occupancy_sensor_type; };
+      night_mode = mkOption { type = types.listOf night_mode_type; };
     };
   };
+
 in
 {
   options.services.robotica-backend = {

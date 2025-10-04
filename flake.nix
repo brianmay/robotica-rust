@@ -501,6 +501,9 @@
                     lights = [ ];
                     strips = [ ];
                     metrics = [ ];
+                    presence_trackers = [ ];
+                    occupancy_sensors = [ ];
+                    night_mode = [ ];
                   };
 
                   secrets = pkgs.writeText "secrets.yaml" ''
@@ -524,7 +527,7 @@
                 services.postgresql = {
                   enable = true;
                   package = pkgs.postgresql_15;
-                  extraPlugins = ps: [ ps.postgis ];
+                  extensions = ps: [ ps.postgis ];
                   initialScript = pkgs.writeText "init.psql" ''
                     CREATE DATABASE robotica;
                     CREATE USER robotica with encrypted password 'your_secure_password_here';
@@ -588,6 +591,8 @@
             # freeswitch-coverage = robotica-freeswitch.coverage;
             robotica-freeswitch = robotica-freeswitch.pkg;
             inherit robotica-frontend-bindgen;
+            # TODO check if this works in CI
+            # inherit test_robotica_backend;
           };
 
           devShells.default = devShell;

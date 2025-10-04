@@ -12,9 +12,14 @@ use robotica_common::{
         lights::{Colors, LightCommand, PowerColor, PowerLevel, SceneName, HSBK},
     },
 };
+use robotica_macro::naive_time_constant;
 use robotica_tokio::{
-    pipes::{stateful, stateless, Subscriber, Subscription},
-    services::persistent_state::PersistentStateRow,
+    devices::occupancy::OccupiedState,
+    pipes::{
+        stateful::{self, static_entity},
+        stateless, Subscriber, Subscription,
+    },
+    services::{persistent_state::PersistentStateRow, scheduler},
     spawn,
 };
 use tokio::time::sleep;
@@ -94,15 +99,6 @@ pub fn get_default_scenes() -> SceneMap {
     );
 
     SceneMap::new(map)
-}
-
-fn static_entity(pc: PowerColor, name: impl Into<String>) -> stateful::Receiver<PowerColor> {
-    let (tx, rx) = stateful::create_pipe(name);
-    spawn(async move {
-        tx.try_send(pc);
-        tx.closed().await;
-    });
-    rx
 }
 
 fn busy_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
@@ -440,4 +436,170 @@ fn copy_colors_to_pos(add_colors: &PowerColor, colors: &mut [HSBK], offset: usiz
     for (src, dst) in zip(x, colors.iter_mut().skip(offset)) {
         *dst = src;
     }
+}
+
+pub fn auto_brightness_level() -> stateful::Receiver<f32> {
+    scheduler::scheduler(
+        "auto-brightness-level",
+        vec![
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(05:00:00),
+                value: 15.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(06:00:00),
+                value: 25.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(07:00:00),
+                value: 50.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(08:00:00),
+                value: 100.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(19:00:00),
+                value: 50.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(20:00:00),
+                value: 25.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(21:00:00),
+                value: 15.0,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(22:00:00),
+                value: 5.0,
+            },
+        ],
+    )
+}
+
+pub fn auto_temperature_level() -> stateful::Receiver<u16> {
+    scheduler::scheduler(
+        "auto-temperature-level",
+        vec![
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(05:00:00),
+                value: 2000,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(06:00:00),
+                value: 2500,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(07:00:00),
+                value: 3000,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(08:00:00),
+                value: 3500,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(19:00:00),
+                value: 3000,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(20:00:00),
+                value: 2500,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(21:00:00),
+                value: 2000,
+            },
+            scheduler::Entry {
+                scheduled_time: naive_time_constant!(22:00:00),
+                value: 1500,
+            },
+        ],
+    )
+}
+
+enum AutoLightState {
+    Off,
+    On,
+    TestOn,
+    Night,
+}
+
+pub fn auto_light_color(
+    brightness: stateful::Receiver<f32>,
+    temperature: stateful::Receiver<u16>,
+    night_mode: stateful::Receiver<bool>,
+    presence: stateful::Receiver<bool>,
+    occupied: stateful::Receiver<OccupiedState>,
+) -> stateful::Receiver<PowerColor> {
+    let (tx, rx) = stateful::create_pipe("auto-light-color");
+
+    spawn(async move {
+        let mut brightness_s = brightness.subscribe().await;
+        let mut temperature_s = temperature.subscribe().await;
+        let mut night_mode_s = night_mode.subscribe().await;
+        let mut presence_s = presence.subscribe().await;
+        let mut occupied_s = occupied.subscribe().await;
+
+        let mut brightness: f32 = 100.0;
+        let mut temperature: u16 = 3500;
+        let mut night_mode: bool = false;
+        let mut presence: bool = false;
+        let mut occupied: OccupiedState = OccupiedState::Vacant;
+
+        loop {
+            tokio::select! {
+                Ok(b) = brightness_s.recv() => {
+                    brightness = b;
+                }
+                Ok(t) = temperature_s.recv() => {
+                    temperature = t;
+                }
+                Ok(nm) = night_mode_s.recv() => {
+                    night_mode = nm;
+                }
+                Ok(p) = presence_s.recv() => {
+                    presence = p;
+                }
+                Ok(o) = occupied_s.recv() => {
+                    occupied = o;
+                }
+            }
+
+            #[allow(clippy::match_same_arms)]
+            let light_state = match (night_mode, presence, occupied) {
+                (false, true, _) => AutoLightState::On,
+                (false, _, OccupiedState::Occupied) => AutoLightState::TestOn,
+                (true, _, OccupiedState::Occupied) => AutoLightState::Night,
+                (true, _, OccupiedState::Vacant) => AutoLightState::Off,
+                (false, false, _) => AutoLightState::Off,
+            };
+
+            let pc = match light_state {
+                AutoLightState::On => PowerColor::On(Colors::Single(HSBK {
+                    hue: 0.0,
+                    saturation: 0.0,
+                    brightness,
+                    kelvin: temperature,
+                })),
+                AutoLightState::TestOn => PowerColor::On(Colors::Single(HSBK {
+                    hue: 120.0,
+                    saturation: 100.0,
+                    brightness,
+                    kelvin: temperature,
+                })),
+                AutoLightState::Night => PowerColor::On(Colors::Single(HSBK {
+                    hue: 0.0,
+                    saturation: 0.0,
+                    brightness: 2.0,
+                    kelvin: temperature,
+                })),
+                AutoLightState::Off => PowerColor::Off,
+            };
+
+            tx.try_send(pc);
+        }
+    });
+
+    rx
 }

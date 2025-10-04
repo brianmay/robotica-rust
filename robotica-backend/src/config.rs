@@ -10,7 +10,7 @@ use robotica_common::{
     robotica::lights::{PowerColor, SceneName},
 };
 use robotica_tokio::{
-    devices::lifx::LifxId,
+    devices::{lifx::LifxId, occupancy, presence_tracker},
     pipes::stateful,
     scheduling::executor,
     services::{http, mqtt, persistent_state},
@@ -95,6 +95,9 @@ pub struct Config {
     pub lifx: Option<LifxConfig>,
     pub metrics: Vec<metrics::ConfigMetric>,
     pub hot_water: Option<HotWaterConfig>,
+    pub presence_trackers: Vec<PresenceTrackerConfig>,
+    pub occupancy_sensors: Vec<OccupancySensorConfig>,
+    pub night_mode: Vec<NightModeConfig>,
 }
 
 /// An error loading the Config
@@ -143,6 +146,8 @@ pub struct LightConfig {
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,
+    pub room: String,
+    pub fixed_brightness: Option<f32>,
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -152,6 +157,8 @@ pub struct StripConfig {
     pub id: Id,
     pub number_of_lights: usize,
     pub splits: Vec<SplitLightConfig>,
+    pub room: String,
+    pub fixed_brightness: Option<f32>,
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -184,6 +191,26 @@ pub struct LifxConfig {
 #[derive(Debug, Deserialize)]
 pub struct HotWaterConfig {
     pub id: Id,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PresenceTrackerConfig {
+    pub topic: String,
+    #[serde(flatten)]
+    pub config: presence_tracker::Config,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OccupancySensorConfig {
+    pub room: String,
+    #[serde(flatten)]
+    pub config: occupancy::Config,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NightModeConfig {
+    pub room: String,
+    pub topic: String,
 }
 
 #[cfg(test)]

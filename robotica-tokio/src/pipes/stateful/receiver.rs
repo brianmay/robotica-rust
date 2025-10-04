@@ -253,6 +253,53 @@ where
         });
     }
 
+    /// Merge two receivers into one.
+    #[must_use]
+    pub fn merge(self, other: Receiver<T>) -> Receiver<T>
+    where
+        T: Eq + 'static,
+    {
+        let name = format!("{} (merge {})", self.name, other.name);
+        let (tx, rx) = create_pipe(&name);
+        spawn(async move {
+            let mut sub1 = self.subscribe().await;
+            let mut sub2 = other.subscribe().await;
+            loop {
+                select! {
+                    data = sub1.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{name}: recv1 failed, exiting: {err}");
+                                break;
+                            }
+                        };
+
+                        tx.try_send(data);
+                    }
+
+                    data = sub2.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{name}: recv2 failed, exiting: {err}");
+                                break;
+                            }
+                        };
+
+                        tx.try_send(data);
+                    }
+
+                    () = tx.closed() => {
+                        debug!("{name}: dest closed");
+                        break;
+                    }
+                }
+            }
+        });
+        rx
+    }
+
     /// Send the data to another pipe.
     pub fn send_to(self, dest: &Sender<T>)
     where
