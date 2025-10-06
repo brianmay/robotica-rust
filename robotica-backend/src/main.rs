@@ -58,6 +58,10 @@ use robotica_tokio::services::mqtt::{MqttRx, MqttTx};
 #[tokio::main]
 async fn main() -> Result<()> {
     color_backtrace::install();
+    if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install rustls crypto provider: {e:?}");
+        std::process::exit(1);
+    }
     let started = stateless::Started::new();
 
     let env = config::Environment::load().unwrap_or_else(|e| {

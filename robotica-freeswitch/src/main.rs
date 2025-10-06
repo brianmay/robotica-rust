@@ -24,6 +24,10 @@ use crate::config::Environment;
 async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
+    if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install rustls crypto provider: {e:?}");
+        std::process::exit(1);
+    }
     let started = stateless::Started::new();
 
     info!(
