@@ -41,6 +41,7 @@ opentelemetry-appender-tracing = "0.30.0"
 tonic = "0.13.1"
 rstest = "0.22.0"
 rustls = { version = "0.23.32", features = ["aws_lc_rs"] }
+tracing_log_error = "0.1.4"
 
 [dev-dependencies]
 float-cmp = "0.10.0"

@@ -12,6 +12,7 @@ use tap::Pipe;
 use thiserror::Error;
 use tokio::time::{interval, sleep_until, Instant, MissedTickBehavior};
 use tracing::{error, info};
+use tracing_log_error::log_error;
 
 pub mod api;
 pub mod car;
@@ -231,7 +232,7 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                             }
                         }
                         Err(err) => {
-                            error!(%id, "Failed to get prices: {}", err);
+                            log_error!(err, %id, "Failed to get prices");
                             // If we failed to get prices, try again in 1 minute
                             RETRY_TIME
                         }
@@ -257,7 +258,7 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                             }));
                         }
                         Err(err) => {
-                            error!(%id, "Failed to get usage: {}", err);
+                            log_error!(err, %id, "Failed to get usage");
                         }
                     }
                 }
