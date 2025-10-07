@@ -273,7 +273,7 @@ pub fn run_client(
 
     // error!("Number of subscriptions: {}", subscriptions.0.len());
 
-    for subscription in subscriptions.0.iter() {
+    for subscription in &subscriptions.0 {
         watch_tx_closed(
             subscription.tx.clone(),
             channel.tx.clone(),
@@ -323,7 +323,7 @@ pub fn run_client(
                         MqttCommand::Unsubscribe(topic) => {
                             // Unsubscribe from exact match
                             debug!("Unsubscribing from topic: {}.", topic);
-                            if let Ok(()) = subscriptions.unsubscribe(&topic) {
+                            if subscriptions.unsubscribe(&topic) == Ok(()) {
                                 if let Err(err) = client.try_unsubscribe(&topic) {
                                     error!("Failed to unsubscribe from topic: {:?}.", err);
                                 }
@@ -455,7 +455,7 @@ pub struct Subscriptions(Vec<Subscription>);
 impl Subscriptions {
     /// Create a new set of subscriptions.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Subscriptions(Vec::new())
     }
 
@@ -506,11 +506,6 @@ impl Subscriptions {
     {
         self.subscribe(topic).into_stateful().translate()
     }
-
-    /// Iterate over all subscriptions.
-    // fn iter(&self) -> impl Iterator<Item = &Subscription> {
-    //     self.0.iter()
-    // }
 
     /// Remove a subscription using exact match from the list.
     fn unsubscribe(&mut self, topic: &str) -> Result<(), ()> {
