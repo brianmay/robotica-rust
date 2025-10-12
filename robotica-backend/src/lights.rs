@@ -521,7 +521,6 @@ pub fn auto_temperature_level() -> stateful::Receiver<u16> {
 enum AutoLightState {
     Off,
     On,
-    TestOn,
     Night,
 }
 
@@ -569,7 +568,7 @@ pub fn auto_light_color(
             #[allow(clippy::match_same_arms)]
             let light_state = match (night_mode, presence, occupied) {
                 (false, true, _) => AutoLightState::On,
-                (false, _, OccupiedState::Occupied) => AutoLightState::TestOn,
+                (false, _, OccupiedState::Occupied) => AutoLightState::On,
                 (true, _, OccupiedState::Occupied) => AutoLightState::Night,
                 (true, _, OccupiedState::Vacant) => AutoLightState::Off,
                 (false, false, _) => AutoLightState::Off,
@@ -579,12 +578,6 @@ pub fn auto_light_color(
                 AutoLightState::On => PowerColor::On(Colors::Single(HSBK {
                     hue: 0.0,
                     saturation: 0.0,
-                    brightness,
-                    kelvin: temperature,
-                })),
-                AutoLightState::TestOn => PowerColor::On(Colors::Single(HSBK {
-                    hue: 120.0,
-                    saturation: 100.0,
                     brightness,
                     kelvin: temperature,
                 })),
