@@ -2,5 +2,17 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": [
+        "cargo"
+      ],
+      "matchSourceUrls": [
+        "https://github.com/open-telemetry/opentelemetry-rust/",
+        "https://github.com/tokio-rs/tracing-opentelemetry"
+      ],
+      "groupName": "opentelemetry-rust-monorepo"
+    }
   ]
 }
