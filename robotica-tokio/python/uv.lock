@@ -320,9 +320,10 @@ wheels = [
 
 [[package]]
 name = "python-lsp-server"
-version = "1.12.2"
+version = "1.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "black" },
     { name = "docstring-to-markdown" },
     { name = "importlib-metadata", marker = "python_full_version < '3.10'" },
     { name = "jedi" },
@@ -330,9 +331,9 @@ dependencies = [
     { name = "python-lsp-jsonrpc" },
     { name = "ujson" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/0f/3d63c5f37edca529a2a003a30add97dcce67a83a99dd932528f623aa1df9/python_lsp_server-1.12.2.tar.gz", hash = "sha256:fea039a36b3132774d0f803671184cf7dde0c688e7b924f23a6359a66094126d", size = 115054, upload-time = "2025-02-07T23:40:03.548Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/92/bd60cbe7d7d6c90e5e556a90497aa1892a3f779d9915026eca6e37a0b59b/python_lsp_server-1.13.1.tar.gz", hash = "sha256:bfa3d6bbca3fc3e6d0137b27cd1eabee65783a8d4314c36e1e230c603419afa3", size = 120484, upload-time = "2025-08-26T16:51:07.927Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/e7/28010a326ef591e1409daf9d57a47de94156c147ad1befe74d8196d82729/python_lsp_server-1.12.2-py3-none-any.whl", hash = "sha256:750116459449184ba20811167cdf96f91296ae12f1f65ebd975c5c159388111b", size = 74773, upload-time = "2025-02-07T23:40:01.581Z" },
+    { url = "https://files.pythonhosted.org/packages/36/03/2884cf7bd092d8a5a71a406971fd2edf5c6171147ca2d4afb3f2a7f8c0f1/python_lsp_server-1.13.1-py3-none-any.whl", hash = "sha256:fadf45275d12a9d9a13e36717a8383cee8e7cffe8a30698d38bfb3fe71b5cdcd", size = 76748, upload-time = "2025-08-26T16:51:05.873Z" },
 ]
 
 [[package]]
@@ -387,7 +388,7 @@ dev = [
     { name = "pylsp-mypy", specifier = "==0.7.0" },
     { name = "python-lsp-black", specifier = "==2.0.0" },
     { name = "python-lsp-ruff", specifier = "==2.3.0" },
-    { name = "python-lsp-server", specifier = "==1.12.2" },
+    { name = "python-lsp-server", specifier = "==1.13.1" },
 ]
 
 [[package]]
