@@ -108,6 +108,7 @@
                     python-dateutil.setuptools = [ ];
                     pytz.setuptools = [ ];
                     six.setuptools = [ ];
+                    tzdata.setuptools = [ ];
                   };
 
                 in
