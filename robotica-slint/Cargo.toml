@@ -17,7 +17,7 @@ robotica-common = { path = "../robotica-common", default-features = false, featu
 robotica-tokio = { path = "../robotica-tokio" }
 serde = { version = "1.0.227", features = ["derive"] }
 serde_json = "1.0.145"
-serde_yml = "0.0.11"
+serde_yml = "0.0.12"
 slint = "1.0.0"
 thiserror = "2.0.16"
 tracing = "0.1.41"
