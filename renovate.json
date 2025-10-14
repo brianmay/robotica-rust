@@ -8,11 +8,11 @@
       "matchDatasources": [
         "cargo"
       ],
-      "matchSourceUrls": [
-        "https://github.com/open-telemetry/opentelemetry-rust/",
-        "https://github.com/tokio-rs/tracing-opentelemetry"
+      "matchPackageNames": [
+        "^tracing-opentelemetry$"
       ],
-      "groupName": "opentelemetry-rust-monorepo"
+      "groupName": "opentelemetry-rust-monorepo",
+      "groupSlug": "opentelemetry-rust-monorepo"
     }
   ]
 }
