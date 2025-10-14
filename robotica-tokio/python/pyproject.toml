@@ -11,7 +11,7 @@ requires-python = ">=3.9"
 
 [dependency-groups]
 dev = [
-    "python-lsp-server == 1.12.2",
+    "python-lsp-server ==1.13.1",
     "python-lsp-ruff ==2.3.0",
     "python-lsp-black == 2.0.0",
     "pylsp-mypy == 0.7.0",]
