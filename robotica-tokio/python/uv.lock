@@ -304,7 +304,7 @@ wheels = [
 
 [[package]]
 name = "python-lsp-ruff"
-version = "2.2.2"
+version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cattrs" },
@@ -313,9 +313,9 @@ dependencies = [
     { name = "ruff" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/ec/475febe2f9e799f44afa476a2c0e063368d4289a65b80457ed737f6d05c0/python_lsp_ruff-2.2.2.tar.gz", hash = "sha256:3f80bdb0b4a8ee24624596a1cff60b28cc37771773730f9bf7d946ddff9f0cac", size = 15951, upload-time = "2024-07-16T11:32:40.64Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/79/2f6322c47bd2956447e0a6787084b4110b4473e3d2501b86aa47c802e6a0/python_lsp_ruff-2.3.0.tar.gz", hash = "sha256:647745b7f3010ac101e3c53a797b8f9deb1f52228b608d70ad0e8e056978c3b7", size = 17268, upload-time = "2025-09-29T20:14:02.994Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/b1/d09777c49a5273d9a79fca24341284d588203dc8587120300e3f86d43858/python_lsp_ruff-2.2.2-py3-none-any.whl", hash = "sha256:7034d16c5cfdf07e932195649ebef569a7ddfcc5853fb2fee05fa7fc739afe3a", size = 11256, upload-time = "2024-07-16T11:32:38.797Z" },
+    { url = "https://files.pythonhosted.org/packages/85/c0/761e359e255fce641c263a3c3e43f7685d1667139e9d35a376c1cc9f6f70/python_lsp_ruff-2.3.0-py3-none-any.whl", hash = "sha256:b858b698fbaff5670f6d5e6c66afc632908f78639d73dc85dedd33ae5fdd204f", size = 12039, upload-time = "2025-09-29T20:14:01.56Z" },
 ]
 
 [[package]]
@@ -386,7 +386,7 @@ requires-dist = [
 dev = [
     { name = "pylsp-mypy", specifier = "==0.7.0" },
     { name = "python-lsp-black", specifier = "==2.0.0" },
-    { name = "python-lsp-ruff", specifier = "==2.2.2" },
+    { name = "python-lsp-ruff", specifier = "==2.3.0" },
     { name = "python-lsp-server", specifier = "==1.12.2" },
 ]
 
