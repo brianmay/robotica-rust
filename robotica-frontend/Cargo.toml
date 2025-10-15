@@ -28,7 +28,7 @@ robotica-common = { path = "../robotica-common", features = [
     "chrono",
     "websockets",
 ] }
-leaflet = "0.4.1"
+leaflet = "0.5.0"
 gloo-utils = "0.2.0"
 tap = "1.0.1"
 geo = "0.31.0"
