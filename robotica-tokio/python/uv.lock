@@ -337,27 +337,19 @@ wheels = [
 ]
 
 [[package]]
-name = "pytz"
-version = "2025.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5f/57/df1c9157c8d5a05117e455d66fd7cf6dbc46974f832b1058ed4856785d8a/pytz-2025.1.tar.gz", hash = "sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e", size = 319617, upload-time = "2025-01-31T01:54:48.615Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/38/ac33370d784287baa1c3d538978b5e2ea064d4c1b93ffbd12826c190dd10/pytz-2025.1-py2.py3-none-any.whl", hash = "sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57", size = 507930, upload-time = "2025-01-31T01:54:45.634Z" },
-]
-
-[[package]]
 name = "recurring-ical-events"
-version = "2.2.3"
+version = "3.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "icalendar" },
     { name = "python-dateutil" },
+    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
     { name = "tzdata" },
     { name = "x-wr-timezone" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/88/7d685a187d0dbef3fdc4287c2f5d9460c26dccf7be8c4b0abf1e06239bce/recurring_ical_events-2.2.3.tar.gz", hash = "sha256:05548cf864447b099b6b7df240396e8f54e0ff47c93b77f719b799beadf1b98e", size = 23179, upload-time = "2024-07-09T11:22:49.48Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/90/05dfcc02ecf58bd170305c88db9e3e3933aa73a1f8abac2b326c7fdc1a98/recurring_ical_events-3.8.0.tar.gz", hash = "sha256:3e8c7c35d9bd8956a7ab91afad51477c60d972e1236d3fd1b55087a66bce7d04", size = 602665, upload-time = "2025-06-10T13:23:50.662Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/51/e51afd29264a7406183e8b35cb024d42aa29de1a38461d8c6c8c6309b26c/recurring_ical_events-2.2.3-py3-none-any.whl", hash = "sha256:c1451960449ff656f07f32620c4f56fe352a5fef486e46d077eea9c608c300fb", size = 20212, upload-time = "2024-07-09T11:22:47.599Z" },
+    { url = "https://files.pythonhosted.org/packages/36/25/88a4218cccae06ce6b15e41d2f263dd4a73e8e8cbe41537cd7784a17479b/recurring_ical_events-3.8.0-py3-none-any.whl", hash = "sha256:cf958eb17c92d4dca5c621e44c2b3fffd4ba700dca0db66287c5dc11438f63ba", size = 238228, upload-time = "2025-06-10T13:23:49.048Z" },
 ]
 
 [[package]]
@@ -380,7 +372,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "icalendar", specifier = "==6.3.1" },
-    { name = "recurring-ical-events", specifier = "==2.2.3" },
+    { name = "recurring-ical-events", specifier = "==3.8.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -554,15 +546,16 @@ wheels = [
 
 [[package]]
 name = "x-wr-timezone"
-version = "0.0.7"
+version = "2.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "click" },
     { name = "icalendar" },
-    { name = "pytz" },
+    { name = "tzdata" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5b/13/39d08b2f410884d167ccf123139e92b516a9292403ffb5170c48c2942179/x_wr_timezone-0.0.7.tar.gz", hash = "sha256:ccbaae164a52086535fd2eb1dced164a5250acc83a672fbb044d11e81a268965", size = 16271, upload-time = "2024-03-17T05:16:39.06Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/2b/8ae5f59ab852c8fe32dd37c1aa058eb98aca118fec2d3af5c3cd56fffb7b/x_wr_timezone-2.0.1.tar.gz", hash = "sha256:9166c40e6ffd4c0edebabc354e1a1e2cffc1bb473f88007694793757685cc8c3", size = 18212, upload-time = "2025-02-06T17:10:40.913Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/c6/53227e391c641b891e173b0454f137a21cb969dd58b5171e487e4da7e87e/x_wr_timezone-0.0.7-py3-none-any.whl", hash = "sha256:0b5e16f677c8f51ce41087a0b3d4f786c5fdcf78af4f8a75d4d960107dcb6d3a", size = 10275, upload-time = "2024-03-17T05:16:36.419Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/b7/4bac35b4079b76c07d8faddf89467e9891b1610cfe8d03b0ebb5610e4423/x_wr_timezone-2.0.1-py3-none-any.whl", hash = "sha256:e74a53b9f4f7def8138455c240e65e47c224778bce3c024fcd6da2cbe91ca038", size = 11102, upload-time = "2025-02-06T17:10:39.192Z" },
 ]
 
 [[package]]

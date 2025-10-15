@@ -104,12 +104,15 @@
                   buildSystemOverrides = {
                     x-wr-timezone.setuptools = [ ];
                     recurring-ical-events.setuptools = [ ];
+                    recurring-ical-events.hatchling = [ ];
+                    recurring-ical-events.hatch-vcs = [ ];
                     icalendar.setuptools = [ ];
                     icalendar.hatchling = [ ];
                     icalendar.hatch-vcs = [ ];
                     packaging.flit-core = [ ];
                     pathspec.flit-core = [ ];
                     pluggy.setuptools = [ ];
+                    click.flit-core = [ ];
                     python-dateutil.setuptools = [ ];
                     pytz.setuptools = [ ];
                     six.setuptools = [ ];

@@ -5,10 +5,13 @@ use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::{FromPyObject, PyAny};
 
+/// A value that could be a `DateTime` or a `Date`
 #[derive(Debug, FromPyObject)]
-enum Dt {
+pub enum Dt {
     // DateTime must come first here.
+    /// A `DateTime` Value
     DateTime(DateTime<Utc>),
+    /// A `Date` Value
     Date(NaiveDate),
 }
 
@@ -49,7 +52,7 @@ pub struct CalendarEntry {
     /// The last modified time of the event.
     pub last_modified: DateTime<Utc>,
     /// The recurrence id of the event.
-    pub recurrence_id: Option<DateTime<Utc>>,
+    pub recurrence_id: Option<Dt>,
 }
 
 impl FromPyObject<'_> for CalendarEntry {
