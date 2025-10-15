@@ -105,6 +105,11 @@
                     x-wr-timezone.setuptools = [ ];
                     recurring-ical-events.setuptools = [ ];
                     icalendar.setuptools = [ ];
+                    icalendar.hatchling = [ ];
+                    icalendar.hatch-vcs = [ ];
+                    packaging.flit-core = [ ];
+                    pathspec.flit-core = [ ];
+                    pluggy.setuptools = [ ];
                     python-dateutil.setuptools = [ ];
                     pytz.setuptools = [ ];
                     six.setuptools = [ ];
