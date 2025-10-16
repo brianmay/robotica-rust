@@ -59,4 +59,4 @@ opentelemetry-semantic-conventions = { version = "0.31.0", features = ["semconv_
 lalrpop = "0.22.2"
 
 [dev-dependencies]
-env_logger = "0.11.6"
+env_logger = "0.11.8"
