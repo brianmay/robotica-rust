@@ -68,7 +68,7 @@
           pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
-          wasm-bindgen-cli = pkgs.wasm-bindgen-cli_0_2_100;
+          wasm-bindgen-cli = pkgs-unstable.wasm-bindgen-cli_0_2_104;
 
           python_venv =
             let
