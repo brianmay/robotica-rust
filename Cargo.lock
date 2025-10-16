@@ -4146,9 +4146,9 @@ dependencies = [
 
 [[package]]
 name = "leaflet"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "365807eb9e73da9377d2e313e5863af3d64e02b770ec31972d76feda3a271d17"
+checksum = "5340ef65d6b55fcf0185ffa74c670df3bd8fe93edfe45a0e1f27f50b4f92a86c"
 dependencies = [
  "js-sys",
  "paste",
