@@ -40,7 +40,7 @@ opentelemetry-stdout = "0.31.0"
 opentelemetry-appender-tracing = "0.31.0"
 tonic = "0.14.0"
 rstest = "0.26.0"
-rustls = { version = "0.23.32", features = ["aws_lc_rs"] }
+rustls = { version = "0.23.33", features = ["aws_lc_rs"] }
 tracing_log_error = "0.1.4"
 
 [dev-dependencies]
