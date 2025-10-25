@@ -484,15 +484,15 @@ pub fn auto_temperature_level() -> stateful::Receiver<u16> {
         vec![
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(05:00:00),
-                value: 2000,
+                value: 2900,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(06:00:00),
-                value: 2500,
+                value: 3100,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(07:00:00),
-                value: 3000,
+                value: 3300,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(08:00:00),
@@ -500,19 +500,19 @@ pub fn auto_temperature_level() -> stateful::Receiver<u16> {
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(19:00:00),
-                value: 3000,
+                value: 3300,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(20:00:00),
-                value: 2500,
+                value: 3100,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(21:00:00),
-                value: 2000,
+                value: 2900,
             },
             scheduler::Entry {
                 scheduled_time: naive_time_constant!(22:00:00),
-                value: 1500,
+                value: 2700,
             },
         ],
     )
