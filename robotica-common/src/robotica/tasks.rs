@@ -55,7 +55,7 @@ impl Task {
     #[must_use]
     pub fn get_mqtt_payload(&self) -> Option<String> {
         match &self.payload {
-            Payload::String(s) => Some(s.to_string()),
+            Payload::String(s) => Some(s.clone()),
             Payload::Json(v) => Some(v.to_string()),
             Payload::Command(c) => serde_json::to_string(c)
                 .inspect_err(|err| {

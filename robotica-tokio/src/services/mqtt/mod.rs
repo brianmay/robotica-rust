@@ -377,7 +377,7 @@ fn process_subscribe(
         let (tx, rx) = generic::create_pipe(&topic);
 
         let subscription = Subscription {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             tx: tx.clone(),
             rx: rx.downgrade(),
         };

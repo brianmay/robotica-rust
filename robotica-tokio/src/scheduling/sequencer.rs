@@ -252,7 +252,7 @@ pub fn check_schedule(
             if sequence.contains_key(k) {
                 Ok(())
             } else {
-                Err(ConfigCheckError::SequenceError(k.to_string()))
+                Err(ConfigCheckError::SequenceError(k.clone()))
             }
         })?;
     }
