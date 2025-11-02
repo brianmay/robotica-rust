@@ -58,22 +58,17 @@ pub struct VolumeCommand {
 }
 
 /// The priority of a message
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum MessagePriority {
     /// The message is urgent and should be delivered immediately.
     Urgent,
 
     /// The message is not important.
+    #[default]
     Low,
 
     /// The message is important and should be delivered during the day if allowed.
     DaytimeOnly,
-}
-
-impl Default for MessagePriority {
-    fn default() -> Self {
-        Self::Low
-    }
 }
 
 impl Display for MessagePriority {

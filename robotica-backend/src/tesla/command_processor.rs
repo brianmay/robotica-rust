@@ -7,9 +7,7 @@ use robotica_common::robotica::{
 use robotica_macro::time_delta_constant;
 use robotica_tokio::{
     pipes::{stateless, Subscriber, Subscription},
-    services::{
-        tesla::api::{self, CommandSequence, SequenceError, Token},
-    },
+    services::tesla::api::{self, CommandSequence, SequenceError, Token},
     spawn,
 };
 use std::time::Duration;
@@ -59,14 +57,14 @@ impl Meters {
 
     fn increment_cleared_errors(&self, forgotten: bool) {
         let attributes = [
-            KeyValue::new("id", self.id.to_string()),
+            KeyValue::new("id", self.id.clone()),
             KeyValue::new("forgotten", forgotten),
         ];
         self.cleared_errors.add(1, &attributes);
     }
 
     fn increment_notified_errors(&self) {
-        let attributes = [KeyValue::new("id", self.id.to_string())];
+        let attributes = [KeyValue::new("id", self.id.clone())];
         self.notified_errors.add(1, &attributes);
     }
 
@@ -78,7 +76,7 @@ impl Meters {
 
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("id", self.id.to_string()),
+                KeyValue::new("id", self.id.clone()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
                 KeyValue::new("status", status),
@@ -88,14 +86,14 @@ impl Meters {
     }
 
     fn increment_cancelled(&self) {
-        let attributes = [KeyValue::new("id", self.id.to_string())];
+        let attributes = [KeyValue::new("id", self.id.clone())];
         self.cancelled.add(1, &attributes);
     }
 
     fn increment_outgoing_started(&self, command: &Command) {
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("id", self.id.to_string()),
+                KeyValue::new("id", self.id.clone()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
             ];
@@ -112,7 +110,7 @@ impl Meters {
 
         if !command.is_nil() {
             let attributes = [
-                KeyValue::new("id", self.id.to_string()),
+                KeyValue::new("id", self.id.clone()),
                 KeyValue::new("charge_limit", format!("{:?}", command.charge_limit)),
                 KeyValue::new("should_charge", format!("{:?}", command.should_charge)),
                 KeyValue::new("status", status),

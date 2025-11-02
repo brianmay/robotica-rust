@@ -25,17 +25,12 @@ use std::sync::Arc;
 use tokio::select;
 use tracing::{error, info};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Request {
     Heat,
+    #[default]
     DoNotHeat,
-}
-
-impl Default for Request {
-    fn default() -> Self {
-        Self::DoNotHeat
-    }
 }
 
 impl combined::Max for Request {

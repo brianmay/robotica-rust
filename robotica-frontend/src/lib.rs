@@ -278,7 +278,7 @@ fn nav_bar() -> Html {
                                     </a>
                                     <ul class="dropdown-menu">
                                         { rooms.iter().map(|room| html! {
-                                            <li>{dropdown_link(Route::Room {id: room.id.to_string()}, room.title.to_string())}</li>
+                                            <li>{dropdown_link(Route::Room {id: room.id.clone()}, room.title.clone())}</li>
                                         }).collect::<Html>() }
                                     </ul>
                                 </li>
@@ -290,7 +290,7 @@ fn nav_bar() -> Html {
                             </a>
                             <ul class="dropdown-menu">
                                 { cars.iter().map(|car| html! {
-                                    <li>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.to_string())}</li>
+                                    <li>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.clone())}</li>
                                 }).collect::<Html>() }
                             </ul>
                         </li>
@@ -300,7 +300,7 @@ fn nav_bar() -> Html {
                             </a>
                             <ul class="dropdown-menu">
                                 { hot_water.iter().map(|hot_water| html! {
-                                    <li>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.to_string())}</li>
+                                    <li>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.clone())}</li>
                                 }).collect::<Html>() }
                             </ul>
                         </li>

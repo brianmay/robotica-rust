@@ -58,7 +58,7 @@ pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
                     for (output, input) in iter.enumerate() {
                         // Arrays are 0 based, but outputs are 1 based.
                         let output = format!("output{}", output + 1);
-                        let topic = id.get_state_topic(&output.to_string());
+                        let topic = id.get_state_topic(&output.clone());
                         let payload = input;
                         let message = MqttMessage::new(topic, payload, Retain::Retain, QoS::AtLeastOnce);
                         mqtt.try_send(message);

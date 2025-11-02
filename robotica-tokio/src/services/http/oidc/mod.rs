@@ -68,7 +68,7 @@ impl Client {
 
     pub fn get_auth_url(&self, origin_url: &str) -> String {
         let auth_url = self.oidc_client.auth_url(&Options {
-            scope: Some(self.config.scopes.to_string()),
+            scope: Some(self.config.scopes.clone()),
             state: Some(origin_url.to_string()),
             ..Default::default()
         });
