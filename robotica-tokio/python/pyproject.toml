@@ -5,7 +5,7 @@ description = ""
 authors = [ {name="Brian May", email="brian@linuxpenguins.xyz"}, ]
 readme = "README.md"
 dependencies = [
-    "icalendar ==6.3.1",
+    "icalendar ==6.3.2",
     "recurring-ical-events ==3.8.0",]
 requires-python = ">=3.9"
 
