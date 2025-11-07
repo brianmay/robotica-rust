@@ -33,4 +33,4 @@ rustls = { version = "0.23.32", features = ["aws_lc_rs"] }
 
 [dependencies.openssl]
 optional = true
-version = "0.10.73"
+version = "0.10.75"
