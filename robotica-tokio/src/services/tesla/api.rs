@@ -107,7 +107,7 @@ fn handle_error(
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum AuthOperation {
     RenewToken,
 }
@@ -139,7 +139,7 @@ fn increment_auth_count(
     result
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum OtherOperation {
     GetProducts,
 }
@@ -171,7 +171,7 @@ fn increment_other_count<U: std::fmt::Debug>(
     result
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum VehicleOperation {
     WakeUp,
     SetChargeLimit,
