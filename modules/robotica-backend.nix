@@ -16,7 +16,7 @@ let
 
   cfg = config.services.robotica-backend;
 
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
   robotica-backend = self.packages.${system}.robotica-backend;
   robotica-frontend = self.packages.${system}.robotica-frontend;
 

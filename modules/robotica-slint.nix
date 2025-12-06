@@ -13,7 +13,7 @@ let
     mkIf
     ;
 
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
 
   cfg = config.services.robotica-slint;
   robotica-slint = cfg.package;
