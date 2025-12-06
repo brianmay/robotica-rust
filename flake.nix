@@ -428,11 +428,19 @@
               );
             in
             {
+              libPath = libPath;
               clippy = clippy;
               coverage = coverage;
               pkg = pkg;
             };
 
+          libPath = pkgs.lib.makeLibraryPath [
+            pkgs.libGL
+            pkgs.libxkbcommon
+            pkgs.dbus.lib
+            pkgs.wayland
+            pkgs.fontconfig
+          ];
           devShell = devenv.lib.mkShell {
             inherit inputs pkgs;
             modules = [
@@ -464,6 +472,7 @@
                 enterShell = ''
                   export ROBOTICA_DEBUG=true
                   echo "Python path: ${python_venv}"
+                  export LD_LIBRARY_PATH="${libPath}"
                   export CONFIG_FILE="$PWD/robotica-backend.yaml"
                   export SLINT_CONFIG_FILE="$PWD/robotica-slint.yaml"
                   export STATIC_PATH="robotica-frontend/dist"
