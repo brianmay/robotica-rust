@@ -501,7 +501,7 @@
             ];
           };
 
-          test_robotica_backend = pkgs.nixosTest {
+          test_robotica_backend = pkgs.testers.nixosTest {
             name = "robotica-backend";
             nodes.machine =
               { ... }:
