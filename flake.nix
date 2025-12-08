@@ -285,7 +285,7 @@
               );
 
               wrapper = pkgs.writeShellScriptBin "robotica-backend" ''
-                export PATH="${python_venv}/bin:$PATH"
+                export PYTHONPATH="${python_venv}/lib/python3.12/site-packages"
                 exec ${pkg}/bin/robotica-backend "$@"
               '';
             in
