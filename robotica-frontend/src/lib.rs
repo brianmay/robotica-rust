@@ -274,7 +274,7 @@ fn nav_bar() -> Html {
                             menus.iter().map(|(menu, rooms)| html! {
                                 <li class="nav-item dropdown">
                                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    {menu}
+                                    {*menu}
                                     </a>
                                     <ul class="dropdown-menu">
                                         { rooms.iter().map(|room| html! {

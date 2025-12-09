@@ -403,7 +403,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                     <img src={icon_to_href(icon, display_state)}/>
                 </div>
                 <div>{ display_state.to_string() }</div>
-                <div>{ &name }</div>
+                <div>{ name }</div>
             </button>
         }
     }

@@ -222,7 +222,7 @@ fn task_to_html(
 fn json_to_html(json: &Value) -> Html {
     match json {
         Value::Null => html! { <span class="null">{"null"}</span> },
-        Value::Bool(b) => html! { <span class="bool">{b}</span> },
+        Value::Bool(b) => html! { <span class="bool">{*b}</span> },
         Value::Number(n) => html! { <span class="number">{n.to_string()}</span> },
         Value::String(s) => html! { <span class="string">{s}</span> },
         Value::Array(a) => {
@@ -377,7 +377,7 @@ fn popover_task_content(task: &Task, on_close: &Callback<()>) -> Html {
                         <tbody>
                             <tr>
                                 <th scope="row">{"Topics"}</th>
-                                <td>{task.topics.clone()}</td>
+                                <td>{task.topics.join(" ")}</td>
                             </tr>
                             <tr>
                                 <th scope="row">{"Summary"}</th>
