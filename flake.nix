@@ -68,7 +68,26 @@
           pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
-          wasm-bindgen-cli = pkgs-unstable.wasm-bindgen-cli_0_2_104;
+
+          wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
+            src = pkgs.fetchCrate {
+              pname = "wasm-bindgen-cli";
+              version = "0.2.106";
+              hash = "sha256-M6WuGl7EruNopHZbqBpucu4RWz44/MSdv6f0zkYw+44=";
+            };
+            # src = pkgs.fetchFromGitHub {
+            #   owner = "rustwasm";
+            #   repo = "wasm-bindgen";
+            #   rev = "0.2.106";
+            #   sha256 = "sha256-ZNqbec3fQeoIKVEdN0uXptDQlEAQNc1MAWqoTcPBUWk=";
+            # };
+
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              inherit src;
+              inherit (src) pname version;
+              hash = "sha256-ElDatyOwdKwHg3bNH/1pcxKI7LXkhsotlDPQjiLHBwA=";
+            };
+          };
 
           python_venv =
             let
