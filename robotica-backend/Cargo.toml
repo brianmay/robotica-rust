@@ -20,7 +20,7 @@ robotica-tokio = { path = "../robotica-tokio", features = ["websockets", "schedu
 robotica-macro = { path = "../robotica-macro"}
 influxdb = { version = "0.7.2", features = ["derive"]}
 reqwest = { version = "0.12.5", features = ["json"] }
-envconfig = "0.11.0"
+envconfig = "0.11.1"
 tap = "1.0.1"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
 geo = { version = "0.32.0" }

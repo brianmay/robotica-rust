@@ -27,7 +27,7 @@ futures = "0.3.31"
 clap = { version = "4.5.13", features = ["derive"] }
 chrono = "0.4.42"
 itertools = "0.14.0"
-envconfig = "0.11.0"
+envconfig = "0.11.1"
 tokio-util = "0.7.16"
 tap = "1.0.1"
 rustls = { version = "0.23.32", features = ["aws_lc_rs"] }

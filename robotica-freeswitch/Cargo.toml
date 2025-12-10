@@ -25,7 +25,7 @@ futures = "0.3.31"
 clap = { version = "4.5.13", features = ["derive"] }
 chrono = "0.4.42"
 itertools = "0.14.0"
-envconfig = "0.11.0"
+envconfig = "0.11.1"
 freeswitch-esl = { git = "https://github.com/KaranGauswami/freeswitch-esl.git" }
 # freeswitch-esl = { path = "/home/brian/tree/3rdparty/freeswitch-esl"}
 reqwest = "0.12.5"
