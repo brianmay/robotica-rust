@@ -48,7 +48,7 @@ arc-swap = "1.7.1"
 hyper = "1.8.1"
 time = "0.3.44"
 sqlx = { version = "0.8.6", features = ["migrate", "postgres", "runtime-tokio"] }
-geozero = { version = "0.14.0", features = ["with-postgis-sqlx"] }
+geozero = { version = "0.15.1", features = ["with-postgis-sqlx"] }
 geo = { version = "0.32.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 rstest = "0.26.0"
