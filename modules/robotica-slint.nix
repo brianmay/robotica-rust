@@ -55,7 +55,7 @@ let
     hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
     filename="$HOME/cache/$hash.wav"
     if ! test -f "$filename"; then
-      ${pkgs.espeak}/bin/espeak -ven+f5 -k5 -s 130 -w /tmp/out.wav "$*"
+      ${pkgs.espeak}/bin/espeak-ng -ven+f5 -k5 -s 130 -w /tmp/out.wav "$*"
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
       ${pkgs.alsa-utils}/bin/aplay -q /tmp/out.wav
       ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
