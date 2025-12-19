@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_filter_sequence() {
-        let config = vec![
+        let config = [
             Config {
                 title: "test".to_string(),
                 id: None,
@@ -668,7 +668,7 @@ mod tests {
 
     #[test]
     fn test_expand_0() {
-        let config = vec![Config {
+        let config = [Config {
             title: "test".to_string(),
             id: None,
             importance: Importance::Medium,
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_expand_1() {
-        let config = vec![Config {
+        let config = [Config {
             title: "test".to_string(),
             id: None,
             importance: Importance::Medium,
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn test_expand_3() {
-        let config = vec![
+        let config = [
             Config {
                 title: "test".to_string(),
                 id: None,
