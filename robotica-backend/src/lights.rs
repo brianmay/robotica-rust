@@ -438,84 +438,106 @@ fn copy_colors_to_pos(add_colors: &PowerColor, colors: &mut [HSBK], offset: usiz
     }
 }
 
+#[derive(Debug)]
+struct EntryTimeValue<T> {
+    duration: Duration,
+    value: T,
+}
+
+fn get_schedule_for_evt_list<T: Copy>(
+    etv_list: &[EntryTimeValue<T>],
+    morning_start: chrono::NaiveTime,
+    evening_start: chrono::NaiveTime,
+) -> Vec<scheduler::Entry<T>> {
+    let mut scheduler_entries = Vec::new();
+
+    let mut morning_time = morning_start;
+    let all_but_last = etv_list.len().saturating_sub(1);
+
+    for etv in etv_list.iter().take(all_but_last) {
+        morning_time -= etv.duration;
+        scheduler_entries.push(scheduler::Entry {
+            scheduled_time: morning_time,
+            value: etv.value,
+        });
+    }
+
+    let mut evening_time = evening_start;
+    for etv in etv_list.iter().skip(1) {
+        scheduler_entries.push(scheduler::Entry {
+            scheduled_time: evening_time,
+            value: etv.value,
+        });
+        evening_time += etv.duration;
+    }
+
+    scheduler_entries
+}
+
 pub fn auto_brightness_level() -> stateful::Receiver<f32> {
-    scheduler::scheduler(
-        "auto-brightness-level",
-        vec![
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(05:00:00),
-                value: 15.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(06:00:00),
-                value: 25.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(07:00:00),
-                value: 50.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(08:00:00),
-                value: 100.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(19:00:00),
-                value: 50.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(20:00:00),
-                value: 25.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(21:00:00),
-                value: 15.0,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(22:00:00),
-                value: 5.0,
-            },
-        ],
-    )
+    let etv_list = [
+        EntryTimeValue {
+            duration: Duration::from_hours(0),
+            value: 100.0,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 50.0,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 25.0,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 15.0,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 5.0,
+        },
+    ];
+
+    let schedule_entries = get_schedule_for_evt_list(
+        &etv_list,
+        naive_time_constant!(08:00:00),
+        naive_time_constant!(19:00:00),
+    );
+    scheduler::scheduler("auto-brightness-level", schedule_entries)
 }
 
 pub fn auto_temperature_level() -> stateful::Receiver<u16> {
-    scheduler::scheduler(
-        "auto-temperature-level",
-        vec![
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(05:00:00),
-                value: 2900,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(06:00:00),
-                value: 3100,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(07:00:00),
-                value: 3300,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(08:00:00),
-                value: 3500,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(19:00:00),
-                value: 3300,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(20:00:00),
-                value: 3100,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(21:00:00),
-                value: 2900,
-            },
-            scheduler::Entry {
-                scheduled_time: naive_time_constant!(22:00:00),
-                value: 2700,
-            },
-        ],
-    )
+    let offset = 250;
+
+    let etv_list = [
+        EntryTimeValue {
+            duration: Duration::from_hours(0),
+            value: 3500,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 3500 - offset,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 3500 - offset * 2,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 3500 - offset * 3,
+        },
+        EntryTimeValue {
+            duration: Duration::from_hours(1),
+            value: 3500 - offset * 4,
+        },
+    ];
+
+    let schedule_entries = get_schedule_for_evt_list(
+        &etv_list,
+        naive_time_constant!(08:00:00),
+        naive_time_constant!(19:00:00),
+    );
+    scheduler::scheduler("auto-temperature-level", schedule_entries)
 }
 
 enum AutoLightState {

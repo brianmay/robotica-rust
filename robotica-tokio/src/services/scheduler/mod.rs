@@ -8,6 +8,7 @@ use tracing::debug;
 use crate::{pipes::stateful, spawn};
 
 /// An entry in the scheduler.
+#[derive(Debug)]
 pub struct Entry<T> {
     /// The time of day to send the value.
     pub scheduled_time: NaiveTime,
