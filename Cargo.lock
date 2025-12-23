@@ -719,7 +719,7 @@ dependencies = [
  "bitflags 2.8.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -4111,7 +4111,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -5112,7 +5112,7 @@ dependencies = [
  "getrandom 0.3.2",
  "hmac-sha256",
  "mime",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -5210,7 +5210,7 @@ dependencies = [
  "bytes",
  "http 1.1.0",
  "opentelemetry",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
 ]
 
 [[package]]
@@ -5225,7 +5225,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "prost",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
  "thiserror 2.0.17",
  "tokio",
  "tonic",
@@ -6097,9 +6097,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.27"
+version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e893f6bece5953520ddbb3f8f46f3ef36dd1fef4ee9b087c4b4a725fd5d10e4"
+checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -6218,7 +6218,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "opentelemetry-stdout",
  "opentelemetry_sdk",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
  "robotica-common",
  "robotica-macro",
  "robotica-tokio",
@@ -6274,7 +6274,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "openssl",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
  "robotica-common",
  "robotica-tokio",
  "rustls 0.23.35",
@@ -6384,7 +6384,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "pyo3",
  "regex",
- "reqwest 0.12.27",
+ "reqwest 0.12.28",
  "robotica-common",
  "robotica-macro",
  "rstest",
