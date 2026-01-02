@@ -116,10 +116,6 @@ impl Client {
         debug!("groups: {:?}", groups);
         debug!("user info: {:?}", user_info);
 
-        let sub = user_info
-            .sub
-            .ok_or_else(|| ResponseError::internal_error("No sub in user info"))?;
-
         let name = user_info
             .name
             .ok_or_else(|| ResponseError::internal_error("No name in user info"))?;
@@ -138,7 +134,7 @@ impl Client {
             SET name = $2, email = $3
             RETURNING id, oidc_id, name, email
             "#,
-            sub,
+            user_info.sub,
             name,
             email
         )
