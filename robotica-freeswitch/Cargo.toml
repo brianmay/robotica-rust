@@ -29,7 +29,7 @@ envconfig = "0.11.0"
 freeswitch-esl = { git = "https://github.com/KaranGauswami/freeswitch-esl.git" }
 # freeswitch-esl = { path = "/home/brian/tree/3rdparty/freeswitch-esl"}
 reqwest = "0.12.5"
-rustls = { version = "0.23.32", features = ["aws_lc_rs"] }
+rustls = { version = "0.23.36", features = ["aws_lc_rs"] }
 
 [dependencies.openssl]
 optional = true
