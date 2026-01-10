@@ -35,7 +35,10 @@ jobs:
         purge-created: 0
         # except the version with the `primary-key`, if it exists
         purge-primary-key: never
-    - run: nix flake check --impure --no-substitute
+    - name: Debug Nix store mode
+      run: |
+        nix show-config | grep -E 'store|daemon'
+        echo "NIX_REMOTE=$NIX_REMOTE"
     - run: nix flake check --impure
     - run: nix build '.#robotica-backend'
     - run: nix build '.#robotica-frontend'
