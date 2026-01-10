@@ -1,6 +1,9 @@
 on:
   pull_request:
  
+env:
+  NIX_REMOTE: daemon
+
 jobs:
   build:
     runs-on: ubuntu-latest
