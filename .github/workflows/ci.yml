@@ -34,7 +34,3 @@ jobs:
     - env:
         NIX_REMOTE: daemon
       run: nix flake check --impure
-    - run: nix build '.#robotica-backend'
-    - run: nix build '.#robotica-frontend'
-    - run: nix build '.#robotica-slint'
-    - run: nix build '.#robotica-freeswitch'
