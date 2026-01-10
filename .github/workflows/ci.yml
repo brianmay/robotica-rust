@@ -7,15 +7,17 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v6
-    - uses: nixbuild/nix-quick-install-action@v34
+    - uses: wimpysworld/nothing-but-nix@v6
+    - uses: DeterminateSystems/nix-installer-action@v21
+      with:
+        determinate:  true
     - name: Restore and cache Nix store
-      uses: nix-community/cache-nix-action@v7
+      uses: nix-community/cache-nix-action@b426b118b6dc86d6952988d396aa7c6b09776d08 # v7.0.0
       with:
         # restore and save a cache using this key
-        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix') }}
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
         # if there's no cache hit, restore a cache by this prefix
         restore-prefixes-first-match: nix-${{ runner.os }}-
         # collect garbage until Nix store size (in bytes) is at most this number
