@@ -13,10 +13,6 @@ jobs:
     - uses: DeterminateSystems/nix-installer-action@v21
       with:
         determinate:  true
-    - name: Ensure nix-daemon is running
-      run: |
-        sudo systemctl start nix-daemon
-        sudo systemctl is-active nix-daemon
     - name: Restore and cache Nix store
       uses: nix-community/cache-nix-action@b426b118b6dc86d6952988d396aa7c6b09776d08 # v7.0.0
       with:
@@ -35,11 +31,9 @@ jobs:
         purge-created: 0
         # except the version with the `primary-key`, if it exists
         purge-primary-key: never
-    - name: Debug Nix store mode
-      run: |
-        nix show-config | grep -E 'store|daemon'
-        echo "NIX_REMOTE=$NIX_REMOTE"
-    - run: nix flake check --impure
+    - env:
+        NIX_REMOTE: daemon
+      run: nix flake check --impure
     - run: nix build '.#robotica-backend'
     - run: nix build '.#robotica-frontend'
     - run: nix build '.#robotica-slint'
