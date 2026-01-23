@@ -9,9 +9,6 @@ use url::Url;
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 pub struct StandardClaims {
     pub iss: Url,
-    // Max 255 ASCII chars
-    // Can't deserialize a [u8; 255]
-    pub sub: String,
     // Either an array of audiences, or just the client_id
     pub aud: SingleOrMultiple<String>,
     // Not perfectly accurate for what time values we can get back...
@@ -59,7 +56,7 @@ impl Claims for StandardClaims {
         &self.iss
     }
     fn sub(&self) -> &str {
-        &self.sub
+        &self.userinfo.sub
     }
     fn aud(&self) -> &SingleOrMultiple<String> {
         &self.aud
