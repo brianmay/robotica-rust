@@ -14,7 +14,7 @@ jobs:
           token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-      - uses: wimpysworld/nothing-but-nix@v7
+      - uses: wimpysworld/nothing-but-nix@v8
       - uses: DeterminateSystems/nix-installer-action@v21
         with:
           determinate: true
