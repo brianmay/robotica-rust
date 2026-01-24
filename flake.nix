@@ -175,7 +175,7 @@
             src = ./robotica-frontend;
             # npmDepsHash = "sha256-1bhWY/wOCYq0J5AYm9Mp9M7DfGCMpp7wBtHNWqV0+5c=";
             # npmDepsHash = pkgs.lib.fakeHash;
-            npmDepsHash = "sha256-FX7XPwz1pyoizIjKaJXVoi2CZRryrKzwyTlH3L0ZRK4=";
+            npmDepsHash = "sha256-4xKx1fDptrXAN0gtNWOGCPuWRAmJMKHJK2ZfYLTzRo4=";
             dontNpmBuild = true;
             inherit nodejs;
 
