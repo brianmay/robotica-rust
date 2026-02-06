@@ -61,10 +61,7 @@
           #     })
           #   ];
           # };
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ (import rust-overlay) ];
-          };
+          pkgs = inputs.nixpkgs.legacyPackages.${system}.extend (import rust-overlay);
           pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
           python = pkgs.python312;
           nodejs = pkgs.nodejs_20;
