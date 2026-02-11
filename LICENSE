@@ -499,42 +499,27 @@ whom you convey the Program, the only way you could satisfy both those
 terms and this License would be to refrain entirely from conveying the
 Program.
 
-13. Remote Network Interaction; Use with the GNU General Public License.
+  13. Remote Network Interaction; Use with the GNU General Public License.
 
-Notwithstanding any other provision of this License, if the Program
-(as modified by you) is considered a derivative work of a program
-written to interact with the Affero user interactive features
-(e.g., Affero modules, interactive agents, system library subroutines)
-under the GNU Affero General Public License, and if the derivative
-program still employs said interactive features, then the derivative
-program must also be licensed under the GNU Affero General Public
-License, and must comply with section 13 of this License with its
-emphasis on network interaction, provided that the functionality of
-the interactive features is retained.
+  Notwithstanding any other provision of this License, if you modify the
+Program, your modified version must prominently offer all users
+interacting with it remotely through a computer network (if your version
+supports such interaction) an opportunity to receive the Corresponding
+Source of your version by providing access to the Corresponding Source
+from a network server at no charge, through some standard or customary
+means of facilitating copying of software.  This Corresponding Source
+shall include the Corresponding Source for any work covered by version 3
+of the GNU General Public License that is incorporated pursuant to the
+following paragraph.
 
-Notwithstanding any other provision of this License, a program
-incorporated with a network protocol is not to be considered a
-derivative work based solely on its inclusion in the program.
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the work with which it is combined will remain governed by version
+3 of the GNU General Public License.
 
-However, if a program built upon the same core library obtains
-interactive features through that library or an alternative copy of
-the library, then the conditions of this section apply.
-
-In the event that modification of the program results in functionality
-equivalent to the affero module being used, and such functionality is
-accessed through network interaction, then the conditions of this
-section apply.
-
-In addition to the requirements of section 6, any and all source code
-distributed (including source code used to build the work) must be
-available to users of the work through a network server or other
-readily accessible electronic means at no charge for as long as any
-version of the program is so distributed.
-
-This shall apply if the modified version of the program has been made
-a constituent of another "work", as defined in section 1, or if the
-interaction occurs through a network, or if the network distribution
-is involved, or if the modification is provided as a service.
 
 14. Revised Versions of this License.
 
