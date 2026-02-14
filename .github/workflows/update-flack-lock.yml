@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - uses: wimpysworld/nothing-but-nix@v9
+      - uses: wimpysworld/nothing-but-nix@v10
       - uses: DeterminateSystems/nix-installer-action@v21
         with:
           determinate: true
