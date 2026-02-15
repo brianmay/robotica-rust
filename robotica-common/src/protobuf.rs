@@ -4,39 +4,17 @@
 use bytes::{Bytes, BytesMut};
 use prost::EncodeError;
 use prost::Message;
-use std::fmt;
+use thiserror::Error;
 
 /// Error type for protobuf decoding operations
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProtobufDecodeError {
     /// Error from prost decoding
-    DecodeError(prost::DecodeError),
+    #[error("Protobuf decode error: {0}")]
+    DecodeError(#[from] prost::DecodeError),
     /// Invalid value after successful decoding
+    #[error("Invalid value")]
     InvalidValue,
-}
-
-impl fmt::Display for ProtobufDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::DecodeError(e) => write!(f, "Protobuf decode error: {}", e),
-            Self::InvalidValue => write!(f, "Invalid value"),
-        }
-    }
-}
-
-impl std::error::Error for ProtobufDecodeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::DecodeError(e) => Some(e),
-            Self::InvalidValue => None,
-        }
-    }
-}
-
-impl From<prost::DecodeError> for ProtobufDecodeError {
-    fn from(err: prost::DecodeError) -> Self {
-        Self::DecodeError(err)
-    }
 }
 
 pub(super) trait ProtobufIntoFrom: Sized {
