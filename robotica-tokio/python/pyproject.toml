@@ -7,7 +7,7 @@ readme = "README.md"
 dependencies = [
     "icalendar ==6.3.2",
     "recurring-ical-events ==3.8.0",]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 
 [dependency-groups]
 dev = [
