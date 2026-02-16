@@ -11,6 +11,12 @@
         "https://github.com/hyperium/tonic"
       ],
       "groupName": "opentelemetry-rust monorepo"
+    },
+    {
+      "matchSourceUrls": [
+        "https://github.com/maxcountryman/tower-sessions"
+      ],
+      "groupName": "tower-sessions monorepo"
     }
   ]
 }
