@@ -4,6 +4,18 @@
 use bytes::{Bytes, BytesMut};
 use prost::EncodeError;
 use prost::Message;
+use thiserror::Error;
+
+/// Error type for protobuf decoding operations
+#[derive(Debug, Error)]
+pub enum ProtobufDecodeError {
+    /// Error from prost decoding
+    #[error("Protobuf decode error: {0}")]
+    DecodeError(#[from] prost::DecodeError),
+    /// Invalid value after successful decoding
+    #[error("Invalid value")]
+    InvalidValue,
+}
 
 pub(super) trait ProtobufIntoFrom: Sized {
     type Protobuf: Message + Default;
@@ -24,7 +36,7 @@ pub trait ProtobufEncoderDecoder: Sized {
     /// # Errors
     ///
     /// Returns an error if the value could not be decoded.
-    fn decode(buf: &[u8]) -> Result<Self, prost::DecodeError>;
+    fn decode(buf: &[u8]) -> Result<Self, ProtobufDecodeError>;
 }
 
 impl<M: ProtobufIntoFrom> ProtobufEncoderDecoder for M {
@@ -35,10 +47,9 @@ impl<M: ProtobufIntoFrom> ProtobufEncoderDecoder for M {
         Ok(buf.into())
     }
 
-    fn decode(buf: &[u8]) -> Result<Self, prost::DecodeError> {
+    fn decode(buf: &[u8]) -> Result<Self, ProtobufDecodeError> {
         let value = M::Protobuf::decode(buf)?;
-        let value =
-            M::from_protobuf(value).ok_or_else(|| prost::DecodeError::new("Invalid value"))?;
+        let value = M::from_protobuf(value).ok_or(ProtobufDecodeError::InvalidValue)?;
         Ok(value)
     }
 }
