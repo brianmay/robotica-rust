@@ -14,7 +14,8 @@
     },
     {
       "matchSourceUrls": [
-        "https://github.com/maxcountryman/tower-sessions"
+        "https://github.com/maxcountryman/tower-sessions",
+        "https://github.com/maxcountryman/tower-sessions-stores"
       ],
       "groupName": "tower-sessions monorepo"
     }
