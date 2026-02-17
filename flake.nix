@@ -70,7 +70,7 @@
             src = pkgs.fetchCrate {
               pname = "wasm-bindgen-cli";
               version = "0.2.108";
-              hash = "sha256-ROxo4izYh4w04BtV/FFOr3W9OxwtCV3usCL6b4hW0XQ=";
+              hash = "sha256-UsuxILm1G6PkmVw0I/JF12CRltAfCJQFOaT4hFwvR8E=";
             };
             # src = pkgs.fetchFromGitHub {
             #   owner = "rustwasm";
