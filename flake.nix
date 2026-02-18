@@ -133,6 +133,7 @@
                     pytz.setuptools = [ ];
                     six.setuptools = [ ];
                     tzdata.setuptools = [ ];
+                    typing-extensions.flit-core = [ ];
                   };
 
                 in
