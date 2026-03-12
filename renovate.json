@@ -18,6 +18,12 @@
         "https://github.com/maxcountryman/tower-sessions-stores"
       ],
       "groupName": "tower-sessions monorepo"
+    },
+    {
+      "matchSourceUrls": [
+        "https://github.com/yewstack/yew"
+      ],
+      "groupName": "yew monorepo"
     }
   ]
 }
