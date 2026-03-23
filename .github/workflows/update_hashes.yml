@@ -47,7 +47,7 @@ jobs:
         run: |
           determinate-nixd fix hashes --auto-apply
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: failure() && github.event_name == 'pull_request'
         with:
           message: "[dependabot skip] Automatically fix Nix hashes"
