@@ -357,6 +357,7 @@ async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Respon
             head {
                 title { "Robotica" }
                 meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" {}
+                link rel="icon" type="image/svg+xml" href="/favicon.svg" {}
                 script src=(backend_js) {}
             }
             body {

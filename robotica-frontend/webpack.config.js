@@ -37,6 +37,7 @@ module.exports = {
       },
       publicPath: '/',
       chunks: ['index'],
+      favicon: path.resolve(__dirname, "assets/static/favicon.svg"),
     }),
     new WebpackManifestPlugin({
       basePath: '',
