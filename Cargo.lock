@@ -6395,7 +6395,7 @@ dependencies = [
  "geo",
  "gloo-net 0.7.0",
  "gloo-timers 0.4.0",
- "gloo-utils 0.2.0",
+ "gloo-utils 0.3.0",
  "itertools 0.14.0",
  "js-sys",
  "leaflet",
