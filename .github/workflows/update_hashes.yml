@@ -15,7 +15,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
       - uses: wimpysworld/nothing-but-nix@v10
-      - uses: DeterminateSystems/nix-installer-action@v21
+      - uses: DeterminateSystems/nix-installer-action@v22
         with:
           determinate: true
       - name: Nix binary cache
