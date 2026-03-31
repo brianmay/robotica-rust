@@ -610,7 +610,7 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-util",
  "itoa",
  "matchit",
@@ -2881,9 +2881,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.5"
+version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa82e28a107a8cc405f0839610bdc9b15f1e25ec7d696aa5cf173edbcb1486ab"
+checksum = "2f44da3a8150a6703ed5d34e164b875fd14c2cdab9af1252a9a1020bde2bdc54"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3157,22 +3157,21 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.8.1"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ab2d4f250c3d7b1c9fcdff1cece94ea4e2dfbec68614f7b87cb205f24ca9d11"
+checksum = "6299f016b246a94207e63da54dbe807655bf9e00044f73ded42c3ac5305fbcca"
 dependencies = [
  "atomic-waker",
  "bytes",
  "futures-channel",
  "futures-core",
- "h2 0.4.5",
+ "h2 0.4.13",
  "http 1.4.0",
  "http-body 1.0.0",
  "httparse",
  "httpdate",
  "itoa",
  "pin-project-lite",
- "pin-utils",
  "smallvec",
  "tokio",
  "want",
@@ -3200,7 +3199,7 @@ checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
 dependencies = [
  "futures-util",
  "http 1.4.0",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-util",
  "rustls 0.23.37",
  "rustls-pki-types",
@@ -3215,7 +3214,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3203a961e5c83b6f5498933e78b6b263e208c197b63e9c6c53cc82ffd3f63793"
 dependencies = [
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-util",
  "pin-project-lite",
  "tokio",
@@ -3230,7 +3229,7 @@ checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
  "bytes",
  "http-body-util",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-util",
  "native-tls",
  "tokio",
@@ -3251,7 +3250,7 @@ dependencies = [
  "futures-util",
  "http 1.4.0",
  "http-body 1.0.0",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "ipnet",
  "libc",
  "percent-encoding",
@@ -6166,11 +6165,11 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.4.5",
+ "h2 0.4.13",
  "http 1.4.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-rustls 0.27.2",
  "hyper-tls",
  "hyper-util",
@@ -6205,11 +6204,11 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-core",
- "h2 0.4.5",
+ "h2 0.4.13",
  "http 1.4.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-rustls 0.27.2",
  "hyper-tls",
  "hyper-util",
@@ -6470,7 +6469,7 @@ dependencies = [
  "geo",
  "geozero",
  "gethostname 1.1.0",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "lalrpop",
  "lalrpop-util",
  "lifx-core",
@@ -8342,11 +8341,11 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
- "h2 0.4.5",
+ "h2 0.4.13",
  "http 1.4.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.8.1",
+ "hyper 1.9.0",
  "hyper-timeout",
  "hyper-util",
  "percent-encoding",
