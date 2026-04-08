@@ -43,8 +43,10 @@ url = "2.5.7"
 futures = "0.3.31"
 tower = { version = "0.5.2", features = ["util"] }
 tower-http = { version = "0.6.6", features = ["fs", "trace"] }
-tower-sessions = { version = "0.14.0" }
-tower-sessions-sqlx-store = { version = "0.15.0", features = ["postgres"] }
+tower-sessions = { version = "0.15.0" }
+# Workaround: crates.io version not updated for tower-sessions 0.15.0
+# See: https://github.com/maxcountryman/tower-sessions-stores/issues/72
+tower-sessions-sqlx-store = { version = "0.15.0", features = ["postgres"], git = "https://github.com/maxcountryman/tower-sessions-stores" }
 arc-swap = "1.7.1"
 hyper = "1.8.1"
 time = "0.3.44"
