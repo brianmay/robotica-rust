@@ -3760,6 +3760,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd89c62e90277619e21910689e0d4864287161f733125bac2d739238ad93e63f"
 dependencies = [
+ "chrono",
  "futures-util",
  "http 1.4.0",
  "influxdb_derive",

@@ -8,7 +8,6 @@ use robotica_tokio::services::mqtt;
 use robotica_tokio::spawn;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use tap::Pipe;
 use tracing::error;
 
 use crate::influxdb::Config;
@@ -212,36 +211,42 @@ struct InfluxReadingF64 {
     time: DateTime<Utc>,
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for anavi::Temperature {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        InfluxReadingF64 {
+        let reading = InfluxReadingF64 {
             value: self.temperature,
             time: Utc::now(),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
+        };
+        vec![reading.try_into_query(topic).unwrap()]
     }
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for anavi::Humidity {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        InfluxReadingF64 {
+        let reading = InfluxReadingF64 {
             value: self.humidity,
             time: Utc::now(),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
+        };
+        vec![reading.try_into_query(topic).unwrap()]
     }
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for zwave::Data<f64> {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        InfluxReadingF64 {
+        let reading = InfluxReadingF64 {
             value: self.value,
             time: self.get_datetime().unwrap_or_else(Utc::now),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
+        };
+        vec![reading.try_into_query(topic).unwrap()]
     }
 }
 
@@ -251,14 +256,45 @@ struct InfluxReadingU8 {
     time: DateTime<Utc>,
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for zwave::Data<u8> {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        InfluxReadingU8 {
+        let reading = InfluxReadingU8 {
             value: self.value,
             time: self.get_datetime().unwrap_or_else(Utc::now),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
+        };
+        vec![reading.try_into_query(topic).unwrap()]
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
+impl GetQueries for shelly::SwitchStatus {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        let reading = ShellySwitchReading {
+            output: self.output,
+            temperature: self.temperature.t_c,
+            time: Utc::now(),
+        };
+        vec![reading.try_into_query(topic).unwrap()]
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
+impl GetQueries for FishTankData {
+    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
+        let reading = FishTankReading {
+            distance: self.distance,
+            temperature: self.temperature,
+            tds: self.tds,
+            time: Utc::now(),
+        };
+        vec![reading.try_into_query(topic).unwrap()]
     }
 }
 
@@ -267,18 +303,6 @@ struct ShellySwitchReading {
     output: bool,
     temperature: f32,
     time: DateTime<Utc>,
-}
-
-impl GetQueries for shelly::SwitchStatus {
-    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        ShellySwitchReading {
-            output: self.output,
-            temperature: self.temperature.t_c,
-            time: Utc::now(),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
-    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -296,19 +320,6 @@ struct FishTankReading {
     time: DateTime<Utc>,
 }
 
-impl GetQueries for FishTankData {
-    fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
-        FishTankReading {
-            distance: self.distance,
-            temperature: self.temperature,
-            tds: self.tds,
-            time: Utc::now(),
-        }
-        .pipe(|x| x.into_query(topic))
-        .pipe(|x| vec![x])
-    }
-}
-
 #[derive(Debug, InfluxDbWriteable)]
 struct ShellyReading {
     pub time: DateTime<Utc>,
@@ -320,6 +331,9 @@ struct ShellyReading {
     pub voltage: f64,
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for shelly::Notify {
     fn get_queries(self, topic: &str) -> Vec<WriteQuery> {
         let time = self.params.get_datetime().unwrap_or_else(Utc::now);
@@ -339,7 +353,8 @@ impl GetQueries for shelly::Notify {
                     pf: status.a_pf,
                     voltage: status.a_voltage,
                 }
-                .into_query(topic("a")),
+                .try_into_query(topic("a"))
+                .unwrap(),
                 ShellyReading {
                     time,
                     act_power: status.b_act_power,
@@ -349,7 +364,8 @@ impl GetQueries for shelly::Notify {
                     pf: status.b_pf,
                     voltage: status.b_voltage,
                 }
-                .into_query(topic("b")),
+                .try_into_query(topic("b"))
+                .unwrap(),
                 ShellyReading {
                     time,
                     act_power: status.c_act_power,
@@ -359,7 +375,8 @@ impl GetQueries for shelly::Notify {
                     pf: status.c_pf,
                     voltage: status.c_voltage,
                 }
-                .into_query(topic("c")),
+                .try_into_query(topic("c"))
+                .unwrap(),
             ]
         } else {
             vec![]
@@ -386,7 +403,8 @@ fn monitor_reading<T>(
         let mut s = rx.subscribe().await;
 
         while let Ok(Json(data)) = s.recv().await {
-            for query in data.get_queries(&influx_topic) {
+            let queries = data.get_queries(&influx_topic);
+            for query in queries {
                 tracing::debug!("Writing to influxdb: {:?}", query);
                 if let Err(e) = client.query(&query).await {
                     error!("Failed to write to influxdb: {}", e);
