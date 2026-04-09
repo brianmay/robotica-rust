@@ -45,7 +45,6 @@ struct PriceReading {
 
 #[derive(InfluxDbWriteable)]
 struct PriceSummaryReading {
-    // is_cheap_2hr: bool,
     per_kwh: f32,
     time: chrono::DateTime<Utc>,
 }
@@ -60,6 +59,9 @@ struct UsageReading {
     time: chrono::DateTime<Utc>,
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     let client = influxdb_config.get_client();
     let now = utc_now();
@@ -72,7 +74,8 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
             time: data.start_time,
             interval_type: data.interval_type,
         }
-        .into_query("amber/price");
+        .try_into_query("amber/price")
+        .unwrap();
 
         if let Err(e) = client.query(&reading).await {
             error!("Failed to write to influxdb: {}", e);
@@ -81,11 +84,11 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
 
     if let Some(current) = prices.current(&now) {
         let reading = PriceSummaryReading {
-            // is_cheap_2hr: false,
             per_kwh: current.per_kwh,
             time: Utc::now(),
         }
-        .into_query("amber/price_summary");
+        .try_into_query("amber/price_summary")
+        .unwrap();
 
         if let Err(e) = client.query(&reading).await {
             error!("Failed to write to influxdb: {}", e);
@@ -93,6 +96,9 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     }
 }
 
+#[allow(clippy::unwrap_used)]
+/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
+/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
     let client = influxdb_config.get_client();
 
@@ -107,7 +113,8 @@ async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
             cost: data.cost,
             time: data.start_time,
         }
-        .into_query(format!("amber/usage/{channel}"));
+        .try_into_query(format!("amber/usage/{channel}"))
+        .unwrap();
 
         if let Err(e) = client.query(&reading).await {
             error!("Failed to write to influxdb: {}", e);
