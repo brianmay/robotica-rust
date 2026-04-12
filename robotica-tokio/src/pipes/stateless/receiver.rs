@@ -212,6 +212,25 @@ where
         });
     }
 
+    /// Run an async function for every value received.
+    /// The next value will not be processed until the future completes.
+    pub fn for_each_async<F, Fut>(self, f: F)
+    where
+        F: Fn(T) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = ()> + Send,
+        T: 'static,
+    {
+        spawn(async move {
+            let mut sub = self.subscribe().await;
+
+            loop {
+                while let Ok(data) = sub.recv().await {
+                    f(data).await;
+                }
+            }
+        });
+    }
+
     /// Send the data to another pipe.
     pub fn send_to(self, dest: &Sender<T>)
     where

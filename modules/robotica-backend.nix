@@ -268,6 +268,27 @@ let
     };
   };
 
+  presence_requirement_type = types.submodule {
+    options = {
+      presence_id = mkOption { type = types.str; };
+      room = mkOption { type = types.str; };
+    };
+  };
+
+  message_route_type = types.submodule {
+    options = {
+      audience = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+      };
+      topic = mkOption { type = types.str; };
+      presence_requirements = mkOption {
+        type = types.listOf presence_requirement_type;
+        default = [ ];
+      };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       executor = mkOption {
@@ -294,6 +315,10 @@ let
       hot_water = mkOption {
         type = lib.types.nullOr hot_water_type;
         default = null;
+      };
+      message_routes = mkOption {
+        type = types.listOf message_route_type;
+        default = [ ];
       };
       presence_trackers = mkOption { type = types.listOf presence_tracker_type; };
       occupancy_sensors = mkOption { type = types.listOf occupancy_sensor_type; };

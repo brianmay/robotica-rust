@@ -83,7 +83,6 @@ async fn main() -> Result<()> {
 
     let (mqtt, mqtt_rx) = mqtt_channel();
     let subscriptions: Subscriptions = Subscriptions::new();
-    let message_sink = ha::create_message_sink(&mqtt);
     let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
         .unwrap_or_else(|e| {
             panic!("Error getting persistent state loader: {e}");
@@ -92,7 +91,6 @@ async fn main() -> Result<()> {
     let state = InitState {
         subscriptions,
         mqtt,
-        message_sink,
         persistent_state_database,
     };
 
@@ -123,9 +121,6 @@ pub struct InitState {
     /// MQTT client.
     #[allow(dead_code)]
     pub mqtt: MqttTx,
-
-    /// Message sink for sending verbal messages.
-    pub message_sink: stateless::Sender<Message>,
 
     /// Persistent state database.
     pub persistent_state_database: PersistentStateDatabase,
@@ -215,32 +210,16 @@ async fn setup_pipes(
     config: config::Config,
     postgres: sqlx::PgPool,
 ) {
-    if let Some(amber_config) = config.amber {
-        let (prices, usage) =
-            amber::run(&Id::new("amber_account"), amber_config).unwrap_or_else(|e| {
-                panic!("Error running amber: {e}");
-            });
-        amber::logging::log_prices(prices.clone(), &config.influxdb);
-        amber::logging::log_usage(usage, &config.influxdb);
-
-        if let Some(hot_water) = config.hot_water {
-            monitor_hot_water(&mut state, hot_water, &prices);
-        }
-
-        monitor_cars(&config.cars, &mut state, &postgres, &prices);
-    } else {
-        info!("No amber configuration found; skipping hot water and car monitoring");
-    }
-
-    monitor_bathroom_door(&mut state);
-
-    let presence_trackers: Vec<stateful::Receiver<PresenceTrackerValue>> = config
+    // espresence sensors
+    let presence_trackers: HashMap<String, stateful::Receiver<PresenceTrackerValue>> = config
         .presence_trackers
         .into_iter()
         .map(|tracker| {
             // println!("presence {} {}", tracker.config.id, tracker.topic);
             let subscription = state.subscriptions.subscribe_into_stateless(tracker.topic);
-            presence_tracker::run(tracker.config, subscription)
+            let id = tracker.config.id.clone();
+            let rx = presence_tracker::run(tracker.config, subscription);
+            (id, rx)
         })
         .collect();
 
@@ -248,6 +227,7 @@ async fn setup_pipes(
     //     error!("Is Brian present? {present:#?}");
     // });
 
+    // motion sensors, etc.
     let occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>> = config
         .occupancy_sensors
         .into_iter()
@@ -266,6 +246,31 @@ async fn setup_pipes(
     // auto_temperature_level().for_each(|(_, level)| {
     //     error!("Auto temperature level: {level}");
     // });
+
+    let message_sink = ha::create_message_sink(
+        state.mqtt.clone(),
+        config.message_routes,
+        &presence_trackers,
+    );
+
+    if let Some(amber_config) = config.amber {
+        let (prices, usage) =
+            amber::run(&Id::new("amber_account"), amber_config).unwrap_or_else(|e| {
+                panic!("Error running amber: {e}");
+            });
+        amber::logging::log_prices(prices.clone(), &config.influxdb);
+        amber::logging::log_usage(usage, &config.influxdb);
+
+        if let Some(hot_water) = config.hot_water {
+            monitor_hot_water(&mut state, hot_water, &prices, message_sink.clone());
+        }
+
+        monitor_cars(&config.cars, &mut state, &postgres, &prices, &message_sink);
+    } else {
+        info!("No amber configuration found; skipping hot water and car monitoring");
+    }
+
+    monitor_bathroom_door(&mut state, message_sink.clone());
 
     if let Some(http_config) = config.http {
         http::run(state.mqtt.clone(), http_config, postgres.clone())
@@ -334,7 +339,7 @@ async fn setup_pipes(
     });
 }
 
-fn monitor_bathroom_door(state: &mut InitState) {
+fn monitor_bathroom_door(state: &mut InitState, message_sink: stateless::Sender<Message>) {
     let bathroom_door: stateful::Receiver<DoorState> = state
         .subscriptions
         .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
@@ -342,7 +347,6 @@ fn monitor_bathroom_door(state: &mut InitState) {
         .rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30));
 
     let mqtt = state.mqtt.clone();
-    let message_sink = state.message_sink.clone();
     spawn(async move {
         let mut s = bathroom_door.subscribe().await;
 
@@ -382,6 +386,7 @@ fn monitor_hot_water(
     state: &mut InitState,
     hot_water: config::HotWaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    message_sink: stateless::Sender<Message>,
 ) {
     let id = hot_water.id;
 
@@ -416,7 +421,6 @@ fn monitor_hot_water(
         .map(|(_, state)| state.get_result())
         .rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300));
 
-    let message_sink = state.message_sink.clone();
     hot_water_request.for_each(move |(old, current)| {
         let command = match current {
             hot_water::Request::Heat => shelly::SwitchCommand::On(None),
@@ -452,6 +456,7 @@ fn monitor_cars(
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    message_sink: &stateless::Sender<Message>,
 ) {
     let id = Id::new("tesla_account");
     let token = tesla::token::run(&id, state).unwrap_or_else(|e| {
@@ -464,7 +469,7 @@ fn monitor_cars(
     });
 
     for (car, tesla) in teslas {
-        monitor_tesla(car, tesla, state, postgres, prices, &token);
+        monitor_tesla(car, tesla, state, postgres, prices, &token, message_sink);
     }
 }
 
@@ -476,6 +481,7 @@ fn monitor_tesla(
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
     token: &stateless::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
+    message_sink: &stateless::Sender<Message>,
 ) {
     let auto_charge = state
         .subscriptions
@@ -499,7 +505,7 @@ fn monitor_tesla(
         postgres.clone(),
     );
 
-    locations.messages.send_to(&state.message_sink);
+    locations.messages.send_to(message_sink);
     locations.location_message.send_to_mqtt_json(
         &state.mqtt,
         car.id.get_state_topic("locations"),
@@ -550,19 +556,18 @@ fn monitor_tesla(
 
     let should_plugin_stream = tesla::monitor_location::monitor(
         car,
-        state.message_sink.clone(),
+        message_sink.clone(),
         locations.location,
         outputs.charging_information,
     );
 
     tesla::command_processor::run(car, tesla, outputs.commands, token.clone())
-        .send_to(&state.message_sink);
+        .send_to(message_sink);
 
     let monitor_doors_receivers = tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
 
-    tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(&state.message_sink);
-    tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream)
-        .send_to(&state.message_sink);
+    tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(message_sink);
+    tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream).send_to(message_sink);
 }
 
 #[must_use]
@@ -613,7 +618,7 @@ struct SharedAutoLight {
     brightness: stateful::Receiver<f32>,
     temperature: stateful::Receiver<u16>,
     night_mode_for_room: HashMap<String, stateful::Receiver<bool>>,
-    presence_trackers: Vec<stateful::Receiver<PresenceTrackerValue>>,
+    presence_trackers: HashMap<String, stateful::Receiver<PresenceTrackerValue>>,
     occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>>,
 }
 

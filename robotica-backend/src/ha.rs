@@ -1,23 +1,94 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use robotica_common::mqtt::Json;
+use robotica_common::mqtt::QoS;
+use robotica_common::mqtt::Retain;
+use robotica_common::robotica::commands::Command;
+// ...existing code...
 use robotica_common::robotica::message::Message;
+use robotica_tokio::devices::presence_tracker;
+use robotica_tokio::devices::presence_tracker::get_room_for_id;
+use robotica_tokio::pipes::stateful;
 use robotica_tokio::pipes::stateless;
 use robotica_tokio::services::mqtt::MqttTx;
-use robotica_tokio::services::mqtt::SendOptions;
 use tracing::info;
+// ...existing code...
 
-pub fn create_message_sink(mqtt: &MqttTx) -> stateless::Sender<Message> {
+use crate::config::MessageRouteConfig;
+
+pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
+    mqtt: MqttTx,
+    message_routes: Vec<MessageRouteConfig>,
+    presence_trackers: &HashMap<
+        String,
+        stateful::Receiver<presence_tracker::PresenceTrackerValue>,
+        S,
+    >,
+) -> stateless::Sender<Message> {
+    let presence_trackers_for_routes = Arc::new(
+        message_routes
+            .iter()
+            .map(|route| {
+                route
+                    .presence_requirements
+                    .iter()
+                    .map(|req| get_room_for_id(&req.presence_id, presence_trackers))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+    );
+    let message_routes = Arc::new(message_routes);
+
     let (tx, rx) = stateless::create_pipe::<Message>("messages");
-    rx.clone().for_each(|message| {
-        // DO NOT set body attribute, it will overwrite the "Sending message"
-        info!(
-            title = message.title,
-            message_body = message.body,
-            priority = ?message.priority,
-            audience = ?message.audience,
-            flash_lights = message.flash_lights,
-            "Sending message"
-        );
+
+    rx.for_each_async({
+        let message_routes = Arc::clone(&message_routes);
+        let presence_trackers_for_routes = Arc::clone(&presence_trackers_for_routes);
+        move |message| {
+            let message_routes = Arc::clone(&message_routes);
+            let presence_trackers_for_routes = Arc::clone(&presence_trackers_for_routes);
+            let mqtt = mqtt.clone();
+            async move {
+                for (route, presence_trackers) in message_routes
+                    .iter()
+                    .zip(presence_trackers_for_routes.iter())
+                {
+                    let mut matches = false;
+                    for (req, presence_tracker) in route
+                        .presence_requirements
+                        .iter()
+                        .zip(presence_trackers.iter())
+                    {
+                        if let Some(room) = presence_tracker.get().await {
+                            if room.as_ref() == Some(&req.room) {
+                                matches = true;
+                            }
+                        }
+                    }
+                    if matches && route.audience.contains(&message.audience.to_string()) {
+                        info!(
+                            title = message.title,
+                            message_body = message.body,
+                            priority = ?message.priority,
+                            audience = ?message.audience,
+                            flash_lights = message.flash_lights,
+                            router_topic = route.topic,
+                            "Routing message"
+                        );
+                        let command = Command::Message(message.clone());
+                        mqtt.try_serialize_send(
+                            &route.topic,
+                            &Json(command),
+                            Retain::NoRetain,
+                            QoS::ExactlyOnce,
+                        );
+                    }
+                }
+            }
+        }
     });
-    rx.send_to_mqtt_json(mqtt, "ha/event/message", &SendOptions::default());
+
     tx
 }
 

@@ -1,12 +1,12 @@
 //! Track location with Espresence
-use std::str::Utf8Error;
+use std::{collections::HashMap, str::Utf8Error};
 
 use crate::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     spawn,
 };
 use chrono::{DateTime, Utc};
-use robotica_common::{datetime::utc_now, mqtt::MqttMessage};
+use robotica_common::{datetime::utc_now, mqtt::MqttMessage, robotica::entities::Id};
 use robotica_macro::time_delta_constant;
 use serde::Deserialize;
 use thiserror::Error;
@@ -14,7 +14,7 @@ use tokio::{
     select,
     time::{sleep_until, Instant},
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// The configuration of a Presence Tracker
 #[derive(Deserialize, Debug)]
@@ -164,9 +164,9 @@ fn calculate_away_instant(away_timeout: chrono::TimeDelta, updated: DateTime<Utc
 
 /// Is there any presence in the given room?
 #[must_use]
-pub fn is_any_presence_in_room(
+pub fn is_any_presence_in_room<S: 'static + ::std::hash::BuildHasher + Send>(
     room: &str,
-    presences: Vec<stateful::Receiver<PresenceTrackerValue>>,
+    presences: HashMap<String, stateful::Receiver<PresenceTrackerValue>, S>,
 ) -> stateful::Receiver<bool> {
     if presences.is_empty() {
         return stateful::static_pipe(false, format!("IsAnyPresenceInRoom_{room}"));
@@ -177,7 +177,8 @@ pub fn is_any_presence_in_room(
 
     spawn(async move {
         let mut results = vec![false; presences.len()];
-        let mut subs = futures::future::join_all(presences.iter().map(Subscriber::subscribe)).await;
+        let mut subs =
+            futures::future::join_all(presences.values().map(Subscriber::subscribe)).await;
 
         loop {
             let futures = subs.iter_mut().map(Subscription::recv).collect::<Vec<_>>();
@@ -196,4 +197,31 @@ pub fn is_any_presence_in_room(
     });
 
     rx
+}
+
+/// Get the room for a given presence tracker ID
+#[must_use]
+pub fn get_room_for_id<S: 'static + ::std::hash::BuildHasher + Send>(
+    id: &Id,
+    presences: &HashMap<String, stateful::Receiver<PresenceTrackerValue>, S>,
+) -> stateful::Receiver<Option<String>> {
+    let id = id.to_string();
+    let tracker = presences.get(&id).cloned();
+
+    tracker.map_or_else(
+        || {
+            warn!("No presence tracker found for ID: {}", id);
+            stateful::static_entity(None, format!("GetRoomForId_{id}"))
+        },
+        |tracker| {
+            let (tx, rx) = stateful::create_pipe(format!("GetRoomForId_{id}"));
+            spawn(async move {
+                let mut sub = tracker.subscribe().await;
+                while let Ok(msg) = sub.recv().await {
+                    tx.try_send(msg.room.clone());
+                }
+            });
+            rx
+        },
+    )
 }

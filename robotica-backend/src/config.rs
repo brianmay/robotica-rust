@@ -98,6 +98,7 @@ pub struct Config {
     pub presence_trackers: Vec<PresenceTrackerConfig>,
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
+    pub message_routes: Vec<MessageRouteConfig>,
 }
 
 /// An error loading the Config
@@ -211,6 +212,19 @@ pub struct OccupancySensorConfig {
 pub struct NightModeConfig {
     pub room: String,
     pub topic: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PresenceRequirements {
+    pub presence_id: Id,
+    pub room: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessageRouteConfig {
+    pub audience: Vec<String>,
+    pub topic: String,
+    pub presence_requirements: Vec<PresenceRequirements>,
 }
 
 #[cfg(test)]
