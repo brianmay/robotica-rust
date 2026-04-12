@@ -253,6 +253,21 @@ async fn setup_pipes(
         &presence_trackers,
     );
 
+    {
+        let message_sink = message_sink.clone();
+        state
+            .subscriptions
+            .subscribe_into_stateless::<Json<Command>>("robotica/command/message")
+            .for_each(move |command| {
+                let message_sink = message_sink.clone();
+                if let Json(Command::Message(message)) = command {
+                    message_sink.try_send(message);
+                } else {
+                    error!("Received non-message command on robotica/command/message: {command:?}");
+                }
+            });
+    }
+
     if let Some(amber_config) = config.amber {
         let (prices, usage) =
             amber::run(&Id::new("amber_account"), amber_config).unwrap_or_else(|e| {

@@ -12,6 +12,7 @@ use robotica_tokio::devices::presence_tracker::get_room_for_id;
 use robotica_tokio::pipes::stateful;
 use robotica_tokio::pipes::stateless;
 use robotica_tokio::services::mqtt::MqttTx;
+use tracing::debug;
 use tracing::info;
 // ...existing code...
 
@@ -46,6 +47,14 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
         let message_routes = Arc::clone(&message_routes);
         let presence_trackers_for_routes = Arc::clone(&presence_trackers_for_routes);
         move |message| {
+            info!(
+                title = message.title,
+                message_body = message.body,
+                priority = ?message.priority,
+                audience = ?message.audience,
+                flash_lights = message.flash_lights,
+                "Received message to route"
+            );
             let message_routes = Arc::clone(&message_routes);
             let presence_trackers_for_routes = Arc::clone(&presence_trackers_for_routes);
             let mqtt = mqtt.clone();
@@ -54,7 +63,8 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                     .iter()
                     .zip(presence_trackers_for_routes.iter())
                 {
-                    let mut matches = false;
+                    let mut presence_matches = presence_trackers.is_empty();
+
                     for (req, presence_tracker) in route
                         .presence_requirements
                         .iter()
@@ -62,12 +72,22 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                     {
                         if let Some(room) = presence_tracker.get().await {
                             if room.as_ref() == Some(&req.room) {
-                                matches = true;
+                                presence_matches = true;
                             }
                         }
                     }
-                    if matches && route.audience.contains(&message.audience.to_string()) {
-                        info!(
+
+                    let audience_matches = route.audience.contains(&message.audience.to_string())
+                        || route.audience.is_empty();
+
+                    debug!(
+                        topic = route.topic.as_str(),
+                        matches_presence = presence_matches,
+                        audience_matches = audience_matches,
+                        "Checking message route presence requirements"
+                    );
+                    if presence_matches && audience_matches {
+                        debug!(
                             title = message.title,
                             message_body = message.body,
                             priority = ?message.priority,
