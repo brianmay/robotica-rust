@@ -59,9 +59,6 @@ struct UsageReading {
     time: chrono::DateTime<Utc>,
 }
 
-#[allow(clippy::unwrap_used)]
-/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
-/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     let client = influxdb_config.get_client();
     let now = utc_now();
@@ -73,12 +70,17 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
             renewables: data.renewables,
             time: data.start_time,
             interval_type: data.interval_type,
-        }
-        .try_into_query("amber/price")
-        .unwrap();
+        };
 
-        if let Err(e) = client.query(&reading).await {
-            error!("Failed to write to influxdb: {}", e);
+        match reading.try_into_query("amber/price") {
+            Ok(query) => {
+                if let Err(e) = client.query(&query).await {
+                    error!("Failed to write to influxdb: {}", e);
+                }
+            }
+            Err(_) => {
+                error!("Failed to create influxdb query");
+            }
         }
     }
 
@@ -86,19 +88,21 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
         let reading = PriceSummaryReading {
             per_kwh: current.per_kwh,
             time: Utc::now(),
-        }
-        .try_into_query("amber/price_summary")
-        .unwrap();
+        };
 
-        if let Err(e) = client.query(&reading).await {
-            error!("Failed to write to influxdb: {}", e);
+        match reading.try_into_query("amber/price_summary") {
+            Ok(query) => {
+                if let Err(e) = client.query(&query).await {
+                    error!("Failed to write to influxdb: {}", e);
+                }
+            }
+            Err(_) => {
+                error!("Failed to create influxdb query");
+            }
         }
     }
 }
 
-#[allow(clippy::unwrap_used)]
-/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
-/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
     let client = influxdb_config.get_client();
 
@@ -112,12 +116,17 @@ async fn usage_to_influxdb(influxdb_config: &influx::Config, usage: &Usage) {
             kwh: data.kwh,
             cost: data.cost,
             time: data.start_time,
-        }
-        .try_into_query(format!("amber/usage/{channel}"))
-        .unwrap();
+        };
 
-        if let Err(e) = client.query(&reading).await {
-            error!("Failed to write to influxdb: {}", e);
+        match reading.try_into_query(format!("amber/usage/{channel}")) {
+            Ok(query) => {
+                if let Err(e) = client.query(&query).await {
+                    error!("Failed to write to influxdb: {}", e);
+                }
+            }
+            Err(_) => {
+                error!("Failed to create influxdb query");
+            }
         }
     }
 }

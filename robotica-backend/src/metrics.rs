@@ -330,9 +330,6 @@ struct ShellyReading {
 
 type ShellyReadingError = <ShellyReading as InfluxDbWriteable>::Error;
 
-#[allow(clippy::unwrap_used)]
-/// Note: unwrap is used because the influxdb-rs crate's derive macro generates a private
-/// error type. See <https://github.com/influxdb-rs/influxdb-rust/issues/188>
 impl GetQueries for shelly::Notify {
     type Error = ShellyReadingError;
     fn get_queries(self, topic: &str) -> Result<Vec<WriteQuery>, Self::Error> {
