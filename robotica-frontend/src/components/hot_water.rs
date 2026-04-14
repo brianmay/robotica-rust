@@ -31,7 +31,7 @@ pub struct HotWaterComponent {
     _config_handle: ContextHandle<Option<Arc<Config>>>,
 }
 
-fn subscribe_to_car(ctx: &Context<HotWaterComponent>, car_id: &Id) {
+fn subscribe(ctx: &Context<HotWaterComponent>, car_id: &Id) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
@@ -62,7 +62,7 @@ impl Component for HotWaterComponent {
         let props = ctx.props();
         let id = Id::new(&props.id);
 
-        subscribe_to_car(ctx, &id);
+        subscribe(ctx, &id);
         Self {
             state_subscription: None,
             state: None,

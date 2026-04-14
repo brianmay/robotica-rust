@@ -35,7 +35,7 @@ pub struct CarComponent {
     _config_handle: ContextHandle<Option<Arc<Config>>>,
 }
 
-fn subscribe_to_car(ctx: &Context<CarComponent>, car_id: &Id) {
+fn subscribe(ctx: &Context<CarComponent>, car_id: &Id) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
@@ -66,7 +66,7 @@ impl Component for CarComponent {
         let props = ctx.props();
         let id = Id::new(&props.id);
 
-        subscribe_to_car(ctx, &id);
+        subscribe(ctx, &id);
         Self {
             state_subscription: None,
             state: None,
