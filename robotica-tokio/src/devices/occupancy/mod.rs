@@ -1,6 +1,8 @@
 //! Module for handling occupancy or PIR sensors
+pub use robotica_common::robotica::occupancy::OccupiedState;
+
 use robotica_common::mqtt::Json;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{pipes::stateful, services::mqtt::Subscriptions};
 
@@ -22,21 +24,12 @@ pub struct Config {
     topic: String,
 }
 
-/// The occupancy state
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
-pub enum OccupiedState {
-    /// The space is occupied
-    Occupied,
-    /// The space is vacant
-    Vacant,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 struct ZigbeeMessage {
     occupancy: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 struct ZwaveMessage {
     value: u8,
 }

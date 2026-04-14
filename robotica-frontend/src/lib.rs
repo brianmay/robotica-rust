@@ -42,6 +42,7 @@ use robotica_common::version;
 use components::car::CarComponent;
 use components::hot_water::HotWaterComponent;
 use components::locations::locations_view::LocationsView;
+use components::occupancy_view::OccupancyViewComponent;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
 use components::welcome::Welcome;
@@ -64,6 +65,8 @@ enum Route {
     Tags,
     #[at("/locations")]
     Locations,
+    #[at("/occupancy")]
+    Occupancy,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -78,6 +81,7 @@ fn switch(selected_route: Route) -> Html {
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::Locations => return html! { <><NavBar/><LocationsView/></> },
+        Route::Occupancy => html! { <OccupancyViewComponent id={"all".to_string()}/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
@@ -312,6 +316,9 @@ fn nav_bar() -> Html {
                         </li>
                         <li class="nav-item">
                             { link(Route::Locations, "Locations") }
+                        </li>
+                        <li class="nav-item">
+                            { link(Route::Occupancy, "Occupancy") }
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="/logout">{ "Logout" }</a>

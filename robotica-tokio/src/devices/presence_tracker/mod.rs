@@ -8,13 +8,15 @@ use crate::{
 use chrono::{DateTime, Utc};
 use robotica_common::{datetime::utc_now, mqtt::MqttMessage, robotica::entities::Id};
 use robotica_macro::time_delta_constant;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::{
     select,
     time::{sleep_until, Instant},
 };
 use tracing::{debug, warn};
+
+pub use robotica_common::robotica::occupancy::PresenceTrackerValue;
 
 /// The configuration of a Presence Tracker
 #[derive(Deserialize, Debug)]
@@ -25,8 +27,6 @@ pub struct Config {
 
 #[derive(Deserialize)]
 struct EspresenceMessage {
-    // mac: String,
-    // id: String,
     distance: f32,
 }
 
@@ -46,16 +46,7 @@ pub enum EspresenceMessageError {
 #[derive(Clone, Debug)]
 pub struct EspresenceMessageWithRoom {
     room: String,
-    // mac: String,
-    // id: String,
     distance: f32,
-}
-
-/// The resultant Presence Tracker that is reported
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct PresenceTrackerValue {
-    room: Option<String>,
-    distance: Option<f32>,
 }
 
 struct State {

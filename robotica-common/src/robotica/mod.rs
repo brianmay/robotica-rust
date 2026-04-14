@@ -8,5 +8,6 @@ pub mod http_api;
 pub mod lights;
 pub mod locations;
 pub mod message;
+pub mod occupancy;
 pub mod switch;
 pub mod tasks;
