@@ -154,59 +154,63 @@ impl Component for OccupancyViewComponent {
             <RequireConnection>
                 <div class="container">
                     <h1>{ "Occupancy" }</h1>
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th scope="col">{"ID"}</th>
-                                <th scope="col">{"Presence"}</th>
-                                <th scope="col">{"Occupancy"}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {
-                                all_ids.iter().map(|id| {
-                                    let presence = self.presences.get(id);
-                                    let occupancy = self.occupancies.get(id);
-                                    html! {
-                                        <tr>
-                                            <td>{ id }</td>
-                                            <td>
-                                                {
-                                                    if let Some(p) = presence {
-                                                        html! {
-                                                            <>
-                                                            { p.room.as_deref().unwrap_or("None") }
-                                                            { " (" }
-                                                            { p.distance.map(|d| format!("{d:.1}m")).unwrap_or_default() }
-                                                            { ")" }
-                                                            </>
-                                                        }
-                                                    } else {
-                                                        html! { "—" }
-                                                    }
-                                                }
-                                            </td>
-                                            <td>
-                                                {
-                                                    if let Some(o) = occupancy {
-                                                        html! {
-                                                            if o.is_occupied() {
-                                                                {"Occupied"}
-                                                            } else {
-                                                                {"Vacant"}
+                    if all_ids.is_empty() {
+                        <p>{"No occupancy or presence data received yet."}</p>
+                    } else {
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{"ID"}</th>
+                                    <th scope="col">{"Presence"}</th>
+                                    <th scope="col">{"Occupancy"}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {
+                                    all_ids.iter().map(|id| {
+                                        let presence = self.presences.get(id);
+                                        let occupancy = self.occupancies.get(id);
+                                        html! {
+                                            <tr>
+                                                <td>{ id }</td>
+                                                <td>
+                                                    {
+                                                        if let Some(p) = presence {
+                                                            html! {
+                                                                <>
+                                                                { p.room.as_deref().unwrap_or("None") }
+                                                                { " (" }
+                                                                { p.distance.map(|d| format!("{d:.1}m")).unwrap_or_default() }
+                                                                { ")" }
+                                                                </>
                                                             }
+                                                        } else {
+                                                            html! { "—" }
                                                         }
-                                                    } else {
-                                                        html! { "—" }
                                                     }
-                                                }
-                                            </td>
-                                        </tr>
-                                    }
-                                }).collect::<Html>()
-                            }
-                        </tbody>
-                    </table>
+                                                </td>
+                                                <td>
+                                                    {
+                                                        if let Some(o) = occupancy {
+                                                            html! {
+                                                                if o.is_occupied() {
+                                                                    {"Occupied"}
+                                                                } else {
+                                                                    {"Vacant"}
+                                                                }
+                                                            }
+                                                        } else {
+                                                            html! { "—" }
+                                                        }
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }).collect::<Html>()
+                                }
+                            </tbody>
+                        </table>
+                    }
                 </div>
             </RequireConnection>
         }
