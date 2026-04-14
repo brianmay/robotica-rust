@@ -13,7 +13,7 @@ use tower_sessions::Session;
 use tracing::{debug, error};
 
 use robotica_common::{
-    mqtt::MqttMessage,
+    mqtt::{topic_matches_any, MqttMessage},
     protobuf::ProtobufEncoderDecoder,
     version::Version,
     websocket::{WsCommand, WsError, WsStatus},
@@ -21,7 +21,7 @@ use robotica_common::{
 
 use crate::{
     pipes::{stateful, Subscriber, Subscription},
-    services::mqtt::{topics::topic_matches_any, MqttTx},
+    services::mqtt::MqttTx,
 };
 
 use super::{get_user, Config, User};

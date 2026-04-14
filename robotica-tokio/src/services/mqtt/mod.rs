@@ -1,5 +1,4 @@
 //! Source (and sink) for MQTT data.
-pub mod topics;
 
 use rumqttc::tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
@@ -15,10 +14,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error};
 
-use robotica_common::mqtt::{Json, MqttMessage, MqttSerializer, QoS, Retain};
+use robotica_common::mqtt::{topic_matches, Json, MqttMessage, MqttSerializer, QoS, Retain};
 
 use crate::pipes::{generic, stateful, stateless};
-use crate::services::mqtt::topics::topic_matches;
 use crate::spawn;
 
 const NUMBER_OF_STARTUP_MESSAGES: usize = 100;

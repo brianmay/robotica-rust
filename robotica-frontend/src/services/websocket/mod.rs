@@ -16,7 +16,7 @@ use web_sys::window;
 use yew::Callback;
 
 use robotica_common::{
-    mqtt::MqttMessage,
+    mqtt::{topic_matches, MqttMessage},
     protobuf::ProtobufEncoderDecoder,
     user::User,
     version::Version,
@@ -184,14 +184,16 @@ impl Subscriptions {
                 SubscribeTo::Mqtt(topic, ..) => Some(topic),
                 SubscribeTo::Events(..) => None,
             })
-            .any(|t| t == topic)
+            .any(|t| topic_matches(topic, t))
     }
 
     fn dispatch_mqtt(&self, msg: &MqttMessage) {
         self.subscriptions
             .values()
             .filter_map(|to| match to {
-                SubscribeTo::Mqtt(topic, callback) if *topic == msg.topic => Some(callback),
+                SubscribeTo::Mqtt(topic, callback) if topic_matches(&msg.topic, topic) => {
+                    Some(callback)
+                }
                 _ => None,
             })
             .for_each(|callback: &Callback<MqttMessage>| {
