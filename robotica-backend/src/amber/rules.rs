@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Prices;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Context {
     days_since_epoch: i32,
     hour: i32,
@@ -144,20 +144,11 @@ impl<T> RuleSet<T> {
         Self { rules }
     }
 
-    pub fn apply<TZ: TimeZone>(
-        &self,
-        prices: &Prices,
-        now: DateTime<Utc>,
-        is_on: bool,
-        timezone: &TZ,
-    ) -> Option<&T> {
-        let id = Id::new("test");
-        let context = Context::new(&id, prices, now, is_on, timezone);
-
+    pub fn apply(&self, context: &Context) -> Option<&T> {
         self.rules
             .iter()
             .find(|rule| {
-                rule.condition.eval(&context).unwrap_or_else(|e| {
+                rule.condition.eval(context).unwrap_or_else(|e| {
                     tracing::error!("Error evaluating rule: {:?}", e);
                     false
                 })

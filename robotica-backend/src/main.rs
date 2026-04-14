@@ -223,6 +223,20 @@ async fn setup_pipes(
         })
         .collect();
 
+    for (tracker_id, tracker) in &presence_trackers {
+        let tracker_id = tracker_id.clone();
+        let mqtt = state.mqtt.clone();
+        tracker.clone().for_each(move |(_, value)| {
+            debug!("Presence tracker {tracker_id} value: {value:?}");
+            mqtt.try_serialize_send(
+                format!("robotica/state/{tracker_id}/presence"),
+                &Json(value),
+                Retain::Retain,
+                QoS::AtLeastOnce,
+            );
+        });
+    }
+
     // presence_trackers[0].clone().for_each(|(_, present)| {
     //     error!("Is Brian present? {present:#?}");
     // });
@@ -236,6 +250,20 @@ async fn setup_pipes(
             (room.room, rx)
         })
         .collect();
+
+    for (occupancy_id, occupancy) in &occupancy_sensors {
+        let occupancy_id = occupancy_id.clone();
+        let mqtt = state.mqtt.clone();
+        occupancy.clone().for_each(move |(_, value)| {
+            debug!("Occupancy sensor {occupancy_id} value: {value:?}");
+            mqtt.try_serialize_send(
+                format!("robotica/state/{occupancy_id}/occupancy"),
+                &Json(value),
+                Retain::Retain,
+                QoS::AtLeastOnce,
+            );
+        });
+    }
 
     // is_any_presence_in_room("brian", presence_trackers.clone()).for_each(|(_, present)| {
     //     error!("Is anyone present in brian? {present}");

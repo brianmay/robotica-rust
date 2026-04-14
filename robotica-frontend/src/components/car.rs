@@ -99,6 +99,7 @@ impl Component for CarComponent {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
         let id = Id::new(&props.id);
@@ -110,7 +111,7 @@ impl Component for CarComponent {
         };
         let title = car.as_ref().map_or("Unknown", |car| car.title.as_str());
 
-        let props = SwitchProps {
+        let switch_props = SwitchProps {
             name: "Charge".to_string(),
             icon: Icon::Light,
             action: Action::Toggle,
@@ -119,28 +120,98 @@ impl Component for CarComponent {
 
         html! {
             <RequireConnection>
-                <div>
+                <div class="container">
                    {  if let Some(state) = &self.state {
                         html! {
                             <div>
                                 <h1>{ format!("Car: {title}") }</h1>
-                                <p>{ format!("State: {:?}", state) }</p>
-                                <p> { "battery:" } { state.battery_level } </p>
-                                <p> { "min charge tomorrow:" } { state.min_charge_tomorrow } </p>
-                                <p> { "result:" } { state.get_result() } </p>
-
-                                {
-                                    if let Some(plan) = state.combined.get_plan().get() {
-                                        html!{ <>
-                                        <p> { "start:" } { datetime_to_time_string(plan.get_start_time()) } </p>
-                                        <p> { "end:" } { datetime_to_time_string(plan.get_end_time()) } </p>
-                                        <p> { "request:" } { plan.get_request() } </p>
-                                        <p> { "timedelta:" } { time_delta::to_string(plan.get_timedelta()) } </p>
-                                        </>}
-                                    } else {
-                                        html!{ <p> { "No plan" } </p> }
-                                    }
-                               }
+                                <table class="table table-striped">
+                                    <tbody>
+                                        <tr>
+                                            <th scope="row">{"Battery Level"}</th>
+                                            <td>{ state.battery_level }{ "%" }</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">{"Min Charge Tomorrow"}</th>
+                                            <td>{ state.min_charge_tomorrow }{ "%" }</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">{"Current Result"}</th>
+                                            <td>{ state.get_result().to_string() }</td>
+                                        </tr>
+                                        {
+                                            if let Some(plan) = state.combined.get_plan().get() {
+                                                html!{ <>
+                                                <tr>
+                                                    <th scope="row">{"Plan Start"}</th>
+                                                    <td>{ datetime_to_time_string(plan.get_start_time()) }</td>
+                                                </tr>
+                                                <tr>
+                                                    <th scope="row">{"Plan End"}</th>
+                                                    <td>{ datetime_to_time_string(plan.get_end_time()) }</td>
+                                                </tr>
+                                                <tr>
+                                                    <th scope="row">{"Plan Result"}</th>
+                                                    <td>{ plan.get_request().to_string() }</td>
+                                                </tr>
+                                                <tr>
+                                                    <th scope="row">{"Plan Duration"}</th>
+                                                    <td>{ time_delta::to_string(plan.get_timedelta()) }</td>
+                                                </tr>
+                                                <tr>
+                                                    <th scope="row">{"Plan Cost"}</th>
+                                                    <td>{ format!("{:.2}p", plan.get_total_cost()) }</td>
+                                                </tr>
+                                                </>}
+                                            } else {
+                                                html!{ <>
+                                                <tr>
+                                                    <th scope="row">{"Plan"}</th>
+                                                    <td>{ "No active plan" }</td>
+                                                </tr>
+                                                </>}
+                                            }
+                                        }
+                                        <tr>
+                                            <th scope="row">{"Rules"}</th>
+                                            <td>
+                                                <ul class="list-unstyled mb-0">
+                                                    {
+                                                        state.combined.get_rules().get_rules().iter().map(|rule| {
+                                                            html! {
+                                                                <li>{ rule.get_condition() }{ ": " }{ rule.get_result().to_string() }</li>
+                                                            }
+                                                        }).collect::<Html>()
+                                                    }
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">{"Rules Context"}</th>
+                                            <td>
+                                                <ul class="list-unstyled mb-0">
+                                                    <li>{ "Day of week: " }{ state.combined.get_rules_context().get_day_of_week() }</li>
+                                                    <li>{ "Hour: " }{ state.combined.get_rules_context().get_hour() }</li>
+                                                    <li>{ "Current price: " }{ format!("{:.2}p", state.combined.get_rules_context().get_current_price()) }</li>
+                                                    <li>{ "Weighted price: " }{ format!("{:.2}p", state.combined.get_rules_context().get_weighted_price()) }</li>
+                                                    <li>{ "Is on: " }{ state.combined.get_rules_context().get_is_on().to_string() }</li>
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                        {
+                                            if let Some(rules_result) = state.combined.get_rules_result() {
+                                                html!{ <>
+                                                <tr>
+                                                    <th scope="row">{"Rules Result"}</th>
+                                                    <td>{ rules_result.to_string() }</td>
+                                                </tr>
+                                                </>}
+                                            } else {
+                                                html! {}
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
                             </div>
                         }
                     } else {
@@ -149,8 +220,8 @@ impl Component for CarComponent {
                         }
                     } }
                 </div>
-                <div>
-                  <Button<SwitchProps> ..props />
+                <div class="mt-3">
+                  <Button<SwitchProps> ..switch_props />
                 </div>
             </RequireConnection>
         }

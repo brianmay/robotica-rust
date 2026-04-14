@@ -8,7 +8,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use robotica_common::{datetime::utc_now, mqtt::MqttMessage, robotica::entities::Id};
 use robotica_macro::time_delta_constant;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
     select,
@@ -52,9 +52,10 @@ pub struct EspresenceMessageWithRoom {
 }
 
 /// The resultant Presence Tracker that is reported
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct PresenceTrackerValue {
     room: Option<String>,
+    distance: Option<f32>,
 }
 
 struct State {
@@ -110,7 +111,7 @@ pub fn run(
                     }
                 } => {
                     debug!("{}: Away timeout reached", config.id);
-                    tx.try_send(PresenceTrackerValue { room: None });
+                    tx.try_send(PresenceTrackerValue { room: None, distance: None });
                     maybe_state = None;
                 }
 
@@ -146,7 +147,7 @@ pub fn run(
                             }
                         }
                     };
-                    tx.try_send(PresenceTrackerValue { room: Some(new_state.room.clone()) });
+                    tx.try_send(PresenceTrackerValue { room: Some(new_state.room.clone()), distance: Some(new_state.distance) });
                     maybe_state = Some(new_state);
                 }
             }

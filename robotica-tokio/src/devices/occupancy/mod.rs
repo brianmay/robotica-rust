@@ -23,7 +23,7 @@ pub struct Config {
 }
 
 /// The occupancy state
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum OccupiedState {
     /// The space is occupied
     Occupied,

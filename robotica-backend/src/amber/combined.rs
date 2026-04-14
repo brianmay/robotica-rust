@@ -5,6 +5,8 @@ use serde::Serialize;
 use std::fmt::Debug;
 use tracing::info;
 
+use crate::amber::rules::Context;
+
 use super::{rules::RuleSet, user_plan::MaybeUserPlan, Prices};
 
 pub trait Max {
@@ -64,14 +66,13 @@ impl<R: RequestTrait> Meters<R> {
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct State<R> {
     time: DateTime<Utc>,
-    plan_request: Option<R>,
-    rules_request: Option<R>,
-    result: R,
     plan: MaybeUserPlan<R>,
 
-    // #[serde(with = "robotica_common::datetime::with_option_time_delta")]
-    // estimated_time_to_plan: Option<TimeDelta>,
     rules: RuleSet<R>,
+    rules_result: Option<R>,
+    rules_context: Context,
+
+    result: R,
 }
 
 impl<R> State<R> {
@@ -81,10 +82,6 @@ impl<R> State<R> {
 
     // pub const fn get_rules(&self) -> &RuleSet<R> {
     //     &self.rules
-    // }
-
-    // pub const fn get_estimated_time_to_plan(&self) -> Option<TimeDelta> {
-    //     self.estimated_time_to_plan
     // }
 }
 
@@ -110,9 +107,10 @@ where
     R: Copy + Debug + Max + Default + RequestTrait,
     TZ: TimeZone,
 {
-    let rules_request = rules.apply(prices, now, is_on, timezone).copied();
+    let context = Context::new(id, prices, now, is_on, timezone);
+    let rules_result = rules.apply(&context).copied();
 
-    let plan_request = plan.get().and_then(|plan| {
+    let plan_result = plan.get().and_then(|plan| {
         if plan.is_current(now) {
             Some(*plan.get_request())
         } else {
@@ -120,10 +118,8 @@ where
         }
     });
 
-    // let estimated_time_to_plan = plan.get_plan().map(|p| p.get_time_left(now));
-
     // get the largest value out of force and normal
-    let combined_request = match (rules_request, plan_request) {
+    let combined_result = match (rules_result, plan_result) {
         (Some(rules_request), Some(plan_request)) => rules_request.max(plan_request),
         (Some(rules_request), None) => rules_request,
         (None, Some(plan_request)) => plan_request,
@@ -132,26 +128,25 @@ where
 
     info!(
         %id,
-        ?plan_request,
-        ?rules_request,
-        ?combined_request,
+        ?plan_result,
+        ?rules_result,
+        ?combined_result,
         "combined request"
     );
 
     if let Some(meters) = meters {
-        meters.set_requested(rules_request, Reason::Rules);
-        meters.set_requested(plan_request, Reason::Plan);
-        meters.set_requested(Some(combined_request), Reason::Combined);
+        meters.set_requested(rules_result, Reason::Rules);
+        meters.set_requested(plan_result, Reason::Plan);
+        meters.set_requested(Some(combined_result), Reason::Combined);
     }
 
     State {
         time: now,
-        result: combined_request,
+        result: combined_result,
         plan: plan.clone(),
-        // estimated_time_to_plan,
-        plan_request,
         rules: rules.clone(),
-        rules_request,
+        rules_result,
+        rules_context: context,
     }
 }
 
@@ -249,13 +244,13 @@ mod tests {
     #[rstest::rstest]
     #[case(
         dt("2020-01-01T00:00:00Z"),
-        Some(TestRequest(72)),
+        TestRequest(72),
         Some(TestRequest(50)),
         TestRequest(72)
     )]
     fn test_get_request(
         #[case] now: DateTime<Utc>,
-        #[case] expected_plan: Option<TestRequest>,
+        #[case] expected_plan: TestRequest,
         #[case] expected_rules: Option<TestRequest>,
         #[case] expected_result: TestRequest,
     ) {
@@ -299,14 +294,13 @@ mod tests {
         ]
         .pipe(rules::RuleSet::new);
 
-        let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), TestRequest(72));
+        let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), expected_plan);
         let id = Id::new("test");
 
         let state = get_request(&id, &plan, &rules, &prices, false, None, now, &timezone);
 
         assert_eq!(state.time, now);
-        assert_eq!(state.plan_request, expected_plan);
-        assert_eq!(state.rules_request, expected_rules);
+        assert_eq!(state.rules_result, expected_rules);
         assert_eq!(state.get_result(), expected_result);
         assert_eq!(state.plan, plan);
     }
