@@ -1,6 +1,6 @@
 use robotica_common::robotica::entities::Id;
 use robotica_tokio::{
-    pipes::stateless,
+    pipes::stateful,
     services::{
         persistent_state::{self, PersistentStateRow},
         tesla::api::{self, Token},
@@ -33,8 +33,8 @@ pub enum Error {
     PersistentStateError(#[from] persistent_state::Error),
 }
 
-pub fn run(id: &Id, state: &InitState) -> Result<stateless::Receiver<Arc<Token>>, Error> {
-    let (tx, rx) = stateless::create_pipe("tesla_token");
+pub fn run(id: &Id, state: &InitState) -> Result<stateful::Receiver<Arc<Token>>, Error> {
+    let (tx, rx) = stateful::create_pipe("tesla_token");
     let id = id.clone();
 
     let tesla_secret = state.persistent_state_database.for_name(&id, "tesla_token");

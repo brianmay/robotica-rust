@@ -6,7 +6,7 @@ use robotica_common::robotica::{
 };
 use robotica_macro::time_delta_constant;
 use robotica_tokio::{
-    pipes::{stateless, Subscriber, Subscription},
+    pipes::{stateful, stateless, Subscriber, Subscription},
     services::tesla::api::{self, CommandSequence, SequenceError, Token},
     spawn,
 };
@@ -233,7 +233,7 @@ pub fn run(
     car: &car::Config,
     tesla: &Config,
     rx: stateless::Receiver<Command>,
-    rx_token: stateless::Receiver<Arc<Token>>,
+    rx_token: stateful::Receiver<Arc<Token>>,
 ) -> stateless::Receiver<Message> {
     let car = car.clone();
     let tesla = tesla.clone();

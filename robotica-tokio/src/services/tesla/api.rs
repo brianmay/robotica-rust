@@ -345,7 +345,7 @@ impl std::fmt::Debug for RawToken {
 
 /// Token to access the Tesla API
 #[allow(clippy::struct_field_names)]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Token {
     access_token: String,
     refresh_token: String,

@@ -523,7 +523,7 @@ fn monitor_tesla(
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
-    token: &stateless::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
+    token: &stateful::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
     message_sink: &stateless::Sender<Message>,
 ) {
     let auto_charge = state
