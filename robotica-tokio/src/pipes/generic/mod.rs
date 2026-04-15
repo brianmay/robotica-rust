@@ -54,7 +54,6 @@ where
                         Some(SendMessage::Set(data)) => {
                             replay_data.push(data.clone());
                             if replay_data.len() > PIPE_SIZE {
-                                error!("generic::create_pipe({name}): replay_data exceeded PIPE_SIZE, dropping oldest value");
                                 replay_data.remove(0);
                             }
                             if let Err(_err) = out_tx.send(data) {
