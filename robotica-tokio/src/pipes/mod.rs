@@ -9,10 +9,10 @@ pub mod stateful;
 pub mod stateless;
 
 /// Size of all pipes.
-pub const PIPE_SIZE: usize = 10;
+pub const PIPE_SIZE: usize = 50;
 
 /// Maximum number of values to store per index for replay in indexed pipes.
-pub const MAX_INDEXED_REPLAY_SIZE: usize = 100;
+pub const MAX_INDEXED_REPLAY_SIZE: usize = 500;
 
 /// Something went wrong in Receiver.
 #[derive(Error, Debug)]
