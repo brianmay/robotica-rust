@@ -13,6 +13,13 @@ use robotica_common::{
 use tracing::debug;
 use yew::prelude::*;
 
+#[derive(Clone, Debug)]
+struct PersonPresence {
+    person_id: String,
+    distance: Option<f32>,
+}
+
+#[allow(dead_code)]
 pub enum Msg {
     SubscribedPresence(Subscription),
     SubscribedOccupancy(Subscription),
@@ -29,7 +36,8 @@ pub struct Props {
 pub struct OccupancyViewComponent {
     presence_subscription: Option<Subscription>,
     occupancy_subscription: Option<Subscription>,
-    presences: HashMap<String, PresenceTrackerValue>,
+    room_presences: HashMap<String, Vec<PersonPresence>>,
+    person_to_room: HashMap<String, String>,
     occupancies: HashMap<String, OccupiedState>,
     config: Option<Arc<Config>>,
     _config_handle: ContextHandle<Option<Arc<Config>>>,
@@ -88,7 +96,7 @@ impl Component for OccupancyViewComponent {
     fn create(ctx: &Context<Self>) -> Self {
         let (config, config_handle): (Option<Arc<Config>>, _) = ctx
             .link()
-            .context(ctx.link().callback(Msg::Config))
+            .context(ctx.link().batch_callback(|_| None))
             .unwrap();
 
         subscribe_presence(ctx);
@@ -96,7 +104,8 @@ impl Component for OccupancyViewComponent {
         Self {
             presence_subscription: None,
             occupancy_subscription: None,
-            presences: HashMap::new(),
+            room_presences: HashMap::new(),
+            person_to_room: HashMap::new(),
             occupancies: HashMap::new(),
             config,
             _config_handle: config_handle,
@@ -119,10 +128,34 @@ impl Component for OccupancyViewComponent {
             }
             Msg::Presence(msg) => {
                 debug!("Presence message: {:?}", msg);
-                if let Some(id) = extract_id_from_topic(&msg.topic, "presence") {
-                    if let Ok(Json(value)) = msg.try_into() {
-                        self.presences.insert(id, value);
-                        return true;
+                if let Some(person_id) = extract_id_from_topic(&msg.topic, "presence") {
+                    if let Ok(Json(value)) = Json::<PresenceTrackerValue>::try_from(msg) {
+                        let old_room = self.person_to_room.get(&person_id).cloned();
+                        let new_room = value.room.clone();
+
+                        if old_room != new_room {
+                            if let Some(old) = old_room {
+                                if let Some(list) = self.room_presences.get_mut(&old) {
+                                    list.retain(|p| p.person_id != person_id);
+                                }
+                            }
+                            if let Some(new) = &new_room {
+                                let entry = self.room_presences.entry(new.clone()).or_default();
+                                if !entry.iter().any(|p| p.person_id == person_id) {
+                                    entry.push(PersonPresence {
+                                        person_id: person_id.clone(),
+                                        distance: value.distance,
+                                    });
+                                }
+                            }
+                            if let Some(new_room) = new_room {
+                                self.person_to_room.insert(person_id.clone(), new_room);
+                            } else {
+                                self.person_to_room.remove(&person_id);
+                            }
+                            return true;
+                        }
+                        return false;
                     }
                 }
                 false
@@ -145,44 +178,48 @@ impl Component for OccupancyViewComponent {
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
-        let mut all_ids: Vec<String> = self.presences.keys().cloned().collect();
-        all_ids.extend(self.occupancies.keys().cloned());
-        all_ids.sort();
-        all_ids.dedup();
+        let mut all_rooms: Vec<String> = self.room_presences.keys().cloned().collect();
+        all_rooms.extend(self.occupancies.keys().cloned());
+        all_rooms.sort();
+        all_rooms.dedup();
 
         html! {
             <RequireConnection>
                 <div class="container">
                     <h1>{ "Occupancy" }</h1>
-                    if all_ids.is_empty() {
+                    if all_rooms.is_empty() {
                         <p>{"No occupancy or presence data received yet."}</p>
                     } else {
                         <table class="table table-striped">
                             <thead>
                                 <tr>
-                                    <th scope="col">{"ID"}</th>
+                                    <th scope="col">{"Room"}</th>
                                     <th scope="col">{"Presence"}</th>
                                     <th scope="col">{"Occupancy"}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {
-                                    all_ids.iter().map(|id| {
-                                        let presence = self.presences.get(id);
-                                        let occupancy = self.occupancies.get(id);
+                                    all_rooms.iter().map(|room| {
+                                        let presences = self.room_presences.get(room);
+                                        let occupancy = self.occupancies.get(room);
                                         html! {
                                             <tr>
-                                                <td>{ id }</td>
+                                                <td>{ room }</td>
                                                 <td>
                                                     {
-                                                        if let Some(p) = presence {
-                                                            html! {
-                                                                <>
-                                                                { p.room.as_deref().unwrap_or("None") }
-                                                                { " (" }
-                                                                { p.distance.map(|d| format!("{d:.1}m")).unwrap_or_default() }
-                                                                { ")" }
-                                                                </>
+                                                        if let Some(people) = presences {
+                                                            if people.is_empty() {
+                                                                html! { "—" }
+                                                            } else {
+                                                                html! {
+                                                                    { people.iter().map(|p| {
+                                                                        let dist = p.distance.map(|d| format!(" ({d:.1}m)")).unwrap_or_default();
+                                                                        html! {
+                                                                            <span>{ format!("{}{}", p.person_id, dist) }</span>
+                                                                        }
+                                                                    }).collect::<Html>() }
+                                                                }
                                                             }
                                                         } else {
                                                             html! { "—" }

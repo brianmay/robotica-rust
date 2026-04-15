@@ -1,4 +1,4 @@
-//! Stateless sender code.
+//! Stateful sender code.
 use tokio::sync::mpsc;
 use tracing::error;
 
