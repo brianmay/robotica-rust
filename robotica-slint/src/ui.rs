@@ -161,97 +161,118 @@ pub fn run_gui(
     ui.set_number_per_row(i32::from(config.number_per_row));
     ui.hide().unwrap();
 
-    {
-        let handle_weak = ui.as_weak();
-        let name = config.ui_config_name.clone();
-        let mqtt = state.mqtt.clone();
-        tokio::spawn(async move {
-            let topic = format!("robotica/config/{name}");
-            let rx = mqtt
-                .subscribe_into_stateless::<Json<Arc<CommonConfig>>>(topic)
-                .await
-                .unwrap();
-            let mut rx = rx.subscribe().await;
-            let mut rx_room = rx_room;
-
-            #[allow(clippy::collection_is_never_read)]
-            let mut _guard = None;
-            let mut maybe_common_config: Option<Arc<CommonConfig>> = None;
-            let mut maybe_selected_room = None;
-
-            loop {
-                select! {
-                    msg = rx_room.recv() => if let Some(room) = msg {
-                        if let Some(common_config) = &maybe_common_config {
-                            maybe_selected_room = common_config.rooms.iter().find(|r| r.title == room).map(|r| r.id.clone());
-                        } else {
-                            maybe_selected_room = None;
-                        }
-                    } else {
-                        error!("Error receiving room");
-                        break;
-                    },
-                    msg = rx.recv() => match msg {
-                        Ok(Json(common_config)) => {
-                            maybe_common_config = Some(common_config);
-                        }
-                        Err(err) => {
-                            error!("Error receiving config: {}", err);
-                            break;
-                        }
-                    }
-                }
-
-                if let Some(common_config) = maybe_common_config.clone() {
-                    let mqtt = mqtt.clone();
-                    let cancellation = CancellationToken::new();
-                    _guard = cancellation.clone().drop_guard().pipe(Some);
-
-                    let rooms = common_config
-                        .rooms
-                        .iter()
-                        .map(|r| r.title.clone().pipe(SharedString::from))
-                        .collect::<Vec<_>>();
-
-                    let selected_room = common_config
-                        .rooms
-                        .iter()
-                        .find(|r| Some(&r.id) == maybe_selected_room.as_ref())
-                        .cloned()
-                        .or_else(|| common_config.rooms.first().cloned());
-
-                    handle_weak
-                        .upgrade_in_event_loop(move |handle| {
-                            handle.set_rooms(ModelRc::new(VecModel::from(rooms)));
-
-                            let id = if let Some(selected_room) = selected_room {
-                                handle.set_selected_room(selected_room.title.into());
-                                Some(selected_room.id)
-                            } else {
-                                handle.set_selected_room("".into());
-                                None
-                            };
-
-                            setup_config(
-                                &handle,
-                                &common_config,
-                                id.as_ref(),
-                                &mqtt,
-                                &cancellation,
-                            );
-                        })
-                        .unwrap();
-                }
-            }
-        });
-    }
+    spawn_config_monitor(
+        ui.as_weak(),
+        config.ui_config_name.clone(),
+        state.mqtt.clone(),
+        rx_room,
+    );
 
     monitor_room_change(&ui, tx_room);
     monitor_screen_reset(&state, &ui);
     monitor_display(config, &ui, rx_screen_command);
     monitor_time(&ui);
 
-    ui.run().unwrap();
+    let max_retries = 5;
+    let mut attempt = 0;
+    loop {
+        match ui.run() {
+            Ok(()) => break,
+            Err(e) => {
+                attempt += 1;
+                if attempt >= max_retries {
+                    error!("Failed to start UI after {} attempts: {e}", max_retries);
+                    panic!("Error running winit event loop: {e}");
+                }
+                tracing::warn!(
+                    "Failed to start UI (attempt {}/{}): {e}. Retrying in 1s...",
+                    attempt,
+                    max_retries
+                );
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+}
+
+fn spawn_config_monitor(
+    handle_weak: Weak<slint::AppWindow>,
+    name: String,
+    mqtt: MqttTx,
+    mut rx_room: mpsc::Receiver<String>,
+) {
+    tokio::spawn(async move {
+        let topic = format!("robotica/config/{name}");
+        let rx = mqtt
+            .subscribe_into_stateless::<Json<Arc<CommonConfig>>>(topic)
+            .await
+            .unwrap();
+        let mut rx = rx.subscribe().await;
+
+        #[allow(clippy::collection_is_never_read)]
+        let mut _guard = None;
+        let mut maybe_common_config: Option<Arc<CommonConfig>> = None;
+        let mut maybe_selected_room = None;
+
+        loop {
+            select! {
+                msg = rx_room.recv() => if let Some(room) = msg {
+                    if let Some(common_config) = &maybe_common_config {
+                        maybe_selected_room = common_config.rooms.iter().find(|r| r.title == room).map(|r| r.id.clone());
+                    } else {
+                        maybe_selected_room = None;
+                    }
+                } else {
+                    error!("Error receiving room");
+                    break;
+                },
+                msg = rx.recv() => match msg {
+                    Ok(Json(common_config)) => {
+                        maybe_common_config = Some(common_config);
+                    }
+                    Err(err) => {
+                        error!("Error receiving config: {err}");
+                        break;
+                    }
+                }
+            }
+
+            if let Some(common_config) = maybe_common_config.clone() {
+                let mqtt = mqtt.clone();
+                let cancellation = CancellationToken::new();
+                _guard = cancellation.clone().drop_guard().pipe(Some);
+
+                let rooms = common_config
+                    .rooms
+                    .iter()
+                    .map(|r| r.title.clone().pipe(SharedString::from))
+                    .collect::<Vec<_>>();
+
+                let selected_room = common_config
+                    .rooms
+                    .iter()
+                    .find(|r| Some(&r.id) == maybe_selected_room.as_ref())
+                    .cloned()
+                    .or_else(|| common_config.rooms.first().cloned());
+
+                handle_weak
+                    .upgrade_in_event_loop(move |handle| {
+                        handle.set_rooms(ModelRc::new(VecModel::from(rooms)));
+
+                        let id = if let Some(selected_room) = selected_room {
+                            handle.set_selected_room(selected_room.title.into());
+                            Some(selected_room.id)
+                        } else {
+                            handle.set_selected_room("".into());
+                            None
+                        };
+
+                        setup_config(&handle, &common_config, id.as_ref(), &mqtt, &cancellation);
+                    })
+                    .unwrap();
+            }
+        }
+    });
 }
 
 fn setup_config(
