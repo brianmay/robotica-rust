@@ -1,4 +1,4 @@
-//! Stateless sender code.
+//! Generic sender code.
 use tokio::sync::mpsc;
 use tracing::error;
 
@@ -11,14 +11,14 @@ pub(super) enum SendMessage<T> {
 pub struct Sender<T> {
     #[allow(dead_code)]
     pub(super) name: String,
-    pub(super) tx: mpsc::Sender<SendMessage<T>>,
+    pub(super) tx: mpsc::UnboundedSender<SendMessage<T>>,
 }
 
 impl<T> Sender<T> {
-    /// Send data to the entity or fail if buffer is full.
+    /// Send data to the entity.
     pub fn try_send(&self, data: T) {
         let msg = SendMessage::Set(data);
-        if let Err(err) = self.tx.try_send(msg) {
+        if let Err(err) = self.tx.send(msg) {
             error!("send failed({}): {}", self.name, err);
         }
     }
@@ -30,10 +30,7 @@ impl<T> Sender<T> {
     }
 
     /// Completes when the entity is closed.
-    pub async fn closed(&self)
-    where
-        T: Send,
-    {
+    pub async fn closed(&self) {
         self.tx.closed().await;
     }
 }

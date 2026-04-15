@@ -24,7 +24,7 @@ pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
     T: Clone + Send + 'static,
 {
-    let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
+    let (send_tx, send_rx) = mpsc::unbounded_channel::<SendMessage<T>>();
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
 

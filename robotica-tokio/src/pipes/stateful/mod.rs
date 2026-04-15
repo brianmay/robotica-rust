@@ -29,7 +29,7 @@ pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
     T: Clone + PartialEq + Send + 'static,
 {
-    let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
+    let (send_tx, send_rx) = mpsc::unbounded_channel::<SendMessage<T>>();
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<OldNewType<T>>(PIPE_SIZE);
 
@@ -113,7 +113,7 @@ pub fn create_indexed_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T
 where
     T: Clone + PartialEq + Send + 'static + HasIndex,
 {
-    let (send_tx, send_rx) = mpsc::channel::<SendMessage<T>>(PIPE_SIZE);
+    let (send_tx, send_rx) = mpsc::unbounded_channel::<SendMessage<T>>();
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
     let (out_tx, out_rx) = broadcast::channel::<OldNewType<T>>(PIPE_SIZE);
 
