@@ -162,11 +162,9 @@ fn rainbow_entity(name: impl Into<String>) -> stateful::Receiver<PowerColor> {
 
 pub struct Inputs {
     pub commands: stateless::Receiver<Json<Command>>,
-    // pub auto: stateful::Receiver<PowerColor>,
 }
 
 pub struct Outputs {
-    // pub state: stateful::Receiver<State>,
     pub scene: stateful::Receiver<SceneName>,
     pub pc: stateful::Receiver<PowerColor>,
 }
@@ -175,7 +173,6 @@ pub struct Outputs {
 pub fn run_auto_light(
     inputs: Inputs,
     persistent_state_database: &crate::PersistentStateDatabase,
-    // discover: stateless::Receiver<Device>,
     scene_map: SceneMap,
     flash_color: PowerColor,
     id: &Id,
@@ -213,7 +210,6 @@ pub struct SplitOutputs {
 pub fn run_split_light(
     inputs: Inputs,
     persistent_state_database: &crate::PersistentStateDatabase,
-    // discover: stateless::Receiver<Device>,
     scene_map: SceneMap,
     flash_color: PowerColor,
     // id: impl Into<String>,
@@ -254,8 +250,6 @@ pub struct MergeLightConfig {
 #[must_use]
 pub fn run_merge_light(
     split_rx: stateful::Receiver<SplitPowerColor>,
-    // discover: stateless::Receiver<Device>,
-    // lifx_id: LifxId,
     id: &Id,
     config: MergeLightConfig,
 ) -> stateful::Receiver<PowerColor> {
