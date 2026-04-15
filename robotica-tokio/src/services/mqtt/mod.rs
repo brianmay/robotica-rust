@@ -5,14 +5,16 @@ use rumqttc::v5::mqttbytes::v5::{Filter, Packet, Publish};
 use rumqttc::v5::{AsyncClient, ClientError, Event, Incoming, MqttOptions};
 use rumqttc::Transport;
 use serde::Deserialize;
+use std::collections::VecDeque;
 use std::num::ParseIntError;
 use std::str;
 use std::str::Utf8Error;
 use thiserror::Error;
+
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, Duration};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use robotica_common::mqtt::{topic_matches, Json, MqttMessage, MqttSerializer, QoS, Retain};
 
@@ -21,6 +23,7 @@ use crate::spawn;
 
 const NUMBER_OF_STARTUP_MESSAGES: usize = 100;
 const NUMBER_OF_STARTUP_SUBSCRIPTIONS: usize = 100;
+const OFFLINE_BUFFER_SIZE: usize = 1000;
 
 const fn qos_to_rumqttc(qos: QoS) -> rumqttc::v5::mqttbytes::QoS {
     match qos {
@@ -190,6 +193,35 @@ pub struct MqttRx {
     rx: mpsc::Receiver<MqttCommand>,
 }
 
+struct OfflineBuffer {
+    messages: VecDeque<MqttMessage>,
+}
+
+impl OfflineBuffer {
+    fn new() -> Self {
+        Self {
+            messages: VecDeque::with_capacity(OFFLINE_BUFFER_SIZE),
+        }
+    }
+
+    fn push(&mut self, msg: MqttMessage) {
+        if self.messages.len() >= OFFLINE_BUFFER_SIZE {
+            self.messages.pop_front();
+        }
+        self.messages.push_back(msg);
+    }
+
+    fn drain(&mut self) -> impl Iterator<Item = MqttMessage> + '_ {
+        self.messages.drain(..)
+    }
+}
+
+impl Default for OfflineBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Create a new MQTT client.
 #[must_use]
 pub fn mqtt_channel() -> (MqttTx, MqttRx) {
@@ -235,6 +267,7 @@ pub struct Config {
 /// # Errors
 ///
 /// Returns an error if there is a problem with the configuration.
+#[allow(clippy::too_many_lines)]
 pub fn run_client(
     mut subscriptions: Subscriptions,
     channel: MqttRx,
@@ -281,18 +314,42 @@ pub fn run_client(
 
     spawn(async move {
         let mut rx = channel.rx;
+        let mut offline_buffer = OfflineBuffer::new();
+        let mut is_connected = false;
 
         loop {
             select! {
                 event = event_loop.poll() => {
                     match event {
                         Ok(Event::Incoming(i)) => {
+                            if matches!(i, Incoming::ConnAck(_)) {
+                                info!("MQTT connected, flushing offline buffer");
+                                is_connected = true;
+                                let mut failed = Vec::new();
+                                for msg in offline_buffer.drain() {
+                                    let retain = matches!(msg.retain, Retain::Retain);
+                                    if let Err(err) = client.try_publish(
+                                        msg.topic.clone(),
+                                        qos_to_rumqttc(msg.qos),
+                                        retain,
+                                        msg.payload.clone(),
+                                    ) {
+                                        error!("Failed to publish buffered message: {:?}.", err);
+                                        failed.push(msg);
+                                        break;
+                                    }
+                                }
+                                for msg in failed {
+                                    offline_buffer.push(msg);
+                                }
+                            }
                             incoming_event(&client, i, &subscriptions);
                         },
                         Ok(Event::Outgoing(_)) => {
                         },
                         Err(err) => {
                             error!("MQTT Error: {:?}", err);
+                            is_connected = false;
                             sleep(Duration::from_secs(10)).await;
                         }
                     }
@@ -306,22 +363,29 @@ pub fn run_client(
                                 subscription.tx.try_send(msg.clone());
                             }
 
-                            let retain = match msg.retain {
-                                Retain::Retain => true,
-                                Retain::NoRetain => false,
-                            };
+                            let retain = matches!(msg.retain, Retain::Retain);
 
-                            if let Err(err) = client.try_publish(msg.topic, qos_to_rumqttc(msg.qos), retain, msg.payload) {
-                                error!("Failed to publish message: {:?}.", err);
+                            if is_connected {
+                                if let Err(err) = client.try_publish(
+                                    msg.topic.clone(),
+                                    qos_to_rumqttc(msg.qos),
+                                    retain,
+                                    msg.payload.clone(),
+                                ) {
+                                    error!("Failed to publish message: {:?}.", err);
+                                    is_connected = false;
+                                    offline_buffer.push(msg);
+                                }
+                            } else {
+                                offline_buffer.push(msg);
                             }
                         },
                         MqttCommand::Subscribe(topic, tx) => {
-                            process_subscribe(&client, &mut subscriptions, &topic, tx, channel.tx.clone());
+                            process_subscribe(&client, &mut subscriptions, &topic, tx, channel.tx.clone(), is_connected);
                         }
                         MqttCommand::Unsubscribe(topic) => {
-                            // Unsubscribe from exact match
                             debug!("Unsubscribing from topic: {}.", topic);
-                            if subscriptions.unsubscribe(&topic) == Ok(()) {
+                            if subscriptions.unsubscribe(&topic).is_ok() && is_connected {
                                 if let Err(err) = client.try_unsubscribe(&topic) {
                                     error!("Failed to unsubscribe from topic: {:?}.", err);
                                 }
@@ -362,6 +426,7 @@ fn process_subscribe(
     topic: impl Into<String>,
     tx: oneshot::Sender<Result<generic::Receiver<MqttMessage>, SubscribeError>>,
     channel_tx: mpsc::Sender<MqttCommand>,
+    is_connected: bool,
 ) {
     let topic: String = topic.into();
 
@@ -380,19 +445,28 @@ fn process_subscribe(
             rx: rx.downgrade(),
         };
 
-        let filter = topic_to_filter(&topic);
-        match client.try_subscribe_many([filter]) {
-            Ok(()) => {
-                debug!("Subscribed to topic: {:?}.", topic);
-                subscriptions.0.push(subscription);
-                watch_tx_closed(tx, channel_tx, topic);
-                Ok(rx)
+        if is_connected {
+            let filter = topic_to_filter(&topic);
+            match client.try_subscribe_many([filter]) {
+                Ok(()) => {
+                    debug!("Subscribed to topic: {:?}.", topic);
+                    subscriptions.0.push(subscription);
+                    watch_tx_closed(tx, channel_tx, topic);
+                    Ok(rx)
+                }
+                Err(err) => {
+                    error!("Failed to subscribe to topics: {:?}.", err);
+                    Err(err.into())
+                }
             }
-            Err(err) => {
-                error!("Failed to subscribe to topics: {:?}.", err);
-                subscriptions.0.retain(|s| s.topic != topic);
-                Err(err.into())
-            }
+        } else {
+            debug!(
+                "Skipping broker subscribe for topic: {:?} (offline).",
+                topic
+            );
+            subscriptions.0.push(subscription);
+            watch_tx_closed(tx, channel_tx, topic);
+            Ok(rx)
         }
     };
 
