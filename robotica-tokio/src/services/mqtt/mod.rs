@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use tracing::{debug, error, info};
 
 use robotica_common::mqtt::{topic_matches, Json, MqttMessage, MqttSerializer, QoS, Retain};
@@ -316,15 +316,20 @@ pub fn run_client(
         let mut rx = channel.rx;
         let mut offline_buffer = OfflineBuffer::new();
         let mut is_connected = false;
+        let mut backoff_deadline: Option<tokio::time::Instant> = None;
 
         loop {
+            let now = tokio::time::Instant::now();
+            let can_poll = backoff_deadline.is_none_or(|d| now >= d);
+
             select! {
-                event = event_loop.poll() => {
+                event = event_loop.poll(), if can_poll => {
                     match event {
                         Ok(Event::Incoming(i)) => {
                             if matches!(i, Incoming::ConnAck(_)) {
                                 info!("MQTT connected, flushing offline buffer");
                                 is_connected = true;
+                                backoff_deadline = None;
                                 let mut failed = Vec::new();
                                 for msg in offline_buffer.drain() {
                                     let retain = matches!(msg.retain, Retain::Retain);
@@ -350,9 +355,12 @@ pub fn run_client(
                         Err(err) => {
                             error!("MQTT Error: {:?}", err);
                             is_connected = false;
-                            sleep(Duration::from_secs(10)).await;
+                            backoff_deadline = Some(now + Duration::from_secs(10));
                         }
                     }
+                },
+                () = tokio::time::sleep_until(backoff_deadline.unwrap_or(now + Duration::from_secs(10))), if backoff_deadline.is_some() => {
+                    backoff_deadline = None;
                 },
                 Some(msg) = rx.recv() => {
                     match msg {
