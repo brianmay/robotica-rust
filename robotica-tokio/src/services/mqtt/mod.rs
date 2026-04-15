@@ -171,7 +171,7 @@ impl MqttTx {
         Ok(self
             .subscribe(topic)
             .await?
-            .into_stateful()
+            .into_indexed_stateful()
             .translate::<U>())
     }
 }
@@ -424,7 +424,7 @@ fn incoming_event(client: &AsyncClient, pkt: Packet, subscriptions: &Subscriptio
             Ok(msg) => {
                 let msg: MqttMessage = msg;
                 let topic = &msg.topic;
-                // debug!("Received message: {msg:?}.");
+                debug!("Received message: {msg:?}.");
                 let subscription_list = subscriptions.get_as_iter(topic);
                 for subscription in subscription_list {
                     subscription.tx.try_send(msg.clone());
@@ -502,7 +502,7 @@ impl Subscriptions {
         T: TryFrom<MqttMessage> + Clone + PartialEq + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
-        self.subscribe(topic).into_stateful().translate()
+        self.subscribe(topic).into_indexed_stateful().translate()
     }
 
     /// Remove a subscription using exact match from the list.

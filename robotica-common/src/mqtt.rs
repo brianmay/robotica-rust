@@ -20,6 +20,23 @@ use thiserror::Error;
 #[cfg(feature = "websockets")]
 use crate::{protobuf::ProtobufIntoFrom, protos};
 
+/// A trait for types that have an index for storing in a stateful pipe.
+///
+/// If `has_index()` returns `Some(key)`, the stateful pipe will store values
+/// keyed by that index, allowing wildcard subscriptions to work correctly.
+/// If `has_index()` returns `None`, the pipe stores only the last value.
+pub trait HasIndex {
+    /// Returns the index for this value, or `None` if this type should
+    /// not be stored by index.
+    fn has_index(&self) -> Option<String>;
+}
+
+impl HasIndex for MqttMessage {
+    fn has_index(&self) -> Option<String> {
+        Some(self.topic.clone())
+    }
+}
+
 /// The retain flag for a MQTT message.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Retain {

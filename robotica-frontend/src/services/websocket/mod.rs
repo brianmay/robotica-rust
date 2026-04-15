@@ -236,8 +236,10 @@ impl State {
     }
 
     fn dispatch_last_mqtt(&self, topic: &str) {
-        if let Some(msg) = self.last_mqtt.get(topic) {
-            self.subscriptions.dispatch_mqtt(msg);
+        for (stored_topic, msg) in &self.last_mqtt {
+            if topic_matches(stored_topic, topic) {
+                self.subscriptions.dispatch_mqtt(msg);
+            }
         }
     }
 

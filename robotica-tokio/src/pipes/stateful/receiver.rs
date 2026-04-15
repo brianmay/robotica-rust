@@ -1,4 +1,4 @@
-//! Stateless receiver code.
+//! Stateful receiver code.
 
 use super::{create_pipe, Sender};
 use crate::pipes::{Subscriber, Subscription as SubscriptionTrait};
@@ -14,7 +14,7 @@ use tracing::{debug, error};
 /// Old and new value.
 pub type OldNewType<T> = (Option<T>, T);
 
-type SubscribeMessage<T> = (broadcast::Receiver<OldNewType<T>>, Option<T>);
+type SubscribeMessage<T> = (broadcast::Receiver<OldNewType<T>>, Vec<T>);
 
 pub(in crate::pipes) enum ReceiveMessage<T> {
     Get(oneshot::Sender<Option<T>>),
@@ -331,7 +331,7 @@ pub struct Subscription<T> {
     rx: broadcast::Receiver<OldNewType<T>>,
     // We need to keep this to ensure connection stays alive.
     _tx: mpsc::Sender<ReceiveMessage<T>>,
-    initial: Option<T>,
+    initial: Vec<T>,
 }
 
 impl<T> Subscription<T>
@@ -344,7 +344,7 @@ where
         Self {
             rx,
             _tx: tx,
-            initial: None,
+            initial: Vec::new(),
         }
     }
 }
@@ -361,9 +361,9 @@ where
     ///
     /// Returns `RecvError::Closed` if the entity is closed.
     pub async fn recv_old_new(&mut self) -> Result<OldNewType<T>, RecvError> {
-        let initial = self.initial.take();
-        if let Some(initial) = initial {
-            return Ok((None, initial));
+        if let Some(initial) = self.initial.pop() {
+            let prev = self.initial.last().cloned();
+            return Ok((prev, initial));
         }
         loop {
             match self.rx.recv().await {
@@ -386,9 +386,9 @@ where
     ///
     /// Returns `RecvError::Closed` if the entity is closed.
     pub fn try_recv_old_new(&mut self) -> Result<Option<OldNewType<T>>, RecvError> {
-        let initial = self.initial.take();
-        if let Some(initial) = initial {
-            return Ok(Some((None, initial)));
+        if let Some(initial) = self.initial.pop() {
+            let prev = self.initial.last().cloned();
+            return Ok(Some((prev, initial)));
         }
         loop {
             match self.rx.try_recv() {

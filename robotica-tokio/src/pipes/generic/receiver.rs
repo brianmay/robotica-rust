@@ -191,4 +191,50 @@ where
         });
         rx
     }
+
+    /// Turn this into a stateful indexed receiver.
+    /// Uses `create_indexed_pipe` for storage keyed by `has_index()`.
+    #[must_use]
+    pub fn into_indexed_stateful(&self) -> stateful::Receiver<T>
+    where
+        T: Eq + Send + Clone + robotica_common::mqtt::HasIndex + 'static,
+    {
+        let name = format!("{} (into_indexed_stateful)", self.name);
+        let (tx, rx) = stateful::create_indexed_pipe(&name);
+
+        let clone_self = self.clone();
+
+        spawn(async move {
+            // We need to keep tx to ensure connection is not closed if self is dropped.
+            let Some((mut sub, initial)) = clone_self.subscribe().await else {
+                return;
+            };
+
+            if let Some(initial) = initial {
+                tx.try_send(initial);
+            }
+
+            loop {
+                select! {
+                    data = sub.recv() => {
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(err) => {
+                                debug!("{name}: recv failed, exiting: {err}");
+                                break;
+                            }
+                        };
+
+                        tx.try_send(data);
+                    }
+
+                    () = tx.closed() => {
+                        debug!("{name}: dest closed");
+                        break;
+                    }
+                }
+            }
+        });
+        rx
+    }
 }
