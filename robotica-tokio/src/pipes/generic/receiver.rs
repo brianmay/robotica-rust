@@ -20,7 +20,7 @@ pub enum RecvError {
     Closed,
 }
 
-type SubscribeMessage<T> = (broadcast::Receiver<T>, Option<T>);
+type SubscribeMessage<T> = (broadcast::Receiver<T>, Vec<T>);
 pub(in crate::pipes) enum ReceiveMessage<T> {
     // Get(oneshot::Sender<Option<T>>),
     Subscribe(oneshot::Sender<SubscribeMessage<T>>),
@@ -74,7 +74,7 @@ pub struct Receiver<T> {
 }
 
 impl<T> Receiver<T> {
-    async fn subscribe(&self) -> Option<(broadcast::Receiver<T>, Option<T>)>
+    async fn subscribe(&self) -> Option<(broadcast::Receiver<T>, Vec<T>)>
     where
         T: Send,
     {
@@ -164,8 +164,8 @@ where
                 return;
             };
 
-            if let Some(initial) = initial {
-                tx.try_send(initial);
+            for item in initial {
+                tx.try_send(item);
             }
 
             loop {
@@ -210,8 +210,8 @@ where
                 return;
             };
 
-            if let Some(initial) = initial {
-                tx.try_send(initial);
+            for item in initial {
+                tx.try_send(item);
             }
 
             loop {

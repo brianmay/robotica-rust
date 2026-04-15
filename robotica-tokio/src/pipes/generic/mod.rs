@@ -42,7 +42,7 @@ where
     };
 
     spawn(async move {
-        let mut current_data: Option<T> = None;
+        let mut replay_data: Vec<T> = Vec::new();
         let mut send_rx = send_rx;
         let mut receive_rx = receive_rx;
 
@@ -52,7 +52,10 @@ where
                     #[allow(clippy::single_match_else)]
                     match msg {
                         Some(SendMessage::Set(data)) => {
-                            current_data = Some(data.clone());
+                            replay_data.push(data.clone());
+                            if replay_data.len() > PIPE_SIZE {
+                                replay_data.remove(0);
+                            }
                             if let Err(_err) = out_tx.send(data) {
                                 // It is not an error if there are no subscribers.
                             }
@@ -68,7 +71,7 @@ where
                     match msg {
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
-                            if tx.send((rx, current_data.clone())).is_err() {
+                            if tx.send((rx, replay_data.clone())).is_err() {
                                 error!("generic::create_pipe{name}): subscribe send failed");
                             }
                         }
