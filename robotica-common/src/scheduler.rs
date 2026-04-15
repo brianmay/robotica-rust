@@ -139,7 +139,7 @@ impl Display for Importance {
 ///
 /// Note this is not used in the backend, which has its own copy.
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct Sequence {
     /// The title of the sequence.
     pub title: String,
@@ -208,7 +208,7 @@ impl Sequence {
 }
 
 /// The complete set of tags for a particular day
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct TagsForDay {
     /// The scheduled day for this entry
     pub date: NaiveDate,
@@ -218,7 +218,7 @@ pub struct TagsForDay {
 }
 
 /// The tags for yesterday, today, and tomorrow.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Tags(pub Vec<TagsForDay>);
 
 impl Deref for Tags {

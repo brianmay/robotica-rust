@@ -31,7 +31,7 @@ pub enum Payload {
 
 /// A task with all values completed.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Task {
     /// The title of the task.
     pub title: String,

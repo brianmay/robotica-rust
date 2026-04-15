@@ -204,7 +204,7 @@ fn spawn_config_monitor(
     tokio::spawn(async move {
         let topic = format!("robotica/config/{name}");
         let rx = mqtt
-            .subscribe_into_stateless::<Json<Arc<CommonConfig>>>(topic)
+            .subscribe_into_stateful::<Json<Arc<CommonConfig>>>(topic)
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
@@ -469,7 +469,7 @@ fn monitor_tags(
     tokio::spawn(async move {
         let topic = format!("robotica/{}/tags", config.instance);
         let rx = mqtt
-            .subscribe_into_stateless::<Arc<Json<Tags>>>(topic)
+            .subscribe_into_stateful::<Arc<Json<Tags>>>(topic)
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
@@ -542,7 +542,7 @@ fn monitor_schedule(
     tokio::spawn(async move {
         let topic = format!("schedule/{}/pending", config.instance);
         let rx = mqtt
-            .subscribe_into_stateless::<Arc<Json<Vec<Sequence>>>>(topic)
+            .subscribe_into_stateful::<Arc<Json<Vec<Sequence>>>>(topic)
             .await
             .unwrap();
         let mut rx = rx.subscribe().await;
