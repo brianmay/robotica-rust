@@ -65,8 +65,6 @@ async fn main() -> Result<()> {
         eprintln!("Failed to install rustls crypto provider: {e:?}");
         std::process::exit(1);
     }
-    let started = stateless::Started::new();
-
     let env = config::Environment::load().unwrap_or_else(|e| {
         panic!("Error loading environment: {e}");
     });
@@ -102,8 +100,6 @@ async fn main() -> Result<()> {
     sqlx::migrate!("../migrations").run(&postgres).await?;
 
     setup_pipes(state, mqtt_rx, config, postgres).await;
-
-    started.notify();
 
     loop {
         debug!("I haven't crashed yet!");

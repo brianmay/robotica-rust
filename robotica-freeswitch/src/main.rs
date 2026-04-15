@@ -11,10 +11,7 @@ mod phone_db;
 
 use config::Config;
 use robotica_common::version;
-use robotica_tokio::{
-    pipes::stateless,
-    services::mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions},
-};
+use robotica_tokio::services::mqtt::{mqtt_channel, run_client, MqttTx, Subscriptions};
 
 use tracing::{debug, info};
 
@@ -28,8 +25,6 @@ async fn main() -> Result<(), anyhow::Error> {
         eprintln!("Failed to install rustls crypto provider: {e:?}");
         std::process::exit(1);
     }
-    let started = stateless::Started::new();
-
     info!(
         "Starting Freeswitch, version = {:?}, build time = {:?}",
         version::VCS_REF,
@@ -40,7 +35,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = env.config()?;
     start_services(config).await?;
 
-    started.notify();
     loop {
         debug!("I haven't crashed yet!");
         tokio::time::sleep(std::time::Duration::from_secs(300)).await;

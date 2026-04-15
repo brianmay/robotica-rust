@@ -16,12 +16,9 @@ use std::sync::Arc;
 
 use robotica_common::robotica::entities::Id;
 use robotica_common::version;
-use robotica_tokio::{
-    pipes::stateless::{self, Started},
-    services::{
-        mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
-        persistent_state::{self, PersistentStateDatabase},
-    },
+use robotica_tokio::services::{
+    mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
+    persistent_state::{self, PersistentStateDatabase},
 };
 use tokio::sync::mpsc;
 
@@ -60,8 +57,6 @@ async fn main() -> Result<(), anyhow::Error> {
         eprintln!("Failed to install rustls crypto provider: {e:?}");
         std::process::exit(1);
     }
-    let started = stateless::Started::new();
-
     info!(
         "Starting robotica-slint, version = {:?}, build time = {:?}",
         version::VCS_REF,
@@ -77,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     let config: LoadedConfig = config.try_into()?;
-    start_services(config, &started)?;
+    start_services(config)?;
 
     Ok(())
 }
@@ -90,7 +85,7 @@ pub struct RunningState {
     // persistent_state_database: PersistentStateDatabase,
 }
 
-fn start_services(config: LoadedConfig, started: &Started) -> Result<(), anyhow::Error> {
+fn start_services(config: LoadedConfig) -> Result<(), anyhow::Error> {
     let (mqtt, mqtt_rx) = mqtt_channel();
     let mut subscriptions: Subscriptions = Subscriptions::new();
     let persistent_state_database = PersistentStateDatabase::new(&config.persistent_state)
@@ -116,8 +111,6 @@ fn start_services(config: LoadedConfig, started: &Started) -> Result<(), anyhow:
         mqtt,
         tx_screen_command,
     };
-
-    started.notify();
 
     ui::run_gui(running_state, config.ui, rx_screen_command);
     Ok(())
