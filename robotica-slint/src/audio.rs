@@ -289,21 +289,13 @@ async fn handle_command(
         state.volume.message = message_volume;
     }
 
-    if let Some(msg) = &command.message {
-        tx_screen_command
-            .try_send(ScreenCommand::Message(msg.clone()))
-            .unwrap_or_else(|err| {
-                error!("Failed to send message to screen: {err}");
-            });
-    }
-
     let should_play = {
         let now = chrono::Local::now();
         command.should_play(now, state.messages_enabled)
     };
 
     if should_play {
-        process_command(state, command, config, mqtt).await;
+        process_command(tx_screen_command, state, command, config, mqtt).await;
     } else {
         info!("Not processing command due to lack of urgency: {command:?}");
     }
@@ -384,6 +376,7 @@ fn get_actions_for_command(command: &AudioCommand) -> Vec<Action<'_>> {
 }
 
 async fn process_command(
+    tx_screen_command: &mpsc::Sender<ScreenCommand>,
     state: &mut State,
     command: AudioCommand,
     config: &LoadedConfig,
@@ -412,6 +405,11 @@ async fn process_command(
                 // If any errors occur in pre_say, they should already have been logged.
                 // Just ignore them. The say call should still work regardless.
                 _ = pre_say(&msg.body, &config.programs).await;
+                tx_screen_command
+                    .try_send(ScreenCommand::Message(msg.clone()))
+                    .unwrap_or_else(|err| {
+                        error!("Failed to send message to screen: {err}");
+                    });
             }
 
             let paused = is_music_paused(&config.programs).await?;
