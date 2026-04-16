@@ -7,6 +7,7 @@ use futures::{
     future::{select, Either},
     SinkExt, StreamExt,
 };
+use gloo_events::{EventListener, EventListenerOptions};
 use gloo_net::websocket::{futures::WebSocket, Message, WebSocketError};
 use gloo_timers::callback::Timeout;
 use thiserror::Error;
@@ -667,22 +668,20 @@ fn get_websocket_url() -> String {
 }
 
 async fn setup_visibility_listener(mut in_tx: Sender<Command>) {
-    let mut was_hidden = false;
+    let Some(document) = window().and_then(|w| w.document()) else {
+        return;
+    };
 
-    loop {
-        let visibility_state = window()
-            .and_then(|w| w.document())
-            .map(|d| d.visibility_state());
-
-        let is_hidden = visibility_state == Some(VisibilityState::Hidden);
-
-        if was_hidden && !is_hidden {
+    let options = EventListenerOptions::run_in_capture_phase();
+    let doc_clone = document.clone();
+    let _listener =
+        EventListener::new_with_options(&document, "visibilitychange", options, move |_event| {
+            if doc_clone.visibility_state() == VisibilityState::Hidden {
+                return;
+            }
             debug!("ws: Page moved to foreground, triggering reconnect.");
             let _ = in_tx.try_send(Command::KeepAlive);
-        }
+        });
 
-        was_hidden = is_hidden;
-
-        gloo_timers::future::sleep(std::time::Duration::from_millis(500)).await;
-    }
+    futures::future::pending::<()>().await;
 }
