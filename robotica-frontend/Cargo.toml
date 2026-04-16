@@ -13,7 +13,7 @@ console_error_panic_hook = "0.1.7"
 eyre = "0.6.12"
 futures = "0.3.31"
 gloo-net = "0.7.0"
-gloo-events = "0.2.0"
+gloo-events = "0.3.0"
 gloo-timers = { version = "0.4.0", features = ["futures"] }
 itertools = "0.14.0"
 serde = "1.0.227"
