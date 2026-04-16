@@ -12,7 +12,7 @@ use gloo_timers::callback::Timeout;
 use thiserror::Error;
 use tracing::{debug, error, info};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::window;
+use web_sys::{window, Document, VisibilityState};
 use yew::Callback;
 
 use robotica_common::{

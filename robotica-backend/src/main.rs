@@ -42,6 +42,7 @@ use robotica_tokio::devices::lifx::{DeviceConfig, DiscoverConfig};
 use robotica_tokio::devices::occupancy::{self, OccupiedState};
 use robotica_tokio::devices::presence_tracker::{is_any_presence_in_room, PresenceTrackerValue};
 use robotica_tokio::devices::{fake_switch, lifx, presence_tracker};
+use robotica_tokio::pipes::delays::DelayInputOptions;
 use robotica_tokio::pipes::{stateful, stateless, Subscriber};
 use robotica_tokio::scheduling::calendar::{CalendarEntry, StartEnd};
 use robotica_tokio::scheduling::executor::executor;
@@ -383,7 +384,12 @@ fn monitor_bathroom_door(state: &mut InitState, message_sink: stateless::Sender<
         .subscriptions
         .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
         .map(|(_, json)| json.into())
-        .rate_limit("Bathroom Door Rate Limited", Duration::from_secs(30));
+        .delay_input(
+            "Bathroom Door Rate Limited",
+            Duration::from_secs(30),
+            |_| true,
+            DelayInputOptions::default(),
+        );
 
     let mqtt = state.mqtt.clone();
     spawn(async move {
