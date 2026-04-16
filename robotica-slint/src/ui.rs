@@ -173,25 +173,11 @@ pub fn run_gui(
     monitor_display(config, &ui, rx_screen_command);
     monitor_time(&ui);
 
-    let max_retries = 5;
-    let mut attempt = 0;
-    loop {
-        match ui.run() {
-            Ok(()) => break,
-            Err(e) => {
-                attempt += 1;
-                if attempt >= max_retries {
-                    error!("Failed to start UI after {} attempts: {e}", max_retries);
-                    panic!("Error running winit event loop: {e}");
-                }
-                tracing::warn!(
-                    "Failed to start UI (attempt {}/{}): {e}. Retrying in 1s...",
-                    attempt,
-                    max_retries
-                );
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        }
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    if let Err(e) = ui.run() {
+        error!("Error running winit event loop: {e}");
+        panic!("Error running winit event loop: {e}");
     }
 }
 
