@@ -199,6 +199,15 @@ pub fn run() -> Result<(), JsValue> {
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
     let config = use_context::<Option<Arc<Config>>>().unwrap();
+    let menu_open = use_state(|| false);
+    let toggle_menu = {
+        let menu_open = menu_open.clone();
+        Callback::from(move |_| menu_open.set(!*menu_open))
+    };
+    let close_menu = {
+        let menu_open = menu_open.clone();
+        Callback::from(move |_| menu_open.set(false))
+    };
 
     let rooms = match &config {
         Some(config) => config
@@ -266,12 +275,12 @@ fn nav_bar() -> Html {
         <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
             <div class="container-fluid">
                 <a class="navbar-brand" href="/">{ "Robotica" }</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <button class="navbar-toggler" type="button" onclick={toggle_menu} aria-controls="navbarSupportedContent" aria-expanded={(*menu_open).to_string()} aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <div class={classes!("collapse", "navbar-collapse", if *menu_open { "show" } else { "" })}>
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
+                        <li class="nav-item" onclick={close_menu.clone()}>
                         { link(Route::Welcome, "Welcome") }
                         </li>
                         {
@@ -282,7 +291,7 @@ fn nav_bar() -> Html {
                                     </a>
                                     <ul class="dropdown-menu">
                                         { rooms.iter().map(|room| html! {
-                                            <li>{dropdown_link(Route::Room {id: room.id.clone()}, room.title.clone())}</li>
+                                            <li onclick={close_menu.clone()}>{dropdown_link(Route::Room {id: room.id.clone()}, room.title.clone())}</li>
                                         }).collect::<Html>() }
                                     </ul>
                                 </li>
@@ -294,7 +303,7 @@ fn nav_bar() -> Html {
                             </a>
                             <ul class="dropdown-menu">
                                 { cars.iter().map(|car| html! {
-                                    <li>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.clone())}</li>
+                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.clone())}</li>
                                 }).collect::<Html>() }
                             </ul>
                         </li>
@@ -304,20 +313,20 @@ fn nav_bar() -> Html {
                             </a>
                             <ul class="dropdown-menu">
                                 { hot_water.iter().map(|hot_water| html! {
-                                    <li>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.clone())}</li>
+                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.clone())}</li>
                                 }).collect::<Html>() }
                             </ul>
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" onclick={close_menu.clone()}>
                             { link(Route::Schedule, "Schedule") }
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" onclick={close_menu.clone()}>
                             { link(Route::Tags, "Tags") }
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" onclick={close_menu.clone()}>
                             { link(Route::Locations, "Locations") }
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" onclick={close_menu.clone()}>
                             { link(Route::Occupancy, "Occupancy") }
                         </li>
                         <li class="nav-item">
