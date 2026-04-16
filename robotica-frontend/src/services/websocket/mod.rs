@@ -12,7 +12,7 @@ use gloo_timers::callback::Timeout;
 use thiserror::Error;
 use tracing::{debug, error, info};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, Document, VisibilityState};
+use web_sys::{window, VisibilityState};
 use yew::Callback;
 
 use robotica_common::{
@@ -268,6 +268,11 @@ impl WebsocketService {
             last_mqtt: HashMap::new(),
             last_event: None,
         };
+
+        let state_in_tx = in_tx.clone();
+        spawn_local(async move {
+            setup_visibility_listener(state_in_tx).await;
+        });
 
         spawn_local(async move {
             reconnect_and_set_keep_alive(&mut state).await;
@@ -659,4 +664,25 @@ fn get_websocket_url() -> String {
     };
     let host = location.host().unwrap();
     format!("{protocol}://{host}/websocket")
+}
+
+async fn setup_visibility_listener(mut in_tx: Sender<Command>) {
+    let mut was_hidden = false;
+
+    loop {
+        let visibility_state = window()
+            .and_then(|w| w.document())
+            .map(|d| d.visibility_state());
+
+        let is_hidden = visibility_state == Some(VisibilityState::Hidden);
+
+        if was_hidden && !is_hidden {
+            debug!("ws: Page moved to foreground, triggering reconnect.");
+            let _ = in_tx.try_send(Command::KeepAlive);
+        }
+
+        was_hidden = is_hidden;
+
+        gloo_timers::future::sleep(std::time::Duration::from_millis(500)).await;
+    }
 }
