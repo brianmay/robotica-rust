@@ -172,7 +172,7 @@
           nodePackages = pkgs.buildNpmPackage {
             name = "robotica-frontend";
             src = ./robotica-frontend;
-            npmDepsHash = "sha256-7mLjhZDcL5cpCg82SavoCHYIdehPXAXd86oF8HxJxns=";
+            npmDepsHash = "sha256-NEA1xjB9dRg9Z7UL6HJqxaweb5/iXn8xY6ZWPARhk6Y=";
             # npmDepsHash = pkgs.lib.fakeHash;
             dontNpmBuild = true;
             inherit nodejs;
