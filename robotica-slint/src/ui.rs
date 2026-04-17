@@ -122,10 +122,13 @@ pub fn run_gui(
     config: Arc<LoadedConfig>,
     rx_screen_command: mpsc::Receiver<ScreenCommand>,
 ) {
+    tracing::info!("run_gui called");
+
     let state = Arc::new(state);
     let (tx_room, rx_room) = mpsc::channel::<String>(1);
 
     let ui = slint::AppWindow::new().unwrap();
+    tracing::info!("Slint AppWindow created");
     ui.set_screen_on(true);
     ui.set_number_per_row(i32::from(config.number_per_row));
     ui.hide().unwrap();
@@ -142,11 +145,13 @@ pub fn run_gui(
     monitor_display(config, &ui, rx_screen_command);
     monitor_time(&ui);
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(3));
+
+    tracing::info!("Starting UI event loop");
 
     if let Err(e) = ui.run() {
         error!("Error running winit event loop: {e}");
-        panic!("Error running winit event loop: {e}");
+        std::process::exit(1);
     }
 }
 
