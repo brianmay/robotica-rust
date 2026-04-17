@@ -329,7 +329,6 @@ where
 /// A subscription to receive data from an entity.
 pub struct Subscription<T> {
     rx: broadcast::Receiver<OldNewType<T>>,
-    // We need to keep this to ensure connection stays alive.
     _tx: mpsc::Sender<ReceiveMessage<T>>,
     initial: Vec<T>,
 }

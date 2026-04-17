@@ -169,22 +169,20 @@ pub fn is_any_presence_in_room<S: 'static + ::std::hash::BuildHasher + Send>(
 
     spawn(async move {
         let mut results = vec![false; presences.len()];
-        let mut subs =
-            futures::future::join_all(presences.values().map(Subscriber::subscribe)).await;
+        let receivers = presences.into_values().collect::<Vec<_>>();
+        let combined = stateful::combine_latest("combined_presence", receivers);
+        let mut combined_sub = combined.subscribe().await;
 
-        loop {
-            let futures = subs.iter_mut().map(Subscription::recv).collect::<Vec<_>>();
-            let (result, i, _) = futures::future::select_all(futures).await;
-            match result {
-                Ok(msg) => {
-                    results[i] = msg.room.as_ref() == Some(&room);
-                    tx.try_send(results.iter().any(|r| *r));
-                }
-                Err(_) => {
-                    // If a subscription is closed, break the loop
-                    break;
-                }
+        while let Ok((i, msg)) = combined_sub.recv().await {
+            if let Some(slot) = results.get_mut(i) {
+                *slot = msg.room.as_ref() == Some(&room);
+            } else {
+                tracing::error!(
+                    "is_any_presence_in_room: received out-of-bounds index {i} (results.len = {})",
+                    results.len()
+                );
             }
+            tx.try_send(results.iter().any(|r| *r));
         }
     });
 

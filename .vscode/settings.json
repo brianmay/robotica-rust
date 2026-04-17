@@ -134,6 +134,7 @@
         "webpki",
         "websockets",
         "wifi",
+        "winit",
         "Writable",
         "zigbee",
         "zwave"

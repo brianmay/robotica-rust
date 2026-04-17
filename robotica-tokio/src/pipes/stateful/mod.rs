@@ -14,6 +14,7 @@ use tracing::error;
 
 use robotica_common::mqtt::HasIndex;
 
+use crate::pipes::{RecvError, Subscriber};
 use crate::spawn;
 
 use super::{MAX_INDEXED_REPLAY_SIZE, PIPE_SIZE};
@@ -218,4 +219,75 @@ pub fn static_entity<T: 'static + Clone + PartialEq + Send>(
         tx.closed().await;
     });
     rx
+}
+
+/// Combine multiple stateful receivers into one that emits the changed input's index and value.
+///
+/// When any input changes, outputs `(input_index, new_value)`.
+#[must_use]
+pub fn combine_latest<T>(name: &str, receivers: Vec<Receiver<T>>) -> Receiver<(usize, T)>
+where
+    T: Clone + PartialEq + Send + 'static,
+{
+    let (tx_out, rx_out) = create_pipe(name);
+    let name = name.to_string();
+
+    spawn(async move {
+        let (chan_tx, mut chan_rx) = tokio::sync::mpsc::channel::<(usize, T)>(receivers.len());
+
+        for (i, rx) in receivers.into_iter().enumerate() {
+            let chan_tx = chan_tx.clone();
+            let name = name.clone();
+            spawn(async move {
+                let mut sub = rx.subscribe().await;
+                loop {
+                    match sub.recv_old_new().await {
+                        Ok((_, new_value)) => {
+                            if chan_tx.send((i, new_value)).await.is_err() {
+                                debug!("{name}: combined channel closed, exiting");
+                                break;
+                            }
+                        }
+                        Err(RecvError::Closed) => {
+                            debug!("{name}: source closed, exiting");
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+        drop(chan_tx);
+
+        while let Some((i, value)) = chan_rx.recv().await {
+            tx_out.try_send((i, value));
+        }
+    });
+
+    rx_out
+}
+
+impl<State> Receiver<State>
+where
+    State: Clone + PartialEq + Send + 'static,
+{
+    /// Combine two stateful receivers into one that emits the changed input's index and value.
+    ///
+    /// When either input changes, outputs `(input_index, new_value)`.
+    #[must_use]
+    pub fn combine_latest(self, other: Receiver<State>) -> Receiver<(usize, State)> {
+        crate::pipes::stateful::combine_latest(
+            &format!("{} (combine_latest)", self.name),
+            vec![self, other],
+        )
+    }
+
+    /// Combine multiple stateful receivers into one that emits the changed input's index and value.
+    ///
+    /// When any input changes, outputs `(input_index, new_value)`.
+    #[must_use]
+    pub fn combine_latest_many(self, others: Vec<Receiver<State>>) -> Receiver<(usize, State)> {
+        let mut all_receivers = vec![self];
+        all_receivers.extend(others);
+        crate::pipes::stateful::combine_latest("combine_latest_many", all_receivers)
+    }
 }

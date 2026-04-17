@@ -18,7 +18,6 @@ use crate::{
 };
 use ::slint::{ComponentHandle, Model, ModelRc, RgbaColor, SharedString, VecModel, Weak};
 use chrono::{Local, Timelike};
-use futures::{stream::FuturesUnordered, Future, StreamExt};
 use serde::Deserialize;
 
 use robotica_common::{
@@ -26,13 +25,13 @@ use robotica_common::{
     scheduler::{Importance, Status},
 };
 use robotica_common::{
-    controllers::{ConfigTrait, ControllerTrait, DisplayState, Label},
-    mqtt::{Json, MqttMessage},
+    controllers::{ConfigTrait, ControllerTrait, DisplayState},
+    mqtt::Json,
     robotica::audio::Message,
     scheduler::{Sequence, Tags},
 };
 use robotica_tokio::{
-    pipes::{stateful, RecvError, Subscriber, Subscription},
+    pipes::{stateful, Subscriber, Subscription},
     services::mqtt::MqttTx,
 };
 use tokio::{
@@ -111,36 +110,6 @@ fn tags_to_slint(tags: &Json<Tags>) -> ModelRc<slint::TagsForDay> {
         .collect();
 
     ModelRc::new(VecModel::from(tags))
-}
-
-async fn select_ok<F, FUTURES, A, B>(futures: FUTURES) -> Result<A, B>
-where
-    F: Future<Output = Result<A, B>> + Send,
-    FUTURES: IntoIterator<Item = F> + Send,
-    B: Send,
-{
-    let mut futures: FuturesUnordered<F> = futures.into_iter().collect();
-
-    let mut last_error: Option<B> = None;
-    while let Some(next) = futures.next().await {
-        match next {
-            Ok(ok) => return Ok(ok),
-            Err(err) => {
-                last_error = Some(err);
-            }
-        }
-    }
-
-    #[allow(clippy::expect_used)]
-    Err(last_error.expect("Empty iterator."))
-}
-
-async fn receive(
-    label: Label,
-    subscription: &mut stateful::Subscription<MqttMessage>,
-) -> Result<(Label, MqttMessage), RecvError> {
-    let msg = subscription.recv().await?;
-    Ok((label, msg))
 }
 
 pub enum ScreenCommand {
@@ -391,20 +360,22 @@ fn monitor_buttons_state(
 
             let requested_subscriptions = controller.get_subscriptions();
 
-            let mut subscriptions = Vec::with_capacity(requested_subscriptions.len());
-            for s in controller.get_subscriptions() {
-                let label = s.label;
-                let s = mqtt.subscribe_into_stateful(s.topic).await.unwrap();
-                let s = s.subscribe().await;
-                subscriptions.push((label, s));
-            }
+            let (labels, receivers) = {
+                let mut labels = Vec::with_capacity(requested_subscriptions.len());
+                let mut receivers = Vec::with_capacity(requested_subscriptions.len());
+                for s in controller.get_subscriptions() {
+                    let label = s.label;
+                    let s = mqtt.subscribe_into_stateful(s.topic).await.unwrap();
+                    labels.push(label);
+                    receivers.push(s);
+                }
+                (labels, receivers)
+            };
+
+            let combined = stateful::combine_latest("combined_subscriptions", receivers);
+            let mut combined_subscribe = combined.subscribe().await;
 
             loop {
-                let f = subscriptions
-                    .iter_mut()
-                    .map(|(label, s)| receive(*label, s))
-                    .map(futures::FutureExt::boxed);
-
                 select! {
                     result = rx_click.recv() => if result == Some(()) {
                         controller.get_press_commands().into_iter().for_each(|message| {
@@ -420,7 +391,12 @@ fn monitor_buttons_state(
                         break;
                     },
 
-                    Ok((label, msg)) = select_ok(f) => {
+                    Ok((i, msg)) = combined_subscribe.recv() => {
+                        let Some(label) = labels.get(i).copied() else {
+                            error!("Received message for missing subscription index {i}");
+                            continue;
+                        };
+
                         controller.process_message(label, msg);
 
                         let display_state = controller.get_display_state();
