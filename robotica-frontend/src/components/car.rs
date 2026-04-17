@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use wasm_bindgen::JsCast;
 
 use crate::{
     components::{
@@ -11,7 +12,7 @@ use robotica_common::{
     config::{Config, Icon},
     controllers::Action,
     datetime::{datetime_to_time_string, time_delta},
-    mqtt::{Json, MqttMessage},
+    mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{amber, entities::Id},
 };
 use tracing::debug;
@@ -21,6 +22,10 @@ pub enum Msg {
     SubscribedState(Subscription),
     Config(Option<Arc<Config>>),
     State(amber::car::State),
+    EditMinCharge(String),
+    StartEdit,
+    CancelEdit,
+    SaveMinCharge,
 }
 
 #[derive(Eq, PartialEq, Properties, Clone)]
@@ -33,14 +38,13 @@ pub struct CarComponent {
     state: Option<amber::car::State>,
     config: Option<Arc<Config>>,
     _config_handle: ContextHandle<Option<Arc<Config>>>,
+    edit_min_charge: String,
+    is_editing: bool,
+    edit_error: Option<String>,
+    wss: WebsocketService,
 }
 
-fn subscribe(ctx: &Context<CarComponent>, car_id: &Id) {
-    let (wss, _): (WebsocketService, _) = ctx
-        .link()
-        .context(ctx.link().batch_callback(|_| None))
-        .unwrap();
-
+fn subscribe(ctx: &Context<CarComponent>, car_id: &Id, wss: WebsocketService) {
     let topic = car_id.get_state_topic("amber");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         let Json(state): Json<amber::car::State> = msg.try_into().unwrap();
@@ -63,15 +67,24 @@ impl Component for CarComponent {
             .context(ctx.link().callback(Msg::Config))
             .unwrap();
 
+        let (wss, _): (WebsocketService, _) = ctx
+            .link()
+            .context(ctx.link().batch_callback(|_| None))
+            .unwrap();
+
         let props = ctx.props();
         let id = Id::new(&props.id);
 
-        subscribe(ctx, &id);
+        subscribe(ctx, &id, wss.clone());
         Self {
             state_subscription: None,
             state: None,
             config,
             _config_handle: config_handle,
+            edit_min_charge: String::new(),
+            is_editing: false,
+            edit_error: None,
+            wss,
         }
     }
 
@@ -81,7 +94,7 @@ impl Component for CarComponent {
 
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::too_many_lines)]
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::SubscribedState(subscription) => {
                 self.state_subscription = Some(subscription);
@@ -94,6 +107,40 @@ impl Component for CarComponent {
             }
             Msg::Config(config) => {
                 self.config = config;
+                true
+            }
+            Msg::EditMinCharge(value) => {
+                self.edit_min_charge = value;
+                true
+            }
+            Msg::StartEdit => {
+                self.is_editing = true;
+                self.edit_error = None;
+                if let Some(state) = &self.state {
+                    self.edit_min_charge = state.min_charge_tomorrow.to_string();
+                }
+                true
+            }
+            Msg::CancelEdit => {
+                self.is_editing = false;
+                self.edit_min_charge = String::new();
+                self.edit_error = None;
+                true
+            }
+            Msg::SaveMinCharge => {
+                if let Ok(value) = self.edit_min_charge.parse::<u8>() {
+                    if value <= 100 {
+                        let props = ctx.props();
+                        let id = Id::new(&props.id);
+                        let topic = id.get_command_topic("min_charge_tomorrow");
+                        let msg = MqttMessage::new(&topic, self.edit_min_charge.clone(), Retain::NoRetain, QoS::ExactlyOnce);
+                        self.wss.send_mqtt(msg);
+                        self.is_editing = false;
+                        self.edit_error = None;
+                        return false;
+                    }
+                }
+                self.edit_error = Some("Please enter a number between 0 and 100".to_string());
                 true
             }
         }
@@ -133,7 +180,63 @@ impl Component for CarComponent {
                                         </tr>
                                         <tr>
                                             <th scope="row">{"Min Charge Tomorrow"}</th>
-                                            <td>{ state.min_charge_tomorrow }{ "%" }</td>
+                                            <td>
+                                                {
+                                                    if self.is_editing {
+                                                        html! {
+                                                            <>
+                                                                <input
+                                                                    type="number"
+                                                                    class="form-control"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    value={self.edit_min_charge.clone()}
+                                                                    oninput={ctx.link().callback(|e: InputEvent| {
+                                                                        let value = e.target()
+                                                                            .unwrap()
+                                                                            .unchecked_into::<web_sys::HtmlInputElement>()
+                                                                            .value();
+                                                                        Msg::EditMinCharge(value)
+                                                                    })}
+                                                                />
+                                                                <button
+                                                                    class="btn btn-primary btn-sm mt-2"
+                                                                    onclick={ctx.link().callback(|_| Msg::SaveMinCharge)}
+                                                                >
+                                                                    { "Save" }
+                                                                </button>
+                                                                <button
+                                                                    class="btn btn-secondary btn-sm mt-2 ms-2"
+                                                                    onclick={ctx.link().callback(|_| Msg::CancelEdit)}
+                                                                >
+                                                                    { "Cancel" }
+                                                                </button>
+                                                                {
+                                                                    if let Some(error) = &self.edit_error {
+                                                                        html! {
+                                                                            <div class="text-danger mt-2">{ error }</div>
+                                                                        }
+                                                                    } else {
+                                                                        html! {}
+                                                                    }
+                                                                }
+                                                            </>
+                                                        }
+                                                    } else {
+                                                        html! {
+                                                            <>
+                                                                { state.min_charge_tomorrow }{ "%" }
+                                                                <button
+                                                                    class="btn btn-secondary btn-sm ms-2"
+                                                                    onclick={ctx.link().callback(|_| Msg::StartEdit)}
+                                                                >
+                                                                    { "Edit" }
+                                                                </button>
+                                                            </>
+                                                        }
+                                                    }
+                                                }
+                                            </td>
                                         </tr>
                                         <tr>
                                             <th scope="row">{"Current Result"}</th>
