@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use opentelemetry::{global, KeyValue};
 use robotica_common::robotica::entities::Id;
 use robotica_common::{
@@ -7,6 +9,7 @@ use robotica_common::{
         switch::{DeviceAction, DevicePower},
     },
 };
+use robotica_tokio::pipes::delays::DelayInputOptions;
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::{persistent_state, tesla::api::ChargingStateEnum},
@@ -139,8 +142,24 @@ pub fn monitor_charging(
         let mut auto_charge_s = auto_charge_rx.subscribe().await;
         let mut is_home_s = receivers.is_home.subscribe().await;
         let mut battery_level_s = receivers.battery_level.subscribe().await;
-        let mut charge_limit_s = receivers.charge_limit.subscribe().await;
-        let mut charging_state_s = receivers.charging_state.subscribe().await;
+
+        // Combine charge limit and charging state into a single stream to avoid redundant updates.
+        let mut combined: stateful::Subscription<(Option<Parsed<u8>>, Option<ChargingStateEnum>)> =
+            stateful::combine_latest_2(
+                "tesla_monitor_charging_combined",
+                receivers.charge_limit,
+                receivers.charging_state,
+            )
+            // Delay receiving the input in case teslamate updates these at the
+            // same time, they can be combined as one value.
+            .delay_input(
+                "tesla_monitor_charging_combined_delay",
+                Duration::from_secs(2),
+                |_| true,
+                DelayInputOptions::default(),
+            )
+            .subscribe()
+            .await;
 
         let mut amber_charge_request: ChargeRequest = charge_request_s
             .recv()
@@ -148,14 +167,15 @@ pub fn monitor_charging(
             .unwrap_or(ChargeRequest::ChargeTo(0));
         let mut ps = ps;
 
-        let mut tesla_state = TeslaState {
-            charge_limit: *charge_limit_s.recv().await.as_deref().unwrap_or(&0),
-            battery_level: *battery_level_s.recv().await.as_deref().unwrap_or(&0),
-            charging_state: charging_state_s
-                .recv()
-                .await
-                .unwrap_or(ChargingStateEnum::Disconnected),
-            is_at_home: is_home_s.recv().await.unwrap_or(false),
+        let mut tesla_state = {
+            let (charge_limit, charging_state) = combined.recv().await.unwrap_or((None, None));
+
+            TeslaState {
+                battery_level: *battery_level_s.recv().await.as_deref().unwrap_or(&0),
+                charge_limit: *charge_limit.as_deref().unwrap_or(&0),
+                charging_state: charging_state.unwrap_or(ChargingStateEnum::Disconnected),
+                is_at_home: is_home_s.recv().await.unwrap_or(false),
+            }
         };
 
         info!(%id, "Initial Tesla state: {:?}", tesla_state);
@@ -193,9 +213,16 @@ pub fn monitor_charging(
                         info!(%id, "Ignoring invalid auto_charge command: {cmd:?}");
                     }
                 }
-                Ok(Parsed(new_charge_limit)) = charge_limit_s.recv() => {
-                    info!(%id, "Charge limit: {new_charge_limit}");
-                    tesla_state.charge_limit = new_charge_limit;
+                Ok((combined_charge_limit, combined_charging_state)) = combined.recv() => {
+                    if let Some(Parsed(charge_limit)) = combined_charge_limit {
+                        info!(%id, "Charge limit: {charge_limit}");
+                        tesla_state.charge_limit = charge_limit;
+                    }
+                    if let Some(charging_state) = combined_charging_state {
+                        info!(%id, "Charging state: {charging_state:?}");
+                        tesla_state.charging_state = charging_state;
+                    }
+                    meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
                 }
                 Ok(Parsed(new_charge_level)) = battery_level_s.recv() => {
                     info!(%id, "Charge level: {new_charge_level}");
@@ -205,12 +232,6 @@ pub fn monitor_charging(
                 Ok(new_is_at_home) = is_home_s.recv() => {
                     info!(%id, "Location is at home: {new_is_at_home}");
                     tesla_state.is_at_home = new_is_at_home;
-                }
-
-                Ok(charging_state) = charging_state_s.recv() => {
-                    info!(%id, "Charging state: {charging_state:?}");
-                    tesla_state.charging_state = charging_state;
-                    meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
                 }
             }
 
