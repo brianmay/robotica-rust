@@ -23,6 +23,7 @@ use robotica_common::mqtt::Json;
 use robotica_common::mqtt::MqttMessage;
 use services::websocket::Subscription;
 use tracing::debug;
+use tracing::error;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -115,20 +116,27 @@ fn footer() -> Html {
 enum AppMsg {
     Config(Arc<Config>),
     ConfigSubscription(Subscription),
+    ConfigError(String),
 }
 
 struct App {
     wss: WebsocketService,
     config: Option<Arc<Config>>,
     config_subscription: Option<Subscription>,
+    config_error: Option<String>,
 }
 
 fn subscribe_to_config(ctx: &Context<App>, wss: WebsocketService, name: &str) {
     let topic = format!("robotica/config/{name}");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         debug!("Got config message");
-        let Json(state): Json<Arc<Config>> = msg.try_into().unwrap();
-        AppMsg::Config(state)
+        match msg.try_into() as Result<Json<Arc<Config>>, _> {
+            Ok(Json(state)) => AppMsg::Config(state),
+            Err(e) => {
+                error!("Failed to deserialize config message: {e:?}");
+                AppMsg::ConfigError(format!("{e:?}"))
+            }
+        }
     });
     let mut wss = wss;
     ctx.link().send_future(async move {
@@ -148,6 +156,7 @@ impl Component for App {
             wss,
             config: None,
             config_subscription: None,
+            config_error: None,
         }
     }
 
@@ -164,10 +173,23 @@ impl Component for App {
 
                 false
             }
+            AppMsg::ConfigError(msg) => {
+                error!("Config error: {}", msg);
+                self.config_error = Some(msg);
+                true
+            }
         }
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
+        if let Some(error) = &self.config_error {
+            return html! {
+                <div class="error">
+                    <h1>{"Config Error"}</h1>
+                    <p>{error}</p>
+                </div>
+            };
+        }
         html! {
             <ContextProvider<WebsocketService> context={self.wss.clone()}>
                 <ContextProvider<Option<Arc<Config>>> context={&self.config}>
