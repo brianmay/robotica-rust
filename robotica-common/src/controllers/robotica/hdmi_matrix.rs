@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     mqtt::{Json, MqttMessage},
-    robotica::{commands::Command, hdmi::HdmiCommand},
+    robotica::{commands::Command, hdmi_matrix::HdmiMatrixCommand},
 };
 
 use super::super::{
@@ -113,7 +113,7 @@ impl ControllerTrait for Controller {
     }
 
     fn get_press_commands(&self) -> Vec<MqttMessage> {
-        let payload = Json(Command::Hdmi(HdmiCommand {
+        let payload = Json(Command::HdmiMatrix(HdmiMatrixCommand {
             input: self.config.input,
             output: self.config.output,
         }));

@@ -1,11 +1,12 @@
-use robotica_tokio::pipes::{Subscriber, Subscription};
+use robotica_tokio::pipes::{stateless, Subscriber, Subscription};
 use tokio::select;
 use tracing::debug;
 
 use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::commands;
 use robotica_common::robotica::entities::Id;
-use robotica_tokio::{devices::hdmi::Command, pipes::stateless, spawn};
+use robotica_tokio::devices::hdmi_matrix::{Command, Options};
+use robotica_tokio::spawn;
 
 use crate::InitState;
 
@@ -26,7 +27,7 @@ pub fn run(state: &mut InitState, id: &Id, addr: &str) {
         loop {
             select! {
                 Ok(Json(command)) = rx_s.recv() => {
-                    if let commands::Command::Hdmi(command) = command {
+                    if let commands::Command::HdmiMatrix(command) = command {
                         let command = Command::SetInput(command.input, command.output);
                         tx.try_send(command);
                     } else {
@@ -40,11 +41,7 @@ pub fn run(state: &mut InitState, id: &Id, addr: &str) {
 
     let mqtt = state.mqtt.clone();
     let addr = addr.to_string();
-    let (rx, _) = robotica_tokio::devices::hdmi::run(
-        addr,
-        rx,
-        &robotica_tokio::devices::hdmi::Options::default(),
-    );
+    let (rx, _) = robotica_tokio::devices::hdmi_matrix::run(addr, rx, &Options::default());
 
     spawn(async move {
         let mut rx_s = rx.subscribe().await;

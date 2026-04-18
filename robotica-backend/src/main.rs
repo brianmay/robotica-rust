@@ -11,7 +11,7 @@ mod amber;
 mod car;
 mod config;
 mod ha;
-mod hdmi;
+mod hdmi_matrix;
 mod influxdb;
 mod lights;
 mod logging;
@@ -317,7 +317,7 @@ async fn setup_pipes(
             .unwrap_or_else(|e| panic!("Error running http server: {e}"));
     }
 
-    hdmi::run(&mut state, &Id::new("Dining/TV"), "hdmi.pri:8000");
+    hdmi_matrix::run(&mut state, &Id::new("Dining/TV"), "hdmi.pri:8000");
 
     let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
     for metric in config.metrics {

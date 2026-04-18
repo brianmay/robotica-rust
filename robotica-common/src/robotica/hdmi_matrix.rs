@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// A command to send to a HDMI matrix.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct HdmiCommand {
+pub struct HdmiMatrixCommand {
     /// The input to switch to.
     pub input: u8,
 
@@ -13,10 +13,10 @@ pub struct HdmiCommand {
     pub output: u8,
 }
 
-impl Display for HdmiCommand {
+impl Display for HdmiMatrixCommand {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let input = self.input;
         let output = self.output;
-        write!(f, "HDMI #{input} -> #{output}")
+        write!(f, "HDMI Matrix #{input} -> #{output}")
     }
 }

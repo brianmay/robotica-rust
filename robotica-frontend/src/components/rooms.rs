@@ -12,7 +12,7 @@ use super::require_connection::RequireConnection;
 
 fn controller_to_html(title: String, icon: Icon, controller_config: &ControllerConfig) -> Html {
     match controller_config {
-        ControllerConfig::Hdmi(config) => {
+        ControllerConfig::HdmiMatrix(config) => {
             let props = HdmiProps {
                 name: title,
                 icon,

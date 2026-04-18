@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    audio::AudioCommand, hdmi::HdmiCommand, lights::LightCommand, message::Message,
+    audio::AudioCommand, hdmi_matrix::HdmiMatrixCommand, lights::LightCommand, message::Message,
     switch::DeviceCommand,
 };
 
@@ -26,8 +26,8 @@ pub enum Command {
     /// Light Command
     Light(LightCommand),
 
-    /// HDMI Command
-    Hdmi(HdmiCommand),
+    /// HDMI Matrix Command
+    HdmiMatrix(HdmiMatrixCommand),
 }
 
 impl Display for Command {
@@ -37,7 +37,7 @@ impl Display for Command {
             Command::Message(command) => command.to_string(),
             Command::Light(command) => command.to_string(),
             Command::Device(command) => command.to_string(),
-            Command::Hdmi(command) => command.to_string(),
+            Command::HdmiMatrix(command) => command.to_string(),
         };
 
         write!(f, "{action_str}")?;

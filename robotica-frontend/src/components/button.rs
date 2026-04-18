@@ -3,7 +3,7 @@ use robotica_common::config::Icon;
 use robotica_common::robotica::lights::SceneName;
 use yew::prelude::*;
 
-use robotica_common::controllers::robotica::{hdmi, lights, music, switch};
+use robotica_common::controllers::robotica::{hdmi_matrix, lights, music, switch};
 use robotica_common::controllers::{
     tasmota, zwave, Action, ConfigTrait, ControllerTrait, DisplayState, Label,
 };
@@ -273,11 +273,11 @@ pub struct HdmiProps {
 }
 
 impl ConfigTrait for HdmiProps {
-    type Controller = hdmi::Controller;
+    type Controller = hdmi_matrix::Controller;
 
     fn create_controller(&self) -> Self::Controller {
         let config = (*self).clone();
-        let config = hdmi::Config {
+        let config = hdmi_matrix::Config {
             topic_substr: config.topic_substr,
             action: config.action,
             input: config.input,

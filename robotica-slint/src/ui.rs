@@ -350,7 +350,7 @@ fn monitor_buttons_state(
             let lbc = &button.config;
 
             let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
-                ControllerConfig::Hdmi(config) => Box::new(config.create_controller()),
+                ControllerConfig::HdmiMatrix(config) => Box::new(config.create_controller()),
                 ControllerConfig::Light(config) => Box::new(config.create_controller()),
                 ControllerConfig::Switch(config) => Box::new(config.create_controller()),
                 ControllerConfig::Zwave(config) => Box::new(config.create_controller()),

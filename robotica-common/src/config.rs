@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        robotica::{hdmi, lights, music, switch},
+        robotica::{hdmi_matrix, lights, music, switch},
         tasmota, zwave,
     },
     robotica::entities::Id,
@@ -15,8 +15,8 @@ use crate::{
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ControllerConfig {
-    /// This is a HDMI button
-    Hdmi(hdmi::Config),
+    /// This is a HDMI Matrix button
+    HdmiMatrix(hdmi_matrix::Config),
 
     /// This is a light button
     Light(lights::Config),

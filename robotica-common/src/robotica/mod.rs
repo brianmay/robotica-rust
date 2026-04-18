@@ -3,7 +3,7 @@ pub mod amber;
 pub mod audio;
 pub mod commands;
 pub mod entities;
-pub mod hdmi;
+pub mod hdmi_matrix;
 pub mod http_api;
 pub mod lights;
 pub mod locations;
