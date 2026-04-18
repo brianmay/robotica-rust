@@ -123,17 +123,24 @@ impl AudioCommand {
     #[must_use]
     pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
         use chrono::Timelike;
+        use tracing::info;
         let day_hour = matches!(now.hour(), 8..=21);
 
         let priority = self.priority;
         #[allow(clippy::match_same_arms)]
-        match (priority, day_hour, enabled) {
+        let result = match (priority, day_hour, enabled) {
             (MessagePriority::Urgent, _, _) => true,
             (MessagePriority::Low, _, true) => true,
             (MessagePriority::Low, _, _) => false,
             (MessagePriority::DaytimeOnly, true, true) => true,
             (MessagePriority::DaytimeOnly, _, _) => false,
-        }
+        };
+
+        info!(
+            "Deciding whether to play message with priority {} at time {} with enabled {}: {}",
+            priority, now, enabled, result
+        );
+        result
     }
 }
 

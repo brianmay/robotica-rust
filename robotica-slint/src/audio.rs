@@ -219,6 +219,7 @@ async fn watch_audio(
             Ok(me) = messages_enabled_s.recv() => {
                 match me {
                     Json(Command::Device(command)) => {
+                        info!("Received messages_enabled command: {:?}", command);
                         state.messages_enabled = match command.action {
                             DeviceAction::TurnOn => true,
                             DeviceAction::TurnOff => false,
@@ -294,15 +295,13 @@ async fn handle_command(
         command.should_play(now, state.messages_enabled)
     };
 
-    if should_play {
-        process_command(tx_screen_command, state, command, config, mqtt).await;
-    } else {
-        info!("Not processing command due to lack of urgency: {command:?}");
-    }
+    process_command(tx_screen_command, should_play, state, command, config, mqtt).await;
 }
 
 enum Action<'a> {
     Sound(&'a String),
+    Display(&'a Message, &'a mpsc::Sender<ScreenCommand>),
+    PreSay(&'a String),
     Say(&'a String),
     Play(&'a String),
     Tasks(&'a Vec<SubTask>),
@@ -318,21 +317,37 @@ impl Action<'_> {
     ) -> Result<(), String> {
         match self {
             Self::Sound(sound) => {
+                info!("Playing sound: {sound}");
                 set_volume(state.volume.message, &config.programs).await?;
                 play_sound(sound, &config.programs, &config.sound_path).await?;
             }
+            Self::Display(msg, tx) => {
+                info!("Displaying message: {}", msg.title);
+                tx.try_send(ScreenCommand::Message(msg.clone()))
+                    .unwrap_or_else(|err| {
+                        error!("Failed to send message to screen: {err}");
+                    });
+            }
+            Self::PreSay(msg) => {
+                info!("Pre-saying message: {msg}");
+                pre_say(msg, &config.programs).await?;
+            }
             Self::Say(msg) => {
+                info!("Saying message: {msg}");
                 set_volume(state.volume.message, &config.programs).await?;
                 say(msg, &config.programs).await?;
             }
             Self::Play(play_list) => {
+                info!("Playing music: {play_list}");
                 set_volume(state.volume.music, &config.programs).await?;
                 play_music(play_list, &config.programs).await?;
             }
             Self::Stop => {
+                info!("Stopping music");
                 stop_music(&config.programs).await?;
             }
             Self::Tasks(tasks) => {
+                info!("Executing {} tasks", tasks.len());
                 for task in tasks {
                     let task = task.clone().to_task(&config.targets);
                     send_task(mqtt, &task);
@@ -343,55 +358,74 @@ impl Action<'_> {
     }
 }
 
-fn get_actions_for_command(command: &AudioCommand) -> Vec<Action<'_>> {
+fn get_actions_for_command<'a>(
+    command: &'a AudioCommand,
+    tx_screen_command: &'a mpsc::Sender<ScreenCommand>,
+    should_play: bool,
+) -> (Vec<Action<'a>>, bool) {
     let mut actions = Vec::new();
+    let mut should_stop_music = false;
 
-    if let Some(tasks) = &command.pre_tasks {
-        actions.push(Action::Tasks(tasks));
-    }
-
-    if let Some(sound) = &command.sound {
-        actions.push(Action::Sound(sound));
-    }
-
-    if let Some(msg) = &command.message {
-        actions.push(Action::Say(&msg.body));
-    }
-
-    if let Some(music) = &command.music {
-        if let Some(play_list) = &music.play_list {
-            actions.push(Action::Play(play_list));
-        }
-
-        if music.stop == Some(true) {
-            actions.push(Action::Stop);
+    if should_play {
+        if let Some(message) = &command.message {
+            actions.push(Action::PreSay(&message.body));
         }
     }
 
-    if let Some(tasks) = &command.post_tasks {
-        actions.push(Action::Tasks(tasks));
+    if let Some(message) = &command.message {
+        actions.push(Action::Display(message, tx_screen_command));
     }
 
-    actions
+    if should_play {
+        if let Some(tasks) = &command.pre_tasks {
+            actions.push(Action::Tasks(tasks));
+        }
+
+        if let Some(sound) = &command.sound {
+            actions.push(Action::Sound(sound));
+            should_stop_music = true;
+        }
+
+        if let Some(msg) = &command.message {
+            actions.push(Action::Say(&msg.body));
+            should_stop_music = true;
+        }
+
+        if let Some(music) = &command.music {
+            if let Some(play_list) = &music.play_list {
+                actions.push(Action::Play(play_list));
+            }
+
+            if music.stop == Some(true) {
+                actions.push(Action::Stop);
+            }
+        }
+
+        if let Some(tasks) = &command.post_tasks {
+            actions.push(Action::Tasks(tasks));
+        }
+    }
+
+    (actions, should_stop_music)
 }
 
 async fn process_command(
     tx_screen_command: &mpsc::Sender<ScreenCommand>,
+    should_play: bool,
     state: &mut State,
     command: AudioCommand,
     config: &LoadedConfig,
     mqtt: &MqttTx,
 ) {
-    let actions = get_actions_for_command(&command);
+    info!(
+        "Processing command: {:?} with should_play: {}",
+        command, should_play
+    );
+    let (actions, should_stop_music) =
+        get_actions_for_command(&command, tx_screen_command, should_play);
 
-    if actions.is_empty() {
-        set_volume(state.volume.music, &config.programs)
-            .await
-            .unwrap_or_else(|e| {
-                state.error = Some(e);
-                state.play_list = None;
-            });
-    } else {
+    if should_stop_music {
+        info!("Executing command with stopping music");
         if let Some(music) = &command.music {
             state.play_list.clone_from(&music.play_list);
         }
@@ -401,17 +435,6 @@ async fn process_command(
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
 
         let do_actions = || async {
-            if let Some(msg) = &command.message {
-                // If any errors occur in pre_say, they should already have been logged.
-                // Just ignore them. The say call should still work regardless.
-                _ = pre_say(&msg.body, &config.programs).await;
-                tx_screen_command
-                    .try_send(ScreenCommand::Message(msg.clone()))
-                    .unwrap_or_else(|err| {
-                        error!("Failed to send message to screen: {err}");
-                    });
-            }
-
             let paused = is_music_paused(&config.programs).await?;
 
             for action in actions {
@@ -425,6 +448,26 @@ async fn process_command(
                 set_volume(state.volume.music, &config.programs).await?;
             }
 
+            Ok(())
+        };
+
+        do_actions().await.unwrap_or_else(|e| {
+            state.error = Some(e);
+            state.play_list = None;
+        });
+    } else {
+        info!("Executing command without stopping music");
+        set_volume(state.volume.music, &config.programs)
+            .await
+            .unwrap_or_else(|e| {
+                state.error = Some(e);
+                state.play_list = None;
+            });
+
+        let do_actions = || async {
+            for action in actions {
+                action.execute(state, config, mqtt).await?;
+            }
             Ok(())
         };
 
