@@ -133,7 +133,12 @@ impl Component for CarComponent {
                         let props = ctx.props();
                         let id = Id::new(&props.id);
                         let topic = id.get_command_topic("min_charge_tomorrow");
-                        let msg = MqttMessage::new(&topic, self.edit_min_charge.clone(), Retain::NoRetain, QoS::ExactlyOnce);
+                        let msg = MqttMessage::new(
+                            &topic,
+                            self.edit_min_charge.clone(),
+                            Retain::NoRetain,
+                            QoS::ExactlyOnce,
+                        );
                         self.wss.send_mqtt(msg);
                         self.is_editing = false;
                         self.edit_error = None;
