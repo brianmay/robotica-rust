@@ -61,6 +61,7 @@ impl ControllerTrait for Controller {
         let config = &self.config;
 
         let p = [
+            "robotica",
             "state",
             &config.topic_substr,
             &format!("output{}", config.output),
@@ -122,7 +123,7 @@ impl ControllerTrait for Controller {
             get_press_on_or_off(display_state, self.config.action),
             TurnOnOff::TurnOn
         ) {
-            let topic = format!("command/{}", self.config.topic_substr);
+            let topic = format!("robotica/command/{}", self.config.topic_substr);
             mqtt_command_vec(&topic, &payload)
         } else {
             // Not possible to turn off an input, so do nothing.

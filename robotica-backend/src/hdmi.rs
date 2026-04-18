@@ -4,20 +4,21 @@ use tracing::debug;
 
 use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::commands;
+use robotica_common::robotica::entities::Id;
 use robotica_tokio::{devices::hdmi::Command, pipes::stateless, spawn};
 
-use crate::{robotica::Id, InitState};
+use crate::InitState;
 
-pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
-    let id = Id::new(location, device);
-    let topic = id.get_command_topic(&[]);
+pub fn run(state: &mut InitState, id: &Id, addr: &str) {
+    let id = id.clone();
+    let topic = id.get_command_topic("");
 
     let command_rx = state
         .subscriptions
         .subscribe_into_stateless::<Json<commands::Command>>(&topic);
 
-    let name = id.get_name("hdmi");
-    let (tx, rx) = stateless::create_pipe(name);
+    let name = format!("{}_hdmi", id.as_str().replace('/', "_"));
+    let (tx, rx) = stateless::create_pipe(&name);
 
     spawn(async move {
         let mut rx_s = command_rx.subscribe().await;
@@ -58,7 +59,7 @@ pub fn run(state: &mut InitState, location: &str, device: &str, addr: &str) {
                     for (output, input) in iter.enumerate() {
                         // Arrays are 0 based, but outputs are 1 based.
                         let output = format!("output{}", output + 1);
-                        let topic = id.get_state_topic(&output.clone());
+                        let topic = id.get_state_topic(&output);
                         let payload = input;
                         let message = MqttMessage::new(topic, payload, Retain::Retain, QoS::AtLeastOnce);
                         mqtt.try_send(message);

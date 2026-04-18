@@ -17,7 +17,6 @@ mod lights;
 mod logging;
 mod metrics;
 mod open_epaper_link;
-mod robotica;
 mod tesla;
 
 use std::collections::HashMap;
@@ -318,7 +317,7 @@ async fn setup_pipes(
             .unwrap_or_else(|e| panic!("Error running http server: {e}"));
     }
 
-    hdmi::run(&mut state, "Dining", "TV", "hdmi.pri:8000");
+    hdmi::run(&mut state, &Id::new("Dining/TV"), "hdmi.pri:8000");
 
     let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
     for metric in config.metrics {
