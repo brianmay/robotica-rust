@@ -424,12 +424,12 @@ async fn process_command(
     let (actions, should_stop_music) =
         get_actions_for_command(&command, tx_screen_command, should_play);
 
+    if let Some(music) = &command.music {
+        state.play_list.clone_from(&music.play_list);
+    }
+
     if should_stop_music {
         info!("Executing command with stopping music");
-        if let Some(music) = &command.music {
-            state.play_list.clone_from(&music.play_list);
-        }
-
         let play_action = actions
             .iter()
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
