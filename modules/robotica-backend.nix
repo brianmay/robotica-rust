@@ -238,6 +238,8 @@ let
   water_heater_type = types.submodule {
     options = {
       id = mkOption { type = types.str; };
+      status_topic = mkOption { type = types.str; };
+      command_topic = mkOption { type = types.str; };
     };
   };
 

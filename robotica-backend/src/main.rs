@@ -440,7 +440,7 @@ fn monitor_water_heater(
 
     let is_on = state
         .subscriptions
-        .subscribe_into_stateful::<Json<shelly::SwitchStatus>>("hotwater/status/switch:0")
+        .subscribe_into_stateful::<Json<shelly::SwitchStatus>>(&water_heater.status_topic)
         .map(|(_, json)| json.0.output);
 
     let rules = state
@@ -473,7 +473,7 @@ fn monitor_water_heater(
         };
         info!("Setting water heater to {:?}", command);
         let msg = MqttMessage::new(
-            "hotwater/command/switch:0",
+            &water_heater.command_topic,
             command,
             Retain::NoRetain,
             QoS::ExactlyOnce,

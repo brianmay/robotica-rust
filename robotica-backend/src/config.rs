@@ -192,6 +192,8 @@ pub struct LifxConfig {
 #[derive(Debug, Deserialize)]
 pub struct WaterHeaterConfig {
     pub id: Id,
+    pub status_topic: String,
+    pub command_topic: String,
 }
 
 #[derive(Debug, Deserialize)]
