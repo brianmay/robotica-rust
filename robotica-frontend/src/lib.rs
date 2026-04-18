@@ -40,11 +40,11 @@ use yew_router::prelude::*;
 use robotica_common::version;
 
 use components::car::CarComponent;
-use components::hot_water::HotWaterComponent;
 use components::locations::locations_view::LocationsView;
 use components::occupancy_view::OccupancyViewComponent;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
+use components::water_heater::WaterHeaterComponent;
 use components::welcome::Welcome;
 
 use crate::components::rooms::Room;
@@ -57,8 +57,8 @@ enum Route {
     Room { id: String },
     #[at("/car/:id")]
     Car { id: String },
-    #[at("/hot_water/:id")]
-    HotWater { id: String },
+    #[at("/water_heater/:id")]
+    WaterHeater { id: String },
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]
@@ -77,7 +77,7 @@ fn switch(selected_route: Route) -> Html {
         Route::Welcome => html! {<Welcome/>},
         Route::Room { id } => html! { <Room id={id}/> },
         Route::Car { id } => html! { <CarComponent id={id}/> },
-        Route::HotWater { id } => html! { <HotWaterComponent id={id}/> },
+        Route::WaterHeater { id } => html! { <WaterHeaterComponent id={id}/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::Locations => return html! { <><NavBar/><LocationsView/></> },
@@ -223,8 +223,8 @@ fn nav_bar() -> Html {
         None => vec![],
     };
 
-    let hot_water = match &config {
-        Some(config) => config.hot_waters.clone(),
+    let water_heaters = match &config {
+        Some(config) => config.water_heaters.clone(),
         None => vec![],
     };
 
@@ -309,11 +309,11 @@ fn nav_bar() -> Html {
                         </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            { "Hot Waters" }
+                            { "Water Heaters" }
                             </a>
                             <ul class="dropdown-menu">
-                                { hot_water.iter().map(|hot_water| html! {
-                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::HotWater {id: hot_water.id.to_string()}, hot_water.title.clone())}</li>
+                                { water_heaters.iter().map(|water_heater| html! {
+                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::WaterHeater {id: water_heater.id.to_string()}, water_heater.title.clone())}</li>
                                 }).collect::<Html>() }
                             </ul>
                         </li>

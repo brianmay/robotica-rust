@@ -51,7 +51,7 @@ use robotica_tokio::services::persistent_state::PersistentStateDatabase;
 use robotica_tokio::spawn;
 use tracing::{debug, error, info, instrument, span};
 
-use crate::amber::hot_water;
+use crate::amber::water_heater;
 use crate::lights::{auto_brightness_level, auto_light_color, auto_temperature_level};
 
 use robotica_tokio::services::http;
@@ -301,13 +301,13 @@ async fn setup_pipes(
         amber::logging::log_prices(prices.clone(), &config.influxdb);
         amber::logging::log_usage(usage, &config.influxdb);
 
-        if let Some(hot_water) = config.hot_water {
-            monitor_hot_water(&mut state, hot_water, &prices, message_sink.clone());
+        for water_heater in config.water_heaters {
+            monitor_water_heater(&mut state, water_heater, &prices, message_sink.clone());
         }
 
         monitor_cars(&config.cars, &mut state, &postgres, &prices, &message_sink);
     } else {
-        info!("No amber configuration found; skipping hot water and car monitoring");
+        info!("No amber configuration found; skipping water heater and car monitoring");
     }
 
     monitor_bathroom_door(&mut state, message_sink.clone());
@@ -427,15 +427,15 @@ fn monitor_bathroom_door(state: &mut InitState, message_sink: stateless::Sender<
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn monitor_hot_water(
+fn monitor_water_heater(
     state: &mut InitState,
-    hot_water: config::HotWaterConfig,
+    water_heater: config::WaterHeaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
     message_sink: stateless::Sender<Message>,
 ) {
-    let id = hot_water.id;
+    let id = water_heater.id;
 
-    let span = tracing::info_span!("Hot Water");
+    let span = tracing::info_span!("Water Heater", id = %id);
     let _guard = span.enter();
 
     let is_on = state
@@ -445,33 +445,33 @@ fn monitor_hot_water(
 
     let rules = state
         .subscriptions
-        .subscribe_into_stateless::<Json<amber::rules::RuleSet<amber::hot_water::Request>>>(
+        .subscribe_into_stateless::<Json<amber::rules::RuleSet<amber::water_heater::Request>>>(
             id.get_command_topic("amber_rules"),
         );
 
     let mqtt_clone = state.mqtt.clone();
-    let hot_water_state = amber::hot_water::run(
+    let water_heater_state = amber::water_heater::run(
         &id,
         &state.persistent_state_database,
         prices.clone(),
         is_on,
         rules,
     );
-    hot_water_state.clone().send_to_mqtt_json(
+    water_heater_state.clone().send_to_mqtt_json(
         &state.mqtt,
         id.get_state_topic("amber"),
         &SendOptions::new(),
     );
-    let hot_water_request = hot_water_state
+    let water_heater_request = water_heater_state
         .map(|(_, state)| state.get_result())
-        .rate_limit("amber/hot_water/ratelimit", Duration::from_secs(300));
+        .rate_limit("amber/water_heater/ratelimit", Duration::from_secs(300));
 
-    hot_water_request.for_each(move |(old, current)| {
+    water_heater_request.for_each(move |(old, current)| {
         let command = match current {
-            hot_water::Request::Heat => shelly::SwitchCommand::On(None),
-            hot_water::Request::DoNotHeat => shelly::SwitchCommand::Off(None),
+            water_heater::Request::Heat => shelly::SwitchCommand::On(None),
+            water_heater::Request::DoNotHeat => shelly::SwitchCommand::Off(None),
         };
-        info!("Setting hot water to {:?}", command);
+        info!("Setting water heater to {:?}", command);
         let msg = MqttMessage::new(
             "hotwater/command/switch:0",
             command,
@@ -483,11 +483,11 @@ fn monitor_hot_water(
         // Don't announce when first starting up.
         if old.is_some() {
             let message = match current {
-                hot_water::Request::Heat => "Turning hot water on",
-                hot_water::Request::DoNotHeat => "Turning hot water off",
+                water_heater::Request::Heat => "Turning water heater on",
+                water_heater::Request::DoNotHeat => "Turning water heater off",
             };
             message_sink.try_send(Message::new(
-                "Hot Water",
+                "Water Heater",
                 message,
                 MessagePriority::DaytimeOnly,
                 Audience::new("everyone"),

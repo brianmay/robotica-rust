@@ -17,12 +17,12 @@ use tracing_log_error::log_error;
 pub mod api;
 pub mod car;
 mod combined;
-pub mod hot_water;
 pub mod logging;
 mod plan;
 mod private;
 pub mod rules;
 mod user_plan;
+pub mod water_heater;
 
 // pub use user_plan::MaybeUserPlan;
 

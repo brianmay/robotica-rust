@@ -16,7 +16,7 @@ use yew::prelude::*;
 pub enum Msg {
     SubscribedState(Subscription),
     Config(Option<Arc<Config>>),
-    State(amber::hot_water::State),
+    State(amber::water_heater::State),
 }
 
 #[derive(Eq, PartialEq, Properties, Clone)]
@@ -24,14 +24,14 @@ pub struct Props {
     pub id: String,
 }
 
-pub struct HotWaterComponent {
+pub struct WaterHeaterComponent {
     state_subscription: Option<Subscription>,
-    state: Option<amber::hot_water::State>,
+    state: Option<amber::water_heater::State>,
     config: Option<Arc<Config>>,
     _config_handle: ContextHandle<Option<Arc<Config>>>,
 }
 
-fn subscribe(ctx: &Context<HotWaterComponent>, car_id: &Id) {
+fn subscribe(ctx: &Context<WaterHeaterComponent>, car_id: &Id) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
@@ -39,7 +39,7 @@ fn subscribe(ctx: &Context<HotWaterComponent>, car_id: &Id) {
 
     let topic = car_id.get_state_topic("amber");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
-        let Json(state): Json<amber::hot_water::State> = msg.try_into().unwrap();
+        let Json(state): Json<amber::water_heater::State> = msg.try_into().unwrap();
         Msg::State(state)
     });
     let mut wss = wss;
@@ -49,7 +49,7 @@ fn subscribe(ctx: &Context<HotWaterComponent>, car_id: &Id) {
     });
 }
 
-impl Component for HotWaterComponent {
+impl Component for WaterHeaterComponent {
     type Message = Msg;
     type Properties = Props;
 
@@ -84,7 +84,7 @@ impl Component for HotWaterComponent {
                 false
             }
             Msg::State(state) => {
-                debug!("Hot Water state: {:?}", state);
+                debug!("Water heater state: {:?}", state);
                 self.state = Some(state);
                 true
             }
@@ -100,18 +100,18 @@ impl Component for HotWaterComponent {
         let props = ctx.props();
         let id = Id::new(&props.id);
 
-        let hot_water = if let Some(config) = &self.config {
+        let water_heater = if let Some(config) = &self.config {
             config
-                .hot_waters
+                .water_heaters
                 .iter()
-                .find(|hot_water| hot_water.id == id)
+                .find(|water_heater| water_heater.id == id)
                 .cloned()
         } else {
             None
         };
-        let title = hot_water
+        let title = water_heater
             .as_ref()
-            .map_or("Unknown", |hot_water| hot_water.title.as_str());
+            .map_or("Unknown", |water_heater| water_heater.title.as_str());
 
         html! {
             <RequireConnection>
@@ -119,7 +119,7 @@ impl Component for HotWaterComponent {
                    {  if let Some(state) = &self.state {
                         html! {
                             <div>
-                                <h1>{ format!("Hot Water: {title}") }</h1>
+                                <h1>{ format!("Water Heater: {title}") }</h1>
                                 <table class="table table-striped">
                                     <tbody>
                                         <tr>

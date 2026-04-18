@@ -103,12 +103,12 @@ pub struct CarConfig {
     pub title: String,
 }
 
-/// Hotwater configuration
+/// Water heater configuration
 #[derive(Deserialize, Serialize, Clone, Eq, PartialEq)]
-pub struct HotWaterConfig {
-    /// The id of the hot water
+pub struct WaterHeaterConfig {
+    /// The id of the water heater
     pub id: Id,
-    /// The name of the hot water
+    /// The name of the water heater
     pub title: String,
 }
 
@@ -124,8 +124,8 @@ pub struct Config {
     /// The cars for this UI
     pub cars: Vec<CarConfig>,
 
-    /// The hotwater config for this UI
-    pub hot_waters: Vec<HotWaterConfig>,
+    /// The water heater config for this UI
+    pub water_heaters: Vec<WaterHeaterConfig>,
 
     /// The name of the server in MQTT topics
     pub instance: String,

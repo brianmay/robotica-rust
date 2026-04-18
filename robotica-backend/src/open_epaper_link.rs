@@ -185,7 +185,7 @@ pub fn output_location(
 //     });
 // }
 
-// pub fn output_amber_hotwater(config: Config, state: stateful::Receiver<amber::hot_water::State>) {
+// pub fn output_amber_water_heater(config: Config, state: stateful::Receiver<amber::water_heater::State>) {
 //     let config = Arc::new(config);
 //     state.async_for_each(move |(_, state)| {
 //         let config = config.clone();
@@ -194,7 +194,7 @@ pub fn output_location(
 //             let maybe_user_plan = combined.get_plan();
 //             let y: &mut u16 = &mut 5;
 //             let mut template = Template(vec![
-//                 header(y, "Hot Water".to_string()),
+//                 header(y, "Water Heater".to_string()),
 //                 line(y),
 //                 // text(y, format!("B: {}%", state.battery_level)),
 //                 // text(y, format!("MCT: {}%", state.min_charge_tomorrow)),

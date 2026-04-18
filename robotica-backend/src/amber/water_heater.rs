@@ -225,11 +225,11 @@ pub fn run(
     is_on: Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<Request>>>,
 ) -> Receiver<State> {
-    let (tx_out, rx_out) = create_pipe("amber/hot_water");
+    let (tx_out, rx_out) = create_pipe("amber/water_heater");
     let timezone = &Local;
     let id = id.clone();
 
-    let psr = persistent_state_database.for_name::<DayState>(&id, "amber_hot_water");
+    let psr = persistent_state_database.for_name::<DayState>(&id, "amber_water_heater");
 
     let mut day = DayState::load(&psr, utc_now(), timezone);
 

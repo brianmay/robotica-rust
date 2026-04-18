@@ -94,7 +94,7 @@ pub struct Config {
     pub strips: Vec<StripConfig>,
     pub lifx: Option<LifxConfig>,
     pub metrics: Vec<metrics::ConfigMetric>,
-    pub hot_water: Option<HotWaterConfig>,
+    pub water_heaters: Vec<WaterHeaterConfig>,
     pub presence_trackers: Vec<PresenceTrackerConfig>,
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
@@ -190,7 +190,7 @@ pub struct LifxConfig {
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
-pub struct HotWaterConfig {
+pub struct WaterHeaterConfig {
     pub id: Id,
 }
 
