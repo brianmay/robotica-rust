@@ -629,7 +629,7 @@
             robotica-freeswitch = robotica-freeswitch.pkg;
             inherit robotica-frontend-bindgen;
             # TODO check if this works in CI
-            # inherit test_robotica_backend;
+            inherit test_robotica_backend;
           };
 
           devShells.default = devShell;
