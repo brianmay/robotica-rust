@@ -95,6 +95,7 @@ pub struct Config {
     pub lifx: Option<LifxConfig>,
     pub metrics: Vec<metrics::ConfigMetric>,
     pub water_heaters: Vec<WaterHeaterConfig>,
+    pub hdmi_matrices: Vec<HdmiMatrixConfig>,
     pub presence_trackers: Vec<PresenceTrackerConfig>,
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
@@ -194,6 +195,13 @@ pub struct WaterHeaterConfig {
     pub id: Id,
     pub status_topic: String,
     pub command_topic: String,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct HdmiMatrixConfig {
+    pub id: Id,
+    pub addr: String,
 }
 
 #[derive(Debug, Deserialize)]

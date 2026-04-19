@@ -539,6 +539,8 @@
                     presence_trackers = [ ];
                     occupancy_sensors = [ ];
                     night_mode = [ ];
+                    water_heaters = [ ];
+                    hdmi_matrices = [ ];
                   };
 
                   secrets = pkgs.writeText "secrets.yaml" ''

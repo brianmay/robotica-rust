@@ -317,7 +317,9 @@ async fn setup_pipes(
             .unwrap_or_else(|e| panic!("Error running http server: {e}"));
     }
 
-    hdmi_matrix::run(&mut state, &Id::new("Dining/TV"), "hdmi.pri:8000");
+    for hdmi_matrix_config in config.hdmi_matrices {
+        hdmi_matrix::run(&mut state, &hdmi_matrix_config.id, &hdmi_matrix_config.addr);
+    }
 
     let mut raw_metrics: Vec<metrics::RawMetric> = vec![];
     for metric in config.metrics {

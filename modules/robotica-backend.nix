@@ -243,6 +243,13 @@ let
     };
   };
 
+  hdmi_matrix_type = types.submodule {
+    options = {
+      id = mkOption { type = types.str; };
+      addr = mkOption { type = types.str; };
+    };
+  };
+
   presence_tracker_type = types.submodule {
     options = {
       id = mkOption { type = types.str; };
@@ -315,6 +322,7 @@ let
       strips = mkOption { type = types.listOf strip_type; };
       metrics = mkOption { type = types.listOf metric_type; };
       water_heaters = mkOption { type = types.listOf water_heater_type; };
+      hdmi_matrices = mkOption { type = types.listOf hdmi_matrix_type; };
       message_routes = mkOption {
         type = types.listOf message_route_type;
         default = [ ];
