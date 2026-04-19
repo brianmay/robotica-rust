@@ -295,7 +295,18 @@ async fn handle_command(
         command.should_play(now, state.messages_enabled)
     };
 
-    process_command(tx_screen_command, should_play, state, command, config, mqtt).await;
+    if should_play {
+        if let Some(music) = &command.music {
+            state.play_list.clone_from(&music.play_list);
+        }
+    }
+
+    process_command(tx_screen_command, should_play, state, command, config, mqtt)
+        .await
+        .unwrap_or_else(|e| {
+            state.error = Some(e);
+            state.play_list = None;
+        });
 }
 
 enum Action<'a> {
@@ -416,7 +427,7 @@ async fn process_command(
     command: AudioCommand,
     config: &LoadedConfig,
     mqtt: &MqttTx,
-) {
+) -> Result<(), String> {
     info!(
         "Processing command: {:?} with should_play: {}",
         command, should_play
@@ -424,37 +435,24 @@ async fn process_command(
     let (actions, should_stop_music) =
         get_actions_for_command(&command, tx_screen_command, should_play);
 
-    if let Some(music) = &command.music {
-        state.play_list.clone_from(&music.play_list);
-    }
-
     if should_stop_music {
         info!("Executing command with stopping music");
         let play_action = actions
             .iter()
             .any(|a| matches!(a, Action::Play(..) | Action::Stop));
 
-        let do_actions = || async {
-            let paused = is_music_paused(&config.programs).await?;
+        let paused = is_music_paused(&config.programs).await?;
 
-            for action in actions {
-                action.execute(state, config, mqtt).await?;
-            }
+        for action in actions {
+            action.execute(state, config, mqtt).await?;
+        }
 
-            if paused && !play_action {
-                set_volume(state.volume.music, &config.programs).await?;
-                music_resume(&config.programs).await?;
-            } else if !paused && !play_action {
-                set_volume(state.volume.music, &config.programs).await?;
-            }
-
-            Ok(())
-        };
-
-        do_actions().await.unwrap_or_else(|e| {
-            state.error = Some(e);
-            state.play_list = None;
-        });
+        if paused && !play_action {
+            set_volume(state.volume.music, &config.programs).await?;
+            music_resume(&config.programs).await?;
+        } else if !paused && !play_action {
+            set_volume(state.volume.music, &config.programs).await?;
+        }
     } else {
         info!("Executing command without stopping music");
         set_volume(state.volume.music, &config.programs)
@@ -464,18 +462,12 @@ async fn process_command(
                 state.play_list = None;
             });
 
-        let do_actions = || async {
-            for action in actions {
-                action.execute(state, config, mqtt).await?;
-            }
-            Ok(())
-        };
-
-        do_actions().await.unwrap_or_else(|e| {
-            state.error = Some(e);
-            state.play_list = None;
-        });
+        for action in actions {
+            action.execute(state, config, mqtt).await?;
+        }
     }
+
+    Ok(())
 }
 
 async fn set_volume(volume: u8, programs: &LoadedProgramsConfig) -> Result<(), String> {
