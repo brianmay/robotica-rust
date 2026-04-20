@@ -5,6 +5,7 @@ use robotica_common::{
     mqtt::{MqttMessage, Retain},
     robotica::{
         audio::MessagePriority,
+        commands::Command,
         message::{Audience, Message},
     },
 };
@@ -116,6 +117,7 @@ fn send_message(message: &str, config: &Config, mqtt: &MqttTx) {
         MessagePriority::Low,
         &config.audience,
     );
+    let msg = Command::Message(msg);
     let msg = MqttMessage::from_json(
         &config.topic,
         &msg,
