@@ -6,15 +6,6 @@ use icalendar::{
 };
 use thiserror::Error;
 
-/// Represents a datetime value, either UTC or a date-only.
-#[derive(Debug, Clone)]
-pub enum Dt {
-    /// A datetime in UTC
-    DateTime(DateTime<Utc>),
-    /// A date-only value
-    Date(NaiveDate),
-}
-
 /// Represents the start and end of an event, either as dates or datetimes.
 #[derive(Debug)]
 pub enum StartEnd {
@@ -37,20 +28,8 @@ pub struct CalendarEntry {
     pub uid: String,
     /// The event status
     pub status: Option<String>,
-    /// The event transparency
-    pub transp: String,
-    /// The event sequence number
-    pub sequence: u8,
     /// The start and end of the event
     pub start_end: StartEnd,
-    /// The stamp datetime
-    pub stamp: DateTime<Utc>,
-    /// The creation datetime
-    pub created: DateTime<Utc>,
-    /// The last modified datetime
-    pub last_modified: DateTime<Utc>,
-    /// The recurrence ID if this is a recurrence override
-    pub recurrence_id: Option<Dt>,
 }
 
 #[allow(clippy::expect_used)]
@@ -154,13 +133,7 @@ pub fn from_str<T: TimeZone>(
                         location,
                         uid,
                         status,
-                        transp: "OPAQUE".to_string(),
-                        sequence: 0,
                         start_end: StartEnd::DateTime(occurrence_utc, occurrence_end),
-                        stamp: Utc::now(),
-                        created: Utc::now(),
-                        last_modified: Utc::now(),
-                        recurrence_id: None,
                     });
                 }
             } else if let Some(s) = entry_start_dt {
@@ -182,13 +155,7 @@ pub fn from_str<T: TimeZone>(
                         location,
                         uid,
                         status,
-                        transp: "OPAQUE".to_string(),
-                        sequence: 0,
                         start_end: StartEnd::DateTime(s_utc, e),
-                        stamp: Utc::now(),
-                        created: Utc::now(),
-                        last_modified: Utc::now(),
-                        recurrence_id: None,
                     });
                 }
             }
