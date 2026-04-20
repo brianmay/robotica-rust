@@ -1,7 +1,9 @@
 //! Provide ability to load from iCal calendars with recurring event support.
 
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
-use icalendar::{Calendar as IcalCalendar, CalendarDateTime, Component, DatePerhapsTime, EventLike};
+use icalendar::{
+    Calendar as IcalCalendar, CalendarDateTime, Component, DatePerhapsTime, EventLike,
+};
 use thiserror::Error;
 
 /// Represents a datetime value, either UTC or a date-only.
@@ -72,27 +74,6 @@ fn calendar_datetime_to_utc(dt: &CalendarDateTime) -> Option<DateTime<Utc>> {
     }
 }
 
-fn format_datetime_for_rrule(dt: &CalendarDateTime) -> String {
-    match dt {
-        CalendarDateTime::Utc(d) => d.format("%Y%m%dT%H%M%SZ").to_string(),
-        CalendarDateTime::WithTimezone { date_time, tzid } => {
-            tzid.parse::<chrono_tz::Tz>()
-                .map_or_else(
-                    |_| date_time.format("%Y%m%dT%H%M%SZ").to_string(),
-                    |tz| {
-                        tz.from_local_datetime(date_time)
-                            .single()
-                            .map_or_else(
-                                || date_time.format("%Y%m%dT%H%M%SZ").to_string(),
-                                |dt| dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string(),
-                            )
-                    },
-                )
-        }
-        CalendarDateTime::Floating(d) => d.format("%Y%m%dT%H%M%S").to_string(),
-    }
-}
-
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn load<T: TimeZone + Clone>(
     url: &str,
@@ -118,12 +99,6 @@ pub(crate) async fn load<T: TimeZone + Clone>(
             let event_start_opt = event.get_start();
             let event_end_opt = event.get_end();
 
-            let dt_start_str = match event_start_opt.as_ref() {
-                Some(DatePerhapsTime::DateTime(ref dt)) => format_datetime_for_rrule(dt),
-                Some(DatePerhapsTime::Date(date)) => date.format("%Y%m%d").to_string(),
-                None => "20190318T040000Z".to_string(),
-            };
-
             let (duration, entry_start_dt) = match (event_start_opt, event_end_opt) {
                 (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
                     let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
@@ -137,42 +112,36 @@ pub(crate) async fn load<T: TimeZone + Clone>(
                 _ => (Duration::hours(1), None),
             };
 
-            if let Some(rrule_str) = event.property_value("RRULE").map(ToString::to_string) {
-                if entry_start_dt.is_some() {
-                    let rrule_full_str = format!("DTSTART:{dt_start_str}\nRRULE:{rrule_str}\n");
-                    
-                    if let Ok(rrule_set) = rrule_full_str.parse::<rrule::RRuleSet>() {
-                        let result = rrule_set.all(100);
-                        
-                        for occurrence in result.dates {
-                            let occurrence_utc = occurrence.with_timezone(&Utc);
-                            if occurrence_utc < start_dt_utc || occurrence_utc >= stop_dt_utc {
-                                continue;
-                            }
-                            let occurrence_end = occurrence_utc + duration;
-                            
-                            let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
-                            let description = event.get_description().map(ToString::to_string);
-                            let location = event.get_location().map(ToString::to_string);
-                            let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
-                    let status = event.get_status().map(|s| format!("{s:?}"));
-                            
-                            entries.push(CalendarEntry {
-                                summary,
-                                description,
-                                location,
-                                uid,
-                                status,
-                                transp: "OPAQUE".to_string(),
-                                sequence: 0,
-                                start_end: StartEnd::DateTime(occurrence_utc, occurrence_end),
-                                stamp: Utc::now(),
-                                created: Utc::now(),
-                                last_modified: Utc::now(),
-                                recurrence_id: None,
-                            });
-                        }
+            if let Ok(rrule_set) = event.get_recurrence() {
+                let result = rrule_set.all(100);
+                
+                for occurrence in result.dates {
+                    let occurrence_utc = occurrence.with_timezone(&Utc);
+                    if occurrence_utc < start_dt_utc || occurrence_utc >= stop_dt_utc {
+                        continue;
                     }
+                    let occurrence_end = occurrence_utc + duration;
+                    
+                    let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
+                    let description = event.get_description().map(ToString::to_string);
+                    let location = event.get_location().map(ToString::to_string);
+                    let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                    let status = event.get_status().map(|s| format!("{s:?}"));
+                    
+                    entries.push(CalendarEntry {
+                        summary,
+                        description,
+                        location,
+                        uid,
+                        status,
+                        transp: "OPAQUE".to_string(),
+                        sequence: 0,
+                        start_end: StartEnd::DateTime(occurrence_utc, occurrence_end),
+                        stamp: Utc::now(),
+                        created: Utc::now(),
+                        last_modified: Utc::now(),
+                        recurrence_id: None,
+                    });
                 }
             } else if let Some(s) = entry_start_dt {
                 let s_utc = match s {
@@ -227,7 +196,7 @@ pub enum Error {
 
     /// `RRule` parsing or generation error
     #[error("RRule error: {0}")]
-    RRule(#[from] rrule::RRuleError),
+    RRule(#[from] icalendar::rrule::RRuleError),
 }
 
 #[cfg(test)]

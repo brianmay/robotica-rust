@@ -3526,6 +3526,8 @@ dependencies = [
  "iso8601",
  "nom 8.0.0",
  "nom-language",
+ "rrule",
+ "thiserror 2.0.18",
  "uuid",
 ]
 
@@ -6649,7 +6651,6 @@ dependencies = [
  "reqwest 0.13.2",
  "robotica-common",
  "robotica-macro",
- "rrule",
  "rstest",
  "rumqttc",
  "rustls-native-certs",
