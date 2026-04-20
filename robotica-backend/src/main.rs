@@ -25,7 +25,7 @@ use std::time::Duration;
 use amber::car::ChargeRequest;
 use amber::rules;
 use anyhow::Result;
-use chrono::{Local, TimeZone};
+use chrono::Local;
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::robotica::audio::MessagePriority;
@@ -43,7 +43,7 @@ use robotica_tokio::devices::presence_tracker::{is_any_presence_in_room, Presenc
 use robotica_tokio::devices::{fake_switch, lifx, presence_tracker};
 use robotica_tokio::pipes::delays::DelayInputOptions;
 use robotica_tokio::pipes::{stateful, stateless, Subscriber};
-use robotica_tokio::scheduling::calendar::{CalendarEntry, StartEnd};
+use robotica_tokio::scheduling::calendar::CalendarEntry;
 use robotica_tokio::scheduling::executor::executor;
 use robotica_tokio::scheduling::sequencer::Sequence;
 use robotica_tokio::services::persistent_state::PersistentStateDatabase;
@@ -122,32 +122,30 @@ pub struct InitState {
     pub persistent_state_database: PersistentStateDatabase,
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn calendar_to_sequence(
     event: CalendarEntry,
-    timezone: Local,
+    _timezone: Local,
     audience: &Audience,
 ) -> Option<Sequence> {
-    let (start_time, end_time) = calendar_start_top_times(&event, timezone).or_else(|| {
-        error!("Error getting start/stop times from calendar event {event:?}");
-        None
-    })?;
+    let (start_time, end_time) = calendar_start_top_times(&event);
 
-    let payload = Message::new(
-        "Calendar Event",
-        &event.summary,
-        MessagePriority::Low,
-        audience.clone(),
-    );
-
-    let tasks = match event.start_end {
-        StartEnd::Date(_, _) => vec![],
-        StartEnd::DateTime(_, _) => vec![Task {
+    let tasks = if event.is_all_day {
+        vec![]
+    } else {
+        let payload = Message::new(
+            "Calendar Event",
+            &event.summary,
+            MessagePriority::Low,
+            audience.clone(),
+        );
+        vec![Task {
             title: format!("Tell everyone {}", event.summary),
             payload: Payload::Command(Command::Message(payload)),
             qos: QoS::ExactlyOnce,
             retain: Retain::NoRetain,
             topics: ["ha/event/message".to_string()].to_vec(),
-        }],
+        }]
     };
 
     #[allow(deprecated)]
@@ -176,27 +174,10 @@ fn calendar_to_sequence(
     })
 }
 
-fn calendar_start_top_times(
+const fn calendar_start_top_times(
     event: &CalendarEntry,
-    timezone: Local,
-) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
-    let (start_time, end_time) = match event.start_end {
-        StartEnd::Date(start, stop) => {
-            let start = start.and_hms_opt(0, 0, 0)?;
-            let stop = stop.and_hms_opt(0, 0, 0)?;
-            let start = timezone
-                .from_local_datetime(&start)
-                .single()?
-                .with_timezone(&chrono::Utc);
-            let stop = timezone
-                .from_local_datetime(&stop)
-                .single()?
-                .with_timezone(&chrono::Utc);
-            (start, stop)
-        }
-        StartEnd::DateTime(start, stop) => (start, stop),
-    };
-    Some((start_time, end_time))
+) -> (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) {
+    (event.start, event.end)
 }
 
 #[allow(clippy::too_many_lines)]

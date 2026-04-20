@@ -6,15 +6,6 @@ use icalendar::{
 };
 use thiserror::Error;
 
-/// Represents the start and end of an event, either as dates or datetimes.
-#[derive(Debug)]
-pub enum StartEnd {
-    /// Start and end are dates
-    Date(NaiveDate, NaiveDate),
-    /// Start and end are datetimes in UTC
-    DateTime(DateTime<Utc>, DateTime<Utc>),
-}
-
 /// A calendar entry representing an event from an iCal calendar.
 #[derive(Debug)]
 pub struct CalendarEntry {
@@ -28,8 +19,12 @@ pub struct CalendarEntry {
     pub uid: String,
     /// The event status
     pub status: Option<String>,
-    /// The start and end of the event
-    pub start_end: StartEnd,
+    /// Whether this is an all-day event (no specific time)
+    pub is_all_day: bool,
+    /// The start time of the event in UTC
+    pub start: DateTime<Utc>,
+    /// The end time of the event in UTC
+    pub end: DateTime<Utc>,
 }
 
 #[allow(clippy::expect_used)]
@@ -94,18 +89,18 @@ pub fn from_str<T: TimeZone>(
             let event_start_opt = event.get_start();
             let event_end_opt = event.get_end();
 
-            let (duration, entry_start_dt) = match (event_start_opt, event_end_opt) {
+            let (duration, entry_start_dt, is_all_day) = match (event_start_opt, event_end_opt) {
                 (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
                     let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
                     let e_utc =
                         calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
-                    (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)))
+                    (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
                 }
                 (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
                     let dur = Duration::days((e - s).num_days());
-                    (dur, Some(DatePerhapsTime::Date(s)))
+                    (dur, Some(DatePerhapsTime::Date(s)), true)
                 }
-                _ => (Duration::hours(1), None),
+                _ => (Duration::hours(1), None, false),
             };
 
             if let Ok(rrule_set) = event.get_recurrence() {
@@ -133,7 +128,9 @@ pub fn from_str<T: TimeZone>(
                         location,
                         uid,
                         status,
-                        start_end: StartEnd::DateTime(occurrence_utc, occurrence_end),
+                        is_all_day,
+                        start: occurrence_utc,
+                        end: occurrence_end,
                     });
                 }
             } else if let Some(s) = entry_start_dt {
@@ -155,17 +152,16 @@ pub fn from_str<T: TimeZone>(
                         location,
                         uid,
                         status,
-                        start_end: StartEnd::DateTime(s_utc, e),
+                        is_all_day,
+                        start: s_utc,
+                        end: e,
                     });
                 }
             }
         }
     }
 
-    entries.sort_by_key(|e| match &e.start_end {
-        StartEnd::DateTime(s, _) => *s,
-        StartEnd::Date(s, _) => naive_date_to_datetime(*s, &Utc),
-    });
+    entries.sort_by_key(|e| e.start);
 
     Ok(entries)
 }
