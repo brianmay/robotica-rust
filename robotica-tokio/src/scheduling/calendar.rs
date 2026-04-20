@@ -76,6 +76,12 @@ fn calendar_datetime_to_utc(dt: &CalendarDateTime) -> Option<DateTime<Utc>> {
 
 /// Parse a calendar from an iCal string and extract events within a date range.
 ///
+/// Note: For recurring events (RRULE), this function uses `after()` and `before()` bounds
+/// to efficiently skip to the query window. However, there is a maximum limit of 10,000
+/// occurrences that can be generated per event to prevent runaway recursion. In practice,
+/// this should not be a problem since the `after()`/`before()` bounds filter to only
+/// occurrences within the query range, and typical queries are for a finite date range.
+///
 /// # Errors
 ///
 /// Returns an error if the calendar string cannot be parsed.
@@ -93,6 +99,12 @@ pub fn from_str<T: TimeZone>(
     let stop_dt: DateTime<T> = naive_date_to_datetime(stop, tz);
     let start_dt_utc = start_dt.with_timezone(&Utc);
     let stop_dt_utc = stop_dt.with_timezone(&Utc);
+    let days_in_range = u16::try_from((stop - start).num_days()).unwrap_or(u16::MAX);
+    let rrule_limit = days_in_range
+        .saturating_mul(2)
+        .saturating_add(10)
+        .clamp(1000, 10000);
+    let rrule_tz: icalendar::rrule::Tz = icalendar::rrule::Tz::UTC;
 
     for component in calendar.iter() {
         if let icalendar::CalendarComponent::Event(event) = component {
@@ -118,7 +130,10 @@ pub fn from_str<T: TimeZone>(
             };
 
             if let Ok(rrule_set) = event.get_recurrence() {
-                let result = rrule_set.all(100);
+                let start_for_rrule = start_dt_utc.with_timezone(&rrule_tz);
+                let stop_for_rrule = stop_dt_utc.with_timezone(&rrule_tz);
+                let bounded = rrule_set.after(start_for_rrule).before(stop_for_rrule);
+                let result = bounded.all(rrule_limit);
 
                 for occurrence in result.dates {
                     let occurrence_utc = occurrence.with_timezone(&Utc);
