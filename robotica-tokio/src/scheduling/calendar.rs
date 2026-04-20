@@ -74,19 +74,23 @@ fn calendar_datetime_to_utc(dt: &CalendarDateTime) -> Option<DateTime<Utc>> {
     }
 }
 
+/// Parse a calendar from an iCal string and extract events within a date range.
+///
+/// # Errors
+///
+/// Returns an error if the calendar string cannot be parsed.
 #[allow(clippy::too_many_lines)]
-pub(crate) async fn load<T: TimeZone + Clone>(
-    url: &str,
+pub fn from_str<T: TimeZone>(
+    ical_str: &str,
     start: NaiveDate,
     stop: NaiveDate,
-    tz: T,
+    tz: &T,
 ) -> Result<Vec<CalendarEntry>, Error> {
-    let text = reqwest::get(url).await?.error_for_status()?.text().await?;
-    let calendar = text.parse::<IcalCalendar>().map_err(|_| Error::Ical)?;
+    let calendar = ical_str.parse::<IcalCalendar>().map_err(|_| Error::Ical)?;
 
     let mut entries = Vec::new();
-    let start_dt: DateTime<T> = naive_date_to_datetime(start, &tz);
-    let stop_dt: DateTime<T> = naive_date_to_datetime(stop, &tz);
+    let start_dt: DateTime<T> = naive_date_to_datetime(start, tz);
+    let stop_dt: DateTime<T> = naive_date_to_datetime(stop, tz);
     let start_dt_utc = start_dt.with_timezone(&Utc);
     let stop_dt_utc = stop_dt.with_timezone(&Utc);
 
@@ -102,7 +106,8 @@ pub(crate) async fn load<T: TimeZone + Clone>(
             let (duration, entry_start_dt) = match (event_start_opt, event_end_opt) {
                 (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
                     let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
-                    let e_utc = calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
+                    let e_utc =
+                        calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
                     (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)))
                 }
                 (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
@@ -114,20 +119,20 @@ pub(crate) async fn load<T: TimeZone + Clone>(
 
             if let Ok(rrule_set) = event.get_recurrence() {
                 let result = rrule_set.all(100);
-                
+
                 for occurrence in result.dates {
                     let occurrence_utc = occurrence.with_timezone(&Utc);
                     if occurrence_utc < start_dt_utc || occurrence_utc >= stop_dt_utc {
                         continue;
                     }
                     let occurrence_end = occurrence_utc + duration;
-                    
+
                     let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
                     let description = event.get_description().map(ToString::to_string);
                     let location = event.get_location().map(ToString::to_string);
                     let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
                     let status = event.get_status().map(|s| format!("{s:?}"));
-                    
+
                     entries.push(CalendarEntry {
                         summary,
                         description,
@@ -146,7 +151,7 @@ pub(crate) async fn load<T: TimeZone + Clone>(
             } else if let Some(s) = entry_start_dt {
                 let s_utc = match s {
                     DatePerhapsTime::DateTime(dt) => calendar_datetime_to_utc(&dt).unwrap_or(start_dt_utc),
-                    DatePerhapsTime::Date(date) => naive_date_to_datetime(date, &tz).with_timezone(&Utc),
+                    DatePerhapsTime::Date(date) => naive_date_to_datetime(date, tz).with_timezone(&Utc),
                 };
                 if s_utc >= start_dt_utc && s_utc < stop_dt_utc {
                     let e = s_utc + duration;
@@ -183,6 +188,21 @@ pub(crate) async fn load<T: TimeZone + Clone>(
     Ok(entries)
 }
 
+/// Load a calendar from a URL and extract events within a date range.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails or the calendar cannot be parsed.
+pub async fn load<T: TimeZone + Clone>(
+    url: &str,
+    start: NaiveDate,
+    stop: NaiveDate,
+    tz: T,
+) -> Result<Vec<CalendarEntry>, Error> {
+    let text = reqwest::get(url).await?.error_for_status()?.text().await?;
+    from_str(&text, start, stop, &tz)
+}
+
 /// Error type for calendar operations.
 #[derive(Error, Debug)]
 pub enum Error {
@@ -204,41 +224,40 @@ mod tests {
     use super::*;
     use chrono_tz::Europe::Berlin;
 
-    #[tokio::test]
-    async fn test_calendar() {
-        let c = load(
-            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
+    const TEST_CALENDAR: &str = include_str!("../../fixtures/recurring_events_changed_duration.ics");
+
+    #[test]
+    fn test_calendar() {
+        let c = from_str(
+            TEST_CALENDAR,
             NaiveDate::from_ymd_opt(2019, 3, 5).unwrap(),
             NaiveDate::from_ymd_opt(2019, 4, 1).unwrap(),
-            Berlin,
+            &Berlin,
         )
-        .await
         .unwrap();
         assert!(c.len() == 7);
     }
 
-    #[tokio::test]
-    async fn test_calendar_stop_same_date() {
-        let c = load(
-            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
+    #[test]
+    fn test_calendar_stop_same_date() {
+        let c = from_str(
+            TEST_CALENDAR,
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
-            Berlin,
+            &Berlin,
         )
-        .await
         .unwrap();
         assert!(c.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_calendar_stop_next_day() {
-        let c = load(
-            "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
+    #[test]
+    fn test_calendar_stop_next_day() {
+        let c = from_str(
+            TEST_CALENDAR,
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 19).unwrap(),
-            Berlin,
+            &Berlin,
         )
-        .await
         .unwrap();
         assert!(c.len() == 1);
     }
