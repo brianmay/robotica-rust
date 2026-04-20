@@ -250,6 +250,21 @@ let
     };
   };
 
+  door_monitor_type = types.submodule {
+    options = {
+      room_name = mkOption { type = types.str; };
+      door_topic = mkOption { type = types.str; };
+      light_topic = mkOption { type = types.str; };
+      scene_name = mkOption { type = types.str; };
+      audience = mkOption { type = types.str; };
+      rate_limit_secs = mkOption {
+        type = types.int;
+        default = 30;
+        description = "Rate limit in seconds";
+      };
+    };
+  };
+
   presence_tracker_type = types.submodule {
     options = {
       id = mkOption { type = types.str; };
@@ -323,6 +338,7 @@ let
       metrics = mkOption { type = types.listOf metric_type; };
       water_heaters = mkOption { type = types.listOf water_heater_type; };
       hdmi_matrices = mkOption { type = types.listOf hdmi_matrix_type; };
+      door_monitors = mkOption { type = types.listOf door_monitor_type; };
       message_routes = mkOption {
         type = types.listOf message_route_type;
         default = [ ];

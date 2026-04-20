@@ -96,6 +96,7 @@ pub struct Config {
     pub metrics: Vec<metrics::ConfigMetric>,
     pub water_heaters: Vec<WaterHeaterConfig>,
     pub hdmi_matrices: Vec<HdmiMatrixConfig>,
+    pub door_monitors: Vec<DoorMonitorConfig>,
     pub presence_trackers: Vec<PresenceTrackerConfig>,
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
@@ -202,6 +203,17 @@ pub struct WaterHeaterConfig {
 pub struct HdmiMatrixConfig {
     pub id: Id,
     pub addr: String,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct DoorMonitorConfig {
+    pub room_name: String,
+    pub door_topic: String,
+    pub light_topic: String,
+    pub scene_name: String,
+    pub audience: String,
+    pub rate_limit_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]

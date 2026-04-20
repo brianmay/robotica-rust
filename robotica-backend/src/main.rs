@@ -309,7 +309,9 @@ async fn setup_pipes(
         info!("No amber configuration found; skipping water heater and car monitoring");
     }
 
-    monitor_bathroom_door(&mut state, message_sink.clone());
+    for door_monitor_config in config.door_monitors {
+        monitor_door(&mut state, door_monitor_config, message_sink.clone());
+    }
 
     if let Some(http_config) = config.http {
         http::run(state.mqtt.clone(), http_config, postgres.clone())
@@ -380,47 +382,60 @@ async fn setup_pipes(
     });
 }
 
-fn monitor_bathroom_door(state: &mut InitState, message_sink: stateless::Sender<Message>) {
-    let bathroom_door: stateful::Receiver<DoorState> = state
+fn monitor_door(
+    state: &mut InitState,
+    config: config::DoorMonitorConfig,
+    message_sink: stateless::Sender<Message>,
+) {
+    let room_name = config.room_name;
+    let vacant_message = format!("The {room_name} is vacant");
+    let occupied_message = format!("The {room_name} is occupied");
+
+    let light_topic = config.light_topic;
+    let scene_name = SceneName::new(&config.scene_name);
+    let audience = Audience::new(&config.audience);
+
+    let door: stateful::Receiver<DoorState> = state
         .subscriptions
-        .subscribe_into_stateful::<Json<Door>>("zigbee2mqtt/Bathroom/door")
+        .subscribe_into_stateful::<Json<Door>>(&config.door_topic)
         .map(|(_, json)| json.into())
         .delay_input(
-            "Bathroom Door Rate Limited",
-            Duration::from_secs(30),
+            &format!("{room_name} Rate Limited"),
+            Duration::from_secs(config.rate_limit_secs),
             |_| true,
             DelayInputOptions::default(),
         );
 
     let mqtt = state.mqtt.clone();
+
     spawn(async move {
-        let mut s = bathroom_door.subscribe().await;
+        let mut s = door.subscribe().await;
 
         while let Ok((old, door)) = s.recv_old_new().await {
             if old.is_some() {
-                info!("Bathroom door state: {door:?}");
+                info!("{room_name} state: {door:?}");
                 let action = match door {
                     DoorState::Open => LightCommand::TurnOff,
                     DoorState::Closed => LightCommand::TurnOn {
-                        scene: SceneName::new("busy"),
+                        scene: scene_name.clone(),
                     },
                 };
                 let command = Command::Light(action);
                 let message = match door {
-                    DoorState::Open => "The bathroom is vacant",
-                    DoorState::Closed => "The bathroom is occupied",
+                    DoorState::Open => &vacant_message,
+                    DoorState::Closed => &occupied_message,
                 };
                 mqtt.try_serialize_send(
-                    "robotica/command/Passage/Light/split/bathroom",
+                    &light_topic,
                     &Json(command),
                     Retain::NoRetain,
                     QoS::ExactlyOnce,
                 );
                 message_sink.try_send(Message::new(
-                    "Bathroom Door",
+                    &room_name,
                     message,
                     MessagePriority::DaytimeOnly,
-                    Audience::new("everyone"),
+                    audience.clone(),
                 ));
             }
         }

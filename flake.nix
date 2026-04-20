@@ -541,6 +541,7 @@
                     night_mode = [ ];
                     water_heaters = [ ];
                     hdmi_matrices = [ ];
+                    door_monitors = [ ];
                   };
 
                   secrets = pkgs.writeText "secrets.yaml" ''
