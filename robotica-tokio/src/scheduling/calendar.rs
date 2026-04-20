@@ -1,140 +1,239 @@
-//! Provide ability to load from Google Calendar.
+//! Provide ability to load from iCal calendars with recurring event support.
 
-use chrono::{DateTime, NaiveDate, Utc};
-use pyo3::ffi::c_str;
-use pyo3::prelude::*;
-use pyo3::{FromPyObject, PyAny};
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use icalendar::{Calendar as IcalCalendar, CalendarDateTime, Component, DatePerhapsTime, EventLike};
+use thiserror::Error;
 
-/// A value that could be a `DateTime` or a `Date`
-#[derive(Debug, FromPyObject)]
+/// Represents a datetime value, either UTC or a date-only.
+#[derive(Debug, Clone)]
 pub enum Dt {
-    // DateTime must come first here.
-    /// A `DateTime` Value
+    /// A datetime in UTC
     DateTime(DateTime<Utc>),
-    /// A `Date` Value
+    /// A date-only value
     Date(NaiveDate),
 }
 
-/// The start and end date/times of a calendar entry.
+/// Represents the start and end of an event, either as dates or datetimes.
 #[derive(Debug)]
 pub enum StartEnd {
-    /// This event is a daily event.
+    /// Start and end are dates
     Date(NaiveDate, NaiveDate),
-
-    /// This event is not a daily event.
+    /// Start and end are datetimes in UTC
     DateTime(DateTime<Utc>, DateTime<Utc>),
 }
 
-/// A parsed calendar entry.
-#[allow(dead_code)]
+/// A calendar entry representing an event from an iCal calendar.
 #[derive(Debug)]
 pub struct CalendarEntry {
-    /// The title of the event.
+    /// The event summary/title
     pub summary: String,
-    /// The description of the event.
+    /// The event description
     pub description: Option<String>,
-    /// The location of the event.
+    /// The event location
     pub location: Option<String>,
-    /// The unique id of the event.
+    /// The event UID
     pub uid: String,
-    /// The status of the event.
+    /// The event status
     pub status: Option<String>,
-    /// The transparency of the event.
+    /// The event transparency
     pub transp: String,
-    /// The sequence of the event.
+    /// The event sequence number
     pub sequence: u8,
-    /// The start and end date/times of the event.
+    /// The start and end of the event
     pub start_end: StartEnd,
-    /// The stamp of the event.
+    /// The stamp datetime
     pub stamp: DateTime<Utc>,
-    /// The creation time of the event.
+    /// The creation datetime
     pub created: DateTime<Utc>,
-    /// The last modified time of the event.
+    /// The last modified datetime
     pub last_modified: DateTime<Utc>,
-    /// The recurrence id of the event.
+    /// The recurrence ID if this is a recurrence override
     pub recurrence_id: Option<Dt>,
 }
 
-impl<'py> FromPyObject<'_, 'py> for CalendarEntry {
-    type Error = pyo3::PyErr;
+#[allow(clippy::expect_used)]
+fn naive_date_to_datetime<T: TimeZone>(date: NaiveDate, tz: &T) -> DateTime<T> {
+    let naive_dt = date
+        .and_hms_opt(0, 0, 0)
+        .expect("hour, minute, and second are valid values");
+    tz.from_local_datetime(&naive_dt).unwrap()
+}
 
-    fn extract(ob: Borrowed<'_, 'py, PyAny>) -> pyo3::PyResult<Self> {
-        let start: Dt = ob.get_item("DTSTART")?.extract()?;
-        let end: Dt = ob.get_item("DTEND")?.extract()?;
-
-        let start_end = match (start, end) {
-            (Dt::DateTime(start), Dt::DateTime(end)) => StartEnd::DateTime(start, end),
-            (Dt::Date(start), Dt::Date(end)) => StartEnd::Date(start, end),
-            (Dt::DateTime(_), Dt::Date(_)) => {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "DTSTART is a DateTime but DTEND is a Date",
-                ))
-            }
-            (Dt::Date(_), Dt::DateTime(_)) => {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "DTSTART is a Date but DTEND is a DateTime",
-                ))
-            }
-        };
-
-        Ok(CalendarEntry {
-            summary: ob.get_item("SUMMARY")?.extract()?,
-            description: ob
-                .get_item("DESCRIPTION")
-                .map_or_else(|_| Ok(None), |f| f.extract().map(Some))?,
-            location: ob
-                .get_item("LOCATION")
-                .map_or_else(|_| Ok(None), |f| f.extract().map(Some))?,
-            uid: ob.get_item("UID")?.extract()?,
-            status: ob
-                .get_item("STATUS")
-                .map_or_else(|_| Ok(None), |f| f.extract().map(Some))?,
-            transp: ob.get_item("TRANSP")?.extract()?,
-            sequence: ob.get_item("SEQUENCE")?.extract()?,
-            start_end,
-            stamp: ob.get_item("DTSTAMP")?.extract()?,
-            created: ob.get_item("CREATED")?.extract()?,
-            last_modified: ob.get_item("LAST-MODIFIED")?.extract()?,
-            recurrence_id: ob
-                .get_item("RECURRENCE-ID")
-                .map_or_else(|_| Ok(None), |f| f.extract().map(Some))?,
-        })
+fn calendar_datetime_to_utc(dt: &CalendarDateTime) -> Option<DateTime<Utc>> {
+    match dt {
+        CalendarDateTime::Utc(dt) => Some(*dt),
+        CalendarDateTime::WithTimezone { date_time, tzid } => {
+            tzid.parse::<chrono_tz::Tz>().map_or_else(
+                |_| Some(Utc.from_utc_datetime(date_time)),
+                |tz| tz.from_local_datetime(date_time).single().map(|dt| dt.with_timezone(&Utc)),
+            )
+        }
+        CalendarDateTime::Floating(naive_dt) => Some(Utc.from_utc_datetime(naive_dt)),
     }
 }
 
-pub(crate) type Calendar = Vec<CalendarEntry>;
-
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum Error {
-    #[error("Python error: {0}")]
-    Python(#[from] PyErr),
-
-    #[error("Reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
+fn format_datetime_for_rrule(dt: &CalendarDateTime) -> String {
+    match dt {
+        CalendarDateTime::Utc(d) => d.format("%Y%m%dT%H%M%SZ").to_string(),
+        CalendarDateTime::WithTimezone { date_time, tzid } => {
+            tzid.parse::<chrono_tz::Tz>()
+                .map_or_else(
+                    |_| date_time.format("%Y%m%dT%H%M%SZ").to_string(),
+                    |tz| {
+                        tz.from_local_datetime(date_time)
+                            .single()
+                            .map_or_else(
+                                || date_time.format("%Y%m%dT%H%M%SZ").to_string(),
+                                |dt| dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string(),
+                            )
+                    },
+                )
+        }
+        CalendarDateTime::Floating(d) => d.format("%Y%m%dT%H%M%S").to_string(),
+    }
 }
 
-pub(crate) async fn load(url: &str, start: NaiveDate, stop: NaiveDate) -> Result<Calendar, Error> {
-    #![allow(clippy::unwrap_used)]
-
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn load<T: TimeZone + Clone>(
+    url: &str,
+    start: NaiveDate,
+    stop: NaiveDate,
+    tz: T,
+) -> Result<Vec<CalendarEntry>, Error> {
     let text = reqwest::get(url).await?.error_for_status()?.text().await?;
+    let calendar = text.parse::<IcalCalendar>().map_err(|_| Error::Ical)?;
 
-    let py_app = c_str!(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/python/robotica.py"
-    )));
+    let mut entries = Vec::new();
+    let start_dt: DateTime<T> = naive_date_to_datetime(start, &tz);
+    let stop_dt: DateTime<T> = naive_date_to_datetime(stop, &tz);
+    let start_dt_utc = start_dt.with_timezone(&Utc);
+    let stop_dt_utc = stop_dt.with_timezone(&Utc);
 
-    Python::attach(|py| {
-        let app = PyModule::from_code(py, py_app, c_str!("robotica.py"), c_str!("robotica"))?;
-        let args = (text, start, stop);
-        let calendar: Calendar = app.getattr("read_calendar")?.call1(args)?.extract()?;
-        Ok(calendar)
-    })
+    for component in calendar.iter() {
+        if let icalendar::CalendarComponent::Event(event) = component {
+            if event.property_value("RECURRENCE-ID").is_some() {
+                continue;
+            }
+
+            let event_start_opt = event.get_start();
+            let event_end_opt = event.get_end();
+
+            let dt_start_str = match event_start_opt.as_ref() {
+                Some(DatePerhapsTime::DateTime(ref dt)) => format_datetime_for_rrule(dt),
+                Some(DatePerhapsTime::Date(date)) => date.format("%Y%m%d").to_string(),
+                None => "20190318T040000Z".to_string(),
+            };
+
+            let (duration, entry_start_dt) = match (event_start_opt, event_end_opt) {
+                (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
+                    let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
+                    let e_utc = calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
+                    (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)))
+                }
+                (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
+                    let dur = Duration::days((e - s).num_days());
+                    (dur, Some(DatePerhapsTime::Date(s)))
+                }
+                _ => (Duration::hours(1), None),
+            };
+
+            if let Some(rrule_str) = event.property_value("RRULE").map(ToString::to_string) {
+                if entry_start_dt.is_some() {
+                    let rrule_full_str = format!("DTSTART:{dt_start_str}\nRRULE:{rrule_str}\n");
+                    
+                    if let Ok(rrule_set) = rrule_full_str.parse::<rrule::RRuleSet>() {
+                        let result = rrule_set.all(100);
+                        
+                        for occurrence in result.dates {
+                            let occurrence_utc = occurrence.with_timezone(&Utc);
+                            if occurrence_utc < start_dt_utc || occurrence_utc >= stop_dt_utc {
+                                continue;
+                            }
+                            let occurrence_end = occurrence_utc + duration;
+                            
+                            let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
+                            let description = event.get_description().map(ToString::to_string);
+                            let location = event.get_location().map(ToString::to_string);
+                            let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                    let status = event.get_status().map(|s| format!("{s:?}"));
+                            
+                            entries.push(CalendarEntry {
+                                summary,
+                                description,
+                                location,
+                                uid,
+                                status,
+                                transp: "OPAQUE".to_string(),
+                                sequence: 0,
+                                start_end: StartEnd::DateTime(occurrence_utc, occurrence_end),
+                                stamp: Utc::now(),
+                                created: Utc::now(),
+                                last_modified: Utc::now(),
+                                recurrence_id: None,
+                            });
+                        }
+                    }
+                }
+            } else if let Some(s) = entry_start_dt {
+                let s_utc = match s {
+                    DatePerhapsTime::DateTime(dt) => calendar_datetime_to_utc(&dt).unwrap_or(start_dt_utc),
+                    DatePerhapsTime::Date(date) => naive_date_to_datetime(date, &tz).with_timezone(&Utc),
+                };
+                if s_utc >= start_dt_utc && s_utc < stop_dt_utc {
+                    let e = s_utc + duration;
+                    let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
+                    let description = event.get_description().map(ToString::to_string);
+                    let location = event.get_location().map(ToString::to_string);
+                    let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                    let status = event.get_status().map(|s| format!("{s:?}"));
+
+                    entries.push(CalendarEntry {
+                        summary,
+                        description,
+                        location,
+                        uid,
+                        status,
+                        transp: "OPAQUE".to_string(),
+                        sequence: 0,
+                        start_end: StartEnd::DateTime(s_utc, e),
+                        stamp: Utc::now(),
+                        created: Utc::now(),
+                        last_modified: Utc::now(),
+                        recurrence_id: None,
+                    });
+                }
+            }
+        }
+    }
+
+    entries.sort_by_key(|e| match &e.start_end {
+        StartEnd::DateTime(s, _) => *s,
+        StartEnd::Date(s, _) => naive_date_to_datetime(*s, &Utc),
+    });
+
+    Ok(entries)
+}
+
+/// Error type for calendar operations.
+#[derive(Error, Debug)]
+pub enum Error {
+    /// Reqwest HTTP error
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    /// iCal parsing error
+    #[error("iCal parsing error")]
+    Ical,
+
+    /// `RRule` parsing or generation error
+    #[error("RRule error: {0}")]
+    RRule(#[from] rrule::RRuleError),
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
     use super::*;
+    use chrono_tz::Europe::Berlin;
 
     #[tokio::test]
     async fn test_calendar() {
@@ -142,11 +241,11 @@ mod tests {
             "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 5).unwrap(),
             NaiveDate::from_ymd_opt(2019, 4, 1).unwrap(),
+            Berlin,
         )
         .await
         .unwrap();
         assert!(c.len() == 7);
-        println!("{c:?}");
     }
 
     #[tokio::test]
@@ -155,11 +254,11 @@ mod tests {
             "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
+            Berlin,
         )
         .await
         .unwrap();
         assert!(c.is_empty());
-        println!("{c:?}");
     }
 
     #[tokio::test]
@@ -168,10 +267,10 @@ mod tests {
             "https://raw.githubusercontent.com/niccokunzmann/python-recurring-ical-events/refs/tags/v3.3.0/test/calendars/recurring_events_changed_duration.ics",
             NaiveDate::from_ymd_opt(2019, 3, 18).unwrap(),
             NaiveDate::from_ymd_opt(2019, 3, 19).unwrap(),
+            Berlin,
         )
         .await
         .unwrap();
         assert!(c.len() == 1);
-        println!("{c:?}");
     }
 }

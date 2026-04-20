@@ -61,7 +61,7 @@ struct InternalConfig<T: TimeZone> {
 }
 impl<T: TimeZone + Copy + Sync> InternalConfig<T> {
     async fn load_calendar(&self, start: Date, stop: Date) -> Vec<Sequence> {
-        let calendar = calendar::load(&self.extra.calendar_url, start, stop)
+        let calendar = calendar::load(&self.extra.calendar_url, start, stop, self.timezone)
             .await
             .unwrap_or_else(|e| {
                 error!("Error loading calendar: {e}");
