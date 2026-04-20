@@ -22,7 +22,7 @@ use robotica_tokio::services::{
 };
 use tokio::sync::mpsc;
 
-use tracing::info;
+use tracing::{error, info};
 use ui::ScreenCommand;
 
 struct LoadedConfig {
@@ -50,7 +50,7 @@ impl TryFrom<config::Config> for LoadedConfig {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() {
     tracing_subscriber::fmt::init();
     color_backtrace::install();
     if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
@@ -64,17 +64,31 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let env = config::Environment::load().unwrap_or_else(|e| {
-        panic!("Error loading environment: {e}");
+        error!("Error loading environment: {e}");
+        std::process::exit(1);
     });
 
     let config = env.config().unwrap_or_else(|e| {
-        panic!("Error loading config: {e}");
+        error!("Error loading config: {e}");
+        std::process::exit(1);
     });
 
-    let config: LoadedConfig = config.try_into()?;
-    start_services(config)?;
-
-    Ok(())
+    let config: LoadedConfig = match config.try_into() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Error loading configuration: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::panic::catch_unwind(|| {
+        start_services(config).unwrap_or_else(|e| {
+            error!("Error starting services: {e}");
+            std::process::exit(1);
+        });
+    }) {
+        error!("Panic in main: {e:?}");
+        std::process::exit(1);
+    }
 }
 
 /// Running state for program.
