@@ -41,7 +41,11 @@ fn calendar_datetime_to_utc(dt: &CalendarDateTime) -> Option<DateTime<Utc>> {
         CalendarDateTime::WithTimezone { date_time, tzid } => {
             tzid.parse::<chrono_tz::Tz>().map_or_else(
                 |_| Some(Utc.from_utc_datetime(date_time)),
-                |tz| tz.from_local_datetime(date_time).single().map(|dt| dt.with_timezone(&Utc)),
+                |tz| {
+                    tz.from_local_datetime(date_time)
+                        .single()
+                        .map(|dt| dt.with_timezone(&Utc))
+                },
             )
         }
         CalendarDateTime::Floating(naive_dt) => Some(Utc.from_utc_datetime(naive_dt)),
@@ -92,8 +96,8 @@ pub fn from_str<T: TimeZone>(
             let (duration, entry_start_dt, is_all_day) = match (event_start_opt, event_end_opt) {
                 (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
                     let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
-                    let e_utc =
-                        calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
+                    let e_utc = calendar_datetime_to_utc(&e)
+                        .unwrap_or_else(|| start_dt_utc + Duration::hours(1));
                     (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
                 }
                 (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
@@ -116,7 +120,10 @@ pub fn from_str<T: TimeZone>(
                     }
                     let occurrence_end = occurrence_utc + duration;
 
-                    let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
+                    let summary = event
+                        .get_summary()
+                        .map(ToString::to_string)
+                        .unwrap_or_default();
                     let description = event.get_description().map(ToString::to_string);
                     let location = event.get_location().map(ToString::to_string);
                     let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
@@ -135,12 +142,19 @@ pub fn from_str<T: TimeZone>(
                 }
             } else if let Some(s) = entry_start_dt {
                 let s_utc = match s {
-                    DatePerhapsTime::DateTime(dt) => calendar_datetime_to_utc(&dt).unwrap_or(start_dt_utc),
-                    DatePerhapsTime::Date(date) => naive_date_to_datetime(date, tz).with_timezone(&Utc),
+                    DatePerhapsTime::DateTime(dt) => {
+                        calendar_datetime_to_utc(&dt).unwrap_or(start_dt_utc)
+                    }
+                    DatePerhapsTime::Date(date) => {
+                        naive_date_to_datetime(date, tz).with_timezone(&Utc)
+                    }
                 };
                 if s_utc >= start_dt_utc && s_utc < stop_dt_utc {
                     let e = s_utc + duration;
-                    let summary = event.get_summary().map(ToString::to_string).unwrap_or_default();
+                    let summary = event
+                        .get_summary()
+                        .map(ToString::to_string)
+                        .unwrap_or_default();
                     let description = event.get_description().map(ToString::to_string);
                     let location = event.get_location().map(ToString::to_string);
                     let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
@@ -199,10 +213,13 @@ pub enum Error {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use chrono_tz::Europe::Berlin;
 
-    const TEST_CALENDAR: &str = include_str!("../../fixtures/recurring_events_changed_duration.ics");
+    const TEST_CALENDAR: &str =
+        include_str!("../../fixtures/recurring_events_changed_duration.ics");
 
     #[test]
     fn test_calendar() {
