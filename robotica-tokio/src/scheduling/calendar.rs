@@ -92,20 +92,20 @@ pub fn from_str<T: TimeZone>(
             let event_start_opt = event.get_start();
             let event_end_opt = event.get_end();
 
-            let (duration, entry_start_dt, is_all_day) = match (event_start_opt.clone(), event_end_opt.clone()) {
-                (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
-                    let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
-                    let e_utc = calendar_datetime_to_utc(&e).unwrap_or_else(|| start_dt_utc + Duration::hours(1));
-                    (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
-                }
-                (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
-                    let dur = Duration::days((e - s).num_days());
-                    (dur, Some(DatePerhapsTime::Date(s)), true)
-                }
-                _ => {
-                    (Duration::hours(1), None, false)
-                }
-            };
+            let (duration, entry_start_dt, is_all_day) =
+                match (event_start_opt.clone(), event_end_opt.clone()) {
+                    (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
+                        let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
+                        let e_utc = calendar_datetime_to_utc(&e)
+                            .unwrap_or_else(|| start_dt_utc + Duration::hours(1));
+                        (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
+                    }
+                    (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
+                        let dur = Duration::days((e - s).num_days());
+                        (dur, Some(DatePerhapsTime::Date(s)), true)
+                    }
+                    _ => (Duration::hours(1), None, false),
+                };
 
             if let Ok(rrule_set) = event.get_recurrence() {
                 let result = rrule_set.clone().all(rrule_limit);
@@ -430,8 +430,14 @@ mod tests {
         let summaries: Vec<_> = c.iter().map(|e| e.summary.as_str()).collect();
         assert!(summaries.contains(&"Multi-day All-day Event"));
         assert!(summaries.contains(&"Timed Event in New York"));
-        let allday = c.iter().find(|e| e.summary == "Multi-day All-day Event").unwrap();
-        let timed = c.iter().find(|e| e.summary == "Timed Event in New York").unwrap();
+        let allday = c
+            .iter()
+            .find(|e| e.summary == "Multi-day All-day Event")
+            .unwrap();
+        let timed = c
+            .iter()
+            .find(|e| e.summary == "Timed Event in New York")
+            .unwrap();
         assert!(allday.is_all_day);
         assert!(!timed.is_all_day);
     }
