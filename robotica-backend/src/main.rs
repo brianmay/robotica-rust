@@ -148,7 +148,6 @@ fn calendar_to_sequence(
         }]
     };
 
-    error!("Creating sequence for calendar event: {}", event.summary);
     Some(Sequence {
         title: event.summary.clone(),
         id: event.uid,
