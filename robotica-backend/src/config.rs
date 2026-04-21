@@ -97,6 +97,7 @@ pub struct Config {
     pub water_heaters: Vec<WaterHeaterConfig>,
     pub hdmi_matrices: Vec<HdmiMatrixConfig>,
     pub door_monitors: Vec<DoorMonitorConfig>,
+    pub calendar_message: Option<CalendarMessageConfig>,
     pub presence_trackers: Vec<PresenceTrackerConfig>,
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
@@ -214,6 +215,15 @@ pub struct DoorMonitorConfig {
     pub scene_name: String,
     pub audience: String,
     pub rate_limit_secs: u64,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct CalendarMessageConfig {
+    pub topic: String,
+    pub audience: String,
+    pub message_title_format: String,
+    pub message_label: String,
 }
 
 #[derive(Debug, Deserialize)]

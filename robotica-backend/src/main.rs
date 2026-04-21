@@ -126,26 +126,28 @@ pub struct InitState {
 fn calendar_to_sequence(
     event: CalendarEntry,
     _timezone: Local,
-    audience: &Audience,
+    calendar_message_config: Option<&config::CalendarMessageConfig>,
 ) -> Option<Sequence> {
     let (start_time, end_time) = calendar_start_top_times(&event);
 
     let tasks = if event.is_all_day {
         vec![]
-    } else {
+    } else if let Some(config) = calendar_message_config {
         let payload = Message::new(
-            "Calendar Event",
+            &config.message_label,
             &event.summary,
             MessagePriority::Low,
-            audience.clone(),
+            Audience::new(&config.audience),
         );
         vec![Task {
-            title: format!("Tell everyone {}", event.summary),
+            title: config.message_title_format.replace("{}", &event.summary),
             payload: Payload::Command(Command::Message(payload)),
             qos: QoS::ExactlyOnce,
             retain: Retain::NoRetain,
-            topics: ["ha/event/message".to_string()].to_vec(),
+            topics: [config.topic.clone()].to_vec(),
         }]
+    } else {
+        vec![]
     };
 
     Some(Sequence {
@@ -313,12 +315,13 @@ async fn setup_pipes(
     }
 
     if let Some(executor_config) = config.executor {
+        let calendar_message_config = config.calendar_message;
         executor(
             &mut state.subscriptions,
             state.mqtt.clone(),
             executor_config,
             Box::new(move |event, timezone| {
-                calendar_to_sequence(event, timezone, &Audience::new("everyone"))
+                calendar_to_sequence(event, timezone, calendar_message_config.as_ref())
             }),
             Local,
         )

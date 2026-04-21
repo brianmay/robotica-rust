@@ -265,6 +265,18 @@ let
     };
   };
 
+  calendar_message_type = types.submodule {
+    options = {
+      topic = mkOption { type = types.str; };
+      audience = mkOption { type = types.str; };
+      message_title_format = mkOption {
+        type = types.str;
+        description = "Format string for message title, use {} for event summary";
+      };
+      message_label = mkOption { type = types.str; };
+    };
+  };
+
   presence_tracker_type = types.submodule {
     options = {
       id = mkOption { type = types.str; };
@@ -339,6 +351,10 @@ let
       water_heaters = mkOption { type = types.listOf water_heater_type; };
       hdmi_matrices = mkOption { type = types.listOf hdmi_matrix_type; };
       door_monitors = mkOption { type = types.listOf door_monitor_type; };
+      calendar_message = mkOption {
+        type = types.nullOr calendar_message_type;
+        default = null;
+      };
       message_routes = mkOption {
         type = types.listOf message_route_type;
         default = [ ];
