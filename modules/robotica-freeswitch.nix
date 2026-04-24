@@ -75,12 +75,9 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [
         "network.target"
-        "postgresql.service"
-        "postgresql-setup.service"
         "mosquitto.service"
       ];
       requires = [
-        "postgresql-setup.service"
         "mosquitto.service"
       ];
       serviceConfig = {
