@@ -212,6 +212,21 @@ in
         program = "${wrapper}";
         user = cfg.user;
       };
+
+      systemd.services."cage-tty1" = {
+        wants = [
+          "network.target"
+          "sound.target"
+          "pipewire.service"
+          "mpd.service"
+        ];
+        after = [
+          "network.target"
+          "sound.target"
+          "pipewire.service"
+          "mpd.service"
+        ];
+      };
     }
   );
 }

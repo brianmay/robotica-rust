@@ -73,6 +73,16 @@ in
 
     systemd.services.robotica-freeswitch = {
       wantedBy = [ "multi-user.target" ];
+      after = [
+        "network.target"
+        "postgresql.service"
+        "postgresql-setup.service"
+        "mosquitto.service"
+      ];
+      requires = [
+        "postgresql-setup.service"
+        "mosquitto.service"
+      ];
       serviceConfig = {
         User = "robotica";
         ExecStart = "${wrapper}/bin/robotica-freeswitch";

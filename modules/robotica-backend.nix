@@ -394,7 +394,12 @@ in
       after = [
         "network.target"
         "postgresql.service"
+        "postgresql-setup.service"
         "influxdb2.service"
+        "mosquitto.service"
+      ];
+      requires = [
+        "postgresql-setup.service"
         "mosquitto.service"
       ];
       serviceConfig = {
