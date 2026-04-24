@@ -75,10 +75,6 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [
         "network.target"
-        "mosquitto.service"
-      ];
-      requires = [
-        "mosquitto.service"
       ];
       serviceConfig = {
         User = "robotica";
