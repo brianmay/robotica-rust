@@ -535,6 +535,12 @@ fn monitor_tesla(
         .subscriptions
         .subscribe_into_stateless::<Parsed<u8>>(car.id.get_command_topic("min_charge_tomorrow"));
 
+    let set_charge_end_time = state.subscriptions.subscribe_into_stateless::<Json<
+        robotica_common::robotica::amber::car::SetChargeEndTime,
+    >>(
+        car.id.get_command_topic("set_charge_end_time")
+    );
+
     let rules = state
         .subscriptions
         .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(
@@ -562,6 +568,7 @@ fn monitor_tesla(
         prices.clone(),
         receivers.battery_level.clone(),
         min_charge_tomorrow,
+        set_charge_end_time,
         receivers.is_charging.clone(),
         rules,
     );

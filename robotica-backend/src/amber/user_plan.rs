@@ -165,6 +165,7 @@ impl<R> MaybeUserPlan<R> {
     //     self.get_plan().map_or(false, |plan| plan.is_current(now))
     // }
 
+    #[allow(dead_code)]
     pub fn get_average_cost_per_hour(&self) -> Option<f32> {
         self.0.as_ref().map(UserPlan::get_average_cost_per_hour)
     }

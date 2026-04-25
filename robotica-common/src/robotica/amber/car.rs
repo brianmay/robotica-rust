@@ -1,7 +1,22 @@
 //! Shared amber car types
+#[cfg(feature = "chrono")]
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
+#[cfg(feature = "chrono")]
+use serde::Serialize;
 
 use super::combined;
+
+/// Set charge end time override
+#[cfg(feature = "chrono")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SetChargeEndTime {
+    /// End time to charge by
+    pub end_time: DateTime<Utc>,
+    /// Minimum charge level
+    pub min_charge: u8,
+}
 
 /// Charge request
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize)]
@@ -34,6 +49,10 @@ pub struct State {
     /// The combined state
     #[serde(flatten)]
     pub combined: combined::State<ChargeRequest>,
+
+    /// Charge requirements
+    #[cfg(feature = "chrono")]
+    pub charge_end_time: SetChargeEndTime,
 }
 
 impl State {

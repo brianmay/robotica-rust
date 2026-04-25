@@ -6,7 +6,7 @@ use opentelemetry::metrics::Meter;
 use robotica_common::{
     datetime::time_delta,
     mqtt::{Json, Parsed},
-    robotica::entities::Id,
+    robotica::{amber::car::SetChargeEndTime, entities::Id},
 };
 use robotica_macro::naive_time_constant;
 use robotica_tokio::{
@@ -17,8 +17,11 @@ use robotica_tokio::{
     spawn,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::select;
+use std::{sync::Arc, time::Duration};
+use tokio::{
+    select,
+    time::{sleep_until, Instant},
+};
 use tracing::{debug, error, info};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -88,15 +91,45 @@ struct PersistentState {
     min_charge_tomorrow: u8,
     charge_plan: ChargePlan,
     rules: rules::RuleSet<ChargeRequest>,
+    charge_end_time: SetChargeEndTime,
 }
 
-impl Default for PersistentState {
-    fn default() -> Self {
+impl PersistentState {
+    pub async fn sleep_until_override_charge_expired(&self) {
+        // If end time is in the past this will return immediately.
+        let end_time = (self.charge_end_time.end_time - Utc::now())
+            .to_std()
+            .unwrap_or_else(|_| Duration::from_secs(0));
+
+        sleep_until(Instant::now() + end_time).await;
+    }
+}
+
+const END_TIME: NaiveTime = naive_time_constant!(06:30:0);
+
+impl PersistentState {
+    fn default_charge_end_time(
+        now: DateTime<Utc>,
+        min_charge_tomorrow: u8,
+        timezone: &impl TimeZone,
+    ) -> SetChargeEndTime {
+        let end_time = {
+            let (_start, end) = super::private::get_day(now, END_TIME, timezone);
+            end
+        };
+        SetChargeEndTime {
+            min_charge: min_charge_tomorrow,
+            end_time,
+        }
+    }
+
+    fn new(now: DateTime<Utc>, timezone: &impl TimeZone) -> Self {
         let min_charge_tomorrow = 70;
         Self {
             min_charge_tomorrow,
             charge_plan: MaybeUserPlan::new_none(),
             rules: rules::RuleSet::new(vec![]),
+            charge_end_time: Self::default_charge_end_time(now, min_charge_tomorrow, timezone),
         }
     }
 }
@@ -108,20 +141,26 @@ pub fn run(
     rx: Receiver<Arc<Prices>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
+    set_charge_end_time: stateless::Receiver<Json<SetChargeEndTime>>,
     is_charging: stateful::Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
 ) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/car");
     let id = car.id.clone();
 
+    let timezone = Local;
+
     let psr = persistent_state_database.for_name::<PersistentState>(&id, "amber_car");
-    let mut ps = psr.load().unwrap_or_default();
+    let mut ps = psr
+        .load()
+        .unwrap_or_else(|_| PersistentState::new(Utc::now(), &timezone));
 
     let meters: combined::Meters<ChargeRequest> = combined::Meters::new(&id);
 
     spawn(async move {
         let mut s = rx.subscribe().await;
         let mut s_min_charge_tomorrow = min_charge_tomorrow.subscribe().await;
+        let mut s_set_charge_end_time = set_charge_end_time.subscribe().await;
         let mut s_battery_level = battery_level.subscribe().await;
         let mut s_is_charging = is_charging.subscribe().await;
         let mut s_rules = rules.subscribe().await;
@@ -149,7 +188,7 @@ pub fn run(
                 ps,
                 Some(&meters),
                 Utc::now(),
-                &Local,
+                &timezone,
             );
             ps = new_ps;
 
@@ -173,6 +212,12 @@ pub fn run(
                     ps.min_charge_tomorrow = *min_charge_tomorrow;
                     save_state(&id, &psr, &ps);
                 },
+                Ok(set_charge_end_time) = s_set_charge_end_time.recv() => {
+                    let msg = set_charge_end_time.into_inner();
+                    debug!(%id, override_min_charge = msg.min_charge, end_time = %msg.end_time, "Setting charge end time override");
+                    ps.charge_end_time = msg;
+                    save_state(&id, &psr, &ps);
+                },
                 Ok(rules) = s_rules.recv() => {
                     debug!(%id, ?rules, "Setting rules");
                     ps.rules = rules.into_inner();
@@ -187,6 +232,11 @@ pub fn run(
                         info!(%id, "Plan ended, but was still charging, estimated time was too short");
                     }
                     ps.charge_plan = MaybeUserPlan::none();
+                },
+                () = ps.sleep_until_override_charge_expired() => {
+                    info!(%id, "Charge end time override expired");
+                    ps.charge_end_time = PersistentState::default_charge_end_time(Utc::now(), ps.min_charge_tomorrow, &timezone);
+                    save_state(&id, &psr, &ps);
                 },
                 else => break,
             }
@@ -205,8 +255,6 @@ fn save_state(
         error!(%id, "Failed to save persistent state: {:?}", e);
     });
 }
-
-const END_TIME: NaiveTime = naive_time_constant!(06:30:0);
 
 #[allow(clippy::too_many_arguments)]
 fn prices_to_charge_request<T: TimeZone>(
@@ -237,6 +285,7 @@ fn prices_to_charge_request<T: TimeZone>(
         combined: request,
         battery_level,
         min_charge_tomorrow: ps.min_charge_tomorrow,
+        charge_end_time: ps.charge_end_time.clone(),
     };
 
     (state, ps)
@@ -249,11 +298,11 @@ fn get_new_plan_to_min_charge(
     timezone: &impl TimeZone,
     prices: &Prices,
     limit: u8,
+    end_time: DateTime<Utc>,
 ) -> MaybeUserPlan<ChargeRequest> {
     let estimated_charge_time_to_min = estimate_to_limit(id, battery_level, now, limit, timezone);
 
     estimated_charge_time_to_min.map_or_else(MaybeUserPlan::none, |estimated_charge_time_to_min| {
-        let (_start_time, end_time) = super::private::get_day(now, END_TIME, timezone);
         let request = ChargeRequest::ChargeTo(limit);
         MaybeUserPlan::get_cheapest(
             id,
@@ -276,29 +325,40 @@ fn get_new_plan(
     timezone: &impl TimeZone,
     prices: &Prices,
 ) -> MaybeUserPlan<ChargeRequest> {
-    let mut try_limit = Vec::with_capacity(3);
+    let charge_end_time = &ps.charge_end_time;
 
-    if ps.min_charge_tomorrow < 90 {
-        try_limit.push((90, 7.68 * 10.0));
-    }
+    let try_limits = {
+        let mut limits = Vec::with_capacity(3);
+        if charge_end_time.min_charge < 90 {
+            limits.push((90, 7.68 * 10.0));
+        }
+        if charge_end_time.min_charge < 80 {
+            limits.push((80, 7.68 * 15.0));
+        }
+        limits.push((charge_end_time.min_charge, 7.68 * 40.0));
+        limits
+    };
 
-    if ps.min_charge_tomorrow < 80 {
-        try_limit.push((80, 7.68 * 15.0));
-    }
-
-    try_limit.push((ps.min_charge_tomorrow, 7.68 * 40.0));
-
-    for (limit, max_cost_per_hour) in try_limit {
-        let new_plan = get_new_plan_to_min_charge(id, battery_level, now, timezone, prices, limit);
+    for (limit, max_cost_per_hour) in try_limits {
+        let new_plan = get_new_plan_to_min_charge(
+            id,
+            battery_level,
+            now,
+            timezone,
+            prices,
+            limit,
+            charge_end_time.end_time,
+        );
         if let Some(plan) = new_plan.get() {
-            let propose_plan = plan.get_average_cost_per_hour() < max_cost_per_hour;
+            let user_plan_cost_per_hour = plan.get_average_cost_per_hour();
+            let propose_plan = f64::from(user_plan_cost_per_hour) < max_cost_per_hour;
 
             if propose_plan {
                 info!(
                     %id,
                     ?new_plan,
                     total_cost = new_plan.get_total_cost(),
-                    average_cost_per_hour = new_plan.get_average_cost_per_hour(),
+                    average_cost_per_hour = user_plan_cost_per_hour,
                     max_cost_per_hour,
                     limit,
                     "Proposing new plan"
@@ -310,7 +370,7 @@ fn get_new_plan(
                 %id,
                 ?new_plan,
                 total_cost = new_plan.get_total_cost(),
-                average_cost_per_hour = new_plan.get_average_cost_per_hour(),
+                average_cost_per_hour = user_plan_cost_per_hour,
                 max_cost_per_hour,
                 limit,
                 "Skipping plan as too expensive"
@@ -356,9 +416,12 @@ pub struct State {
 
     #[serde(flatten)]
     pub combined: combined::State<ChargeRequest>,
+
+    pub charge_end_time: SetChargeEndTime,
 }
 
 impl State {
+    #[must_use]
     pub const fn get_result(&self) -> ChargeRequest {
         self.combined.get_result()
     }
