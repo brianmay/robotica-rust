@@ -402,6 +402,9 @@ in
         "postgresql-setup.service"
         "mosquitto.service"
       ];
+      partOf = [
+        "postgresql.service"
+      ];
       serviceConfig = {
         User = "robotica";
         ExecStart = "${wrapper}/bin/robotica-backend";
