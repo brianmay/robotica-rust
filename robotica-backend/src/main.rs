@@ -544,7 +544,7 @@ fn monitor_tesla(
     let rules = state
         .subscriptions
         .subscribe_into_stateless::<Json<rules::RuleSet<ChargeRequest>>>(
-            car.id.get_command_topic("rules"),
+            car.id.get_command_topic("amber_rules"),
         );
 
     let receivers = tesla::Receivers::new(tesla, state);
