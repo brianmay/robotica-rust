@@ -14,6 +14,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
       - uses: wimpysworld/nothing-but-nix@v10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - uses: DeterminateSystems/nix-installer-action@v22
         with:
           determinate: true
