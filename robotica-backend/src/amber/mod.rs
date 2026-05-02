@@ -240,7 +240,7 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
 
                     // Schedule the next update
                     info!(%id, "Next poll in {}", next_delay);
-                    let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_secs(300));
+                    let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_mins(5));
                     price_instant = Instant::now() + next_delay;
                 }
                 _ = usage_interval.tick() => {

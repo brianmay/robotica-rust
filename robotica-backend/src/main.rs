@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
 
     loop {
         debug!("I haven't crashed yet!");
-        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+        tokio::time::sleep(std::time::Duration::from_mins(5)).await;
     }
 
     Ok(())
@@ -463,7 +463,7 @@ fn monitor_water_heater(
     );
     let water_heater_request = water_heater_state
         .map(|(_, state)| state.get_result())
-        .rate_limit("amber/water_heater/ratelimit", Duration::from_secs(300));
+        .rate_limit("amber/water_heater/ratelimit", Duration::from_mins(5));
 
     water_heater_request.for_each(move |(old, current)| {
         let command = match current {

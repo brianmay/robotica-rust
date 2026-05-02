@@ -192,7 +192,7 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
     });
 
     // We only care if doors open for at least 120 seconds.
-    let duration = Duration::from_secs(120);
+    let duration = Duration::from_mins(2);
     let rx = rx.delay_input(
         "tesla_doors (delayed)",
         duration,
@@ -206,7 +206,7 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
     let rx = rx.filter(|(p, c)| p.is_some() || !c.is_empty());
 
     // Repeat the last value every 5 minutes.
-    let duration = Duration::from_secs(300);
+    let duration = Duration::from_mins(5);
     let rx = rx.delay_repeat("tesla_doors (repeat)", duration, |(_, c)| !c.is_empty());
 
     // Output the message.

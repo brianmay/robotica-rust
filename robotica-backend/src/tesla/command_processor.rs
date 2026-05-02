@@ -272,7 +272,7 @@ pub fn run(
                                     // If we did have a command, rate limit next command to 5 minutes.
                                     Some(TryCommand {
                                     command: Command::new(),
-                                    next_try_instant: Instant::now() + Duration::from_secs(300),
+                                    next_try_instant: Instant::now() + Duration::from_mins(5),
                                 })
                             };
                             errors.notify_success(&message_tx, &meters);
@@ -288,7 +288,7 @@ pub fn run(
                             errors.notify_errors(&message_tx, &meters);
                         }
                         Err(err) => {
-                            let duration = Duration::from_secs(60);
+                            let duration = Duration::from_mins(1);
                             error!(%id, "Command failed: {err}, retrying in {duration:?}.");
                             meters.increment_outgoing_done(&try_command.command, OutgoingStatus::Error);
                             maybe_try_command = Some(TryCommand {

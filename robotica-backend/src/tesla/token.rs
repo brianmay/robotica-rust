@@ -42,7 +42,7 @@ pub fn run(id: &Id, state: &InitState) -> Result<stateful::Receiver<Arc<Token>>,
     let meters = Meters::new();
 
     spawn(async move {
-        let mut refresh_token_timer = tokio::time::interval(Duration::from_secs(3600));
+        let mut refresh_token_timer = tokio::time::interval(Duration::from_hours(1));
 
         check_token(&id, &mut token, &tesla_secret, &meters).await;
         test_tesla_api(&id, &token, &meters).await;

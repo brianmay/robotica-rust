@@ -37,7 +37,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     loop {
         debug!("I haven't crashed yet!");
-        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+        tokio::time::sleep(std::time::Duration::from_mins(5)).await;
     }
 }
 
