@@ -160,7 +160,7 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
     tokio::task::spawn(
         session_store
             .clone()
-            .continuously_delete_expired(tokio::time::Duration::from_secs(60)),
+            .continuously_delete_expired(tokio::time::Duration::from_mins(1)),
     );
 
     let session_layer = SessionManagerLayer::new(session_store)
@@ -193,11 +193,11 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
                 match new_client {
                     Ok(new_client) => {
                         client.store(Arc::new(Some(new_client)));
-                        tokio::time::sleep(tokio::time::Duration::from_secs(10 * 60)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_mins(10)).await;
                     }
                     Err(e) => {
                         tracing::error!("failed to refresh oidc client: {}", e);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_mins(1)).await;
                     }
                 }
             }

@@ -20,7 +20,7 @@ pub fn plug_in_reminder(
 
     let should_plugin_stream = should_plugin_stream.delay_repeat(
         "tesla_should_plugin (repeat)",
-        Duration::from_secs(60 * 10),
+        Duration::from_mins(10),
         |(_, should_plugin)| *should_plugin == ShouldPlugin::ShouldPlugin,
     );
 

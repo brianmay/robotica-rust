@@ -150,7 +150,7 @@ pub fn run(
 
 fn calculate_away_instant(away_timeout: chrono::TimeDelta, updated: DateTime<Utc>) -> Instant {
     let delta = updated + away_timeout - utc_now();
-    let std = delta.to_std().unwrap_or(std::time::Duration::from_secs(60));
+    let std = delta.to_std().unwrap_or(std::time::Duration::from_secs(1));
     Instant::now() + std
 }
 

@@ -329,14 +329,14 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
     fn get_next_timer(&self, now: &DateTime<Utc>) -> Instant {
         let next = self.events.front();
         next.map_or_else(
-            || Instant::now() + tokio::time::Duration::from_secs(120),
+            || Instant::now() + tokio::time::Duration::from_mins(2),
             |next| {
                 let next = next.datetime;
                 let mut next = next - *now;
                 if next > Self::POLL_INTERVAL {
                     next = Self::POLL_INTERVAL;
                 }
-                let next = next.to_std().unwrap_or(std::time::Duration::from_secs(60));
+                let next = next.to_std().unwrap_or(std::time::Duration::from_mins(1));
                 Instant::now() + next
             },
         )

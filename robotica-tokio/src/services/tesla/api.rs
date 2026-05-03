@@ -679,7 +679,7 @@ impl Token {
         let token = {
             let expires_in = Duration::from_secs(token.expires_in);
             let renew_in = expires_in
-                .checked_sub(Duration::from_secs(60 * 60))
+                .checked_sub(Duration::from_hours(1))
                 .unwrap_or_default();
 
             let expires_in =
@@ -808,7 +808,7 @@ impl Token {
             // This should never happen
             Err(Error::Json(err)) => {
                 error!("Trying to wake up: Json error (should not happen): {}", err);
-                Err(WakeupError::WaitRetry(Duration::from_secs(60)))
+                Err(WakeupError::WaitRetry(Duration::from_mins(1)))
             }
         }
     }
