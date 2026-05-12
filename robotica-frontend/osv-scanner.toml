@@ -1,0 +1,29 @@
+[[PackageOverrides]]
+name = "ajv"
+ecosystem = "npm"
+ignore = true
+reason = "Dev dependency (webpack JSON schema validator) — not shipped to production"
+
+[[PackageOverrides]]
+name = "brace-expansion"
+ecosystem = "npm"
+ignore = true
+reason = "Dev dependency — not shipped to production"
+
+[[PackageOverrides]]
+name = "path-to-regexp"
+ecosystem = "npm"
+ignore = true
+reason = "Dev dependency (webpack dev server) — not shipped to production"
+
+[[PackageOverrides]]
+name = "qs"
+ecosystem = "npm"
+ignore = true
+reason = "Dev dependency (webpack dev server query parser) — not shipped to production"
+
+[[PackageOverrides]]
+name = "serialize-javascript"
+ecosystem = "npm"
+ignore = true
+reason = "Dev dependency (webpack serialization) — not shipped to production"
