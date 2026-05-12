@@ -378,6 +378,7 @@
                   pkgs.sqlx-cli
                   pkgs.influxdb2
                   pkgs.mosquitto
+                  pkgs.osv-scanner
                 ];
                 enterShell = ''
                   export ROBOTICA_DEBUG=true

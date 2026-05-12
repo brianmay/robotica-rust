@@ -1,0 +1,45 @@
+[[PackageOverrides]]
+name = "atomic-polyfill"
+ignore = true
+reason = "Stale lock entry — not in any dependency tree"
+
+[[PackageOverrides]]
+name = "rsa"
+ignore = true
+reason = "Stale lock entry — not in any dependency tree"
+
+[[PackageOverrides]]
+name = "paste"
+ignore = true
+reason = "Compile-time proc macro only — no runtime impact"
+
+[[PackageOverrides]]
+name = "proc-macro-error"
+ignore = true
+reason = "Compile-time proc macro only — no runtime impact"
+
+[[PackageOverrides]]
+name = "bincode"
+ignore = true
+reason = "WASM frontend only (gloo-worker); unmaintained but no known vulns"
+
+[[PackageOverrides]]
+name = "rustls-pemfile"
+ignore = true
+reason = "Unmaintained but no known security bugs; used by rumqttc for local TLS certs"
+
+[[PackageOverrides]]
+name = "libyml"
+ignore = true
+reason = "Unsound (local config files only, not untrusted input). Migrate to serde_norway."
+
+[[PackageOverrides]]
+name = "serde_yml"
+ignore = true
+reason = "Unsound (local config files only, not untrusted input). Migrate to serde_norway."
+
+[[PackageOverrides]]
+name = "rustls-webpki"
+version = "0.102.8"
+vulnerability.ignore = true
+reason = "All CVEs are CRL/cert-chain issues requiring either compromised CA or misissued certs. MQTT uses local broker. Pinned by rumqttc — can't update to 0.103.x."
