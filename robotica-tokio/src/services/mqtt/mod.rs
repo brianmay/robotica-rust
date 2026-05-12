@@ -806,7 +806,7 @@ mod tests {
                 password: "test"
         "#;
 
-        let config = serde_yml::from_str::<Config>(config).unwrap();
+        let config = serde_yaml_ng::from_str::<Config>(config).unwrap();
         assert_eq!(config.host, "test");
         assert_eq!(config.port, 1234);
         if let Credentials::UsernamePassword { username, password } = config.credentials {
@@ -824,7 +824,7 @@ mod tests {
             port: 1234
         "#;
 
-        let config = serde_yml::from_str::<Config>(config).unwrap();
+        let config = serde_yaml_ng::from_str::<Config>(config).unwrap();
         assert_eq!(config.host, "test");
         assert_eq!(config.port, 1234);
         assert!(matches!(config.credentials, Credentials::None));

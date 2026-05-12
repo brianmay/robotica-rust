@@ -34,10 +34,10 @@ pub struct Environment {
     pub database_url: Option<String>,
 }
 
-fn load_file(filename: &Path) -> Result<serde_yml::Value, Error> {
+fn load_file(filename: &Path) -> Result<serde_yaml_ng::Value, Error> {
     let f = std::fs::File::open(filename).map_err(|e| Error::File(filename.to_path_buf(), e))?;
-    let config: serde_yml::Value =
-        serde_yml::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
+    let config: serde_yaml_ng::Value =
+        serde_yaml_ng::from_reader(f).map_err(|e| Error::Yaml(filename.to_path_buf(), e))?;
 
     Ok(config)
 }
@@ -54,15 +54,15 @@ impl Environment {
         };
 
         let config = {
-            let mut env_config = serde_yml::Value::Mapping(serde_yml::Mapping::new());
+            let mut env_config = serde_yaml_ng::Value::Mapping(serde_yaml_ng::Mapping::new());
             if let Some(database_url) = &self.database_url {
-                env_config["database_url"] = serde_yml::Value::String(database_url.clone());
+                env_config["database_url"] = serde_yaml_ng::Value::String(database_url.clone());
             }
             robotica_tokio::serde::merge_yaml(config, env_config)?
         };
 
         let mut config: Config =
-            serde_yml::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
+            serde_yaml_ng::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         if let Some(static_path) = &self.static_path {
             if let Some(http_config) = &mut config.http {
@@ -113,7 +113,7 @@ pub enum Error {
 
     /// Error reading the file
     #[error("Error parsing file {0}: {1}")]
-    Yaml(PathBuf, serde_yml::Error),
+    Yaml(PathBuf, serde_yaml_ng::Error),
 
     /// Error merging the files
     #[error("Error merging files: {0}")]

@@ -29,16 +29,6 @@ ignore = true
 reason = "Unmaintained but no known security bugs; used by rumqttc for local TLS certs"
 
 [[PackageOverrides]]
-name = "libyml"
-ignore = true
-reason = "Unsound (local config files only, not untrusted input). Migrate to serde_norway."
-
-[[PackageOverrides]]
-name = "serde_yml"
-ignore = true
-reason = "Unsound (local config files only, not untrusted input). Migrate to serde_norway."
-
-[[PackageOverrides]]
 name = "rustls-webpki"
 version = "0.102.8"
 vulnerability.ignore = true

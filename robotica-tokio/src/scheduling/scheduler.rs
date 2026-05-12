@@ -94,7 +94,7 @@ pub enum ConfigError {
 
     /// Error reading the file
     #[error("Error parsing file {0}: {1}")]
-    YamlError(PathBuf, serde_yml::Error),
+    YamlError(PathBuf, serde_yaml_ng::Error),
 }
 
 /// Load the scheduler config from the given path.
@@ -107,7 +107,7 @@ pub fn load_config(filename: &Path) -> Result<Vec<Config>, ConfigError> {
         .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
 
     let config: Vec<Config> =
-        serde_yml::from_reader(f).map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
+        serde_yaml_ng::from_reader(f).map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
 
     Ok(config)
 }
