@@ -22,7 +22,7 @@ jobs:
           determinate: true
       - name: Update flake.lock
         id: update
-        uses: DeterminateSystems/update-flake-lock@d8097c6eb8f9758830163bdb33482c0079e67a46 # v28
+        uses: DeterminateSystems/update-flake-lock@834c491b2ece4de0bbd00d85214bb5e83b4da5c6 # v28
         with:
           token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
           pr-title: "Update flake.lock" # Title of PR to be created
