@@ -158,7 +158,14 @@ pub fn init_tracing_subscriber(config: &Config) -> Result<OtelGuard, Error> {
     let filter = EnvFilter::from_default_env()
         .add_directive("hyper=error".parse().unwrap())
         .add_directive("tonic=error".parse().unwrap())
-        .add_directive("reqwest=error".parse().unwrap());
+        .add_directive("reqwest=error".parse().unwrap())
+        // Suppress internal tracing from opentelemetry crates to prevent a
+        // re-entrant deadlock: opentelemetry internals can emit tracing events
+        // inside OpenTelemetryLayer::on_enter, which holds a span write lock.
+        // See: https://github.com/tokio-rs/tracing-opentelemetry/issues/250
+        .add_directive("opentelemetry=off".parse().unwrap())
+        .add_directive("opentelemetry_sdk=off".parse().unwrap())
+        .add_directive("opentelemetry_otlp=off".parse().unwrap());
 
     let layer = tracing_subscriber::registry()
         .with(filter)
