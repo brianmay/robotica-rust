@@ -1,3 +1,5 @@
+name: update hashes
+
 on:
   pull_request:
  
@@ -5,7 +7,7 @@ env:
   NIX_REMOTE: daemon
 
 jobs:
-  build:
+  update_hashes:
     runs-on: ubuntu-latest
     if: github.actor != 'brianmay-actions' && github.event.pull_request.head.repo.full_name == github.repository
     steps:
