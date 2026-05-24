@@ -45,7 +45,7 @@
           # };
           pkgs = inputs.nixpkgs.legacyPackages.${system}.extend (import rust-overlay);
           pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
-          nodejs = pkgs.nodejs_20;
+          nodejs = pkgs.nodejs_22;
 
           wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
             src = pkgs.fetchCrate {
