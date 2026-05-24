@@ -410,9 +410,7 @@ impl Component for MapComponent {
                     update_tooltip(marker, &location);
                     *existing = location;
                 } else {
-                    let options = leaflet::MarkerOptions::default();
-                    options.set_title(location.label.clone());
-                    let marker = leaflet::Marker::new_with_options(&lat_lng, &options);
+                    let marker = leaflet::Marker::new(&lat_lng);
                     marker.add_to(&self.map);
                     make_tooltip(&marker, &location);
                     self.tracked_objects.insert(topic, (location, marker));
