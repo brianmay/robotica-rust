@@ -145,12 +145,12 @@ pub struct Outputs {
 }
 
 fn new_message(
-    sender_name: &str,
+    title: &str,
     message: impl Into<String>,
     priority: MessagePriority,
     audience: impl Into<Audience>,
 ) -> Message {
-    Message::new(sender_name, message.into(), priority, audience)
+    Message::new(title, message.into(), priority, audience)
 }
 
 /// Candidate radius used when querying nearby zones for observability.
@@ -168,7 +168,7 @@ async fn process_location(
     postgres: &sqlx::PgPool,
     locations: &mut state::State,
     first_time: &mut bool,
-    sender_name: &str,
+    title: &str,
     tracked_name: &str,
     audience: &AudienceConfig,
     arrival_radius: f64,
@@ -204,12 +204,12 @@ async fn process_location(
         for loc in &arrived {
             let msg = format!("{tracked_name} arrived at {}", loc.name);
             let aud = if loc.announce_on_enter { &audience.locations } else { &audience.private };
-            message_tx.try_send(new_message(sender_name, msg, MessagePriority::Low, aud.clone()));
+            message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
         }
         for loc in left {
             let msg = format!("{tracked_name} left {}", loc.name);
             let aud = if loc.announce_on_exit { &audience.locations } else { &audience.private };
-            message_tx.try_send(new_message(sender_name, msg, MessagePriority::Low, aud.clone()));
+            message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
         }
     }
 
@@ -246,8 +246,8 @@ async fn process_location(
 
 /// Monitor a stream of location updates, enriching each with database lookups.
 ///
-/// * `sender_name` — name used as the sender in arrival/departure messages
-///   (e.g. `"Tesla"` or `"Phone"`).
+/// * `title` — title used in arrival/departure messages
+///   (e.g. `"Tesla"` or `"OwnTracks"`).
 /// * `tracked_name` — human-readable name for the tracked object used in
 ///   message bodies (e.g. `"Model 3"` or `"Brian's phone"`).
 /// * `audience` — where to send arrival/departure announcements.
@@ -258,7 +258,7 @@ async fn process_location(
 /// * `exit_radius` — extra padding in metres used for the exit hysteresis test;
 ///   the object must move this far outside the zone before departure is triggered.
 pub fn monitor<T>(
-    sender_name: impl Into<String>,
+    title: impl Into<String>,
     tracked_name: impl Into<String>,
     audience: AudienceConfig,
     location: stateful::Receiver<Json<T>>,
@@ -272,7 +272,7 @@ where
     let (location_tx, location_rx) = stateful::create_pipe("location_monitor");
     let (message_tx, message_rx) = stateless::create_pipe("location_monitor_message");
 
-    let sender_name = sender_name.into();
+    let title = title.into();
     let tracked_name = tracked_name.into();
 
     spawn(async move {
@@ -288,7 +288,7 @@ where
                 &postgres,
                 &mut locations,
                 &mut first_time,
-                &sender_name,
+                &title,
                 &tracked_name,
                 &audience,
                 arrival_radius,
