@@ -647,6 +647,8 @@ fn monitor_owntracks(
         },
         location,
         postgres.clone(),
+        config.arrival_radius_m,
+        config.exit_radius_m,
     );
 
     locations.messages.send_to(message_sink);
