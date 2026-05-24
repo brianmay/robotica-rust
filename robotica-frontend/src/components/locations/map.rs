@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     components::locations::{editor::EditorView, list::List},
@@ -10,13 +10,11 @@ use crate::{
 };
 use geo::coord;
 use gloo_utils::document;
-use itertools::Itertools;
 use js_sys::Reflect;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
     robotica::{
-        entities::Id,
         locations::{CreateLocation, Location, LocationMessage},
     },
     user::User,
@@ -34,8 +32,8 @@ use super::{
 };
 
 pub enum Msg {
-    Car(LocationMessage),
-    SubscribedCar(Subscription),
+    TrackedObject(String, LocationMessage),
+    SubscribedTracked(Subscription),
     SubscribedEvents(Subscription),
     MqttEvent(WsEvent),
     CreatePolygon(leaflet::Polygon),
@@ -125,10 +123,9 @@ pub struct MapComponent {
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
     _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
-    car_subscription: SubscriptionStatus,
+    tracked_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
-    car_marker: Option<leaflet::Marker>,
-    car: Option<LocationMessage>,
+    tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
     connected: Connected,
 }
 
@@ -210,12 +207,10 @@ impl MapComponent {
     }
 
     fn get_marked_locations(&self) -> Vec<&Location> {
-        let no_locations = vec![];
-        if let Some(car) = &self.car {
-            car.locations.iter().collect_vec()
-        } else {
-            no_locations
-        }
+        self.tracked_objects
+            .values()
+            .flat_map(|(loc, _)| loc.locations.iter())
+            .collect()
     }
 
     fn set_object(&mut self, object: &ParamObject) {
@@ -391,10 +386,9 @@ impl Component for MapComponent {
             _update_handler: update_handler,
             _delete_handler: delete_handler,
             _show_locations_handler: show_list_handler,
-            car_subscription: SubscriptionStatus::Unsubscribed,
+            tracked_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
-            car_marker: None,
-            car: None,
+            tracked_objects: HashMap::new(),
             connected: Connected::Disconnected {
                 reason: "Loading...".to_string(),
             },
@@ -412,25 +406,29 @@ impl Component for MapComponent {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let props = ctx.props();
         match msg {
-            Msg::Car(location) => {
+            Msg::TrackedObject(topic, location) => {
                 let lat_lng = LatLng::new(location.latitude, location.longitude);
-                if let Some(ref marker) = self.car_marker {
+                if let Some((_, marker)) = self.tracked_objects.get(&topic) {
                     marker.set_lat_lng(&lat_lng);
+                    self.tracked_objects
+                        .entry(topic)
+                        .and_modify(|(loc, _)| *loc = location);
                 } else {
-                    let car_marker = leaflet::Marker::new(&lat_lng);
-                    car_marker.add_to(&self.map);
-                    self.car_marker = Some(car_marker);
+                    let options = leaflet::MarkerOptions::default();
+                    options.set_title(location.label.clone());
+                    let marker = leaflet::Marker::new_with_options(&lat_lng, &options);
+                    marker.add_to(&self.map);
+                    self.tracked_objects.insert(topic, (location, marker));
                 }
-                self.car = Some(location);
                 self.update_location_styles();
                 false
             }
-            Msg::SubscribedCar(subscription) => {
-                // If car_subscription is unsubscribed, we lost interest in this subscription.
+            Msg::SubscribedTracked(subscription) => {
+                // If tracked_subscription is unsubscribed, we lost interest in this subscription.
                 // If it is in progress, we are waiting for the user to be set.
                 // It should never be subscribed, but we handle it just in case.
-                if matches!(self.car_subscription, SubscriptionStatus::InProgress) {
-                    self.car_subscription = SubscriptionStatus::Subscribed(subscription);
+                if matches!(self.tracked_subscription, SubscriptionStatus::InProgress) {
+                    self.tracked_subscription = SubscriptionStatus::Subscribed(subscription);
                 }
                 false
             }
@@ -440,14 +438,14 @@ impl Component for MapComponent {
             }
             Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
                 let is_subscribed =
-                    matches!(self.car_subscription, SubscriptionStatus::Subscribed(_));
+                    matches!(self.tracked_subscription, SubscriptionStatus::Subscribed(_));
                 let should_subscribe = user.is_admin;
 
                 if !is_subscribed && should_subscribe {
-                    subscribe_to_car(ctx);
-                    self.car_subscription = SubscriptionStatus::InProgress;
+                    subscribe_to_tracked_objects(ctx);
+                    self.tracked_subscription = SubscriptionStatus::InProgress;
                 } else if !should_subscribe {
-                    self.car_subscription = SubscriptionStatus::Unsubscribed;
+                    self.tracked_subscription = SubscriptionStatus::Unsubscribed;
                 }
 
                 self.user = Some(user);
@@ -456,12 +454,10 @@ impl Component for MapComponent {
             }
             Msg::MqttEvent(WsEvent::Disconnected(reason)) => {
                 self.user = None;
-                self.car_subscription = SubscriptionStatus::Unsubscribed;
-                self.car = None;
-                if let Some(car_marker) = &self.car_marker {
-                    car_marker.remove_from(&self.map);
+                self.tracked_subscription = SubscriptionStatus::Unsubscribed;
+                for (_, (_, marker)) in self.tracked_objects.drain() {
+                    marker.remove_from(&self.map);
                 }
-                self.car_marker = None;
                 self.update_location_styles();
                 self.connected = Connected::Disconnected { reason };
                 true
@@ -683,22 +679,22 @@ impl Component for MapComponent {
     }
 }
 
-fn subscribe_to_car(ctx: &Context<MapComponent>) {
+fn subscribe_to_tracked_objects(ctx: &Context<MapComponent>) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let id = Id::new("tesla_1");
-    let topic = id.get_state_topic("locations");
+    let topic = "robotica/state/+/locations".to_string();
     let callback = ctx.link().callback(move |msg: MqttMessage| {
+        let topic = msg.topic.clone();
         let Json(location): Json<LocationMessage> = msg.try_into().unwrap();
-        Msg::Car(location)
+        Msg::TrackedObject(topic, location)
     });
     let mut wss = wss;
     ctx.link().send_future(async move {
         let s = wss.subscribe_mqtt(topic, callback).await;
-        Msg::SubscribedCar(s)
+        Msg::SubscribedTracked(s)
     });
 }
 

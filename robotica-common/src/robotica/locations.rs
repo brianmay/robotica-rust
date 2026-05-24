@@ -113,6 +113,9 @@ pub struct CreateLocation {
 /// A location message for an object
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct LocationMessage {
+    /// Human-readable label identifying the tracked object (e.g. `"Model 3"`, `"Brian's phone"`).
+    pub label: String,
+
     /// The latitude of the object
     pub latitude: f64,
 
