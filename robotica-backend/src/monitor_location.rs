@@ -215,6 +215,7 @@ where
             first_time = false;
 
             let output = robotica::locations::LocationMessage {
+                label: tracked_name.clone(),
                 latitude: location.latitude(),
                 longitude: location.longitude(),
                 locations: locations.to_vec(),
