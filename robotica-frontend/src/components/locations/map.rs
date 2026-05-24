@@ -15,7 +15,7 @@ use chrono::Utc;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
-    robotica::locations::{CreateLocation, Location, LocationMessage},
+    robotica::zones::{CreateZone, Zone, LocationMessage},
     user::User,
 };
 use tap::{Pipe, Tap};
@@ -39,7 +39,7 @@ pub enum Msg {
     UpdatePolygon(leaflet::Polygon),
     DeletePolygon(leaflet::Polygon),
     UpdateLocation(UpdateLocation),
-    SelectLocation(Location),
+    SelectLocation(Zone),
     ShowList,
     SaveLocation,
     CancelLocation,
@@ -54,12 +54,12 @@ enum Connected {
 
 #[derive(PartialEq, Clone)]
 pub enum ParamObject {
-    List(Arc<Vec<Location>>),
+    List(Arc<Vec<Zone>>),
     Item(ActionLocation),
 }
 
 struct MapLocation {
-    location: Location,
+    location: Zone,
     leaflet_id: i32,
 }
 
@@ -69,7 +69,7 @@ struct MapActionLocation {
 }
 
 enum MapObject {
-    List(Arc<Vec<Location>>, Vec<MapLocation>, bool),
+    List(Arc<Vec<Zone>>, Vec<MapLocation>, bool),
     Item(MapActionLocation),
     None,
 }
@@ -131,11 +131,11 @@ pub struct MapComponent {
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
     pub object: ParamObject,
-    pub create_location: Callback<CreateLocation>,
+    pub create_location: Callback<CreateZone>,
     pub update_location: Callback<ActionLocation>,
     pub delete_location: Callback<ActionLocation>,
     pub save_location: Callback<ActionLocation>,
-    pub request_item: Callback<Location>,
+    pub request_item: Callback<Zone>,
     pub request_list: Callback<()>,
     pub status: LocationStatus,
     pub loading_status: LoadingStatus,
@@ -172,7 +172,7 @@ impl MapComponent {
         });
     }
 
-    fn set_list(&mut self, locations: &Arc<Vec<Location>>) {
+    fn set_list(&mut self, locations: &Arc<Vec<Zone>>) {
         self.draw_layer.clear_layers();
         let marked_locations = self.get_marked_locations();
 
@@ -284,7 +284,7 @@ fn get_action_location_options(
 
 fn get_location_options(
     marked_locations: &[i32],
-    location: &Location,
+    location: &Zone,
 ) -> leaflet::PolylineOptions {
     let color = get_location_color(marked_locations, location);
     let options = leaflet::PolylineOptions::default();
@@ -303,7 +303,7 @@ fn get_action_location_color(marked_locations: &[i32], location: &ActionLocation
     }
 }
 
-fn get_location_color(marked_locations: &[i32], location: &Location) -> String {
+fn get_location_color(marked_locations: &[i32], location: &Zone) -> String {
     let is_marked = marked_locations.contains(&location.id);
 
     if is_marked {
@@ -474,7 +474,7 @@ impl Component for MapComponent {
                     .collect::<Vec<_>>()
                     .pipe(geo::LineString::from);
 
-                let location = CreateLocation {
+                let location = CreateZone {
                     name: "New Location".to_string(),
                     bounds: geo::Polygon::new(exterior, vec![]),
                     color: "black".to_string(),

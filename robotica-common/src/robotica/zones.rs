@@ -1,35 +1,35 @@
-//! Common stuff for robotica locations
+//! Common types for robotica zone boundaries and location messages.
 
-/// A location is a named area with a polygonal boundary
+/// A zone is a named geographic area with a polygonal boundary stored in the database.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
-pub struct Location {
-    /// The unique id of the location.
+pub struct Zone {
+    /// The unique id of the zone.
     pub id: i32,
 
-    /// The name of the location.
+    /// The name of the zone.
     pub name: String,
 
-    /// The boundary of the location.
+    /// The boundary of the zone.
     pub bounds: geo::Polygon<f64>,
 
     /// The color of the polygon
     pub color: String,
 
-    /// Should we announce when something enters this location?
+    /// Should we announce when something enters this zone?
     pub announce_on_enter: bool,
 
-    /// Should we announce when something enters this location?
+    /// Should we announce when something exits this zone?
     pub announce_on_exit: bool,
 }
 
-impl Location {
-    /// Is the location the home location?
+impl Zone {
+    /// Is this the home zone?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
         self.name == "Home"
     }
 
-    /// Is the location near the home location?
+    /// Is this the near-home zone?
     #[must_use]
     pub fn is_near_home(&self) -> bool {
         self.name == "Near Home"
@@ -37,62 +37,62 @@ impl Location {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-/// A list of occupied zones, derived from a [`LocationMessage`].
-pub struct LocationList(Vec<OccupiedZone>);
+/// A list of occupied zones derived from a [`LocationMessage`].
+pub struct OccupiedZones(Vec<OccupiedZone>);
 
-impl LocationList {
-    /// Create a new location list
+impl OccupiedZones {
+    /// Create a new occupied zones list.
     #[must_use]
     pub const fn new(list: Vec<OccupiedZone>) -> Self {
         Self(list)
     }
 
-    /// Is the location at home?
+    /// Is any zone the home zone?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
         self.0.iter().any(OccupiedZone::is_at_home)
     }
 
-    /// Is the location near home?
+    /// Is any zone the near-home zone?
     #[must_use]
     pub fn is_near_home(&self) -> bool {
         self.0.iter().any(OccupiedZone::is_near_home)
     }
 
-    /// Turn the list into a set of ids
+    /// Turn the list into a set of ids.
     #[must_use]
     pub fn to_set(&self) -> std::collections::HashSet<i32> {
         self.0.iter().map(|l| l.id).collect()
     }
 }
 
-/// A request to create a new location.
+/// A request to create a new zone.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
-pub struct CreateLocation {
-    /// The name of the location.
+pub struct CreateZone {
+    /// The name of the zone.
     pub name: String,
 
-    /// The boundary of the location.
+    /// The boundary of the zone.
     pub bounds: geo::Polygon<f64>,
 
     /// The color of the polygon
     pub color: String,
 
-    /// Should we announce when something enters this location?
+    /// Should we announce when something enters this zone?
     pub announce_on_enter: bool,
 
-    /// Should we announce when something enters this location?
+    /// Should we announce when something exits this zone?
     pub announce_on_exit: bool,
 }
 
 /// A lightweight summary of a zone currently occupied by a tracked object.
 ///
 /// Contains only the fields needed by consumers of [`LocationMessage`];
-/// the full [`Location`] (with bounds, color, announce flags, etc.) lives
+/// the full [`Zone`] (with bounds, color, announce flags, etc.) lives
 /// solely in the database and the backend's internal state.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct OccupiedZone {
-    /// The unique id of the zone (matches [`Location::id`]).
+    /// The unique id of the zone (matches [`Zone::id`]).
     pub id: i32,
 
     /// The human-readable name of the zone (e.g. `"Home"`, `"Near Home"`).
@@ -112,7 +112,7 @@ pub struct OccupiedZone {
 /// without triggering a zone transition.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct NearbyZone {
-    /// The unique id of the zone (matches [`Location::id`]).
+    /// The unique id of the zone (matches [`Zone::id`]).
     pub id: i32,
 
     /// The human-readable name of the zone.
@@ -123,12 +123,12 @@ pub struct NearbyZone {
 }
 
 impl OccupiedZone {
-    /// Create from a [`Location`] with a known distance.
+    /// Create from a [`Zone`] with a known distance.
     #[must_use]
-    pub fn from_location(loc: &Location, distance_m: f64) -> Self {
+    pub fn from_zone(zone: &Zone, distance_m: f64) -> Self {
         Self {
-            id: loc.id,
-            name: loc.name.clone(),
+            id: zone.id,
+            name: zone.name.clone(),
             distance_m,
         }
     }
@@ -146,7 +146,7 @@ impl OccupiedZone {
     }
 }
 
-impl IntoIterator for LocationList {
+impl IntoIterator for OccupiedZones {
     type Item = OccupiedZone;
     type IntoIter = std::vec::IntoIter<OccupiedZone>;
 
@@ -154,7 +154,8 @@ impl IntoIterator for LocationList {
         self.0.into_iter()
     }
 }
-/// A location message for an object
+
+/// A location message for a tracked object.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct LocationMessage {
     /// Human-readable label identifying the tracked object (e.g. `"Model 3"`, `"Brian's phone"`).
@@ -170,7 +171,7 @@ pub struct LocationMessage {
     #[cfg(feature = "chrono")]
     pub timestamp: chrono::DateTime<chrono::Utc>,
 
-    /// The locations that the object is in
+    /// The zones the object is currently inside.
     pub locations: Vec<OccupiedZone>,
 
     /// Zones within the candidate search radius that were not triggered.

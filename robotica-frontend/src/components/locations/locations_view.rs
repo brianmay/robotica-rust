@@ -4,7 +4,7 @@ use gloo_net::http::{Request, Response};
 use gloo_net::Error;
 use robotica_common::robotica::{
     http_api::ApiResponse,
-    locations::{CreateLocation, Location},
+    zones::{CreateZone, Zone},
 };
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -14,17 +14,17 @@ use yew::{platform::spawn_local, prelude::*};
 
 pub enum Msg {
     LoadFailed(String),
-    Locations(Arc<Vec<Location>>),
+    Locations(Arc<Vec<Zone>>),
     SaveLocation(ActionLocation),
-    SaveSuccess(Location),
-    CreateSuccess(Location),
+    SaveSuccess(Zone),
+    CreateSuccess(Zone),
     SaveFailed(ActionLocation, String),
-    DeleteSuccess(Location),
-    DeleteFailed(Location, String),
-    CreateLocation(CreateLocation),
+    DeleteSuccess(Zone),
+    DeleteFailed(Zone, String),
+    CreateLocation(CreateZone),
     UpdateLocation(ActionLocation),
     DeleteLocation(ActionLocation),
-    RequestItem(Location),
+    RequestItem(Zone),
     RequestList,
 }
 
@@ -58,7 +58,7 @@ impl LocationStatus {
 
 pub struct LocationsView {
     location: Option<ActionLocation>,
-    list: Arc<Vec<Location>>,
+    list: Arc<Vec<Zone>>,
     status: LocationStatus,
     loading_status: LoadingStatus,
 }
@@ -114,9 +114,9 @@ impl Component for LocationsView {
                 self.list = locations;
                 true
             }
-            Msg::CreateLocation(location) => {
-                debug!("Creating location: {:?}", location);
-                let action_location = ActionLocation::Create(location);
+            Msg::CreateLocation(zone) => {
+                debug!("Creating location: {:?}", zone);
+                let action_location = ActionLocation::Create(zone);
                 self.status = LocationStatus::Saving;
                 save_location(action_location, ctx);
                 true
@@ -132,7 +132,7 @@ impl Component for LocationsView {
                 self.status = LocationStatus::Saving;
                 match location {
                     ActionLocation::Create(_) => self.location = None,
-                    ActionLocation::Update(location) => delete_location(location, ctx),
+                    ActionLocation::Update(zone) => delete_location(zone, ctx),
                 }
                 true
             }
@@ -146,8 +146,8 @@ impl Component for LocationsView {
                     false
                 }
             }
-            Msg::CreateSuccess(location) => {
-                self.location = location.pipe(ActionLocation::Update).pipe(Some);
+            Msg::CreateSuccess(zone) => {
+                self.location = zone.pipe(ActionLocation::Update).pipe(Some);
                 self.status = LocationStatus::Unchanged;
                 load_list(ctx);
                 true
@@ -174,8 +174,8 @@ impl Component for LocationsView {
                 self.status = LocationStatus::error(error);
                 true
             }
-            Msg::RequestItem(location) => {
-                self.location = Some(ActionLocation::Update(location));
+            Msg::RequestItem(zone) => {
+                self.location = Some(ActionLocation::Update(zone));
                 self.status = LocationStatus::Unchanged;
                 true
             }
@@ -222,10 +222,10 @@ impl Component for LocationsView {
 fn load_list(ctx: &Context<LocationsView>) {
     let link = ctx.link().clone();
     spawn_local(async move {
-        let locations = Request::get("/api/locations")
+        let locations = Request::get("/api/zones")
             .send()
             .await
-            .pipe(process_response::<Vec<Location>>)
+            .pipe(process_response::<Vec<Zone>>)
             .await;
 
         let result = match locations {
@@ -244,21 +244,21 @@ fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
         debug!("Sending save request");
 
         let response = match &location {
-            ActionLocation::Create(location) => Request::post("/api/locations/create")
-                .json(&location)
+            ActionLocation::Create(zone) => Request::post("/api/zones/create")
+                .json(&zone)
                 .unwrap()
                 .send()
                 .await
-                .pipe(process_response::<Location>)
+                .pipe(process_response::<Zone>)
                 .await
                 .map(Msg::CreateSuccess),
 
-            ActionLocation::Update(location) => Request::put("/api/locations")
-                .json(&location)
+            ActionLocation::Update(zone) => Request::put("/api/zones")
+                .json(&zone)
                 .unwrap()
                 .send()
                 .await
-                .pipe(process_response::<Location>)
+                .pipe(process_response::<Zone>)
                 .await
                 .map(Msg::SaveSuccess),
         };
@@ -278,14 +278,14 @@ fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
     });
 }
 
-fn delete_location(location: Location, ctx: &Context<LocationsView>) {
-    debug!("Deleting location: {:?}", location);
-    let id = location.id;
+fn delete_location(zone: Zone, ctx: &Context<LocationsView>) {
+    debug!("Deleting location: {:?}", zone);
+    let id = zone.id;
 
     let link = ctx.link().clone();
     spawn_local(async move {
         debug!("Sending delete request");
-        let response = Request::delete(&format!("/api/locations/{id}"))
+        let response = Request::delete(&format!("/api/zones/{id}"))
             .send()
             .await
             .pipe(process_response::<()>)
@@ -294,11 +294,11 @@ fn delete_location(location: Location, ctx: &Context<LocationsView>) {
         let result = match response {
             Ok(()) => {
                 debug!("Location deleted");
-                Msg::DeleteSuccess(location.clone())
+                Msg::DeleteSuccess(zone.clone())
             }
             Err(err) => {
                 debug!("Failed to delete location: {err}");
-                Msg::DeleteFailed(location, format!("Failed to delete location: {err}"))
+                Msg::DeleteFailed(zone, format!("Failed to delete location: {err}"))
             }
         };
 

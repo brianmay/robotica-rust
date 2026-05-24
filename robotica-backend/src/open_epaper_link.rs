@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use robotica_common::robotica::locations::LocationList;
+use robotica_common::robotica::zones::OccupiedZones;
 use robotica_tokio::pipes::stateful;
 use serde::{Deserialize, Serialize};
 use serde_tuple::Serialize_tuple;
@@ -136,7 +136,7 @@ const fn line(y: &mut u16) -> Element {
 pub fn output_location(
     name: impl Into<String>,
     config: Config,
-    state: stateful::Receiver<LocationList>,
+    state: stateful::Receiver<OccupiedZones>,
 ) {
     let config = Arc::new(config);
     let name = name.into();
