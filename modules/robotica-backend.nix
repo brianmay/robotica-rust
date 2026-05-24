@@ -325,6 +325,22 @@ let
     };
   };
 
+  owntracks_audience_type = types.submodule {
+    options = {
+      locations = mkOption { type = types.str; };
+      private = mkOption { type = types.str; };
+    };
+  };
+
+  owntracks_source_type = types.submodule {
+    options = {
+      topic = mkOption { type = types.str; };
+      id = mkOption { type = types.str; };
+      name = mkOption { type = types.str; };
+      audience = mkOption { type = owntracks_audience_type; };
+    };
+  };
+
   config_type = types.submodule {
     options = {
       executor = mkOption {
@@ -362,6 +378,10 @@ let
       presence_trackers = mkOption { type = types.listOf presence_tracker_type; };
       occupancy_sensors = mkOption { type = types.listOf occupancy_sensor_type; };
       night_mode = mkOption { type = types.listOf night_mode_type; };
+      owntracks = mkOption {
+        type = types.listOf owntracks_source_type;
+        default = [ ];
+      };
     };
   };
 
