@@ -217,6 +217,7 @@ where
                 label: tracked_name.clone(),
                 latitude: location.latitude(),
                 longitude: location.longitude(),
+                timestamp: location.timestamp(),
                 locations: locations.to_vec(),
             };
             location_tx.try_send(output);
