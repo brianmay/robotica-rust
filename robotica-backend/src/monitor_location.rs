@@ -239,7 +239,7 @@ async fn process_location(
         latitude: lat,
         longitude: lon,
         timestamp,
-        locations: locations.to_vec(),
+        zones: locations.to_vec(),
         nearby_zones,
     })
 }
@@ -304,7 +304,7 @@ where
 
     let location = location_rx
         .clone()
-        .map(|(_, l)| OccupiedZones::new(l.locations));
+        .map(|(_, l)| OccupiedZones::new(l.zones));
     let is_home = location.clone().map(|(_, l)| l.is_at_home());
 
     Outputs {
