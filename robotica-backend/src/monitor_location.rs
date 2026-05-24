@@ -8,7 +8,7 @@ use robotica_common::{
     robotica::{
         self,
         audio::MessagePriority,
-        locations::LocationList,
+        locations::{LocationList, NearbyZone},
         message::{Audience, Message},
     },
 };
@@ -31,7 +31,8 @@ mod state {
 
     pub struct State {
         set: HashSet<i32>,
-        map: HashMap<i32, locations::Location>,
+        /// Maps zone id → (Location, signed distance in metres).
+        map: HashMap<i32, (locations::Location, f64)>,
     }
 
     impl State {
@@ -42,6 +43,9 @@ mod state {
             }
         }
 
+        /// Search for zones within `distance` metres and build a State from them.
+        ///
+        /// Distances are signed: negative = inside, positive = outside.
         pub async fn search_locations(
             postgres: &sqlx::PgPool,
             lat: f64,
@@ -49,14 +53,33 @@ mod state {
             distance: f64,
         ) -> Result<Self, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            let locations = database::locations::search_locations(postgres, point, distance).await?;
+            let locations =
+                database::locations::search_locations(postgres, point, distance).await?;
             let set = locations.iter().map(|l| l.id).collect();
-            let map = locations.into_iter().map(|l| (l.id, l)).collect();
+            // We don't have individual distances here; use 0.0 as a sentinel
+            // (this path is only used for arrival/exit hysteresis, not for reporting).
+            let map = locations
+                .into_iter()
+                .map(|l| (l.id, (l, 0.0_f64)))
+                .collect();
             Ok(Self { set, map })
         }
 
+        /// Search for all zones within `candidate_radius` metres and return them
+        /// with signed distances.
+        pub async fn search_with_distance(
+            postgres: &sqlx::PgPool,
+            lat: f64,
+            lon: f64,
+            candidate_radius: f64,
+        ) -> Result<Vec<(locations::Location, f64)>, sqlx::Error> {
+            let point = geo::Point::new(lon, lat);
+            database::locations::search_locations_with_distance(postgres, point, candidate_radius)
+                .await
+        }
+
         pub fn get(&self, id: i32) -> Option<&locations::Location> {
-            self.map.get(&id)
+            self.map.get(&id).map(|(l, _)| l)
         }
 
         pub fn difference(&self, other: &Self) -> HashSet<i32> {
@@ -64,21 +87,35 @@ mod state {
         }
 
         pub fn to_vec(&self) -> Vec<OccupiedZone> {
-            let mut list = self.map.values().map(OccupiedZone::from).collect::<Vec<_>>();
+            let mut list = self
+                .map
+                .values()
+                .map(|(loc, dist)| OccupiedZone::from_location(loc, *dist))
+                .collect::<Vec<_>>();
             list.sort_by_key(|k| k.id);
             list
         }
 
-        pub fn extend(&mut self, locations: Vec<locations::Location>) {
-            for location in locations {
+        pub fn extend(&mut self, locations: Vec<(locations::Location, f64)>) {
+            for (location, dist) in locations {
                 self.set.insert(location.id);
-                self.map.insert(location.id, location);
+                self.map.insert(location.id, (location, dist));
             }
         }
 
         pub fn reject(&mut self, hs: &HashSet<i32>) {
             self.set.retain(|x| !hs.contains(x));
             self.map.retain(|k, _v| !hs.contains(k));
+        }
+
+        /// Refresh distances for all currently-occupied zones from the latest
+        /// candidate query results.
+        pub fn update_distances(&mut self, candidates: &[(locations::Location, f64)]) {
+            for (loc, dist) in candidates {
+                if let Some(entry) = self.map.get_mut(&loc.id) {
+                    entry.1 = *dist;
+                }
+            }
         }
     }
 }
@@ -114,6 +151,97 @@ fn new_message(
     audience: impl Into<Audience>,
 ) -> Message {
     Message::new(sender_name, message.into(), priority, audience)
+}
+
+/// Candidate radius used when querying nearby zones for observability.
+///
+/// All zones within this distance (metres) are fetched; those within
+/// `arrival_radius` are treated as occupied, the rest are reported as
+/// [`NearbyZone`]s.
+const CANDIDATE_RADIUS_M: f64 = 500.0;
+
+#[allow(clippy::too_many_arguments)]
+async fn process_location(
+    lat: f64,
+    lon: f64,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    postgres: &sqlx::PgPool,
+    locations: &mut state::State,
+    first_time: &mut bool,
+    sender_name: &str,
+    tracked_name: &str,
+    audience: &AudienceConfig,
+    arrival_radius: f64,
+    exit_radius: f64,
+    message_tx: &stateless::Sender<Message>,
+) -> Option<robotica::locations::LocationMessage> {
+    let inner_locations = match state::State::search_locations(postgres, lat, lon, arrival_radius).await {
+        Ok(l) => l,
+        Err(err) => { error!("Failed to search locations: {}", err); return None; }
+    };
+    let outer_locations = match state::State::search_locations(postgres, lat, lon, exit_radius).await {
+        Ok(l) => l,
+        Err(err) => { error!("Failed to search locations: {}", err); return None; }
+    };
+
+    // --- candidate query for distances + nearby_zones ---
+    let candidates = match state::State::search_with_distance(postgres, lat, lon, CANDIDATE_RADIUS_M).await {
+        Ok(c) => c,
+        Err(err) => { error!("Failed to search candidate locations: {}", err); return None; }
+    };
+
+    let arrived: Vec<_> = inner_locations
+        .difference(locations)
+        .into_iter()
+        .filter_map(|id| inner_locations.get(id))
+        .cloned()
+        .collect();
+
+    let left_set = locations.difference(&outer_locations);
+    let left: Vec<_> = left_set.iter().copied().filter_map(|id| locations.get(id)).collect();
+
+    if !*first_time {
+        for loc in &arrived {
+            let msg = format!("{tracked_name} arrived at {}", loc.name);
+            let aud = if loc.announce_on_enter { &audience.locations } else { &audience.private };
+            message_tx.try_send(new_message(sender_name, msg, MessagePriority::Low, aud.clone()));
+        }
+        for loc in left {
+            let msg = format!("{tracked_name} left {}", loc.name);
+            let aud = if loc.announce_on_exit { &audience.locations } else { &audience.private };
+            message_tx.try_send(new_message(sender_name, msg, MessagePriority::Low, aud.clone()));
+        }
+    }
+
+    let arrived_with_dist: Vec<_> = arrived
+        .into_iter()
+        .map(|loc| {
+            let dist = candidates.iter().find(|(c, _)| c.id == loc.id).map_or(0.0, |(_, d)| *d);
+            (loc, dist)
+        })
+        .collect();
+
+    locations.reject(&left_set);
+    locations.extend(arrived_with_dist);
+    locations.update_distances(&candidates);
+    *first_time = false;
+
+    let occupied_ids: std::collections::HashSet<i32> = locations.to_vec().iter().map(|z| z.id).collect();
+    let mut nearby_zones: Vec<NearbyZone> = candidates
+        .iter()
+        .filter(|(loc, _)| !occupied_ids.contains(&loc.id))
+        .map(|(loc, dist)| NearbyZone { id: loc.id, name: loc.name.clone(), distance_m: *dist })
+        .collect();
+    nearby_zones.sort_by_key(|z| z.id);
+
+    Some(robotica::locations::LocationMessage {
+        label: tracked_name.to_owned(),
+        latitude: lat,
+        longitude: lon,
+        timestamp,
+        locations: locations.to_vec(),
+        nearby_zones,
+    })
 }
 
 /// Monitor a stream of location updates, enriching each with database lookups.
@@ -153,80 +281,24 @@ where
         let mut first_time = true;
 
         while let Ok(Json(location)) = inputs.recv().await {
-            let lat = location.latitude();
-            let lon = location.longitude();
-
-            let inner_locations =
-                state::State::search_locations(&postgres, lat, lon, arrival_radius).await;
-            let inner_locations = match inner_locations {
-                Ok(l) => l,
-                Err(err) => {
-                    error!("Failed to search locations: {}", err);
-                    continue;
-                }
-            };
-
-            let outer_locations =
-                state::State::search_locations(&postgres, lat, lon, exit_radius).await;
-            let outer_locations = match outer_locations {
-                Ok(l) => l,
-                Err(err) => {
-                    error!("Failed to search locations: {}", err);
-                    continue;
-                }
-            };
-
-            let arrived: Vec<_> = inner_locations
-                .difference(&locations)
-                .into_iter()
-                .filter_map(|id| inner_locations.get(id))
-                .cloned()
-                .collect();
-
-            let left_set = locations.difference(&outer_locations);
-
-            let left: Vec<_> = left_set
-                .iter()
-                .copied()
-                .filter_map(|id| locations.get(id))
-                .collect();
-
-            if !first_time {
-                for loc in &arrived {
-                    let msg = format!("{tracked_name} arrived at {}", loc.name);
-                    let aud = if loc.announce_on_enter {
-                        &audience.locations
-                    } else {
-                        &audience.private
-                    };
-                    let msg = new_message(&sender_name, msg, MessagePriority::Low, aud.clone());
-                    message_tx.try_send(msg);
-                }
-
-                for loc in left {
-                    let msg = format!("{tracked_name} left {}", loc.name);
-                    let aud = if loc.announce_on_exit {
-                        &audience.locations
-                    } else {
-                        &audience.private
-                    };
-                    let msg = new_message(&sender_name, msg, MessagePriority::Low, aud.clone());
-                    message_tx.try_send(msg);
-                }
+            if let Some(output) = process_location(
+                location.latitude(),
+                location.longitude(),
+                location.timestamp(),
+                &postgres,
+                &mut locations,
+                &mut first_time,
+                &sender_name,
+                &tracked_name,
+                &audience,
+                arrival_radius,
+                exit_radius,
+                &message_tx,
+            )
+            .await
+            {
+                location_tx.try_send(output);
             }
-
-            locations.reject(&left_set);
-            locations.extend(arrived);
-            first_time = false;
-
-            let output = robotica::locations::LocationMessage {
-                label: tracked_name.clone(),
-                latitude: location.latitude(),
-                longitude: location.longitude(),
-                timestamp: location.timestamp(),
-                locations: locations.to_vec(),
-            };
-            location_tx.try_send(output);
         }
     });
 

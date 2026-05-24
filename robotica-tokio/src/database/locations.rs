@@ -371,14 +371,64 @@ pub async fn search_locations(
     .pipe(Ok)
 }
 
-#[cfg(test)]
+/// Search for locations within `candidate_radius` metres of `location`,
+/// returning each with its signed distance to the zone boundary.
+///
+/// Distance convention:
+/// - **negative** → tracker is *inside* the zone
+/// - **positive** → tracker is *outside* the zone
+///
+/// # Errors
+///
+/// Returns a [`sqlx::Error`] on database failure.
+pub async fn search_locations_with_distance(
+    postgres: &sqlx::PgPool,
+    location: geo::Point<f64>,
+    candidate_radius: f64,
+) -> Result<Vec<(Location, f64)>, sqlx::Error> {
+    let geometry = Geometry::Point(location);
+    let geo = wkb::Encode(geometry);
+
+    sqlx::query!(
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit,
+                  bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>",
+                  ST_Distance($1::geography, bounds) AS "dist!: f64"
+           FROM locations
+           WHERE ST_DWithin($1::geography, bounds, $2)"#,
+        geo as _,
+        candidate_radius,
+    )
+    .fetch_all(postgres)
+    .await?
+    .into_iter()
+    .filter_map(|row| {
+        if let Some(Geometry::Polygon(p)) = row.bounds.geometry {
+            let loc = Location {
+                id: row.id,
+                name: row.name,
+                bounds: p,
+                color: row.color,
+                announce_on_enter: row.announce_on_enter,
+                announce_on_exit: row.announce_on_exit,
+            };
+            Some((loc, row.dist))
+        } else {
+            error!("Not a polygon: {:?}", row.bounds);
+            None
+        }
+    })
+    .collect::<Vec<_>>()
+    .pipe(Ok)
+}
 mod test {
     #![allow(clippy::unwrap_used)]
+    #![allow(clippy::wildcard_imports)]
+    #![allow(unused_imports)]
     use sqlx::{Pool, Postgres};
 
     use super::*;
     use robotica_common::robotica::locations::CreateLocation;
-
+    #[allow(dead_code)]
     async fn db_create_location(postgres: &Pool<Postgres>) {
         let bounds = geo::Polygon::new(
             geo::LineString::from(vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]),

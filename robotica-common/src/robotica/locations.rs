@@ -36,7 +36,7 @@ impl Location {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 /// A list of occupied zones, derived from a [`LocationMessage`].
 pub struct LocationList(Vec<OccupiedZone>);
 
@@ -90,16 +90,49 @@ pub struct CreateLocation {
 /// Contains only the fields needed by consumers of [`LocationMessage`];
 /// the full [`Location`] (with bounds, color, announce flags, etc.) lives
 /// solely in the database and the backend's internal state.
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct OccupiedZone {
     /// The unique id of the zone (matches [`Location::id`]).
     pub id: i32,
 
     /// The human-readable name of the zone (e.g. `"Home"`, `"Near Home"`).
     pub name: String,
+
+    /// Distance from the tracker to the nearest zone boundary, in metres.
+    ///
+    /// `0.0` means the tracker is inside or on the boundary of the zone;
+    /// positive values mean the tracker is outside (`PostGIS` `ST_Distance`
+    /// returns 0 for any point inside a polygon).
+    pub distance_m: f64,
+}
+
+/// A zone that is within the candidate search radius but not currently occupied.
+///
+/// Useful for tuning arrival/exit radii: shows how close the tracker came
+/// without triggering a zone transition.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+pub struct NearbyZone {
+    /// The unique id of the zone (matches [`Location::id`]).
+    pub id: i32,
+
+    /// The human-readable name of the zone.
+    pub name: String,
+
+    /// Distance from the tracker to the nearest zone boundary, in metres (always ≥ 0).
+    pub distance_m: f64,
 }
 
 impl OccupiedZone {
+    /// Create from a [`Location`] with a known distance.
+    #[must_use]
+    pub fn from_location(loc: &Location, distance_m: f64) -> Self {
+        Self {
+            id: loc.id,
+            name: loc.name.clone(),
+            distance_m,
+        }
+    }
+
     /// Is this the home zone?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
@@ -110,15 +143,6 @@ impl OccupiedZone {
     #[must_use]
     pub fn is_near_home(&self) -> bool {
         self.name == "Near Home"
-    }
-}
-
-impl From<&Location> for OccupiedZone {
-    fn from(loc: &Location) -> Self {
-        Self {
-            id: loc.id,
-            name: loc.name.clone(),
-        }
     }
 }
 
@@ -148,4 +172,9 @@ pub struct LocationMessage {
 
     /// The locations that the object is in
     pub locations: Vec<OccupiedZone>,
+
+    /// Zones within the candidate search radius that were not triggered.
+    ///
+    /// Useful for tuning arrival/exit radii.
+    pub nearby_zones: Vec<NearbyZone>,
 }
