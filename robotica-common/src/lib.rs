@@ -8,6 +8,10 @@
 #![allow(clippy::use_self)]
 
 pub mod anavi_thermometer;
+pub mod owntracks;
+
+#[cfg(feature = "chrono")]
+pub mod location_source;
 pub mod config;
 pub mod controllers;
 pub mod mqtt;

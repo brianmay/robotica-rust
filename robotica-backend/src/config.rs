@@ -102,6 +102,8 @@ pub struct Config {
     pub occupancy_sensors: Vec<OccupancySensorConfig>,
     pub night_mode: Vec<NightModeConfig>,
     pub message_routes: Vec<MessageRouteConfig>,
+    #[serde(default)]
+    pub owntracks: Vec<OwnTracksSourceConfig>,
 }
 
 /// An error loading the Config
@@ -257,6 +259,39 @@ pub struct MessageRouteConfig {
     pub audience: Vec<String>,
     pub topic: String,
     pub presence_requirements: Vec<PresenceRequirements>,
+}
+
+/// Audience configuration for an `OwnTracks` location source.
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct OwnTracksAudienceConfig {
+    /// Audience for public location announcements (e.g. "arrived at X").
+    pub locations: robotica_common::robotica::message::Audience,
+    /// Audience for private announcements.
+    pub private: robotica_common::robotica::message::Audience,
+}
+
+impl From<OwnTracksAudienceConfig> for crate::monitor_location::AudienceConfig {
+    fn from(c: OwnTracksAudienceConfig) -> Self {
+        Self {
+            locations: c.locations,
+            private: c.private,
+        }
+    }
+}
+
+/// Configuration for a single `OwnTracks` location source.
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct OwnTracksSourceConfig {
+    /// MQTT topic to subscribe to for location updates.
+    pub topic: String,
+    /// Unique identifier for this tracked object.
+    pub id: robotica_common::robotica::entities::Id,
+    /// Human-readable name used in arrival/departure messages.
+    pub name: String,
+    /// Announcement audiences.
+    pub audience: OwnTracksAudienceConfig,
 }
 
 #[cfg(test)]

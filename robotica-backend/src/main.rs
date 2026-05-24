@@ -16,6 +16,7 @@ mod influxdb;
 mod lights;
 mod logging;
 mod metrics;
+mod monitor_location;
 mod open_epaper_link;
 mod tesla;
 
@@ -28,6 +29,7 @@ use anyhow::Result;
 use chrono::Local;
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
+use robotica_common::owntracks;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::entities::Id;
@@ -293,6 +295,10 @@ async fn setup_pipes(
 
     for door_monitor_config in config.door_monitors {
         monitor_door(&mut state, door_monitor_config, message_sink.clone());
+    }
+
+    for owntracks_config in config.owntracks {
+        monitor_owntracks(&mut state, owntracks_config, &postgres, &message_sink);
     }
 
     if let Some(http_config) = config.http {
@@ -619,6 +625,36 @@ fn monitor_tesla(
 
     tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(message_sink);
     tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream).send_to(message_sink);
+}
+
+#[instrument(fields(id=%config.id), skip_all)]
+fn monitor_owntracks(
+    state: &mut InitState,
+    config: config::OwnTracksSourceConfig,
+    postgres: &sqlx::PgPool,
+    message_sink: &stateless::Sender<Message>,
+) {
+    let location = state
+        .subscriptions
+        .subscribe_into_stateful::<Json<owntracks::LocationMessage>>(&config.topic);
+
+    let locations = monitor_location::monitor(
+        "OwnTracks",
+        &config.name,
+        monitor_location::AudienceConfig {
+            locations: config.audience.locations,
+            private: config.audience.private,
+        },
+        location,
+        postgres.clone(),
+    );
+
+    locations.messages.send_to(message_sink);
+    locations.location_message.send_to_mqtt_json(
+        &state.mqtt,
+        config.id.get_state_topic("locations"),
+        &SendOptions::new(),
+    );
 }
 
 #[must_use]
