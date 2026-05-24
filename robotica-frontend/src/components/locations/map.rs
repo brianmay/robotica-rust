@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use gloo_timers::callback::Interval;
+
 use crate::{
     components::locations::{editor::EditorView, list::List},
     robotica_wasm::{
@@ -44,6 +46,7 @@ pub enum Msg {
     SaveLocation,
     CancelLocation,
     CancelList,
+    Tick,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -126,6 +129,7 @@ pub struct MapComponent {
     event_subscription: Option<Subscription>,
     tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
     connected: Connected,
+    _tick_interval: Interval,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -373,6 +377,9 @@ impl Component for MapComponent {
             .dispatch_event(&Event::new("resize").unwrap())
             .unwrap();
 
+        let tick_callback = ctx.link().callback(|()| Msg::Tick);
+        let tick_interval = Interval::new(60_000, move || tick_callback.emit(()));
+
         Self {
             map: leaflet_map,
             user: None,
@@ -389,6 +396,7 @@ impl Component for MapComponent {
             connected: Connected::Disconnected {
                 reason: "Loading...".to_string(),
             },
+            _tick_interval: tick_interval,
         }
         .tap_mut(|s| Self::set_object(s, object))
         .tap(Self::position_map)
@@ -556,6 +564,12 @@ impl Component for MapComponent {
                     *show_locations = false;
                 }
                 true
+            }
+            Msg::Tick => {
+                for (location, marker) in self.tracked_objects.values() {
+                    update_tooltip(marker, location);
+                }
+                false
             }
             Msg::SelectLocation(location) => {
                 props.request_item.emit(location);
