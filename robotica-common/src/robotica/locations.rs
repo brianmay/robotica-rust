@@ -142,6 +142,10 @@ pub struct LocationMessage {
     /// The longitude of the object
     pub longitude: f64,
 
+    /// Timestamp of the location fix.
+    #[cfg(feature = "chrono")]
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+
     /// The locations that the object is in
     pub locations: Vec<OccupiedZone>,
 }

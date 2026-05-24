@@ -11,12 +11,11 @@ use crate::{
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
+use chrono::Utc;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
-    robotica::{
-        locations::{CreateLocation, Location, LocationMessage},
-    },
+    robotica::locations::{CreateLocation, Location, LocationMessage},
     user::User,
 };
 use tap::{Pipe, Tap};
@@ -406,16 +405,16 @@ impl Component for MapComponent {
         match msg {
             Msg::TrackedObject(topic, location) => {
                 let lat_lng = LatLng::new(location.latitude, location.longitude);
-                if let Some((_, marker)) = self.tracked_objects.get(&topic) {
+                if let Some((existing, marker)) = self.tracked_objects.get_mut(&topic) {
                     marker.set_lat_lng(&lat_lng);
-                    self.tracked_objects
-                        .entry(topic)
-                        .and_modify(|(loc, _)| *loc = location);
+                    update_tooltip(marker, &location);
+                    *existing = location;
                 } else {
                     let options = leaflet::MarkerOptions::default();
                     options.set_title(location.label.clone());
                     let marker = leaflet::Marker::new_with_options(&lat_lng, &options);
                     marker.add_to(&self.map);
+                    make_tooltip(&marker, &location);
                     self.tracked_objects.insert(topic, (location, marker));
                 }
                 self.update_location_styles();
@@ -765,4 +764,34 @@ fn delete_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Eve
 
 fn add_tile_layer(map: &Map) {
     TileLayer::new("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").add_to(map);
+}
+
+fn tooltip_text(location: &LocationMessage) -> String {
+    let minutes_ago = Utc::now()
+        .signed_duration_since(location.timestamp)
+        .num_minutes();
+    let zones: Vec<&str> = location.locations.iter().map(|z| z.name.as_str()).collect();
+    if zones.is_empty() {
+        format!("{}\n{} min ago", location.label, minutes_ago)
+    } else {
+        format!("{}\n{} min ago\n{}", location.label, minutes_ago, zones.join(", "))
+    }
+}
+
+fn make_tooltip(marker: &leaflet::Marker, location: &LocationMessage) {
+    let options = leaflet::TooltipOptions::default();
+    options.set_permanent(true);
+    let tooltip = leaflet::Tooltip::new(&options, None);
+    let text = tooltip_text(location);
+    tooltip.set_content(&JsValue::from_str(&text));
+    marker
+        .unchecked_ref::<leaflet::Layer>()
+        .bind_tooltip(&tooltip);
+}
+
+fn update_tooltip(marker: &leaflet::Marker, location: &LocationMessage) {
+    let text = tooltip_text(location);
+    marker
+        .unchecked_ref::<leaflet::Layer>()
+        .set_tooltip_content(&JsValue::from_str(&text));
 }
