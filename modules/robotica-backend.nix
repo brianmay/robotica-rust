@@ -116,6 +116,16 @@ let
         type = lib.types.nullOr display_type;
         default = null;
       };
+      arrival_radius_m = mkOption {
+        type = types.float;
+        default = 0.0;
+        description = "Extra padding in metres added to zone boundaries when testing arrival. Default 0.0 suits high-accuracy Tesla GPS.";
+      };
+      exit_radius_m = mkOption {
+        type = types.float;
+        default = 10.0;
+        description = "Extra padding in metres for exit hysteresis. Prevents flapping near zone edges.";
+      };
     };
   };
 
@@ -338,6 +348,16 @@ let
       id = mkOption { type = types.str; };
       name = mkOption { type = types.str; };
       audience = mkOption { type = owntracks_audience_type; };
+      arrival_radius_m = mkOption {
+        type = types.float;
+        default = 50.0;
+        description = "Extra padding in metres added to zone boundaries when testing arrival. Default 50.0 compensates for Google-sourced position inaccuracy.";
+      };
+      exit_radius_m = mkOption {
+        type = types.float;
+        default = 150.0;
+        description = "Extra padding in metres for exit hysteresis. Prevents flapping as position wanders.";
+      };
     };
   };
 

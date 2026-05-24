@@ -125,12 +125,18 @@ fn new_message(
 /// * `audience` — where to send arrival/departure announcements.
 /// * `location` — upstream pipe of location updates.
 /// * `postgres` — database pool for location lookups.
+/// * `arrival_radius` — extra padding in metres added to zone boundaries when
+///   testing whether the object has arrived (use `0.0` for exact boundary).
+/// * `exit_radius` — extra padding in metres used for the exit hysteresis test;
+///   the object must move this far outside the zone before departure is triggered.
 pub fn monitor<T>(
     sender_name: impl Into<String>,
     tracked_name: impl Into<String>,
     audience: AudienceConfig,
     location: stateful::Receiver<Json<T>>,
     postgres: sqlx::PgPool,
+    arrival_radius: f64,
+    exit_radius: f64,
 ) -> Outputs
 where
     T: LocationSource + Send + Sync + Clone + 'static,
@@ -151,7 +157,7 @@ where
             let lon = location.longitude();
 
             let inner_locations =
-                state::State::search_locations(&postgres, lat, lon, 0.0).await;
+                state::State::search_locations(&postgres, lat, lon, arrival_radius).await;
             let inner_locations = match inner_locations {
                 Ok(l) => l,
                 Err(err) => {
@@ -161,7 +167,7 @@ where
             };
 
             let outer_locations =
-                state::State::search_locations(&postgres, lat, lon, 10.0).await;
+                state::State::search_locations(&postgres, lat, lon, exit_radius).await;
             let outer_locations = match outer_locations {
                 Ok(l) => l,
                 Err(err) => {

@@ -292,6 +292,27 @@ pub struct OwnTracksSourceConfig {
     pub name: String,
     /// Announcement audiences.
     pub audience: OwnTracksAudienceConfig,
+
+    /// Extra padding in metres added to zone boundaries when testing arrival.
+    /// Defaults to `50.0` — accounts for typical GPS inaccuracy with
+    /// Google-sourced positions.
+    #[serde(default = "OwnTracksSourceConfig::default_arrival_radius_m")]
+    pub arrival_radius_m: f64,
+
+    /// Extra padding in metres for the exit hysteresis test.
+    /// Defaults to `150.0` — prevents flapping when position wanders.
+    #[serde(default = "OwnTracksSourceConfig::default_exit_radius_m")]
+    pub exit_radius_m: f64,
+}
+
+impl OwnTracksSourceConfig {
+    const fn default_arrival_radius_m() -> f64 {
+        50.0
+    }
+
+    const fn default_exit_radius_m() -> f64 {
+        150.0
+    }
 }
 
 #[cfg(test)]

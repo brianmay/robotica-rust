@@ -25,5 +25,7 @@ pub fn monitor(
         },
         location,
         postgres,
+        car.arrival_radius_m,
+        car.exit_radius_m,
     )
 }
