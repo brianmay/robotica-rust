@@ -8,7 +8,7 @@ use robotica_common::{
     robotica::{
         self,
         audio::MessagePriority,
-        locations::{LocationList, NearbyZone},
+        zones::{NearbyZone, OccupiedZones},
         message::{Audience, Message},
     },
 };
@@ -26,13 +26,13 @@ use tracing::error;
 mod state {
     use std::collections::{HashMap, HashSet};
 
-    use robotica_common::robotica::locations::{self, OccupiedZone};
+    use robotica_common::robotica::zones::{self, OccupiedZone};
     use robotica_tokio::database;
 
     pub struct State {
         set: HashSet<i32>,
-        /// Maps zone id → (Location, signed distance in metres).
-        map: HashMap<i32, (locations::Location, f64)>,
+        /// Maps zone id → (Zone, signed distance in metres).
+        map: HashMap<i32, (zones::Zone, f64)>,
     }
 
     impl State {
@@ -53,12 +53,12 @@ mod state {
             distance: f64,
         ) -> Result<Self, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            let locations =
-                database::locations::search_locations(postgres, point, distance).await?;
-            let set = locations.iter().map(|l| l.id).collect();
+            let zones =
+                database::zones::search_zones(postgres, point, distance).await?;
+            let set = zones.iter().map(|l| l.id).collect();
             // We don't have individual distances here; use 0.0 as a sentinel
             // (this path is only used for arrival/exit hysteresis, not for reporting).
-            let map = locations
+            let map = zones
                 .into_iter()
                 .map(|l| (l.id, (l, 0.0_f64)))
                 .collect();
@@ -72,13 +72,13 @@ mod state {
             lat: f64,
             lon: f64,
             candidate_radius: f64,
-        ) -> Result<Vec<(locations::Location, f64)>, sqlx::Error> {
+        ) -> Result<Vec<(zones::Zone, f64)>, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            database::locations::search_locations_with_distance(postgres, point, candidate_radius)
+            database::zones::search_zones_with_distance(postgres, point, candidate_radius)
                 .await
         }
 
-        pub fn get(&self, id: i32) -> Option<&locations::Location> {
+        pub fn get(&self, id: i32) -> Option<&zones::Zone> {
             self.map.get(&id).map(|(l, _)| l)
         }
 
@@ -90,16 +90,16 @@ mod state {
             let mut list = self
                 .map
                 .values()
-                .map(|(loc, dist)| OccupiedZone::from_location(loc, *dist))
+                .map(|(loc, dist)| OccupiedZone::from_zone(loc, *dist))
                 .collect::<Vec<_>>();
             list.sort_by_key(|k| k.id);
             list
         }
 
-        pub fn extend(&mut self, locations: Vec<(locations::Location, f64)>) {
-            for (location, dist) in locations {
-                self.set.insert(location.id);
-                self.map.insert(location.id, (location, dist));
+        pub fn extend(&mut self, zones: Vec<(zones::Zone, f64)>) {
+            for (zone, dist) in zones {
+                self.set.insert(zone.id);
+                self.map.insert(zone.id, (zone, dist));
             }
         }
 
@@ -110,7 +110,7 @@ mod state {
 
         /// Refresh distances for all currently-occupied zones from the latest
         /// candidate query results.
-        pub fn update_distances(&mut self, candidates: &[(locations::Location, f64)]) {
+        pub fn update_distances(&mut self, candidates: &[(zones::Zone, f64)]) {
             for (loc, dist) in candidates {
                 if let Some(entry) = self.map.get_mut(&loc.id) {
                     entry.1 = *dist;
@@ -135,13 +135,13 @@ pub struct AudienceConfig {
 /// Outputs produced by [`monitor`].
 pub struct Outputs {
     /// The current set of named locations the tracked object is inside.
-    pub location: stateful::Receiver<LocationList>,
+    pub location: stateful::Receiver<OccupiedZones>,
     /// `true` when the object is at home.
     pub is_home: stateful::Receiver<bool>,
     /// Arrival / departure messages.
     pub messages: stateless::Receiver<Message>,
     /// Full location message (lat/lon + location list).
-    pub location_message: stateful::Receiver<robotica::locations::LocationMessage>,
+    pub location_message: stateful::Receiver<robotica::zones::LocationMessage>,
 }
 
 fn new_message(
@@ -174,7 +174,7 @@ async fn process_location(
     arrival_radius: f64,
     exit_radius: f64,
     message_tx: &stateless::Sender<Message>,
-) -> Option<robotica::locations::LocationMessage> {
+) -> Option<robotica::zones::LocationMessage> {
     let inner_locations = match state::State::search_locations(postgres, lat, lon, arrival_radius).await {
         Ok(l) => l,
         Err(err) => { error!("Failed to search locations: {}", err); return None; }
@@ -234,7 +234,7 @@ async fn process_location(
         .collect();
     nearby_zones.sort_by_key(|z| z.id);
 
-    Some(robotica::locations::LocationMessage {
+    Some(robotica::zones::LocationMessage {
         label: tracked_name.to_owned(),
         latitude: lat,
         longitude: lon,
@@ -304,7 +304,7 @@ where
 
     let location = location_rx
         .clone()
-        .map(|(_, l)| LocationList::new(l.locations));
+        .map(|(_, l)| OccupiedZones::new(l.locations));
     let is_home = location.clone().map(|(_, l)| l.is_at_home());
 
     Outputs {

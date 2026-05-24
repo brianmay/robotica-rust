@@ -6,7 +6,7 @@ pub mod entities;
 pub mod hdmi_matrix;
 pub mod http_api;
 pub mod lights;
-pub mod locations;
+pub mod zones;
 pub mod message;
 pub mod occupancy;
 pub mod switch;

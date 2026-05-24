@@ -3,13 +3,12 @@ use axum::routing::{delete, get, post, put};
 use axum::{extract::State, Json};
 use geo::Point;
 use robotica_common::robotica::http_api::ApiResponse;
-use robotica_common::robotica::locations::{CreateLocation, Location};
+use robotica_common::robotica::zones::{CreateZone, Zone};
 use tap::Pipe;
 use tower_sessions::Session;
 
-use crate::database::locations::{
-    create_location, delete_location, get_location, list_locations, search_locations,
-    update_location,
+use crate::database::zones::{
+    create_zone, delete_zone, get_zone, list_zones, search_zones, update_zone,
 };
 
 use super::super::{get_user, HttpState};
@@ -29,12 +28,12 @@ pub fn router(state: HttpState) -> axum::Router {
 pub async fn list_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-) -> Result<Json<ApiResponse<Vec<Location>>>, ResponseError> {
+) -> Result<Json<ApiResponse<Vec<Zone>>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     }
 
-    list_locations(&postgres)
+    list_zones(&postgres)
         .await?
         .pipe(ApiResponse::success)
         .pipe(Json)
@@ -44,8 +43,8 @@ pub async fn list_handler(
 async fn create_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Json(location): Json<CreateLocation>,
-) -> Result<Json<ApiResponse<Location>>, ResponseError> {
+    Json(zone): Json<CreateZone>,
+) -> Result<Json<ApiResponse<Zone>>, ResponseError> {
     let Some(user) = get_user(&session).await else {
         return Err(ResponseError::AuthenticationFailed);
     };
@@ -54,15 +53,15 @@ async fn create_handler(
         return Err(ResponseError::AuthorizationFailed);
     }
 
-    create_location(&postgres, &location)
+    create_zone(&postgres, &zone)
         .await?
-        .pipe(|id| Location {
+        .pipe(|id| Zone {
             id,
-            name: location.name,
-            bounds: location.bounds,
-            color: location.color,
-            announce_on_enter: location.announce_on_enter,
-            announce_on_exit: location.announce_on_exit,
+            name: zone.name,
+            bounds: zone.bounds,
+            color: zone.color,
+            announce_on_enter: zone.announce_on_enter,
+            announce_on_exit: zone.announce_on_exit,
         })
         .pipe(ApiResponse::success)
         .pipe(Json)
@@ -82,7 +81,7 @@ async fn delete_handler(
         return Err(ResponseError::AuthorizationFailed);
     }
 
-    delete_location(&postgres, id)
+    delete_zone(&postgres, id)
         .await
         .map_err(|err| {
             if matches!(err, sqlx::Error::RowNotFound) {
@@ -99,8 +98,8 @@ async fn delete_handler(
 async fn update_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
-    Json(location): Json<Location>,
-) -> Result<Json<ApiResponse<Location>>, ResponseError> {
+    Json(zone): Json<Zone>,
+) -> Result<Json<ApiResponse<Zone>>, ResponseError> {
     let Some(user) = get_user(&session).await else {
         return Err(ResponseError::AuthenticationFailed);
     };
@@ -109,7 +108,7 @@ async fn update_handler(
         return Err(ResponseError::AuthorizationFailed);
     }
 
-    update_location(&postgres, &location)
+    update_zone(&postgres, &zone)
         .await
         .map_err(|err| {
             if matches!(err, sqlx::Error::RowNotFound) {
@@ -118,7 +117,7 @@ async fn update_handler(
                 ResponseError::SqlError(err)
             }
         })?
-        .pipe(|()| location)
+        .pipe(|()| zone)
         .pipe(ApiResponse::success)
         .pipe(Json)
         .pipe(Ok)
@@ -128,28 +127,26 @@ pub async fn get_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
     Path(id): Path<i32>,
-) -> Result<Json<Location>, ResponseError> {
+) -> Result<Json<Zone>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     }
 
-    get_location(&postgres, id)
+    get_zone(&postgres, id)
         .await?
-        .map_or(Err(ResponseError::NotFoundError()), |location| {
-            Ok(Json(location))
-        })
+        .map_or(Err(ResponseError::NotFoundError()), |zone| Ok(Json(zone)))
 }
 
 pub async fn search_handler(
     State(postgres): State<sqlx::PgPool>,
     session: Session,
     Json(location): Json<Point<f64>>,
-) -> Result<Json<Vec<Location>>, ResponseError> {
+) -> Result<Json<Vec<Zone>>, ResponseError> {
     if get_user(&session).await.is_none() {
         return Err(ResponseError::AuthenticationFailed);
     }
 
-    search_locations(&postgres, location, 0.0)
+    search_zones(&postgres, location, 0.0)
         .await?
         .pipe(Json)
         .pipe(Ok)

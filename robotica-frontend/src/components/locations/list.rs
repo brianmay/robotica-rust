@@ -1,27 +1,27 @@
-use robotica_common::robotica::locations::Location;
+use robotica_common::robotica::zones::Zone;
 use std::sync::Arc;
 use yew::prelude::*;
 
 pub enum Msg {}
 
 pub struct List {
-    locations: Arc<Vec<Location>>,
+    locations: Arc<Vec<Zone>>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
-    pub locations: Arc<Vec<Location>>,
-    pub select_location: Callback<Location>,
+    pub locations: Arc<Vec<Zone>>,
+    pub select_location: Callback<Zone>,
     pub cancel: Callback<()>,
 }
 
 impl List {
-    fn button(ctx: &Context<Self>, location: Location) -> Html {
-        let name = location.name.clone();
+    fn button(ctx: &Context<Self>, zone: Zone) -> Html {
+        let name = zone.name.clone();
         let cb = ctx
             .props()
             .select_location
-            .reform(move |_| location.clone());
+            .reform(move |_| zone.clone());
         html! {
             <button onclick={cb}>{name}</button>
         }
@@ -45,7 +45,7 @@ impl Component for List {
             <div class="control component-container">
                 <h1>{"Choose a location"}</h1>
                 <div>
-                    {for self.locations.iter().map(|location| Self::button(ctx, location.clone()))}
+                    {for self.locations.iter().map(|zone| Self::button(ctx, zone.clone()))}
                 </div>
                 <button onclick={on_click}>{"Cancel"}</button>
             </div>

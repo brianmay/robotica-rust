@@ -1,11 +1,11 @@
-//! Access locations table in the database
+//! Access zones table in the database
 use geo::Geometry;
 use geozero::wkb;
-use robotica_common::robotica::locations::Location;
+use robotica_common::robotica::zones::Zone;
 use tap::Pipe;
 use tracing::error;
 
-/// List locations from the database.
+/// List zones from the database.
 ///
 /// # Arguments
 ///
@@ -19,25 +19,25 @@ use tracing::error;
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_tokio::database::locations::list_locations;
+/// use robotica_tokio::database::zones::list_zones;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
-///     let locations = list_locations(&postgres).await.unwrap();
-///     println!("{:?}", locations);
+///     let zones = list_zones(&postgres).await.unwrap();
+///     println!("{:?}", zones);
 /// }
 /// ```
-pub async fn list_locations(postgres: &sqlx::PgPool) -> Result<Vec<Location>, sqlx::Error> {
+pub async fn list_zones(postgres: &sqlx::PgPool) -> Result<Vec<Zone>, sqlx::Error> {
     sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations"#
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones"#
     )
     .fetch_all(postgres)
     .await?
     .into_iter()
     .filter_map(|row| {
         if let Some(Geometry::Polygon(p)) = row.bounds.geometry {
-            Location {
+            Zone {
                 id: row.id,
                 name: row.name,
                 bounds: p,
@@ -55,12 +55,12 @@ pub async fn list_locations(postgres: &sqlx::PgPool) -> Result<Vec<Location>, sq
     .pipe(Ok)
 }
 
-/// Create a new location in the database.
+/// Create a new zone in the database.
 ///
 /// # Arguments
 ///
 /// * `postgres` - The `PostgreSQL` connection pool.
-/// * `location` - The location to create.
+/// * `zone` - The zone to create.
 ///
 /// # Errors
 ///
@@ -68,42 +68,42 @@ pub async fn list_locations(postgres: &sqlx::PgPool) -> Result<Vec<Location>, sq
 ///
 /// # Panics
 ///
-/// This function may panic if the provided location is invalid.
+/// This function may panic if the provided zone is invalid.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_common::robotica::locations::CreateLocation;
-/// use robotica_tokio::database::locations::create_location;
+/// use robotica_common::robotica::zones::CreateZone;
+/// use robotica_tokio::database::zones::create_zone;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
-///     let location = CreateLocation {
-///         name: "New Location".to_string(),
+///     let zone = CreateZone {
+///         name: "New Zone".to_string(),
 ///         color: "blue".to_string(),
 ///         announce_on_enter: true,
 ///         announce_on_exit: false,
 ///         bounds: geo::Polygon::new(geo::LineString::from(vec![(0.0,0.0), (0.0,1.0), (1.0,1.0), (0.0,0.0)]), vec![]),
 ///     };
-///     let id = create_location(&postgres, &location).await.unwrap();
-///     println!("Created location with ID: {}", id);
+///     let id = create_zone(&postgres, &zone).await.unwrap();
+///     println!("Created zone with ID: {}", id);
 /// }
 /// ```
-pub async fn create_location(
+pub async fn create_zone(
     postgres: &sqlx::PgPool,
-    location: &robotica_common::robotica::locations::CreateLocation,
+    zone: &robotica_common::robotica::zones::CreateZone,
 ) -> Result<i32, sqlx::Error> {
-    let geometry = Geometry::Polygon(location.bounds.clone());
+    let geometry = Geometry::Polygon(zone.bounds.clone());
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"INSERT INTO locations (name, color, announce_on_enter, announce_on_exit, bounds) VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
-        location.name,
-        location.color,
-        location.announce_on_enter,
-        location.announce_on_exit,
+        r#"INSERT INTO zones (name, color, announce_on_enter, announce_on_exit, bounds) VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
+        zone.name,
+        zone.color,
+        zone.announce_on_enter,
+        zone.announce_on_exit,
         geo as _
     )
     .fetch_one(postgres)
@@ -112,18 +112,18 @@ pub async fn create_location(
     .pipe(Ok)
 }
 
-/// Deletes a location from the database.
+/// Deletes a zone from the database.
 ///
-/// This function takes a `PostgreSQL` connection pool and an ID of a location, and deletes the location with the given ID from the database.
+/// This function takes a `PostgreSQL` connection pool and an ID of a zone, and deletes the zone with the given ID from the database.
 ///
 /// # Arguments
 ///
 /// * `postgres` - A `PostgreSQL` connection pool.
-/// * `id` - The ID of the location to delete.
+/// * `id` - The ID of the zone to delete.
 ///
 /// # Returns
 ///
-/// This function returns a `Result` which is an `Ok` if the location was successfully deleted, or an `Err` if an error occurred.
+/// This function returns a `Result` which is an `Ok` if the zone was successfully deleted, or an `Err` if an error occurred.
 ///
 /// # Errors
 ///
@@ -137,20 +137,20 @@ pub async fn create_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_tokio::database::locations::delete_location;
+/// use robotica_tokio::database::zones::delete_zone;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
-///     let id = 999; // ID of the location to delete
-///     let rc = delete_location(&postgres, id).await;
+///     let id = 999; // ID of the zone to delete
+///     let rc = delete_zone(&postgres, id).await;
 ///     if rc.is_ok() {
-///         println!("Deleted location with ID: {}", id);
+///         println!("Deleted zone with ID: {}", id);
 ///     }
 /// }
 /// ```
-pub async fn delete_location(postgres: &sqlx::PgPool, id: i32) -> Result<(), sqlx::Error> {
-    sqlx::query!(r#"DELETE FROM locations WHERE id = $1"#, id)
+pub async fn delete_zone(postgres: &sqlx::PgPool, id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query!(r#"DELETE FROM zones WHERE id = $1"#, id)
         .execute(postgres)
         .await?
         .pipe(|rc| {
@@ -162,18 +162,18 @@ pub async fn delete_location(postgres: &sqlx::PgPool, id: i32) -> Result<(), sql
         })
 }
 
-/// Updates a location in the database.
+/// Updates a zone in the database.
 ///
-/// This function takes a `PostgreSQL` connection pool and a location object, and updates the corresponding location in the database.
+/// This function takes a `PostgreSQL` connection pool and a zone object, and updates the corresponding zone in the database.
 ///
 /// # Arguments
 ///
 /// * `postgres` - A `PostgreSQL` connection pool.
-/// * `location` - The location object containing the updated information.
+/// * `zone` - The zone object containing the updated information.
 ///
 /// # Returns
 ///
-/// This function returns a `Result` which is an `Ok` if the location was successfully updated, or an `Err` if an error occurred.
+/// This function returns a `Result` which is an `Ok` if the zone was successfully updated, or an `Err` if an error occurred.
 ///
 /// # Errors
 ///
@@ -187,59 +187,59 @@ pub async fn delete_location(postgres: &sqlx::PgPool, id: i32) -> Result<(), sql
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_tokio::database::locations::update_location;
-/// use robotica_common::robotica::locations::Location;
+/// use robotica_tokio::database::zones::update_zone;
+/// use robotica_common::robotica::zones::Zone;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
-///     let location = Location {
+///     let zone = Zone {
 ///         id: 1,
-///         name: "New Location".to_string(),
+///         name: "New Zone".to_string(),
 ///         color: "blue".to_string(),
 ///         announce_on_enter: true,
 ///         announce_on_exit: false,
 ///         bounds: geo::Polygon::new(geo::LineString::from(vec![(0.0,0.0), (0.0,1.0), (1.0,1.0), (0.0,0.0)]), vec![]),
 ///     };
-///     let rc = update_location(&postgres, &location).await;
+///     let rc = update_zone(&postgres, &zone).await;
 ///     if rc.is_ok() {
-///         println!("Updated location with ID: {}", location.id);
+///         println!("Updated zone with ID: {}", zone.id);
 ///     }
 /// }
 /// ```
-pub async fn update_location(
+pub async fn update_zone(
     postgres: &sqlx::PgPool,
-    location: &robotica_common::robotica::locations::Location,
+    zone: &robotica_common::robotica::zones::Zone,
 ) -> Result<(), sqlx::Error> {
-    let geometry = Geometry::Polygon(location.bounds.clone());
+    let geometry = Geometry::Polygon(zone.bounds.clone());
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"UPDATE locations SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6"#,
-        location.name,
-        location.color,
-        location.announce_on_enter,
-        location.announce_on_exit,
+        r#"UPDATE zones SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6"#,
+        zone.name,
+        zone.color,
+        zone.announce_on_enter,
+        zone.announce_on_exit,
         geo as _,
-        location.id
+        zone.id
     )
     .execute(postgres)
     .await?
     .pipe(|rc| if rc.rows_affected() > 0 { Ok(()) } else { Err(sqlx::Error::RowNotFound) })
 }
 
-/// Retrieves a location from the database.
+/// Retrieves a zone from the database.
 ///
-/// This function takes a `PostgreSQL` connection pool and an ID, and retrieves the corresponding location from the database.
+/// This function takes a `PostgreSQL` connection pool and an ID, and retrieves the corresponding zone from the database.
 ///
 /// # Arguments
 ///
 /// * `postgres` - A `PostgreSQL` connection pool.
-/// * `id` - The ID of the location to retrieve.
+/// * `id` - The ID of the zone to retrieve.
 ///
 /// # Returns
 ///
-/// This function returns a `Result` which is an `Ok` containing an `Option<Location>` if the location was found, or an `Err` if an error occurred.
+/// This function returns a `Result` which is an `Ok` containing an `Option<Zone>` if the zone was found, or an `Err` if an error occurred.
 ///
 /// # Errors
 ///
@@ -253,23 +253,23 @@ pub async fn update_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_tokio::database::locations::get_location;
-/// use robotica_common::robotica::locations::Location;
+/// use robotica_tokio::database::zones::get_zone;
+/// use robotica_common::robotica::zones::Zone;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
 ///     let id = 1;
-///     let rc = get_location(&postgres, id).await;
-///     println!("Location: {:?}", rc);
+///     let rc = get_zone(&postgres, id).await;
+///     println!("Zone: {:?}", rc);
 /// }
 /// ```
-pub async fn get_location(
+pub async fn get_zone(
     postgres: &sqlx::PgPool,
     id: i32,
-) -> Result<Option<Location>, sqlx::Error> {
+) -> Result<Option<Zone>, sqlx::Error> {
     let rc = sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE id = $1"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones WHERE id = $1"#,
         id
     )
     .fetch_optional(postgres)
@@ -278,7 +278,7 @@ pub async fn get_location(
     match rc {
         Some(row) => {
             if let Some(Geometry::Polygon(p)) = row.bounds.geometry {
-                Location {
+                Zone {
                     id: row.id,
                     name: row.name,
                     bounds: p,
@@ -298,9 +298,9 @@ pub async fn get_location(
     }
 }
 
-/// Searches for locations in the database based on a given location.
+/// Searches for zones in the database based on a given location.
 ///
-/// This function takes a `PostgreSQL` connection pool and a location, and searches for locations in the database that intersect with the given location.
+/// This function takes a `PostgreSQL` connection pool and a location, and searches for zones in the database that intersect with the given location.
 ///
 /// # Arguments
 ///
@@ -309,7 +309,7 @@ pub async fn get_location(
 ///
 /// # Returns
 ///
-/// This function returns a `Result` which is an `Ok` containing a vector of `Location` if the search was successful, or an `Err` if an error occurred.
+/// This function returns a `Result` which is an `Ok` containing a vector of `Zone` if the search was successful, or an `Err` if an error occurred.
 ///
 /// # Errors
 ///
@@ -323,28 +323,28 @@ pub async fn get_location(
 ///
 /// ```no_run
 /// use sqlx::PgPool;
-/// use robotica_tokio::database::locations::search_locations;
-/// use robotica_common::robotica::locations::Location;
+/// use robotica_tokio::database::zones::search_zones;
+/// use robotica_common::robotica::zones::Zone;
 /// use geo::Point;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let postgres = PgPool::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
 ///     let location = Point::new(1.0, 2.0);
-///     let result = search_locations(&postgres, location, 0.0).await;
-///     println!("Locations: {:?}", result);
+///     let result = search_zones(&postgres, location, 0.0).await;
+///     println!("Zones: {:?}", result);
 /// }
 /// ```
-pub async fn search_locations(
+pub async fn search_zones(
     postgres: &sqlx::PgPool,
     location: geo::Point<f64>,
     distance: f64,
-) -> Result<Vec<Location>, sqlx::Error> {
+) -> Result<Vec<Zone>, sqlx::Error> {
     let geometry = Geometry::Point(location);
     let geo = wkb::Encode(geometry);
 
     sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM locations WHERE ST_DWithin($1, bounds, $2)"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones WHERE ST_DWithin($1, bounds, $2)"#,
         geo as _,
         distance,
     )
@@ -353,7 +353,7 @@ pub async fn search_locations(
     .into_iter()
     .filter_map(|row| {
         if let Some(Geometry::Polygon(p)) = row.bounds.geometry {
-            Location {
+            Zone {
                 id: row.id,
                 name: row.name,
                 bounds: p,
@@ -371,7 +371,7 @@ pub async fn search_locations(
     .pipe(Ok)
 }
 
-/// Search for locations within `candidate_radius` metres of `location`,
+/// Search for zones within `candidate_radius` metres of `location`,
 /// returning each with its signed distance to the zone boundary.
 ///
 /// Distance convention:
@@ -381,11 +381,11 @@ pub async fn search_locations(
 /// # Errors
 ///
 /// Returns a [`sqlx::Error`] on database failure.
-pub async fn search_locations_with_distance(
+pub async fn search_zones_with_distance(
     postgres: &sqlx::PgPool,
     location: geo::Point<f64>,
     candidate_radius: f64,
-) -> Result<Vec<(Location, f64)>, sqlx::Error> {
+) -> Result<Vec<(Zone, f64)>, sqlx::Error> {
     let geometry = Geometry::Point(location);
     let geo = wkb::Encode(geometry);
 
@@ -393,7 +393,7 @@ pub async fn search_locations_with_distance(
         r#"SELECT id, name, color, announce_on_enter, announce_on_exit,
                   bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>",
                   ST_Distance($1::geography, bounds) AS "dist!: f64"
-           FROM locations
+           FROM zones
            WHERE ST_DWithin($1::geography, bounds, $2)"#,
         geo as _,
         candidate_radius,
@@ -403,7 +403,7 @@ pub async fn search_locations_with_distance(
     .into_iter()
     .filter_map(|row| {
         if let Some(Geometry::Polygon(p)) = row.bounds.geometry {
-            let loc = Location {
+            let zone = Zone {
                 id: row.id,
                 name: row.name,
                 bounds: p,
@@ -411,7 +411,7 @@ pub async fn search_locations_with_distance(
                 announce_on_enter: row.announce_on_enter,
                 announce_on_exit: row.announce_on_exit,
             };
-            Some((loc, row.dist))
+            Some((zone, row.dist))
         } else {
             error!("Not a polygon: {:?}", row.bounds);
             None
@@ -420,6 +420,7 @@ pub async fn search_locations_with_distance(
     .collect::<Vec<_>>()
     .pipe(Ok)
 }
+
 mod test {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::wildcard_imports)]
@@ -427,9 +428,10 @@ mod test {
     use sqlx::{Pool, Postgres};
 
     use super::*;
-    use robotica_common::robotica::locations::CreateLocation;
+    use robotica_common::robotica::zones::CreateZone;
+
     #[allow(dead_code)]
-    async fn db_create_location(postgres: &Pool<Postgres>) {
+    async fn db_create_zone(postgres: &Pool<Postgres>) {
         let bounds = geo::Polygon::new(
             geo::LineString::from(vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]),
             vec![],
@@ -437,7 +439,7 @@ mod test {
         let geometry = Geometry::Polygon(bounds);
         let geo = wkb::Encode(geometry);
 
-        sqlx::query("INSERT INTO locations (name,color,announce_on_enter,announce_on_exit, bounds) VALUES ('test', 'red', false, false, $1);",)
+        sqlx::query("INSERT INTO zones (name,color,announce_on_enter,announce_on_exit, bounds) VALUES ('test', 'red', false, false, $1);",)
             .bind(geo)
             .execute(postgres)
             .await
@@ -445,9 +447,9 @@ mod test {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test_create_location(postgres: Pool<Postgres>) {
-        let location = CreateLocation {
-            name: "New Location".to_string(),
+    async fn test_create_zone(postgres: Pool<Postgres>) {
+        let zone = CreateZone {
+            name: "New Zone".to_string(),
             color: "blue".to_string(),
             announce_on_enter: true,
             announce_on_exit: false,
@@ -456,46 +458,46 @@ mod test {
                 vec![],
             ),
         };
-        let id = create_location(&postgres, &location).await.unwrap();
+        let id = create_zone(&postgres, &zone).await.unwrap();
         assert!(id > 0);
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test_list_locations(postgres: Pool<Postgres>) {
-        db_create_location(&postgres).await;
-        let locations = list_locations(&postgres).await.unwrap();
-        assert!(!locations.is_empty());
+    async fn test_list_zones(postgres: Pool<Postgres>) {
+        db_create_zone(&postgres).await;
+        let zones = list_zones(&postgres).await.unwrap();
+        assert!(!zones.is_empty());
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test_get_location(postgres: Pool<Postgres>) {
-        db_create_location(&postgres).await;
-        let locations = list_locations(&postgres).await.unwrap();
-        let location = locations.first().unwrap();
-        let rc = get_location(&postgres, location.id).await.unwrap();
+    async fn test_get_zone(postgres: Pool<Postgres>) {
+        db_create_zone(&postgres).await;
+        let zones = list_zones(&postgres).await.unwrap();
+        let zone = zones.first().unwrap();
+        let rc = get_zone(&postgres, zone.id).await.unwrap();
         assert!(rc.is_some());
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test_update_location(postgres: Pool<Postgres>) {
-        db_create_location(&postgres).await;
+    async fn test_update_zone(postgres: Pool<Postgres>) {
+        db_create_zone(&postgres).await;
 
-        let locations = list_locations(&postgres).await.unwrap();
-        let mut location = locations.first().unwrap().clone();
-        location.name = "Updated Location".to_string();
-        update_location(&postgres, &location).await.unwrap();
-        let rc = get_location(&postgres, location.id).await.unwrap().unwrap();
-        assert_eq!(rc.name, "Updated Location");
+        let zones = list_zones(&postgres).await.unwrap();
+        let mut zone = zones.first().unwrap().clone();
+        zone.name = "Updated Zone".to_string();
+        update_zone(&postgres, &zone).await.unwrap();
+        let rc = get_zone(&postgres, zone.id).await.unwrap().unwrap();
+        assert_eq!(rc.name, "Updated Zone");
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test_delete_location(postgres: Pool<Postgres>) {
-        db_create_location(&postgres).await;
+    async fn test_delete_zone(postgres: Pool<Postgres>) {
+        db_create_zone(&postgres).await;
 
-        let locations = list_locations(&postgres).await.unwrap();
-        let location = locations.first().unwrap();
-        delete_location(&postgres, location.id).await.unwrap();
-        let rc = get_location(&postgres, location.id).await.unwrap();
+        let zones = list_zones(&postgres).await.unwrap();
+        let zone = zones.first().unwrap();
+        delete_zone(&postgres, zone.id).await.unwrap();
+        let rc = get_zone(&postgres, zone.id).await.unwrap();
         assert!(rc.is_none());
     }
 }

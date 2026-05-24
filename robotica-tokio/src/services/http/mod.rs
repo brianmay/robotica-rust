@@ -40,7 +40,7 @@ use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
 use crate::spawn;
 
-use self::api::locations;
+use self::api::zones;
 use self::errors::ResponseError;
 use self::oidc::Client;
 
@@ -221,7 +221,7 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
         .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
         .with_state(state.clone())
-        .nest("/api/locations", locations::router(state))
+        .nest("/api/zones", zones::router(state))
         .layer(session_layer)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 

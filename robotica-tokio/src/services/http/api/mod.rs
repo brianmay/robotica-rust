@@ -1,2 +1,2 @@
 pub(super) mod errors;
-pub(super) mod locations;
+pub(super) mod zones;

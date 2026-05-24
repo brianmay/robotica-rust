@@ -1,5 +1,5 @@
 use robotica_common::robotica::{
-    audio::MessagePriority, locations::LocationList, message::Message,
+    audio::MessagePriority, zones::OccupiedZones, message::Message,
 };
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
@@ -99,7 +99,7 @@ fn announce_charging_state(
 pub fn monitor(
     car: &car::Config,
     message_sink: stateless::Sender<Message>,
-    location_stream: stateful::Receiver<LocationList>,
+    location_stream: stateful::Receiver<OccupiedZones>,
     charging_info: stateful::Receiver<ChargingInformation>,
 ) -> stateful::Receiver<ShouldPlugin> {
     let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
