@@ -208,7 +208,7 @@ impl MapComponent {
     fn get_marked_locations(&self) -> Vec<i32> {
         self.tracked_objects
             .values()
-            .flat_map(|(loc, _)| loc.locations.iter().map(|z| z.id))
+            .flat_map(|(loc, _)| loc.zones.iter().map(|z| z.id))
             .collect()
     }
 
@@ -768,7 +768,7 @@ fn tooltip_text(location: &LocationMessage) -> String {
     let minutes_ago = Utc::now()
         .signed_duration_since(location.timestamp)
         .num_minutes();
-    let zones: Vec<&str> = location.locations.iter().map(|z| z.name.as_str()).collect();
+    let zones: Vec<&str> = location.zones.iter().map(|z| z.name.as_str()).collect();
     if zones.is_empty() {
         format!("{}\n{} min ago", location.label, minutes_ago)
     } else {

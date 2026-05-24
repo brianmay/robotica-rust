@@ -172,7 +172,7 @@ pub struct LocationMessage {
     pub timestamp: chrono::DateTime<chrono::Utc>,
 
     /// The zones the object is currently inside.
-    pub locations: Vec<OccupiedZone>,
+    pub zones: Vec<OccupiedZone>,
 
     /// Zones within the candidate search radius that were not triggered.
     ///
