@@ -12,7 +12,6 @@ use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
 use chrono::Utc;
-use gloo_timers::callback::Interval;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
@@ -36,7 +35,6 @@ pub enum Msg {
     SubscribedTracked(Subscription),
     SubscribedEvents(Subscription),
     MqttEvent(WsEvent),
-    RefreshTooltips,
     CreatePolygon(leaflet::Polygon),
     UpdatePolygon(leaflet::Polygon),
     DeletePolygon(leaflet::Polygon),
@@ -127,7 +125,6 @@ pub struct MapComponent {
     tracked_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
     tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
-    _tooltip_interval: Interval,
     connected: Connected,
 }
 
@@ -376,11 +373,6 @@ impl Component for MapComponent {
             .dispatch_event(&Event::new("resize").unwrap())
             .unwrap();
 
-        let tooltip_interval = {
-            let callback = ctx.link().callback(|()| Msg::RefreshTooltips);
-            Interval::new(60_000, move || callback.emit(()))
-        };
-
         Self {
             map: leaflet_map,
             user: None,
@@ -394,7 +386,6 @@ impl Component for MapComponent {
             tracked_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
             tracked_objects: HashMap::new(),
-            _tooltip_interval: tooltip_interval,
             connected: Connected::Disconnected {
                 reason: "Loading...".to_string(),
             },
@@ -440,12 +431,6 @@ impl Component for MapComponent {
             }
             Msg::SubscribedEvents(subscription) => {
                 self.event_subscription = Some(subscription);
-                false
-            }
-            Msg::RefreshTooltips => {
-                for (location, marker) in self.tracked_objects.values() {
-                    update_tooltip(marker, location);
-                }
                 false
             }
             Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
@@ -795,7 +780,7 @@ fn tooltip_text(location: &LocationMessage) -> String {
 
 fn make_tooltip(marker: &leaflet::Marker, location: &LocationMessage) {
     let options = leaflet::TooltipOptions::default();
-    options.set_permanent(true);
+    options.set_sticky(true);
     let tooltip = leaflet::Tooltip::new(&options, None);
     let text = tooltip_text(location);
     tooltip.set_content(&JsValue::from_str(&text));
