@@ -146,7 +146,7 @@ pub fn output_location(
         async move {
             let mut y = 5;
             let mut template = Template(vec![header(&mut y, name), line(&mut y)]);
-            for location in state.into_iter().filter(|l| l.announce_on_enter) {
+            for location in state {
                 template.0.push(text(&mut y, location.name.clone()));
             }
             if let Err(e) = template.send(&config).await {

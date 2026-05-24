@@ -36,58 +36,33 @@ impl Location {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-/// A list of locations
-pub struct LocationList(Vec<Location>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// A list of occupied zones, derived from a [`LocationMessage`].
+pub struct LocationList(Vec<OccupiedZone>);
 
 impl LocationList {
     /// Create a new location list
     #[must_use]
-    pub const fn new(list: Vec<Location>) -> Self {
+    pub const fn new(list: Vec<OccupiedZone>) -> Self {
         Self(list)
     }
 
     /// Is the location at home?
     #[must_use]
     pub fn is_at_home(&self) -> bool {
-        self.0.iter().any(Location::is_at_home)
+        self.0.iter().any(OccupiedZone::is_at_home)
     }
 
     /// Is the location near home?
     #[must_use]
     pub fn is_near_home(&self) -> bool {
-        self.0.iter().any(Location::is_near_home)
-    }
-
-    /// Turn the list into a map
-    #[must_use]
-    pub fn into_map(self) -> std::collections::HashMap<i32, Location> {
-        self.0.into_iter().map(|l| (l.id, l)).collect()
+        self.0.iter().any(OccupiedZone::is_near_home)
     }
 
     /// Turn the list into a set of ids
     #[must_use]
     pub fn to_set(&self) -> std::collections::HashSet<i32> {
         self.0.iter().map(|l| l.id).collect()
-    }
-
-    /// Filter out items from list
-    pub fn retain(&mut self, f: impl Fn(&Location) -> bool) {
-        self.0.retain(f);
-    }
-
-    /// Extend the list with another list
-    pub fn extend(&mut self, other: impl IntoIterator<Item = Location>) {
-        self.0.extend(other);
-    }
-}
-
-impl IntoIterator for LocationList {
-    type Item = Location;
-    type IntoIter = std::vec::IntoIter<Location>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
     }
 }
 
@@ -110,6 +85,51 @@ pub struct CreateLocation {
     pub announce_on_exit: bool,
 }
 
+/// A lightweight summary of a zone currently occupied by a tracked object.
+///
+/// Contains only the fields needed by consumers of [`LocationMessage`];
+/// the full [`Location`] (with bounds, color, announce flags, etc.) lives
+/// solely in the database and the backend's internal state.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
+pub struct OccupiedZone {
+    /// The unique id of the zone (matches [`Location::id`]).
+    pub id: i32,
+
+    /// The human-readable name of the zone (e.g. `"Home"`, `"Near Home"`).
+    pub name: String,
+}
+
+impl OccupiedZone {
+    /// Is this the home zone?
+    #[must_use]
+    pub fn is_at_home(&self) -> bool {
+        self.name == "Home"
+    }
+
+    /// Is this the near-home zone?
+    #[must_use]
+    pub fn is_near_home(&self) -> bool {
+        self.name == "Near Home"
+    }
+}
+
+impl From<&Location> for OccupiedZone {
+    fn from(loc: &Location) -> Self {
+        Self {
+            id: loc.id,
+            name: loc.name.clone(),
+        }
+    }
+}
+
+impl IntoIterator for LocationList {
+    type Item = OccupiedZone;
+    type IntoIter = std::vec::IntoIter<OccupiedZone>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 /// A location message for an object
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct LocationMessage {
@@ -123,5 +143,5 @@ pub struct LocationMessage {
     pub longitude: f64,
 
     /// The locations that the object is in
-    pub locations: Vec<Location>,
+    pub locations: Vec<OccupiedZone>,
 }
