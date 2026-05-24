@@ -26,9 +26,8 @@ use tracing::error;
 mod state {
     use std::collections::{HashMap, HashSet};
 
-    use robotica_common::robotica::locations::{self, LocationList};
+    use robotica_common::robotica::locations::{self, OccupiedZone};
     use robotica_tokio::database;
-    use tap::Pipe;
 
     pub struct State {
         set: HashSet<i32>,
@@ -36,10 +35,11 @@ mod state {
     }
 
     impl State {
-        pub fn new(list: LocationList) -> Self {
-            let set = list.to_set();
-            let map = list.into_map();
-            Self { set, map }
+        pub fn empty() -> Self {
+            Self {
+                set: HashSet::new(),
+                map: HashMap::new(),
+            }
         }
 
         pub async fn search_locations(
@@ -49,11 +49,10 @@ mod state {
             distance: f64,
         ) -> Result<Self, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            database::locations::search_locations(postgres, point, distance)
-                .await?
-                .pipe(LocationList::new)
-                .pipe(Self::new)
-                .pipe(Ok)
+            let locations = database::locations::search_locations(postgres, point, distance).await?;
+            let set = locations.iter().map(|l| l.id).collect();
+            let map = locations.into_iter().map(|l| (l.id, l)).collect();
+            Ok(Self { set, map })
         }
 
         pub fn get(&self, id: i32) -> Option<&locations::Location> {
@@ -64,8 +63,8 @@ mod state {
             self.set.difference(&other.set).copied().collect()
         }
 
-        pub fn to_vec(&self) -> Vec<locations::Location> {
-            let mut list = self.map.values().cloned().collect::<Vec<_>>();
+        pub fn to_vec(&self) -> Vec<OccupiedZone> {
+            let mut list = self.map.values().map(OccupiedZone::from).collect::<Vec<_>>();
             list.sort_by_key(|k| k.id);
             list
         }
@@ -144,7 +143,7 @@ where
 
     spawn(async move {
         let mut inputs = location.subscribe().await;
-        let mut locations = state::State::new(LocationList::new(vec![]));
+        let mut locations = state::State::empty();
         let mut first_time = true;
 
         while let Ok(Json(location)) = inputs.recv().await {

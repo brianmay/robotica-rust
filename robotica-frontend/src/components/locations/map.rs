@@ -206,10 +206,10 @@ impl MapComponent {
         self.object = MapObject::List(locations.clone(), list, false);
     }
 
-    fn get_marked_locations(&self) -> Vec<&Location> {
+    fn get_marked_locations(&self) -> Vec<i32> {
         self.tracked_objects
             .values()
-            .flat_map(|(loc, _)| loc.locations.iter())
+            .flat_map(|(loc, _)| loc.locations.iter().map(|z| z.id))
             .collect()
     }
 
@@ -270,7 +270,7 @@ impl MapComponent {
 }
 
 fn get_action_location_options(
-    marked_locations: &[&Location],
+    marked_locations: &[i32],
     location: &ActionLocation,
 ) -> leaflet::PolylineOptions {
     let color = get_action_location_color(marked_locations, location);
@@ -284,7 +284,7 @@ fn get_action_location_options(
 }
 
 fn get_location_options(
-    marked_locations: &[&Location],
+    marked_locations: &[i32],
     location: &Location,
 ) -> leaflet::PolylineOptions {
     let color = get_location_color(marked_locations, location);
@@ -297,17 +297,15 @@ fn get_location_options(
     options
 }
 
-fn get_action_location_color(marked_locations: &[&Location], location: &ActionLocation) -> String {
+fn get_action_location_color(marked_locations: &[i32], location: &ActionLocation) -> String {
     match location {
         ActionLocation::Create(_location) => "black".to_string(),
         ActionLocation::Update(location) => get_location_color(marked_locations, location),
     }
 }
 
-fn get_location_color(marked_locations: &[&Location], location: &Location) -> String {
-    let is_marked = marked_locations
-        .iter()
-        .any(|marked_location| location.id == marked_location.id);
+fn get_location_color(marked_locations: &[i32], location: &Location) -> String {
+    let is_marked = marked_locations.contains(&location.id);
 
     if is_marked {
         "red".to_string()
