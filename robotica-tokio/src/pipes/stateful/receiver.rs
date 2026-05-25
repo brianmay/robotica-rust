@@ -328,9 +328,9 @@ where
 
 /// A subscription to receive data from an entity.
 pub struct Subscription<T> {
-    rx: broadcast::Receiver<OldNewType<T>>,
-    _tx: mpsc::Sender<ReceiveMessage<T>>,
-    initial: Vec<T>,
+    pub(in crate::pipes) rx: broadcast::Receiver<OldNewType<T>>,
+    pub(in crate::pipes) _tx: mpsc::Sender<ReceiveMessage<T>>,
+    pub(in crate::pipes) initial: Vec<T>,
 }
 
 impl<T> Subscription<T>
@@ -338,7 +338,7 @@ where
     T: Clone,
 {
     /// Create a null subscription that is already closed.
-    fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
+    pub(in crate::pipes) fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
         let (_tx, rx) = broadcast::channel(1);
         Self {
             rx,

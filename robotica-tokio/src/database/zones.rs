@@ -264,10 +264,7 @@ pub async fn update_zone(
 ///     println!("Zone: {:?}", rc);
 /// }
 /// ```
-pub async fn get_zone(
-    postgres: &sqlx::PgPool,
-    id: i32,
-) -> Result<Option<Zone>, sqlx::Error> {
+pub async fn get_zone(postgres: &sqlx::PgPool, id: i32) -> Result<Option<Zone>, sqlx::Error> {
     let rc = sqlx::query!(
         r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones WHERE id = $1"#,
         id

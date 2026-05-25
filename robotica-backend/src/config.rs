@@ -61,8 +61,8 @@ impl Environment {
             robotica_tokio::serde::merge_yaml(config, env_config)?
         };
 
-        let mut config: Config =
-            serde_yaml_ng::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
+        let mut config: Config = serde_yaml_ng::from_value(config)
+            .map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         if let Some(static_path) = &self.static_path {
             if let Some(http_config) = &mut config.http {

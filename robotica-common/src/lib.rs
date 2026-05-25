@@ -10,10 +10,10 @@
 pub mod anavi_thermometer;
 pub mod owntracks;
 
-#[cfg(feature = "chrono")]
-pub mod location_source;
 pub mod config;
 pub mod controllers;
+#[cfg(feature = "chrono")]
+pub mod location_source;
 pub mod mqtt;
 pub mod robotica;
 pub mod shelly;

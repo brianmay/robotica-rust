@@ -1,30 +1,26 @@
-//! Stateless receiver code.
+//! Indexed receiver code.
+//!
+//! The receiver shares its message types with the stateful receiver so that
+//! [`into_stateful`] can return a [`stateful::Receiver`] backed by the same
+//! channel — a true thin wrapper.
 
-use thiserror::Error;
+use async_trait::async_trait;
 use tokio::{
     select,
-    sync::{broadcast, mpsc, oneshot},
+    sync::{mpsc, oneshot},
 };
 use tracing::{debug, error};
 
 use crate::{
-    pipes::{stateful, stateless},
+    pipes::{stateful, stateless, Subscriber, Subscription as SubscriptionTrait},
     spawn,
 };
 
-/// Something went wrong in Receiver.
-#[derive(Error, Debug)]
-pub enum RecvError {
-    /// The Pipe was closed.
-    #[error("The pipe was closed")]
-    Closed,
-}
+use stateful::receiver::Subscription;
 
-type SubscribeMessage<T> = (broadcast::Receiver<T>, Vec<T>);
-pub(in crate::pipes) enum ReceiveMessage<T> {
-    // Get(oneshot::Sender<Option<T>>),
-    Subscribe(oneshot::Sender<SubscribeMessage<T>>),
-}
+// The generic pipe uses the same message types as the stateful pipe so that
+// `into_stateful` can return a `stateful::Receiver` backed by the same channel.
+pub(in crate::pipes) use stateful::receiver::ReceiveMessage;
 
 /// A `Receiver` that doesn't count as a reference to the entity.
 pub struct WeakReceiver<T> {
@@ -43,56 +39,45 @@ impl<T> WeakReceiver<T> {
     }
 }
 
-// impl<T> WeakReceiver<T>
-// where
-//     T: Send + Clone,
-// {
-//     /// Get a stateless receiver
-//     #[must_use]
-//     pub fn into_stateless(&self) -> stateless::WeakReceiver<T> {
-//         stateless::WeakReceiver {
-//             name: self.name.clone(),
-//             tx: self.stateless_tx.clone(),
-//         }
-//     }
-
-//     /// Turn this into a stateful receiver.
-//     #[must_use]
-//     pub fn into_stateful(&self) -> stateful::WeakReceiver<T> {
-//         stateful::WeakReceiver {
-//             name: self.name.clone(),
-//             tx: self.stateful_tx.clone(),
-//         }
-//     }
-// }
-
-/// Receive a value from an entity
+/// Receive a value from an entity.
 #[derive(Debug, Clone)]
 pub struct Receiver<T> {
     pub(super) name: String,
     pub(in crate::pipes) tx: mpsc::Sender<ReceiveMessage<T>>,
 }
 
-impl<T> Receiver<T> {
-    async fn subscribe(&self) -> Option<(broadcast::Receiver<T>, Vec<T>)>
-    where
-        T: Send,
-    {
+#[async_trait]
+impl<T> Subscriber<T> for Receiver<T>
+where
+    T: Send + Clone + 'static,
+{
+    type SubscriptionType = Subscription<T>;
+
+    /// Subscribe to this entity.
+    ///
+    /// Returns an already closed subscription if the entity is closed.
+    async fn subscribe(&self) -> Subscription<T> {
         let (tx, rx) = oneshot::channel();
         let msg = ReceiveMessage::Subscribe(tx);
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
-            return None;
+            return Subscription::null(self.tx.clone());
         }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);
-                None
+                Subscription::null(self.tx.clone())
             },
-            |(rx, initial)| Some((rx, initial)),
+            |(rx, initial)| Subscription {
+                rx,
+                _tx: self.tx.clone(),
+                initial,
+            },
         )
     }
+}
 
+impl<T> Receiver<T> {
     /// Try to convert to a `WeakReceiver`
     #[must_use]
     pub fn downgrade(&self) -> WeakReceiver<T> {
@@ -107,7 +92,28 @@ impl<T> Receiver<T>
 where
     T: Send + Clone,
 {
-    /// Get a stateless receiver
+    /// Retrieve the most recent value from the entity.
+    ///
+    /// Returns `None` if the entity is closed.
+    pub async fn get(&self) -> Option<T> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ReceiveMessage::Get(tx);
+        if let Err(err) = self.tx.send(msg).await {
+            error!("{}: get/send failed: {}", self.name, err);
+            return None;
+        }
+        rx.await.unwrap_or_else(|_| {
+            error!("{}: get/await failed", self.name);
+            None
+        })
+    }
+}
+
+impl<T> Receiver<T>
+where
+    T: Send + Clone,
+{
+    /// Get a stateless receiver that forwards every message (new-value only).
     #[must_use]
     pub fn into_stateless(&self) -> stateless::Receiver<T>
     where
@@ -119,9 +125,7 @@ where
         let clone_self = self.clone();
 
         spawn(async move {
-            let Some((mut sub, _)) = clone_self.subscribe().await else {
-                return;
-            };
+            let mut sub = clone_self.subscribe().await;
 
             loop {
                 select! {
@@ -148,93 +152,14 @@ where
     }
 
     /// Turn this into a stateful receiver.
+    ///
+    /// Because the generic pipe shares message types with the stateful pipe,
+    /// this is a thin wrapper — no additional actor is created.
     #[must_use]
-    pub fn into_stateful(&self) -> stateful::Receiver<T>
-    where
-        T: Eq + 'static,
-    {
-        let name = format!("{} (into_stateful)", self.name);
-        let (tx, rx) = stateful::create_pipe(&name);
-
-        let clone_self = self.clone();
-
-        spawn(async move {
-            // We need to keep tx to ensure connection is not closed if self is dropped.
-            let Some((mut sub, initial)) = clone_self.subscribe().await else {
-                return;
-            };
-
-            for item in initial {
-                tx.try_send(item);
-            }
-
-            loop {
-                select! {
-                    data = sub.recv() => {
-                        let data = match data {
-                            Ok(data) => data,
-                            Err(err) => {
-                                debug!("{name}: recv failed, exiting: {err}");
-                                break;
-                            }
-                        };
-
-                        tx.try_send(data);
-                    }
-
-                    () = tx.closed() => {
-                        debug!("{name}: dest closed");
-                        break;
-                    }
-                }
-            }
-        });
-        rx
-    }
-
-    /// Turn this into a stateful indexed receiver.
-    /// Uses `create_indexed_pipe` for storage keyed by `has_index()`.
-    #[must_use]
-    pub fn into_indexed_stateful(&self) -> stateful::Receiver<T>
-    where
-        T: Eq + Send + Clone + robotica_common::mqtt::HasIndex + 'static,
-    {
-        let name = format!("{} (into_indexed_stateful)", self.name);
-        let (tx, rx) = stateful::create_indexed_pipe(&name);
-
-        let clone_self = self.clone();
-
-        spawn(async move {
-            // We need to keep tx to ensure connection is not closed if self is dropped.
-            let Some((mut sub, initial)) = clone_self.subscribe().await else {
-                return;
-            };
-
-            for item in initial {
-                tx.try_send(item);
-            }
-
-            loop {
-                select! {
-                    data = sub.recv() => {
-                        let data = match data {
-                            Ok(data) => data,
-                            Err(err) => {
-                                debug!("{name}: recv failed, exiting: {err}");
-                                break;
-                            }
-                        };
-
-                        tx.try_send(data);
-                    }
-
-                    () = tx.closed() => {
-                        debug!("{name}: dest closed");
-                        break;
-                    }
-                }
-            }
-        });
-        rx
+    pub fn into_stateful(&self) -> stateful::Receiver<T> {
+        stateful::Receiver {
+            name: self.name.clone(),
+            tx: self.tx.clone(),
+        }
     }
 }

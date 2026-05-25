@@ -232,8 +232,8 @@ pub fn load_config(filename: &Path) -> Result<ConfigMap, ConfigError> {
     let f = std::fs::File::open(filename)
         .map_err(|e| ConfigError::FileError(filename.to_path_buf(), e))?;
 
-    let config: ConfigMap =
-        serde_yaml_ng::from_reader(f).map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
+    let config: ConfigMap = serde_yaml_ng::from_reader(f)
+        .map_err(|e| ConfigError::YamlError(filename.to_path_buf(), e))?;
 
     Ok(config)
 }

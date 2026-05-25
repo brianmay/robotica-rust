@@ -1,6 +1,4 @@
-use robotica_common::robotica::{
-    audio::MessagePriority, zones::OccupiedZones, message::Message,
-};
+use robotica_common::robotica::{audio::MessagePriority, message::Message, zones::OccupiedZones};
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::tesla::api::ChargingStateEnum,

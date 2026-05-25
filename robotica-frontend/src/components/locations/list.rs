@@ -18,10 +18,7 @@ pub struct Props {
 impl List {
     fn button(ctx: &Context<Self>, zone: Zone) -> Html {
         let name = zone.name.clone();
-        let cb = ctx
-            .props()
-            .select_location
-            .reform(move |_| zone.clone());
+        let cb = ctx.props().select_location.reform(move |_| zone.clone());
         html! {
             <button onclick={cb}>{name}</button>
         }

@@ -10,14 +10,14 @@ use crate::{
     },
     services::websocket::{Subscription, WebsocketService, WsEvent},
 };
+use chrono::Utc;
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
-use chrono::Utc;
 use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
-    robotica::zones::{CreateZone, Zone, LocationMessage},
+    robotica::zones::{CreateZone, LocationMessage, Zone},
 };
 use tap::{Pipe, Tap};
 use tracing::debug;
@@ -284,10 +284,7 @@ fn get_action_location_options(
     options
 }
 
-fn get_location_options(
-    marked_locations: &[i32],
-    location: &Zone,
-) -> leaflet::PolylineOptions {
+fn get_location_options(marked_locations: &[i32], location: &Zone) -> leaflet::PolylineOptions {
     let color = get_location_color(marked_locations, location);
     let options = leaflet::PolylineOptions::default();
     options.set_color(color.clone());
@@ -770,7 +767,12 @@ fn tooltip_text(location: &LocationMessage) -> String {
     if zones.is_empty() {
         format!("{}\n{} min ago", location.label, minutes_ago)
     } else {
-        format!("{}\n{} min ago\n{}", location.label, minutes_ago, zones.join(", "))
+        format!(
+            "{}\n{} min ago\n{}",
+            location.label,
+            minutes_ago,
+            zones.join(", ")
+        )
     }
 }
 

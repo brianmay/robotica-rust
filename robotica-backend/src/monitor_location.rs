@@ -3,16 +3,16 @@
 //! Takes a stream of any type implementing [`LocationSource`] and produces
 //! enriched location outputs by cross-referencing against the database.
 
+use robotica_common::location_source::LocationSource;
 use robotica_common::{
     mqtt::Json,
     robotica::{
         self,
         audio::MessagePriority,
-        zones::{NearbyZone, OccupiedZones},
         message::{Audience, Message},
+        zones::{NearbyZone, OccupiedZones},
     },
 };
-use robotica_common::location_source::LocationSource;
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     spawn,
@@ -53,15 +53,11 @@ mod state {
             distance: f64,
         ) -> Result<Self, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            let zones =
-                database::zones::search_zones(postgres, point, distance).await?;
+            let zones = database::zones::search_zones(postgres, point, distance).await?;
             let set = zones.iter().map(|l| l.id).collect();
             // We don't have individual distances here; use 0.0 as a sentinel
             // (this path is only used for arrival/exit hysteresis, not for reporting).
-            let map = zones
-                .into_iter()
-                .map(|l| (l.id, (l, 0.0_f64)))
-                .collect();
+            let map = zones.into_iter().map(|l| (l.id, (l, 0.0_f64))).collect();
             Ok(Self { set, map })
         }
 
@@ -74,8 +70,7 @@ mod state {
             candidate_radius: f64,
         ) -> Result<Vec<(zones::Zone, f64)>, sqlx::Error> {
             let point = geo::Point::new(lon, lat);
-            database::zones::search_zones_with_distance(postgres, point, candidate_radius)
-                .await
+            database::zones::search_zones_with_distance(postgres, point, candidate_radius).await
         }
 
         pub fn get(&self, id: i32) -> Option<&zones::Zone> {
@@ -175,20 +170,32 @@ async fn process_location(
     exit_radius: f64,
     message_tx: &stateless::Sender<Message>,
 ) -> Option<robotica::zones::LocationMessage> {
-    let inner_locations = match state::State::search_locations(postgres, lat, lon, arrival_radius).await {
-        Ok(l) => l,
-        Err(err) => { error!("Failed to search locations: {}", err); return None; }
-    };
-    let outer_locations = match state::State::search_locations(postgres, lat, lon, exit_radius).await {
-        Ok(l) => l,
-        Err(err) => { error!("Failed to search locations: {}", err); return None; }
-    };
+    let inner_locations =
+        match state::State::search_locations(postgres, lat, lon, arrival_radius).await {
+            Ok(l) => l,
+            Err(err) => {
+                error!("Failed to search locations: {}", err);
+                return None;
+            }
+        };
+    let outer_locations =
+        match state::State::search_locations(postgres, lat, lon, exit_radius).await {
+            Ok(l) => l,
+            Err(err) => {
+                error!("Failed to search locations: {}", err);
+                return None;
+            }
+        };
 
     // --- candidate query for distances + nearby_zones ---
-    let candidates = match state::State::search_with_distance(postgres, lat, lon, CANDIDATE_RADIUS_M).await {
-        Ok(c) => c,
-        Err(err) => { error!("Failed to search candidate locations: {}", err); return None; }
-    };
+    let candidates =
+        match state::State::search_with_distance(postgres, lat, lon, CANDIDATE_RADIUS_M).await {
+            Ok(c) => c,
+            Err(err) => {
+                error!("Failed to search candidate locations: {}", err);
+                return None;
+            }
+        };
 
     let arrived: Vec<_> = inner_locations
         .difference(locations)
@@ -198,17 +205,29 @@ async fn process_location(
         .collect();
 
     let left_set = locations.difference(&outer_locations);
-    let left: Vec<_> = left_set.iter().copied().filter_map(|id| locations.get(id)).collect();
+    let left: Vec<_> = left_set
+        .iter()
+        .copied()
+        .filter_map(|id| locations.get(id))
+        .collect();
 
     if !*first_time {
         for loc in &arrived {
             let msg = format!("{tracked_name} arrived at {}", loc.name);
-            let aud = if loc.announce_on_enter { &audience.locations } else { &audience.private };
+            let aud = if loc.announce_on_enter {
+                &audience.locations
+            } else {
+                &audience.private
+            };
             message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
         }
         for loc in left {
             let msg = format!("{tracked_name} left {}", loc.name);
-            let aud = if loc.announce_on_exit { &audience.locations } else { &audience.private };
+            let aud = if loc.announce_on_exit {
+                &audience.locations
+            } else {
+                &audience.private
+            };
             message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
         }
     }
@@ -216,7 +235,10 @@ async fn process_location(
     let arrived_with_dist: Vec<_> = arrived
         .into_iter()
         .map(|loc| {
-            let dist = candidates.iter().find(|(c, _)| c.id == loc.id).map_or(0.0, |(_, d)| *d);
+            let dist = candidates
+                .iter()
+                .find(|(c, _)| c.id == loc.id)
+                .map_or(0.0, |(_, d)| *d);
             (loc, dist)
         })
         .collect();
@@ -226,11 +248,16 @@ async fn process_location(
     locations.update_distances(&candidates);
     *first_time = false;
 
-    let occupied_ids: std::collections::HashSet<i32> = locations.to_vec().iter().map(|z| z.id).collect();
+    let occupied_ids: std::collections::HashSet<i32> =
+        locations.to_vec().iter().map(|z| z.id).collect();
     let mut nearby_zones: Vec<NearbyZone> = candidates
         .iter()
         .filter(|(loc, _)| !occupied_ids.contains(&loc.id))
-        .map(|(loc, dist)| NearbyZone { id: loc.id, name: loc.name.clone(), distance_m: *dist })
+        .map(|(loc, dist)| NearbyZone {
+            id: loc.id,
+            name: loc.name.clone(),
+            distance_m: *dist,
+        })
         .collect();
     nearby_zones.sort_by_key(|z| z.id);
 

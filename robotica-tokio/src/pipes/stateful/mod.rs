@@ -7,12 +7,9 @@ pub use receiver::Receiver;
 pub use receiver::Subscription;
 pub use receiver::WeakReceiver;
 pub use sender::Sender;
-use std::collections::HashMap;
 use tokio::select;
 use tracing::debug;
 use tracing::error;
-
-use robotica_common::mqtt::HasIndex;
 
 use crate::pipes::{RecvError, Subscriber};
 use crate::spawn;
@@ -95,88 +92,6 @@ where
                 }
                 else => {
                     debug!("stateful::create_pipe({name}): all inputs closed");
-                    break;
-                }
-            }
-        }
-    });
-
-    (sender, receiver)
-}
-
-/// Create a stateful indexed entity that sends every message and adds state messages.
-///
-/// Values are stored in a `HashMap` keyed by the index returned by `has_index()`.
-/// If `has_index()` returns `Some(key)`, values are stored per-key with bounded replay.
-/// If `has_index()` returns `None`, values are stored under a singleton key.
-#[must_use]
-pub fn create_indexed_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
-where
-    T: Clone + PartialEq + Send + 'static + HasIndex,
-{
-    let (send_tx, send_rx) = mpsc::unbounded_channel::<SendMessage<T>>();
-    let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
-    let (out_tx, out_rx) = broadcast::channel::<OldNewType<T>>(PIPE_SIZE);
-
-    drop(out_rx);
-
-    let name = name.into();
-
-    let sender: Sender<T> = Sender {
-        tx: send_tx,
-        name: name.clone(),
-    };
-    let receiver: Receiver<T> = Receiver {
-        tx: receive_tx,
-        name: name.clone(),
-    };
-
-    spawn(async move {
-        let mut indexed_data: HashMap<String, T> = HashMap::new();
-        let mut send_rx = send_rx;
-        let mut receive_rx = receive_rx;
-
-        loop {
-            select! {
-                msg = send_rx.recv() => {
-                    match msg {
-                        Some(SendMessage::Set(data)) => {
-                            let key = data.has_index().unwrap_or_else(|| "_singleton".to_string());
-                            let prev_data = indexed_data.get(&key).cloned();
-                            indexed_data.insert(key, data.clone());
-                            if let Err(_err) = out_tx.send((prev_data, data)) {
-                                // It is not an error if there are no subscribers.
-                            }
-                        }
-                        None => {
-                            debug!("stateful::create_indexed_pipe({name}): send channel closed");
-                            break;
-                        }
-                    }
-                }
-                msg = receive_rx.recv() => {
-                    match msg {
-                        Some(ReceiveMessage::Get(tx)) => {
-                            let data = indexed_data.values().last().cloned();
-                            if tx.send(data).is_err() {
-                                error!("stateful::create_indexed_pipe({name}): get send failed");
-                            }
-                        }
-                        Some(ReceiveMessage::Subscribe(tx)) => {
-                            let rx = out_tx.subscribe();
-                            let replay: Vec<T> = indexed_data.values().cloned().collect();
-                            if tx.send((rx, replay)).is_err() {
-                                error!("stateful::create_indexed_pipe{name}): subscribe send failed");
-                            }
-                        }
-                        None => {
-                            debug!("stateful::create_indexed_pipe({name}): receive channel closed");
-                            break;
-                        }
-                    }
-                }
-                else => {
-                    debug!("stateful::create_indexed_pipe({name}): all inputs closed");
                     break;
                 }
             }

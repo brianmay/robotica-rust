@@ -174,7 +174,7 @@ impl MqttTx {
         Ok(self
             .subscribe(topic)
             .await?
-            .into_indexed_stateful()
+            .into_stateful()
             .translate::<U>())
     }
 }
@@ -584,7 +584,7 @@ impl Subscriptions {
         T: TryFrom<MqttMessage> + Clone + PartialEq + Send + 'static,
         <T as TryFrom<MqttMessage>>::Error: Send + std::error::Error,
     {
-        self.subscribe(topic).into_indexed_stateful().translate()
+        self.subscribe(topic).into_stateful().translate()
     }
 
     /// Remove a subscription using exact match from the list.

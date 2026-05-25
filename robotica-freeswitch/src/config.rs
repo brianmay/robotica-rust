@@ -34,8 +34,8 @@ impl Environment {
             config
         };
 
-        let config: Config =
-            serde_yaml_ng::from_value(config).map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
+        let config: Config = serde_yaml_ng::from_value(config)
+            .map_err(|e| Error::Yaml(self.config_file.clone(), e))?;
 
         Ok(config)
     }

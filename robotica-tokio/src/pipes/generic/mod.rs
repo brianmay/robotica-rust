@@ -1,6 +1,9 @@
-//! A Generic Pipe can be turned into a stateful or stateless receiver
+//! An indexed pipe stores the last value per key (via `HasIndex`) and
+//! can be turned into a stateful or stateless receiver.
 pub mod receiver;
 pub mod sender;
+
+use std::collections::HashMap;
 
 pub use receiver::Receiver;
 pub use receiver::WeakReceiver;
@@ -9,6 +12,9 @@ use tokio::select;
 use tracing::debug;
 use tracing::error;
 
+use robotica_common::mqtt::HasIndex;
+
+use crate::pipes::stateful::receiver::OldNewType;
 use crate::spawn;
 
 use self::receiver::ReceiveMessage;
@@ -18,15 +24,19 @@ use sender::SendMessage;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
-/// Create a generic entity that sends every message.
+/// Create an indexed entity that stores the last value per key and replays
+/// all current values to new subscribers.
+///
+/// Keys are extracted via [`HasIndex::has_index`].  If `has_index()` returns
+/// `None`, the value is stored under a singleton key.
 #[must_use]
 pub fn create_pipe<T>(name: impl Into<String>) -> (Sender<T>, Receiver<T>)
 where
-    T: Clone + Send + 'static,
+    T: Clone + PartialEq + Send + HasIndex + 'static,
 {
     let (send_tx, send_rx) = mpsc::unbounded_channel::<SendMessage<T>>();
     let (receive_tx, receive_rx) = mpsc::channel::<ReceiveMessage<T>>(PIPE_SIZE);
-    let (out_tx, out_rx) = broadcast::channel::<T>(PIPE_SIZE);
+    let (out_tx, out_rx) = broadcast::channel::<OldNewType<T>>(PIPE_SIZE);
 
     drop(out_rx);
 
@@ -42,7 +52,7 @@ where
     };
 
     spawn(async move {
-        let mut replay_data: Vec<T> = Vec::new();
+        let mut indexed_data: HashMap<String, T> = HashMap::new();
         let mut send_rx = send_rx;
         let mut receive_rx = receive_rx;
 
@@ -52,12 +62,14 @@ where
                     #[allow(clippy::single_match_else)]
                     match msg {
                         Some(SendMessage::Set(data)) => {
-                            replay_data.push(data.clone());
-                            if replay_data.len() > PIPE_SIZE {
-                                replay_data.remove(0);
-                            }
-                            if let Err(_err) = out_tx.send(data) {
-                                // It is not an error if there are no subscribers.
+                            let key = data.has_index().unwrap_or_else(|| "_singleton".to_string());
+                            let prev_data = indexed_data.get(&key).cloned();
+                            let changed = prev_data.as_ref().is_none_or(|saved| saved != &data);
+                            if changed {
+                                indexed_data.insert(key, data.clone());
+                                if let Err(_err) = out_tx.send((prev_data, data)) {
+                                    // It is not an error if there are no subscribers.
+                                }
                             }
                         }
                         None => {
@@ -69,10 +81,17 @@ where
                 msg = receive_rx.recv() => {
                     #[allow(clippy::single_match_else)]
                     match msg {
+                        Some(ReceiveMessage::Get(tx)) => {
+                            let data = indexed_data.values().last().cloned();
+                            if tx.send(data).is_err() {
+                                error!("generic::create_pipe({name}): get send failed");
+                            }
+                        }
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
-                            if tx.send((rx, replay_data.clone())).is_err() {
-                                error!("generic::create_pipe{name}): subscribe send failed");
+                            let replay: Vec<T> = indexed_data.values().cloned().collect();
+                            if tx.send((rx, replay)).is_err() {
+                                error!("generic::create_pipe({name}): subscribe send failed");
                             }
                         }
                         None => {
