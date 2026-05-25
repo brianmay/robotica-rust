@@ -17,7 +17,7 @@ use robotica_common::mqtt::HasIndex;
 use crate::pipes::{RecvError, Subscriber};
 use crate::spawn;
 
-use super::{MAX_INDEXED_REPLAY_SIZE, PIPE_SIZE};
+use super::PIPE_SIZE;
 pub(in crate::pipes) use receiver::ReceiveMessage;
 use sender::SendMessage;
 use tokio::sync::broadcast;
@@ -132,7 +132,7 @@ where
     };
 
     spawn(async move {
-        let mut indexed_data: HashMap<String, Vec<T>> = HashMap::new();
+        let mut indexed_data: HashMap<String, T> = HashMap::new();
         let mut send_rx = send_rx;
         let mut receive_rx = receive_rx;
 
@@ -142,14 +142,8 @@ where
                     match msg {
                         Some(SendMessage::Set(data)) => {
                             let key = data.has_index().unwrap_or_else(|| "_singleton".to_string());
-                            let prev_data = indexed_data.get(&key).and_then(|v| v.last()).cloned();
-                            indexed_data.entry(key.clone()).or_default();
-                            if let Some(v) = indexed_data.get_mut(&key) {
-                                v.push(data.clone());
-                                if v.len() > MAX_INDEXED_REPLAY_SIZE {
-                                    v.remove(0);
-                                }
-                            }
+                            let prev_data = indexed_data.get(&key).cloned();
+                            indexed_data.insert(key, data.clone());
                             if let Err(_err) = out_tx.send((prev_data, data)) {
                                 // It is not an error if there are no subscribers.
                             }
@@ -163,17 +157,14 @@ where
                 msg = receive_rx.recv() => {
                     match msg {
                         Some(ReceiveMessage::Get(tx)) => {
-                            let data = indexed_data.values().last().and_then(|v| v.last()).cloned();
+                            let data = indexed_data.values().last().cloned();
                             if tx.send(data).is_err() {
                                 error!("stateful::create_indexed_pipe({name}): get send failed");
                             }
                         }
                         Some(ReceiveMessage::Subscribe(tx)) => {
                             let rx = out_tx.subscribe();
-                            let replay: Vec<T> = indexed_data
-                                .values()
-                                .filter_map(|v| v.last().cloned())
-                                .collect();
+                            let replay: Vec<T> = indexed_data.values().cloned().collect();
                             if tx.send((rx, replay)).is_err() {
                                 error!("stateful::create_indexed_pipe{name}): subscribe send failed");
                             }
