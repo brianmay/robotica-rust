@@ -3786,7 +3786,7 @@ dependencies = [
  "http 1.4.0",
  "influxdb_derive",
  "lazy-regex",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "serde",
  "serde_derive",
  "serde_json",
@@ -5180,7 +5180,7 @@ dependencies = [
  "getrandom 0.4.2",
  "hmac-sha256",
  "mime",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6279,9 +6279,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.3"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
+checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
  "base64",
  "bytes",
@@ -6399,7 +6399,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "opentelemetry-stdout",
  "opentelemetry_sdk",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "robotica-common",
  "robotica-macro",
  "robotica-tokio",
@@ -6455,7 +6455,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "openssl",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "robotica-common",
  "robotica-tokio",
  "rustls",
@@ -6567,7 +6567,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "regex",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "robotica-common",
  "robotica-macro",
  "rstest",
@@ -9425,7 +9425,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
