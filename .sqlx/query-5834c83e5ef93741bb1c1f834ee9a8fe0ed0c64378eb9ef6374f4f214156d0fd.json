@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM zones WHERE ST_DWithin($1, bounds, $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "announce_on_enter",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "announce_on_exit",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "bounds!: wkb::Decode<geo::Geometry<f64>>",
+        "type_info": {
+          "Custom": {
+            "name": "geography",
+            "kind": "Simple"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "geography",
+            "kind": "Simple"
+          }
+        },
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5834c83e5ef93741bb1c1f834ee9a8fe0ed0c64378eb9ef6374f4f214156d0fd"
+}

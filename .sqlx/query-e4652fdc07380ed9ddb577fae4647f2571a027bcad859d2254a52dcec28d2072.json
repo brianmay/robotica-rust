@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM locations WHERE id = $1",
+  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM zones",
   "describe": {
     "columns": [
       {
@@ -40,9 +40,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Int4"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -53,5 +51,5 @@
       false
     ]
   },
-  "hash": "f9cf52ed51322a8c857ac8aee7ce649c3bea53bbc3cd95cfb4ad5f376419cf33"
+  "hash": "e4652fdc07380ed9ddb577fae4647f2571a027bcad859d2254a52dcec28d2072"
 }
