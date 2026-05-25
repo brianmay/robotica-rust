@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE locations SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6",
+  "query": "UPDATE zones SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6",
   "describe": {
     "columns": [],
     "parameters": {
@@ -20,5 +20,5 @@
     },
     "nullable": []
   },
-  "hash": "a7b4f479d1334502694e36c8c389028149300ba8bc7f3801bbe7404b1e8c3f4e"
+  "hash": "cc19d3a07ef560520dc11c5b06ecb532a95d358080401236df11863df2bd4ea7"
 }
