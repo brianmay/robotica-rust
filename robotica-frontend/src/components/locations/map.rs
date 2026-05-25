@@ -18,7 +18,6 @@ use leaflet::{LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
     robotica::zones::{CreateZone, Zone, LocationMessage},
-    user::User,
 };
 use tap::{Pipe, Tap};
 use tracing::debug;
@@ -117,7 +116,6 @@ enum SubscriptionStatus {
 
 pub struct MapComponent {
     map: Map,
-    user: Option<User>,
     object: MapObject,
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
@@ -382,7 +380,6 @@ impl Component for MapComponent {
 
         Self {
             map: leaflet_map,
-            user: None,
             object: MapObject::None,
             container,
             draw_layer,
@@ -439,24 +436,19 @@ impl Component for MapComponent {
                 self.event_subscription = Some(subscription);
                 false
             }
-            Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
+            Msg::MqttEvent(WsEvent::Connected { .. }) => {
                 let is_subscribed =
                     matches!(self.tracked_subscription, SubscriptionStatus::Subscribed(_));
-                let should_subscribe = user.is_admin;
 
-                if !is_subscribed && should_subscribe {
+                if !is_subscribed {
                     subscribe_to_tracked_objects(ctx);
                     self.tracked_subscription = SubscriptionStatus::InProgress;
-                } else if !should_subscribe {
-                    self.tracked_subscription = SubscriptionStatus::Unsubscribed;
                 }
 
-                self.user = Some(user);
                 self.connected = Connected::Connected;
                 true
             }
             Msg::MqttEvent(WsEvent::Disconnected(reason)) => {
-                self.user = None;
                 self.tracked_subscription = SubscriptionStatus::Unsubscribed;
                 for (_, (_, marker)) in self.tracked_objects.drain() {
                     marker.remove_from(&self.map);
@@ -600,9 +592,6 @@ impl Component for MapComponent {
         let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
         let select_location = ctx.link().callback(Msg::SelectLocation);
 
-        // Don't show connection error if user is not admin.
-        let is_admin = self.user.as_ref().is_none_or(|user| user.is_admin);
-
         let mut messages = vec![];
 
         match &props.loading_status {
@@ -618,13 +607,8 @@ impl Component for MapComponent {
             LocationStatus::Error(err) => messages.push(format!("Error: {err}")),
         }
 
-        #[allow(clippy::match_same_arms)]
-        match (&self.connected, is_admin) {
-            (Connected::Disconnected { reason }, true) => {
-                messages.push(format!("Disconnected: {reason}"));
-            }
-            (Connected::Disconnected { .. }, false) => {}
-            (Connected::Connected, _) => {}
+        if let Connected::Disconnected { reason } = &self.connected {
+            messages.push(format!("Disconnected: {reason}"));
         }
 
         let status_msg = if messages.is_empty() {
