@@ -250,6 +250,7 @@ let
       id = mkOption { type = types.str; };
       status_topic = mkOption { type = types.str; };
       command_topic = mkOption { type = types.str; };
+      audience = mkOption { type = types.str; };
     };
   };
 

@@ -200,6 +200,7 @@ pub struct WaterHeaterConfig {
     pub id: Id,
     pub status_topic: String,
     pub command_topic: String,
+    pub audience: Audience,
 }
 
 #[allow(clippy::module_name_repetitions)]

@@ -34,7 +34,7 @@ use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::entities::Id;
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
-use robotica_common::robotica::message::{Audience, Message};
+use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
@@ -495,7 +495,7 @@ fn monitor_water_heater(
                 "Water Heater",
                 message,
                 MessagePriority::DaytimeOnly,
-                Audience::new("everyone"),
+                water_heater.audience.clone(),
             ));
         }
     });
