@@ -8,6 +8,7 @@ use robotica_common::{
     mqtt::Json,
     robotica::entities::Id,
     robotica::lights::{PowerColor, SceneName},
+    robotica::message::Audience,
 };
 use robotica_tokio::{
     devices::{lifx::LifxId, occupancy, presence_tracker},
@@ -215,7 +216,7 @@ pub struct DoorMonitorConfig {
     pub door_topic: String,
     pub light_topic: String,
     pub scene_name: String,
-    pub audience: String,
+    pub audience: Audience,
     pub rate_limit_secs: u64,
 }
 
@@ -223,7 +224,7 @@ pub struct DoorMonitorConfig {
 #[derive(Debug, Deserialize)]
 pub struct CalendarMessageConfig {
     pub topic: String,
-    pub audience: String,
+    pub audience: Audience,
     pub message_title_format: String,
     pub message_label: String,
 }
@@ -256,7 +257,7 @@ pub struct PresenceRequirements {
 
 #[derive(Debug, Deserialize)]
 pub struct MessageRouteConfig {
-    pub audience: Vec<String>,
+    pub audience: Vec<Audience>,
     pub topic: String,
     pub presence_requirements: Vec<PresenceRequirements>,
 }
@@ -266,9 +267,9 @@ pub struct MessageRouteConfig {
 #[derive(Debug, Deserialize)]
 pub struct OwnTracksAudienceConfig {
     /// Audience for public location announcements (e.g. "arrived at X").
-    pub locations: robotica_common::robotica::message::Audience,
+    pub locations: Audience,
     /// Audience for private announcements.
-    pub private: robotica_common::robotica::message::Audience,
+    pub private: Audience,
 }
 
 impl From<OwnTracksAudienceConfig> for crate::monitor_location::AudienceConfig {
@@ -287,7 +288,7 @@ pub struct OwnTracksSourceConfig {
     /// MQTT topic to subscribe to for location updates.
     pub topic: String,
     /// Unique identifier for this tracked object.
-    pub id: robotica_common::robotica::entities::Id,
+    pub id: Id,
     /// Human-readable name used in arrival/departure messages.
     pub name: String,
     /// Announcement audiences.

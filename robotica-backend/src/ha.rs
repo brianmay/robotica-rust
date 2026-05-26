@@ -77,8 +77,8 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                         }
                     }
 
-                    let audience_matches = route.audience.contains(&message.audience.to_string())
-                        || route.audience.is_empty();
+                    let audience_matches =
+                        route.audience.contains(&message.audience) || route.audience.is_empty();
 
                     debug!(
                         topic = route.topic.as_str(),

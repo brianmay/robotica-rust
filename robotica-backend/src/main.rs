@@ -139,7 +139,7 @@ fn calendar_to_sequence(
             &config.message_label,
             &event.summary,
             MessagePriority::Low,
-            Audience::new(&config.audience),
+            config.audience.clone(),
         );
         vec![Task {
             title: config.message_title_format.replace("{}", &event.summary),
@@ -382,7 +382,7 @@ fn monitor_door(
 
     let light_topic = config.light_topic;
     let scene_name = SceneName::new(&config.scene_name);
-    let audience = Audience::new(&config.audience);
+    let audience = config.audience;
 
     let door: stateful::Receiver<DoorState> = state
         .subscriptions
