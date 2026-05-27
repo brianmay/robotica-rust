@@ -5,43 +5,54 @@ use std::{
 };
 
 use chrono::Datelike;
-use serde::Deserialize;
+use evalexpr::{
+    build_operator_tree, ContextWithMutableFunctions, ContextWithMutableVariables,
+    DefaultNumericTypes, Function, HashMapContext, Node, Value,
+};
+use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string, Date, Weekday};
 
-use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar};
+/// A compiled evalexpr condition.
+#[derive(Debug, Clone)]
+pub struct Condition(Node);
 
-#[derive(Debug)]
-struct Context {
-    days_since_epoch: i32,
-    classifications: HashSet<String>,
-    day_of_week: String,
+impl<'de> Deserialize<'de> for Condition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        build_operator_tree::<DefaultNumericTypes>(&s)
+            .map(Condition)
+            .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))
+    }
 }
 
-impl GetValues for Context {
-    fn get_fields() -> Fields<Self> {
-        let mut fields: Fields<Self> = Fields::default();
-        fields.scalars.insert("days_since_epoch".to_string());
-        fields.scalars.insert("day_of_week".to_string());
-        fields.hash_sets.insert("classifications".to_string());
-        fields
-    }
-
-    fn get_scalar(&self, field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
-        match field.get_name() {
-            "days_since_epoch" => Some(Scalar::new_int(self.days_since_epoch)),
-            "day_of_week" => Some(Scalar::new_string(&self.day_of_week)),
-            _ => None,
-        }
-    }
-
-    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
-        match field.get_name() {
-            "classifications" => Some(&self.classifications),
-            _ => None,
-        }
-    }
+fn build_context(
+    days_since_epoch: i32,
+    day_of_week: &str,
+    classifications: &HashSet<String>,
+) -> HashMapContext<DefaultNumericTypes> {
+    let classifications = classifications.clone();
+    let mut ctx = HashMapContext::new();
+    ctx.set_value(
+        "days_since_epoch".into(),
+        Value::Int(i64::from(days_since_epoch)),
+    )
+    .ok();
+    ctx.set_value("day_of_week".into(), Value::String(day_of_week.to_string()))
+        .ok();
+    ctx.set_function(
+        "classifications".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(classifications.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx
 }
 
 /// Classify a date into tags.
@@ -53,7 +64,7 @@ pub struct Config {
     week_day: Option<bool>,
     day_of_week: Option<Weekday>,
     #[serde(rename = "if")]
-    if_cond: Option<Vec<BooleanExpr<Context>>>,
+    if_cond: Option<Vec<Condition>>,
     if_set: Option<Vec<String>>,
     if_not_set: Option<Vec<String>>,
     add: Option<Vec<String>>,
@@ -127,13 +138,13 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
             }
         }
         if let Some(if_cond) = &c.if_cond {
-            let context = Context {
-                days_since_epoch: num_days_from_ce(date),
-                classifications: tags.clone(),
-                day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
-            };
-            if !if_cond.iter().any(|c| {
-                c.eval(&context).unwrap_or_else(|e| {
+            let ctx = build_context(
+                num_days_from_ce(date),
+                &week_day_to_string(date.weekday()).to_lowercase(),
+                &tags,
+            );
+            if !if_cond.iter().any(|cond| {
+                cond.0.eval_boolean_with_context(&ctx).unwrap_or_else(|e| {
                     tracing::error!("Error evaluating condition: {}", e);
                     false
                 })
@@ -166,8 +177,6 @@ pub fn classify_date_with_config(date: &Date, config: &Vec<Config>) -> HashSet<S
 mod tests {
     #![allow(clippy::unwrap_used)]
     use std::str::FromStr;
-
-    use crate::conditions::ast::{Condition, ConditionOpcode, Expr};
 
     use super::*;
 
@@ -294,15 +303,11 @@ mod tests {
     #[test]
     fn test_cond() {
         let conditions = vec![
-            BooleanExpr::Condition(Condition::Op(
-                Box::new(Expr::Integer(10)),
-                ConditionOpcode::Eq,
-                Box::new(Expr::Integer(11)),
-            )),
-            BooleanExpr::Condition(Condition::In(
-                "classifications".to_string(),
-                FieldRef::new("classifications"),
-            )),
+            Condition(build_operator_tree::<DefaultNumericTypes>("10 == 11").unwrap()),
+            Condition(
+                build_operator_tree::<DefaultNumericTypes>(r#"classifications("classifications")"#)
+                    .unwrap(),
+            ),
         ];
 
         let config = vec![Config {
