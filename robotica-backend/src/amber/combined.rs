@@ -266,31 +266,31 @@ mod tests {
         };
         let rules = vec![
             rules::Rule::new(
-                "is_on==true and weighted_price < 11.0".parse().unwrap(),
+                "is_on == true && weighted_price < 11.0".parse().unwrap(),
                 TestRequest(90),
             ),
             rules::Rule::new(
-                "is_on==true and weighted_price < 16.0".parse().unwrap(),
+                "is_on == true && weighted_price < 16.0".parse().unwrap(),
                 TestRequest(80),
             ),
             rules::Rule::new(
-                "is_on==true and weighted_price < 31.0".parse().unwrap(),
+                "is_on == true && weighted_price < 31.0".parse().unwrap(),
                 TestRequest(70),
             ),
-            rules::Rule::new("is_on==true".parse().unwrap(), TestRequest(50)),
+            rules::Rule::new("is_on == true".parse().unwrap(), TestRequest(50)),
             rules::Rule::new(
-                "is_on==false and weighted_price < 9.0".parse().unwrap(),
+                "is_on == false && weighted_price < 9.0".parse().unwrap(),
                 TestRequest(90),
             ),
             rules::Rule::new(
-                "is_on==false and weighted_price < 14.0".parse().unwrap(),
+                "is_on == false && weighted_price < 14.0".parse().unwrap(),
                 TestRequest(80),
             ),
             rules::Rule::new(
-                "is_on==false and weighted_price < 29.0".parse().unwrap(),
+                "is_on == false && weighted_price < 29.0".parse().unwrap(),
                 TestRequest(70),
             ),
-            rules::Rule::new("is_on==false".parse().unwrap(), TestRequest(50)),
+            rules::Rule::new("is_on == false".parse().unwrap(), TestRequest(50)),
         ]
         .pipe(rules::RuleSet::new);
 

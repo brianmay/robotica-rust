@@ -6399,6 +6399,7 @@ dependencies = [
  "color-backtrace",
  "data-encoding",
  "envconfig",
+ "evalexpr",
  "float-cmp 0.10.0",
  "geo",
  "influxdb",

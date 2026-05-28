@@ -651,11 +651,11 @@ mod tests {
 
         let rules = rules::RuleSet::new(vec![
             rules::Rule::new(
-                "is_on==false and weighted_price < 12.0".parse().unwrap(),
+                "is_on == false && weighted_price < 12.0".parse().unwrap(),
                 Request::Heat,
             ),
             rules::Rule::new(
-                "is_on==true and weighted_price < 14.0".parse().unwrap(),
+                "is_on == true && weighted_price < 14.0".parse().unwrap(),
                 Request::Heat,
             ),
             rules::Rule::new("true == true".parse().unwrap(), Request::DoNotHeat),

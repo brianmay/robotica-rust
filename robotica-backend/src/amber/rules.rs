@@ -1,12 +1,13 @@
-use std::{collections::HashSet, fmt::Debug};
+use std::{fmt::Debug, str::FromStr};
 
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use evalexpr::{
+    build_operator_tree, ContextWithMutableVariables, DefaultNumericTypes, EvalexprError,
+    HashMapContext, Node, Value,
+};
 use robotica_common::datetime::{num_days_from_ce, week_day_to_string};
 use robotica_common::robotica::entities::Id;
-use robotica_tokio::conditions::ast::{
-    BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar,
-};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Prices;
 
@@ -45,40 +46,90 @@ impl Context {
             is_on,
         }
     }
-}
 
-impl GetValues for Context {
-    fn get_fields() -> Fields<Self> {
-        let mut fields: Fields<Self> = Fields::default();
-        fields.scalars.insert("days_since_epoch".to_string());
-        fields.scalars.insert("day_of_week".to_string());
-        fields.scalars.insert("hour".to_string());
-        fields.scalars.insert("current_price".to_string());
-        fields.scalars.insert("weighted_price".to_string());
-        fields.scalars.insert("is_on".to_string());
-        fields
-    }
-
-    fn get_scalar(&self, field: &Reference<Self>) -> Option<Scalar> {
-        match field.get_name() {
-            "days_since_epoch" => Some(Scalar::Integer(self.days_since_epoch)),
-            "day_of_week" => Some(Scalar::String(self.day_of_week.clone())),
-            "hour" => Some(Scalar::Integer(self.hour)),
-            "current_price" => Some(Scalar::Float(self.current_price)),
-            "weighted_price" => Some(Scalar::Float(self.weighted_price)),
-            "is_on" => Some(Scalar::Boolean(self.is_on)),
-            _ => None,
-        }
-    }
-
-    fn get_hash_set(&self, _field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
-        None
+    fn to_evalexpr_context(&self) -> HashMapContext<DefaultNumericTypes> {
+        let mut ctx = HashMapContext::new();
+        ctx.set_value(
+            "days_since_epoch".into(),
+            Value::Int(i64::from(self.days_since_epoch)),
+        )
+        .ok();
+        ctx.set_value("day_of_week".into(), Value::String(self.day_of_week.clone()))
+            .ok();
+        ctx.set_value("hour".into(), Value::Int(i64::from(self.hour)))
+            .ok();
+        ctx.set_value(
+            "current_price".into(),
+            Value::Float(f64::from(self.current_price)),
+        )
+        .ok();
+        ctx.set_value(
+            "weighted_price".into(),
+            Value::Float(f64::from(self.weighted_price)),
+        )
+        .ok();
+        ctx.set_value("is_on".into(), Value::Boolean(self.is_on)).ok();
+        ctx
     }
 }
 
-#[derive(Deserialize, Serialize)]
+/// A compiled evalexpr condition.
+#[derive(Clone)]
+pub struct Condition {
+    source: String,
+    node: Node,
+}
+
+#[allow(clippy::use_self, clippy::missing_fields_in_debug)]
+impl Debug for Condition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Condition")
+            .field("source", &self.source)
+            .finish()
+    }
+}
+
+impl PartialEq for Condition {
+    fn eq(&self, other: &Self) -> bool {
+        self.source == other.source
+    }
+}
+
+impl Serialize for Condition {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.source)
+    }
+}
+
+impl FromStr for Condition {
+    type Err = EvalexprError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        build_operator_tree::<DefaultNumericTypes>(s).map(|node| Self {
+            source: s.to_string(),
+            node,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Condition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let source: String = Deserialize::deserialize(deserializer)?;
+        build_operator_tree::<DefaultNumericTypes>(&source)
+            .map(|node| Self { source, node })
+            .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Rule<T> {
-    condition: BooleanExpr<Context>,
+    condition: Condition,
     result: T,
 }
 
@@ -107,12 +158,12 @@ impl<T: PartialEq> PartialEq for Rule<T> {
 
 impl<T> Rule<T> {
     #[cfg(test)]
-    pub const fn new(condition: BooleanExpr<Context>, result: T) -> Self {
+    pub fn new(condition: Condition, result: T) -> Self {
         Self { condition, result }
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RuleSet<T> {
     rules: Vec<Rule<T>>,
 }
@@ -145,13 +196,17 @@ impl<T> RuleSet<T> {
     }
 
     pub fn apply(&self, context: &Context) -> Option<&T> {
+        let ctx = context.to_evalexpr_context();
         self.rules
             .iter()
             .find(|rule| {
-                rule.condition.eval(context).unwrap_or_else(|e| {
-                    tracing::error!("Error evaluating rule: {:?}", e);
-                    false
-                })
+                rule.condition
+                    .node
+                    .eval_boolean_with_context(&ctx)
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Error evaluating rule: {:?}", e);
+                        false
+                    })
             })
             .map(|rule| &rule.result)
     }
