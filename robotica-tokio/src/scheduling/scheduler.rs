@@ -1,18 +1,37 @@
 //! Create a schedule based on tags from classifier.
 //!
 
-use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference, Scalar};
 use chrono::Datelike;
 use chrono::{NaiveDate, TimeZone};
+use evalexpr::{
+    build_operator_tree, ContextWithMutableFunctions, ContextWithMutableVariables,
+    DefaultNumericTypes, Function, HashMapContext, Node, Value,
+};
 use robotica_common::datetime::{
     convert_date_time_to_utc_or_default, week_day_to_string, DateTime, Time,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 use thiserror::Error;
+
+/// A compiled evalexpr condition.
+#[derive(Debug, Clone)]
+pub struct Condition(Node);
+
+impl<'de> Deserialize<'de> for Condition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        build_operator_tree::<DefaultNumericTypes>(&s)
+            .map(Condition)
+            .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))
+    }
+}
 
 /// An entry in the schedule.
 #[allow(dead_code)]
@@ -39,7 +58,7 @@ pub struct Sequence {
 #[derive(Deserialize, Debug)]
 pub struct Config {
     #[serde(rename = "if")]
-    if_cond: Option<Vec<BooleanExpr<Context>>>,
+    if_cond: Option<Vec<Condition>>,
     today: Option<Vec<String>>,
     tomorrow: Option<Vec<String>>,
     sequences: HashMap<String, Sequence>,
@@ -53,36 +72,33 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
-struct Context {
-    today: HashSet<String>,
-    tomorrow: HashSet<String>,
-    day_of_week: String,
-}
-
-impl GetValues for Context {
-    fn get_fields() -> Fields<Self> {
-        let mut fields: Fields<Self> = Fields::default();
-        fields.scalars.insert("day_of_week".to_string());
-        fields.hash_sets.insert("today".to_string());
-        fields.hash_sets.insert("tomorrow`".to_string());
-        fields
-    }
-
-    fn get_scalar(&self, field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
-        match field.get_name() {
-            "day_of_week" => Some(Scalar::new_string(&self.day_of_week)),
-            _ => None,
-        }
-    }
-
-    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
-        match field.get_name() {
-            "today" => Some(&self.today),
-            "tomorrow" => Some(&self.tomorrow),
-            _ => None,
-        }
-    }
+fn build_context(
+    day_of_week: &str,
+    today: &HashSet<String>,
+    tomorrow: &HashSet<String>,
+) -> HashMapContext<DefaultNumericTypes> {
+    let today = today.clone();
+    let tomorrow = tomorrow.clone();
+    let mut ctx = HashMapContext::new();
+    ctx.set_value("day_of_week".into(), Value::String(day_of_week.to_string()))
+        .ok();
+    ctx.set_function(
+        "today".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(today.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx.set_function(
+        "tomorrow".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(tomorrow.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx
 }
 
 /// An error loading the Config
@@ -119,13 +135,13 @@ fn is_condition_ok(
     tomorrow: &HashSet<String>,
 ) -> bool {
     config.if_cond.as_ref().is_none_or(|s_if| {
-        s_if.iter().any(|s_if| {
-            let context = Context {
-                today: today.clone(),
-                tomorrow: tomorrow.clone(),
-                day_of_week: week_day_to_string(date.weekday()).to_lowercase(),
-            };
-            s_if.eval(&context).unwrap_or_else(|e| {
+        let ctx = build_context(
+            &week_day_to_string(date.weekday()).to_lowercase(),
+            today,
+            tomorrow,
+        );
+        s_if.iter().any(|cond| {
+            cond.0.eval_boolean_with_context(&ctx).unwrap_or_else(|e| {
                 tracing::error!("Error evaluating condition: {:?}", e);
                 false
             })
@@ -244,8 +260,6 @@ mod tests {
     use chrono::FixedOffset;
     use robotica_common::datetime::convert_date_time_to_utc;
 
-    use crate::conditions::BooleanExprParser;
-
     use super::*;
 
     struct ExpectedResult {
@@ -296,9 +310,9 @@ mod tests {
                 )]),
             },
             Config {
-                if_cond: Some(vec![BooleanExprParser::new()
-                    .parse(&Context::get_fields(), "'boxing' in today")
-                    .unwrap()]),
+                if_cond: Some(vec![Condition(
+                    build_operator_tree::<DefaultNumericTypes>(r#"today("boxing")"#).unwrap(),
+                )]),
                 today: None,
                 tomorrow: None,
                 sequences: HashMap::from([(

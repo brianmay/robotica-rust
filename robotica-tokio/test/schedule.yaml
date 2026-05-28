@@ -10,7 +10,7 @@
         time: "08:00:00"
 
   - if:
-    - "'boxing' in today"
+    - "today(\"boxing\")"
     sequences:
       "wake_up":
         time: "12:30:00"
