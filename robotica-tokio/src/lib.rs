@@ -8,10 +8,6 @@
 #![allow(clippy::use_self)]
 #![allow(clippy::to_string_trait_impl)]
 
-#[macro_use]
-extern crate lalrpop_util;
-
-pub mod conditions;
 pub mod database;
 pub mod devices;
 pub mod pipes;
