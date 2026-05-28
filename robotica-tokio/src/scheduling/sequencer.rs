@@ -6,7 +6,11 @@ use std::{
 };
 
 use chrono::{NaiveDate, Utc};
-use serde::{Deserialize, Serialize};
+use evalexpr::{
+    build_operator_tree, ContextWithMutableFunctions, DefaultNumericTypes, Function,
+    HashMapContext, Node, Value,
+};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use robotica_common::{
@@ -16,9 +20,23 @@ use robotica_common::{
     scheduler::{Importance, Mark, Status},
 };
 
-use crate::conditions::ast::{BooleanExpr, FieldRef, Fields, GetValues, Reference};
-
 use super::scheduler::{self};
+
+/// A compiled evalexpr condition.
+#[derive(Debug, Clone)]
+pub struct Condition(Node);
+
+impl<'de> Deserialize<'de> for Condition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        build_operator_tree::<DefaultNumericTypes>(&s)
+            .map(Condition)
+            .map_err(|e| serde::de::Error::custom(format!("Error parsing condition: {e}")))
+    }
+}
 
 /// A task in a config sequence.
 #[derive(Deserialize, Debug, Clone)]
@@ -55,7 +73,7 @@ pub struct Config {
 
     /// The conditions that must be true before this is scheduled.
     #[serde(rename = "if")]
-    if_cond: Option<Vec<BooleanExpr<Context>>>,
+    if_cond: Option<Vec<Condition>>,
 
     /// The required classifications for this step.
     classifications: Option<HashSet<String>>,
@@ -124,7 +142,7 @@ pub struct Sequence {
 
     /// The conditions that must be true before this is scheduled.
     #[serde(skip)]
-    pub if_cond: Option<Vec<BooleanExpr<Context>>>,
+    pub if_cond: Option<Vec<Condition>>,
 
     /// The required classifications for this step.
     #[serde(skip)]
@@ -172,35 +190,40 @@ impl Sequence {
     }
 }
 
-/// The context for the sequencer operation.
-#[derive(Debug, Clone)]
-pub struct Context {
-    today: HashSet<String>,
-    tomorrow: HashSet<String>,
-    options: HashSet<String>,
-}
-
-impl GetValues for Context {
-    fn get_fields() -> Fields<Self> {
-        let mut fields: Fields<Self> = Fields::default();
-        fields.hash_sets.insert("today".to_string());
-        fields.hash_sets.insert("tomorrow".to_string());
-        fields.hash_sets.insert("options".to_string());
-        fields
-    }
-
-    fn get_scalar(&self, _field: &Reference<Self>) -> Option<crate::conditions::ast::Scalar> {
-        None
-    }
-
-    fn get_hash_set(&self, field: &FieldRef<Self, HashSet<String>>) -> Option<&HashSet<String>> {
-        match field.get_name() {
-            "today" => Some(&self.today),
-            "tomorrow" => Some(&self.tomorrow),
-            "options" => Some(&self.options),
-            _ => None,
-        }
-    }
+fn build_context(
+    today: &HashSet<String>,
+    tomorrow: &HashSet<String>,
+    options: &HashSet<String>,
+) -> HashMapContext<DefaultNumericTypes> {
+    let today = today.clone();
+    let tomorrow = tomorrow.clone();
+    let options = options.clone();
+    let mut ctx = HashMapContext::new();
+    ctx.set_function(
+        "today".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(today.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx.set_function(
+        "tomorrow".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(tomorrow.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx.set_function(
+        "options".to_string(),
+        Function::new(move |arg| {
+            let tag = arg.as_string()?;
+            Ok(Value::Boolean(options.contains(&tag)))
+        }),
+    )
+    .ok();
+    ctx
 }
 
 /// An error loading the Config
@@ -344,16 +367,12 @@ pub fn get_sequence_with_config(
         .get(sequence_name)
         .ok_or_else(|| SequenceError::NoSequence(sequence_name.to_string()))?;
 
-    let context = Context {
-        today: today.clone(),
-        tomorrow: tomorrow.clone(),
-        options: options.clone(),
-    };
+    let ctx = build_context(today, tomorrow, options);
 
     let expanded_list = src_sequences
         .iter()
         .enumerate()
-        .filter(|(_n, config)| filter_sequence(config, &context))
+        .filter(|(_n, config)| filter_sequence(config, today, options, &ctx))
         .flat_map(expand_config)
         .collect::<Vec<_>>();
 
@@ -380,21 +399,26 @@ pub fn get_sequence_with_config(
     Ok(sequences)
 }
 
-fn filter_sequence(config: &Config, context: &Context) -> bool {
+fn filter_sequence(
+    config: &Config,
+    today: &HashSet<String>,
+    options: &HashSet<String>,
+    ctx: &HashMapContext<DefaultNumericTypes>,
+) -> bool {
     let mut ok = true;
     if let Some(classifications) = &config.classifications {
-        if context.today.intersection(classifications).next().is_none() {
+        if today.intersection(classifications).next().is_none() {
             ok = false;
         }
     }
     if let Some(test_options) = &config.options {
-        if context.options.intersection(test_options).next().is_none() {
+        if options.intersection(test_options).next().is_none() {
             ok = false;
         }
     }
     if let Some(if_cond) = &config.if_cond {
         if !if_cond.iter().any(|c| {
-            c.eval(context).unwrap_or_else(|e| {
+            c.0.eval_boolean_with_context(ctx).unwrap_or_else(|e| {
                 tracing::error!("Error evaluating condition: {e:?}");
                 false
             })
@@ -635,34 +659,28 @@ mod tests {
             },
         ];
 
-        let context = Context {
-            today: HashSet::from(["christmas".to_string()]),
-            tomorrow: HashSet::from([]),
-            options: HashSet::from(["boxing".to_string()]),
-        };
-        let result = filter_sequence(&config[0], &context);
+        let today = HashSet::from(["christmas".to_string()]);
+        let tomorrow = HashSet::from([]);
+        let options = HashSet::from(["boxing".to_string()]);
+        let ctx = build_context(&today, &tomorrow, &options);
+        let result = filter_sequence(&config[0], &today, &options, &ctx);
         assert!(result);
-        let result = filter_sequence(&config[1], &context);
-        assert!(result);
-
-        let context = Context {
-            today: HashSet::from([]),
-            tomorrow: HashSet::from([]),
-            options: HashSet::from(["boxing".to_string()]),
-        };
-        let result = filter_sequence(&config[0], &context);
-        assert!(!result);
-        let result = filter_sequence(&config[1], &context);
+        let result = filter_sequence(&config[1], &today, &options, &ctx);
         assert!(result);
 
-        let context = Context {
-            today: HashSet::from(["christmas".to_string()]),
-            tomorrow: HashSet::from([]),
-            options: HashSet::from([]),
-        };
-        let result = filter_sequence(&config[0], &context);
+        let today = HashSet::from([]);
+        let ctx = build_context(&today, &tomorrow, &options);
+        let result = filter_sequence(&config[0], &today, &options, &ctx);
         assert!(!result);
-        let result = filter_sequence(&config[1], &context);
+        let result = filter_sequence(&config[1], &today, &options, &ctx);
+        assert!(result);
+
+        let options = HashSet::from([]);
+        let today = HashSet::from(["christmas".to_string()]);
+        let ctx = build_context(&today, &tomorrow, &options);
+        let result = filter_sequence(&config[0], &today, &options, &ctx);
+        assert!(!result);
+        let result = filter_sequence(&config[1], &today, &options, &ctx);
         assert!(result);
     }
 
