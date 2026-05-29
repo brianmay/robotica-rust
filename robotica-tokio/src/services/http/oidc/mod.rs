@@ -128,15 +128,16 @@ impl Client {
 
         let user = sqlx::query!(
             r#"
-            INSERT INTO users (oidc_id, name, email)
-            VALUES ($1, $2, $3)
+            INSERT INTO users (oidc_id, name, email, is_admin)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (oidc_id) DO UPDATE
-            SET name = $2, email = $3
+            SET name = $2, email = $3, is_admin = $4
             RETURNING id, oidc_id, name, email
             "#,
             user_info.sub,
             name,
-            email
+            email,
+            is_admin
         )
         .fetch_one(&postgres)
         .await
