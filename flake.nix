@@ -51,6 +51,7 @@
             src = pkgs.fetchCrate {
               pname = "wasm-bindgen-cli";
               version = "0.2.122";
+              registryDl = "https://static.crates.io/crates";
               hash = "sha256-vO4RSxi/sMWxmsEs3GuljdMfIRSu75A+Q+c5wgYToRU=";
             };
             # src = pkgs.fetchFromGitHub {
