@@ -86,7 +86,6 @@ impl Client {
             .into();
 
         if let Some(id_token) = token.id_token.as_mut() {
-            debug!("token: {:?}", id_token);
             self.oidc_client
                 .decode_token(id_token)
                 .map_err(|err| ResponseError::bad_request(format!("Token decode failed: {err}")))?;
@@ -95,7 +94,6 @@ impl Client {
                 .map_err(|err| {
                     ResponseError::bad_request(format!("Token validation failed: {err}"))
                 })?;
-            debug!("token: {:?}", id_token);
         } else {
             return Err(ResponseError::bad_request("No id token"));
         }
