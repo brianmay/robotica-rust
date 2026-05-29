@@ -14,7 +14,7 @@ use chrono::Utc;
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
-use leaflet::{LatLng, Map, MapOptions, TileLayer};
+use leaflet::{Evented, LatLng, Map, MapOptions, TileLayer, Tooltip, TooltipOptions};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
     robotica::zones::{CreateZone, LocationMessage, Zone},
@@ -123,6 +123,7 @@ pub struct MapComponent {
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
+    zone_click_handlers: Vec<leaflet::EventedHandle<leaflet::MouseEvent>>,
     tracked_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
     tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
@@ -174,35 +175,57 @@ impl MapComponent {
         });
     }
 
-    fn set_list(&mut self, zones: &Arc<Vec<Zone>>) {
+    fn set_list(&mut self, zones: &Arc<Vec<Zone>>, select_zone: &Callback<Zone>) {
         self.draw_layer.clear_layers();
+        self.zone_click_handlers.clear();
         let marked_zones = self.get_marked_zones();
 
-        let list: Vec<MapZone> = zones
-            .iter()
-            .map(|zone| {
-                let options = get_zone_options(&marked_zones, zone);
+        let mut list = Vec::with_capacity(zones.len());
+        for zone in zones.iter() {
+            let options = get_zone_options(&marked_zones, zone);
 
-                let lat_lngs = zone
-                    .bounds
-                    .exterior()
-                    .coords()
-                    .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
-                    .map(JsValue::from)
-                    .collect();
+            let lat_lngs = zone
+                .bounds
+                .exterior()
+                .coords()
+                .map(|lat_lng| LatLng::new(lat_lng.y, lat_lng.x))
+                .map(JsValue::from)
+                .collect();
 
-                let polygon = leaflet::Polygon::new_with_options(&lat_lngs, &options)
-                    .unchecked_into::<leaflet::Layer>()
-                    .add_to_layer_group(&self.draw_layer);
+            let polygon = leaflet::Polygon::new_with_options(&lat_lngs, &options);
 
-                let id = self.draw_layer.get_layer_id(&polygon);
+            let tooltip_opts = TooltipOptions::default();
+            tooltip_opts.set_permanent(true);
+            tooltip_opts.set_direction("center".to_string());
+            let tooltip = Tooltip::new(&tooltip_opts, None);
+            tooltip.set_content(&JsValue::from_str(&zone.name));
+            polygon
+                .unchecked_ref::<leaflet::Layer>()
+                .bind_tooltip(&tooltip);
 
-                MapZone {
-                    zone: zone.clone(),
-                    leaflet_id: id,
-                }
-            })
-            .collect();
+            let zone_clone = zone.clone();
+            let cb = select_zone.clone();
+            let handle = Evented::on_leaflet_event(
+                &&polygon,
+                "click",
+                move |_event: leaflet::MouseEvent| {
+                    cb.emit(zone_clone.clone());
+                },
+            );
+            self.zone_click_handlers.push(handle);
+
+            polygon
+                .unchecked_ref::<leaflet::Layer>()
+                .add_to_layer_group(&self.draw_layer);
+            let id = self
+                .draw_layer
+                .get_layer_id(polygon.unchecked_ref::<leaflet::Layer>());
+
+            list.push(MapZone {
+                zone: zone.clone(),
+                leaflet_id: id,
+            });
+        }
 
         self.object = MapObject::List(zones.clone(), list, false);
     }
@@ -214,9 +237,9 @@ impl MapComponent {
             .collect()
     }
 
-    fn set_object(&mut self, object: &ParamObject) {
+    fn set_object(&mut self, object: &ParamObject, select_zone: &Callback<Zone>) {
         match object {
-            ParamObject::List(zones) => self.set_list(zones),
+            ParamObject::List(zones) => self.set_list(zones, select_zone),
             ParamObject::Item(zone) => self.set_item(zone.clone()),
         }
     }
@@ -381,6 +404,7 @@ impl Component for MapComponent {
             _create_handler: create_handler,
             _update_handler: update_handler,
             _show_locations_handler: show_list_handler,
+            zone_click_handlers: Vec::new(),
             tracked_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
             tracked_objects: HashMap::new(),
@@ -389,7 +413,7 @@ impl Component for MapComponent {
             },
             _tick_interval: tick_interval,
         }
-        .tap_mut(|s| Self::set_object(s, object))
+        .tap_mut(|s| Self::set_object(s, object, &ctx.link().callback(Msg::SelectZone)))
         .tap(Self::position_map)
     }
 
@@ -574,7 +598,8 @@ impl Component for MapComponent {
         let props = ctx.props();
 
         if props.object != old_props.object {
-            self.set_object(&props.object);
+            let select_zone = ctx.link().callback(Msg::SelectZone);
+            self.set_object(&props.object, &select_zone);
             self.position_map();
 
             match &props.object {

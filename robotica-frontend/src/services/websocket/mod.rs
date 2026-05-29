@@ -61,6 +61,8 @@ enum Command {
     Send(MqttMessage),
     /// Send a keep alive message.
     KeepAlive,
+    /// Force disconnect and reconnect (triggered on foreground).
+    Reconnect,
 }
 
 /// The details from the backend
@@ -476,6 +478,14 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
             }
             ProcessCommandResult::Continue
         }
+        Some(Command::Reconnect) => {
+            debug!("ws: Got Reconnect command, forcing disconnect+reconnect.");
+            state.backend = BackendState::Disconnected;
+            state.dispatch_event(&WsEvent::Disconnected("Page foregrounded".to_string()));
+            state.keep_alive_timer.disconnected(&state.in_tx);
+            reconnect_and_set_keep_alive(state).await;
+            ProcessCommandResult::Continue
+        }
         None => {
             debug!("ws: Got Close command.");
             state.keep_alive_timer.cancel();
@@ -680,7 +690,7 @@ async fn setup_visibility_listener(mut in_tx: Sender<Command>) {
                 return;
             }
             debug!("ws: Page moved to foreground, triggering reconnect.");
-            let _ = in_tx.try_send(Command::KeepAlive);
+            let _ = in_tx.try_send(Command::Reconnect);
         });
 
     futures::future::pending::<()>().await;
