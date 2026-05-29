@@ -57,7 +57,7 @@ geo = { version = "0.33.0", features = ["serde", "use-serde"] }
 tap = "1.0.1"
 rstest = "0.26.0"
 opentelemetry = { version = "0.31.0", features = ["metrics"] }
-opentelemetry-semantic-conventions = { version = "0.31.0", features = ["semconv_experimental"] }
+opentelemetry-semantic-conventions = { version = "0.32.0", features = ["semconv_experimental"] }
 
 [dev-dependencies]
 env_logger = "0.11.8"
