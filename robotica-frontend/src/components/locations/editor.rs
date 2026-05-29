@@ -1,4 +1,4 @@
-use super::{locations_view::LocationStatus, ActionLocation};
+use super::{zones::ZoneStatus, ActionZone};
 use crate::components::forms::{checkbox::Checkbox, text_input::TextInput};
 use tracing::debug;
 use yew::prelude::*;
@@ -10,23 +10,23 @@ pub enum Msg {
     AnnounceOnExit(bool),
 }
 
-pub enum UpdateLocation {
+pub enum UpdateZone {
     Name(String),
     Color(String),
     AnnounceOnEnter(bool),
     AnnounceOnExit(bool),
 }
 
-impl UpdateLocation {
-    pub fn apply_to_location(&self, location: &mut ActionLocation) {
+impl UpdateZone {
+    pub fn apply_to_zone(&self, zone: &mut ActionZone) {
         match self {
-            UpdateLocation::Name(name) => location.set_name(name.clone()),
-            UpdateLocation::Color(color) => location.set_color(color.clone()),
-            UpdateLocation::AnnounceOnEnter(announce_on_enter) => {
-                location.set_announce_on_enter(*announce_on_enter);
+            UpdateZone::Name(name) => zone.set_name(name.clone()),
+            UpdateZone::Color(color) => zone.set_color(color.clone()),
+            UpdateZone::AnnounceOnEnter(announce_on_enter) => {
+                zone.set_announce_on_enter(*announce_on_enter);
             }
-            UpdateLocation::AnnounceOnExit(announce_on_exit) => {
-                location.set_announce_on_exit(*announce_on_exit);
+            UpdateZone::AnnounceOnExit(announce_on_exit) => {
+                zone.set_announce_on_exit(*announce_on_exit);
             }
         }
     }
@@ -36,9 +36,9 @@ pub struct EditorView {}
 
 #[derive(PartialEq, Clone, Properties)]
 pub struct Props {
-    pub location: ActionLocation,
-    pub status: LocationStatus,
-    pub update_location: Callback<UpdateLocation>,
+    pub zone: ActionZone,
+    pub status: ZoneStatus,
+    pub update_zone: Callback<UpdateZone>,
     pub on_save: Callback<()>,
     pub on_cancel: Callback<()>,
 }
@@ -58,29 +58,29 @@ impl Component for EditorView {
             Msg::Name(name) => {
                 debug!("Updating name: {}", name);
                 let props = ctx.props();
-                let update = UpdateLocation::Name(name);
-                props.update_location.emit(update);
+                let update = UpdateZone::Name(name);
+                props.update_zone.emit(update);
                 false
             }
             Msg::Color(color) => {
                 debug!("Updating color: {}", color);
                 let props = ctx.props();
-                let update = UpdateLocation::Color(color);
-                props.update_location.emit(update);
+                let update = UpdateZone::Color(color);
+                props.update_zone.emit(update);
                 false
             }
             Msg::AnnounceOnEnter(announce_on_enter) => {
                 debug!("Updating announce_on_enter: {}", announce_on_enter);
                 let props = ctx.props();
-                let update = UpdateLocation::AnnounceOnEnter(announce_on_enter);
-                props.update_location.emit(update);
+                let update = UpdateZone::AnnounceOnEnter(announce_on_enter);
+                props.update_zone.emit(update);
                 false
             }
             Msg::AnnounceOnExit(announce_on_exit) => {
                 debug!("Updating announce_on_exit: {}", announce_on_exit);
                 let props = ctx.props();
-                let update = UpdateLocation::AnnounceOnExit(announce_on_exit);
-                props.update_location.emit(update);
+                let update = UpdateZone::AnnounceOnExit(announce_on_exit);
+                props.update_zone.emit(update);
                 false
             }
         }
@@ -88,14 +88,14 @@ impl Component for EditorView {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
-        let location = &props.location;
+        let zone = &props.zone;
         let status = &props.status;
 
         let status_msg = match status {
-            LocationStatus::Unchanged => "Unchanged".to_string(),
-            LocationStatus::Changed => "Changed".to_string(),
-            LocationStatus::Saving => "Saving".to_string(),
-            LocationStatus::Error(err) => format!("Error {err}"),
+            ZoneStatus::Unchanged => "Unchanged".to_string(),
+            ZoneStatus::Changed => "Changed".to_string(),
+            ZoneStatus::Saving => "Saving".to_string(),
+            ZoneStatus::Error(err) => format!("Error {err}"),
         };
 
         let save = props.on_save.reform(|_| ());
@@ -111,16 +111,16 @@ impl Component for EditorView {
 
         let disable_save = !status.can_save();
 
-        let name = location.name();
+        let name = zone.name();
 
         html! {
             <>
                 <h1>{&name}</h1>
                 <form>
                     <TextInput id="name" label="Name" value={name} on_change={update_name} />
-                    <TextInput id="color" label="Color" value={location.color()} on_change={update_color} />
-                    <Checkbox id="announce_on_enter" label="Announce on enter" value={location.announce_on_enter()} on_change={update_announce_on_enter} />
-                    <Checkbox id="announce_on_exit" label="Announce on exit" value={location.announce_on_exit()} on_change={update_announce_on_exit} />
+                    <TextInput id="color" label="Color" value={zone.color()} on_change={update_color} />
+                    <Checkbox id="announce_on_enter" label="Announce on enter" value={zone.announce_on_enter()} on_change={update_announce_on_enter} />
+                    <Checkbox id="announce_on_exit" label="Announce on exit" value={zone.announce_on_exit()} on_change={update_announce_on_exit} />
 
                     <button onclick={save} disabled={disable_save} >
                         {"Save"}

@@ -1,4 +1,4 @@
-use super::ActionLocation;
+use super::ActionZone;
 use crate::components::locations::map::{MapComponent, ParamObject};
 use gloo_net::http::{Request, Response};
 use gloo_net::Error;
@@ -14,16 +14,16 @@ use yew::{platform::spawn_local, prelude::*};
 
 pub enum Msg {
     LoadFailed(String),
-    Locations(Arc<Vec<Zone>>),
-    SaveLocation(ActionLocation),
+    Zones(Arc<Vec<Zone>>),
+    SaveZone(ActionZone),
     SaveSuccess(Zone),
     CreateSuccess(Zone),
-    SaveFailed(ActionLocation, String),
+    SaveFailed(ActionZone, String),
     DeleteSuccess(Zone),
     DeleteFailed(Zone, String),
-    CreateLocation(CreateZone),
-    UpdateLocation(ActionLocation),
-    DeleteLocation(ActionLocation),
+    CreateZone(CreateZone),
+    UpdateZone(ActionZone),
+    DeleteZone(ActionZone),
     RequestItem(Zone),
     RequestList,
 }
@@ -36,30 +36,30 @@ pub enum LoadingStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LocationStatus {
+pub enum ZoneStatus {
     Unchanged,
     Changed,
     Saving,
     Error(String),
 }
 
-impl LocationStatus {
+impl ZoneStatus {
     pub fn error(message: impl Into<String>) -> Self {
-        LocationStatus::Error(message.into())
+        ZoneStatus::Error(message.into())
     }
 
     pub const fn can_save(&self) -> bool {
         matches!(
             self,
-            LocationStatus::Unchanged | LocationStatus::Changed | LocationStatus::Error(_)
+            ZoneStatus::Unchanged | ZoneStatus::Changed | ZoneStatus::Error(_)
         )
     }
 }
 
-pub struct LocationsView {
-    location: Option<ActionLocation>,
+pub struct ZonesView {
+    zone: Option<ActionZone>,
     list: Arc<Vec<Zone>>,
-    status: LocationStatus,
+    status: ZoneStatus,
     loading_status: LoadingStatus,
 }
 
@@ -86,7 +86,7 @@ async fn process_response<T: DeserializeOwned + std::fmt::Debug>(
     }
 }
 
-impl Component for LocationsView {
+impl Component for ZonesView {
     type Message = Msg;
     type Properties = ();
 
@@ -94,8 +94,8 @@ impl Component for LocationsView {
         load_list(ctx);
 
         Self {
-            location: None,
-            status: LocationStatus::Unchanged,
+            zone: None,
+            status: ZoneStatus::Unchanged,
             loading_status: LoadingStatus::Loading,
             list: Arc::new(Vec::new()),
         }
@@ -109,37 +109,37 @@ impl Component for LocationsView {
                 self.loading_status = LoadingStatus::Error(err);
                 true
             }
-            Msg::Locations(locations) => {
+            Msg::Zones(zones) => {
                 self.loading_status = LoadingStatus::Loaded;
-                self.list = locations;
+                self.list = zones;
                 true
             }
-            Msg::CreateLocation(zone) => {
-                debug!("Creating location: {:?}", zone);
-                let action_location = ActionLocation::Create(zone);
-                self.status = LocationStatus::Saving;
-                save_location(action_location, ctx);
+            Msg::CreateZone(zone) => {
+                debug!("Creating zone: {:?}", zone);
+                let action_zone = ActionZone::Create(zone);
+                self.status = ZoneStatus::Saving;
+                save_zone(action_zone, ctx);
                 true
             }
-            Msg::UpdateLocation(location) => {
-                debug!("Updating location: {:?}", location);
-                self.location = Some(location);
-                self.status = LocationStatus::Changed;
+            Msg::UpdateZone(zone) => {
+                debug!("Updating zone: {:?}", zone);
+                self.zone = Some(zone);
+                self.status = ZoneStatus::Changed;
                 true
             }
-            Msg::DeleteLocation(location) => {
-                debug!("Deleting location: {:?}", location);
-                self.status = LocationStatus::Saving;
-                match location {
-                    ActionLocation::Create(_) => self.location = None,
-                    ActionLocation::Update(zone) => delete_location(zone, ctx),
+            Msg::DeleteZone(zone) => {
+                debug!("Deleting zone: {:?}", zone);
+                self.status = ZoneStatus::Saving;
+                match zone {
+                    ActionZone::Create(_) => self.zone = None,
+                    ActionZone::Update(zone) => delete_zone(zone, ctx),
                 }
                 true
             }
-            Msg::SaveLocation(location) => {
+            Msg::SaveZone(zone) => {
                 if self.status.can_save() {
-                    self.status = LocationStatus::Saving;
-                    save_location(location, ctx);
+                    self.status = ZoneStatus::Saving;
+                    save_zone(zone, ctx);
                     true
                 } else {
                     debug!("Status wrong, not saving");
@@ -147,59 +147,59 @@ impl Component for LocationsView {
                 }
             }
             Msg::CreateSuccess(zone) => {
-                self.location = zone.pipe(ActionLocation::Update).pipe(Some);
-                self.status = LocationStatus::Unchanged;
+                self.zone = zone.pipe(ActionZone::Update).pipe(Some);
+                self.status = ZoneStatus::Unchanged;
                 load_list(ctx);
                 true
             }
-            Msg::SaveSuccess(_location) => {
-                self.location = None;
-                self.status = LocationStatus::Unchanged;
+            Msg::SaveSuccess(_zone) => {
+                self.zone = None;
+                self.status = ZoneStatus::Unchanged;
                 load_list(ctx);
                 true
             }
-            Msg::SaveFailed(location, error) => {
-                self.status = LocationStatus::error(error);
-                self.location = Some(location);
+            Msg::SaveFailed(zone, error) => {
+                self.status = ZoneStatus::error(error);
+                self.zone = Some(zone);
                 true
             }
-            Msg::DeleteSuccess(_location) => {
-                self.location = None;
-                self.status = LocationStatus::Unchanged;
+            Msg::DeleteSuccess(_zone) => {
+                self.zone = None;
+                self.status = ZoneStatus::Unchanged;
                 self.loading_status = LoadingStatus::Loading;
                 load_list(ctx);
                 true
             }
-            Msg::DeleteFailed(_location, error) => {
-                self.status = LocationStatus::error(error);
+            Msg::DeleteFailed(_zone, error) => {
+                self.status = ZoneStatus::error(error);
                 true
             }
             Msg::RequestItem(zone) => {
-                self.location = Some(ActionLocation::Update(zone));
-                self.status = LocationStatus::Unchanged;
+                self.zone = Some(ActionZone::Update(zone));
+                self.status = ZoneStatus::Unchanged;
                 true
             }
             Msg::RequestList => {
-                self.location = None;
-                self.status = LocationStatus::Unchanged;
+                self.zone = None;
+                self.status = ZoneStatus::Unchanged;
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let locations = self.list.clone();
+        let zones = self.list.clone();
 
-        let object = if let Some(location) = &self.location {
-            ParamObject::Item(location.clone())
+        let object = if let Some(zone) = &self.zone {
+            ParamObject::Item(zone.clone())
         } else {
-            ParamObject::List(locations)
+            ParamObject::List(zones)
         };
 
-        let create_location = ctx.link().callback(Msg::CreateLocation);
-        let update_location = ctx.link().callback(Msg::UpdateLocation);
-        let delete_location = ctx.link().callback(Msg::DeleteLocation);
-        let save_location = ctx.link().callback(Msg::SaveLocation);
+        let create_zone = ctx.link().callback(Msg::CreateZone);
+        let update_zone = ctx.link().callback(Msg::UpdateZone);
+        let delete_zone = ctx.link().callback(Msg::DeleteZone);
+        let save_zone = ctx.link().callback(Msg::SaveZone);
         let request_item = ctx.link().callback(Msg::RequestItem);
         let request_list = ctx.link().callback(|()| Msg::RequestList);
 
@@ -208,10 +208,10 @@ impl Component for LocationsView {
                 object={object}
                 status={self.status.clone()}
                 loading_status={self.loading_status.clone()}
-                create_location={create_location}
-                update_location={update_location}
-                delete_location={delete_location}
-                save_location={save_location}
+                create_zone={create_zone}
+                update_zone={update_zone}
+                delete_zone={delete_zone}
+                save_zone={save_zone}
                 request_item={request_item}
                 request_list={request_list}
                 />
@@ -219,17 +219,17 @@ impl Component for LocationsView {
     }
 }
 
-fn load_list(ctx: &Context<LocationsView>) {
+fn load_list(ctx: &Context<ZonesView>) {
     let link = ctx.link().clone();
     spawn_local(async move {
-        let locations = Request::get("/api/zones")
+        let zones = Request::get("/api/zones")
             .send()
             .await
             .pipe(process_response::<Vec<Zone>>)
             .await;
 
-        let result = match locations {
-            Ok(locations) => Msg::Locations(Arc::new(locations)),
+        let result = match zones {
+            Ok(zones) => Msg::Zones(Arc::new(zones)),
             Err(err) => Msg::LoadFailed(err),
         };
 
@@ -237,14 +237,14 @@ fn load_list(ctx: &Context<LocationsView>) {
     });
 }
 
-fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
-    debug!("Saving location: {:?}", location);
+fn save_zone(zone: ActionZone, ctx: &Context<ZonesView>) {
+    debug!("Saving zone: {:?}", zone);
     let link = ctx.link().clone();
     spawn_local(async move {
         debug!("Sending save request");
 
-        let response = match &location {
-            ActionLocation::Create(zone) => Request::post("/api/zones/create")
+        let response = match &zone {
+            ActionZone::Create(zone) => Request::post("/api/zones/create")
                 .json(&zone)
                 .unwrap()
                 .send()
@@ -253,7 +253,7 @@ fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
                 .await
                 .map(Msg::CreateSuccess),
 
-            ActionLocation::Update(zone) => Request::put("/api/zones")
+            ActionZone::Update(zone) => Request::put("/api/zones")
                 .json(&zone)
                 .unwrap()
                 .send()
@@ -265,12 +265,12 @@ fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
 
         let result = match response {
             Ok(response) => {
-                debug!("Location saved");
+                debug!("Zone saved");
                 response
             }
             Err(err) => {
-                debug!("Failed to save location: {err}");
-                Msg::SaveFailed(location, format!("Failed to save location: {err}"))
+                debug!("Failed to save zone: {err}");
+                Msg::SaveFailed(zone, format!("Failed to save zone: {err}"))
             }
         };
 
@@ -278,8 +278,8 @@ fn save_location(location: ActionLocation, ctx: &Context<LocationsView>) {
     });
 }
 
-fn delete_location(zone: Zone, ctx: &Context<LocationsView>) {
-    debug!("Deleting location: {:?}", zone);
+fn delete_zone(zone: Zone, ctx: &Context<ZonesView>) {
+    debug!("Deleting zone: {:?}", zone);
     let id = zone.id;
 
     let link = ctx.link().clone();
@@ -293,12 +293,12 @@ fn delete_location(zone: Zone, ctx: &Context<LocationsView>) {
 
         let result = match response {
             Ok(()) => {
-                debug!("Location deleted");
+                debug!("Zone deleted");
                 Msg::DeleteSuccess(zone.clone())
             }
             Err(err) => {
-                debug!("Failed to delete location: {err}");
-                Msg::DeleteFailed(zone, format!("Failed to delete location: {err}"))
+                debug!("Failed to delete zone: {err}");
+                Msg::DeleteFailed(zone, format!("Failed to delete zone: {err}"))
             }
         };
 

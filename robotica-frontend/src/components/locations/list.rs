@@ -5,20 +5,20 @@ use yew::prelude::*;
 pub enum Msg {}
 
 pub struct List {
-    locations: Arc<Vec<Zone>>,
+    zones: Arc<Vec<Zone>>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
-    pub locations: Arc<Vec<Zone>>,
-    pub select_location: Callback<Zone>,
+    pub zones: Arc<Vec<Zone>>,
+    pub select_zone: Callback<Zone>,
     pub cancel: Callback<()>,
 }
 
 impl List {
     fn button(ctx: &Context<Self>, zone: Zone) -> Html {
         let name = zone.name.clone();
-        let cb = ctx.props().select_location.reform(move |_| zone.clone());
+        let cb = ctx.props().select_zone.reform(move |_| zone.clone());
         html! {
             <button onclick={cb}>{name}</button>
         }
@@ -31,7 +31,7 @@ impl Component for List {
 
     fn create(ctx: &Context<Self>) -> Self {
         List {
-            locations: ctx.props().locations.clone(),
+            zones: ctx.props().zones.clone(),
         }
     }
 
@@ -42,7 +42,7 @@ impl Component for List {
             <div class="control component-container">
                 <h1>{"Choose a location"}</h1>
                 <div>
-                    {for self.locations.iter().map(|zone| Self::button(ctx, zone.clone()))}
+                    {for self.zones.iter().map(|zone| Self::button(ctx, zone.clone()))}
                 </div>
                 <button onclick={on_click}>{"Cancel"}</button>
             </div>
@@ -52,10 +52,10 @@ impl Component for List {
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         let props = ctx.props();
 
-        if old_props.locations == props.locations {
+        if old_props.zones == props.zones {
             false
         } else {
-            self.locations = props.locations.clone();
+            self.zones = props.zones.clone();
             true
         }
     }

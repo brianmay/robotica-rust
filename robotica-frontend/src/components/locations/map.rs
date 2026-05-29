@@ -26,9 +26,9 @@ use web_sys::{Element, HtmlElement, Node};
 use yew::prelude::*;
 
 use super::{
-    editor::UpdateLocation,
-    locations_view::{LoadingStatus, LocationStatus},
-    ActionLocation,
+    editor::UpdateZone,
+    zones::{LoadingStatus, ZoneStatus},
+    ActionZone,
 };
 
 pub enum Msg {
@@ -39,11 +39,11 @@ pub enum Msg {
     CreatePolygon(leaflet::Polygon),
     UpdatePolygon(leaflet::Polygon),
     DeletePolygon(leaflet::Polygon),
-    UpdateLocation(UpdateLocation),
-    SelectLocation(Zone),
+    UpdateZone(UpdateZone),
+    SelectZone(Zone),
     ShowList,
-    SaveLocation,
-    CancelLocation,
+    SaveZone,
+    CancelZone,
     CancelList,
     Tick,
 }
@@ -57,22 +57,22 @@ enum Connected {
 #[derive(PartialEq, Clone)]
 pub enum ParamObject {
     List(Arc<Vec<Zone>>),
-    Item(ActionLocation),
+    Item(ActionZone),
 }
 
-struct MapLocation {
-    location: Zone,
+struct MapZone {
+    zone: Zone,
     leaflet_id: i32,
 }
 
-struct MapActionLocation {
-    location: ActionLocation,
+struct MapActionZone {
+    zone: ActionZone,
     leaflet_id: i32,
 }
 
 enum MapObject {
-    List(Arc<Vec<Zone>>, Vec<MapLocation>, bool),
-    Item(MapActionLocation),
+    List(Arc<Vec<Zone>>, Vec<MapZone>, bool),
+    Item(MapActionZone),
     None,
 }
 
@@ -88,16 +88,16 @@ impl MapObject {
     //     }
     // }
 
-    fn get_action_location_by_id(&self, id: i32) -> Option<ActionLocation> {
+    fn get_action_zone_by_id(&self, id: i32) -> Option<ActionZone> {
         match self {
-            MapObject::List(_, locations, _) => locations
+            MapObject::List(_, zones, _) => zones
                 .iter()
-                .find(|location| location.leaflet_id == id)
-                .map(|location| ActionLocation::Update(location.location.clone())),
+                .find(|zone| zone.leaflet_id == id)
+                .map(|zone| ActionZone::Update(zone.zone.clone())),
 
-            MapObject::Item(location) => {
-                if location.leaflet_id == id {
-                    Some(location.location.clone())
+            MapObject::Item(zone) => {
+                if zone.leaflet_id == id {
+                    Some(zone.zone.clone())
                 } else {
                     None
                 }
@@ -133,13 +133,13 @@ pub struct MapComponent {
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
     pub object: ParamObject,
-    pub create_location: Callback<CreateZone>,
-    pub update_location: Callback<ActionLocation>,
-    pub delete_location: Callback<ActionLocation>,
-    pub save_location: Callback<ActionLocation>,
+    pub create_zone: Callback<CreateZone>,
+    pub update_zone: Callback<ActionZone>,
+    pub delete_zone: Callback<ActionZone>,
+    pub save_zone: Callback<ActionZone>,
     pub request_item: Callback<Zone>,
     pub request_list: Callback<()>,
-    pub status: LocationStatus,
+    pub status: ZoneStatus,
     pub loading_status: LoadingStatus,
 }
 
@@ -149,13 +149,13 @@ impl MapComponent {
         Html::VRef(node.clone())
     }
 
-    fn set_item(&mut self, location: ActionLocation) {
+    fn set_item(&mut self, zone: ActionZone) {
         self.draw_layer.clear_layers();
-        let marked_locations = self.get_marked_locations();
-        let options = get_action_location_options(&marked_locations, &location);
+        let marked_zones = self.get_marked_zones();
+        let options = get_action_zone_options(&marked_zones, &zone);
 
         self.draw_layer.clear_layers();
-        let lat_lngs = location
+        let lat_lngs = zone
             .bounds()
             .exterior()
             .coords()
@@ -168,22 +168,22 @@ impl MapComponent {
             .add_to_layer_group(&self.draw_layer)
             .pipe(|x| self.draw_layer.get_layer_id(&x));
 
-        self.object = MapObject::Item(MapActionLocation {
-            location,
+        self.object = MapObject::Item(MapActionZone {
+            zone,
             leaflet_id: id,
         });
     }
 
-    fn set_list(&mut self, locations: &Arc<Vec<Zone>>) {
+    fn set_list(&mut self, zones: &Arc<Vec<Zone>>) {
         self.draw_layer.clear_layers();
-        let marked_locations = self.get_marked_locations();
+        let marked_zones = self.get_marked_zones();
 
-        let list: Vec<MapLocation> = locations
+        let list: Vec<MapZone> = zones
             .iter()
-            .map(|location| {
-                let options = get_location_options(&marked_locations, location);
+            .map(|zone| {
+                let options = get_zone_options(&marked_zones, zone);
 
-                let lat_lngs = location
+                let lat_lngs = zone
                     .bounds
                     .exterior()
                     .coords()
@@ -197,17 +197,17 @@ impl MapComponent {
 
                 let id = self.draw_layer.get_layer_id(&polygon);
 
-                MapLocation {
-                    location: location.clone(),
+                MapZone {
+                    zone: zone.clone(),
                     leaflet_id: id,
                 }
             })
             .collect();
 
-        self.object = MapObject::List(locations.clone(), list, false);
+        self.object = MapObject::List(zones.clone(), list, false);
     }
 
-    fn get_marked_locations(&self) -> Vec<i32> {
+    fn get_marked_zones(&self) -> Vec<i32> {
         self.tracked_objects
             .values()
             .flat_map(|(loc, _)| loc.zones.iter().map(|z| z.id))
@@ -216,36 +216,36 @@ impl MapComponent {
 
     fn set_object(&mut self, object: &ParamObject) {
         match object {
-            ParamObject::List(locations) => self.set_list(locations),
-            ParamObject::Item(location) => self.set_item(location.clone()),
+            ParamObject::List(zones) => self.set_list(zones),
+            ParamObject::Item(zone) => self.set_item(zone.clone()),
         }
     }
 
-    fn iterate_over_layers(&self, f: impl Fn(&ActionLocation, leaflet::Layer)) {
+    fn iterate_over_layers(&self, f: impl Fn(&ActionZone, leaflet::Layer)) {
         match &self.object {
-            MapObject::List(_, locations, _) => {
-                for location in locations {
-                    let layer = self.draw_layer.get_layer(location.leaflet_id);
-                    let location = ActionLocation::Update(location.location.clone());
-                    f(&location, layer);
+            MapObject::List(_, zones, _) => {
+                for zone in zones {
+                    let layer = self.draw_layer.get_layer(zone.leaflet_id);
+                    let zone = ActionZone::Update(zone.zone.clone());
+                    f(&zone, layer);
                 }
             }
-            MapObject::Item(location) => {
-                let id = location.leaflet_id;
+            MapObject::Item(zone) => {
+                let id = zone.leaflet_id;
                 let layer = self.draw_layer.get_layer(id);
-                f(&location.location, layer);
+                f(&zone.zone, layer);
             }
             MapObject::None => {}
         }
     }
 
-    fn update_location_styles(&self) {
-        let marked_locations = self.get_marked_locations();
+    fn update_zone_styles(&self) {
+        let marked_zones = self.get_marked_zones();
 
-        self.iterate_over_layers(|location, layer| {
+        self.iterate_over_layers(|zone, layer| {
             // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
             let layer = layer.unchecked_into::<leaflet::Polyline>();
-            let options = get_action_location_options(&marked_locations, location);
+            let options = get_action_zone_options(&marked_zones, zone);
             layer.set_style(&options);
         });
     }
@@ -256,25 +256,22 @@ impl MapComponent {
             MapObject::None => {
                 self.map.fit_world();
             }
-            MapObject::List(_, locations, _) => {
-                if locations.is_empty() {
+            MapObject::List(_, zones, _) => {
+                if zones.is_empty() {
                     self.map.fit_world();
                 } else {
                     self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
                 }
             }
-            MapObject::Item(_location) => {
+            MapObject::Item(_zone) => {
                 self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             }
         }
     }
 }
 
-fn get_action_location_options(
-    marked_locations: &[i32],
-    location: &ActionLocation,
-) -> leaflet::PolylineOptions {
-    let color = get_action_location_color(marked_locations, location);
+fn get_action_zone_options(marked_zones: &[i32], zone: &ActionZone) -> leaflet::PolylineOptions {
+    let color = get_action_zone_color(marked_zones, zone);
     let options = leaflet::PolylineOptions::default();
     options.set_color(color.clone());
     options.set_fill_color(color);
@@ -284,8 +281,8 @@ fn get_action_location_options(
     options
 }
 
-fn get_location_options(marked_locations: &[i32], location: &Zone) -> leaflet::PolylineOptions {
-    let color = get_location_color(marked_locations, location);
+fn get_zone_options(marked_zones: &[i32], zone: &Zone) -> leaflet::PolylineOptions {
+    let color = get_zone_color(marked_zones, zone);
     let options = leaflet::PolylineOptions::default();
     options.set_color(color.clone());
     options.set_fill_color(color);
@@ -295,20 +292,20 @@ fn get_location_options(marked_locations: &[i32], location: &Zone) -> leaflet::P
     options
 }
 
-fn get_action_location_color(marked_locations: &[i32], location: &ActionLocation) -> String {
-    match location {
-        ActionLocation::Create(_location) => "black".to_string(),
-        ActionLocation::Update(location) => get_location_color(marked_locations, location),
+fn get_action_zone_color(marked_zones: &[i32], zone: &ActionZone) -> String {
+    match zone {
+        ActionZone::Create(_zone) => "black".to_string(),
+        ActionZone::Update(zone) => get_zone_color(marked_zones, zone),
     }
 }
 
-fn get_location_color(marked_locations: &[i32], location: &Zone) -> String {
-    let is_marked = marked_locations.contains(&location.id);
+fn get_zone_color(marked_zones: &[i32], zone: &Zone) -> String {
+    let is_marked = marked_zones.contains(&zone.id);
 
     if is_marked {
         "red".to_string()
     } else {
-        location.color.clone()
+        zone.color.clone()
     }
 }
 
@@ -417,7 +414,7 @@ impl Component for MapComponent {
                     make_tooltip(&marker, &location);
                     self.tracked_objects.insert(topic, (location, marker));
                 }
-                self.update_location_styles();
+                self.update_zone_styles();
                 false
             }
             Msg::SubscribedTracked(subscription) => {
@@ -450,7 +447,7 @@ impl Component for MapComponent {
                 for (_, (_, marker)) in self.tracked_objects.drain() {
                     marker.remove_from(&self.map);
                 }
-                self.update_location_styles();
+                self.update_zone_styles();
                 self.connected = Connected::Disconnected { reason };
                 true
             }
@@ -471,22 +468,22 @@ impl Component for MapComponent {
                     .collect::<Vec<_>>()
                     .pipe(geo::LineString::from);
 
-                let location = CreateZone {
-                    name: "New Location".to_string(),
+                let zone = CreateZone {
+                    name: "New Zone".to_string(),
                     bounds: geo::Polygon::new(exterior, vec![]),
                     color: "black".to_string(),
                     announce_on_enter: false,
                     announce_on_exit: false,
                 };
 
-                props.create_location.emit(location);
+                props.create_zone.emit(zone);
                 false
             }
             Msg::UpdatePolygon(polygon) => {
                 let id = self.draw_layer.get_layer_id(&polygon);
-                let location = self.object.get_action_location_by_id(id);
+                let zone = self.object.get_action_zone_by_id(id);
 
-                if let Some(location) = location {
+                if let Some(zone) = zone {
                     let exterior = polygon
                         .get_lat_lngs()
                         .iter()
@@ -504,27 +501,27 @@ impl Component for MapComponent {
                         .pipe(geo::LineString::from);
 
                     let new_bounds = geo::Polygon::new(exterior, vec![]);
-                    // let updates = UpdateLocation::Bounds(new_bounds);
+                    // let updates = UpdateZone::Bounds(new_bounds);
 
-                    let mut location = location;
-                    location.set_bounds(new_bounds);
-                    props.save_location.emit(location.clone());
+                    let mut zone = zone;
+                    zone.set_bounds(new_bounds);
+                    props.save_zone.emit(zone.clone());
                 }
                 false
             }
             Msg::DeletePolygon(polygon) => {
                 let id = self.draw_layer.get_layer_id(&polygon);
-                let location = self.object.get_action_location_by_id(id);
-                if let Some(location) = location {
-                    props.delete_location.emit(location);
+                let zone = self.object.get_action_zone_by_id(id);
+                if let Some(zone) = zone {
+                    props.delete_zone.emit(zone);
                 }
                 false
             }
-            Msg::UpdateLocation(updates) => {
-                if let MapObject::Item(location) = &mut self.object {
-                    let mut location = location.location.clone();
-                    updates.apply_to_location(&mut location);
-                    props.update_location.emit(location.clone());
+            Msg::UpdateZone(updates) => {
+                if let MapObject::Item(zone) = &mut self.object {
+                    let mut zone = zone.zone.clone();
+                    updates.apply_to_zone(&mut zone);
+                    props.update_zone.emit(zone.clone());
                 }
                 false
             }
@@ -536,13 +533,13 @@ impl Component for MapComponent {
                 }
                 true
             }
-            Msg::SaveLocation => {
-                if let MapObject::Item(location) = &self.object {
-                    props.save_location.emit(location.location.clone());
+            Msg::SaveZone => {
+                if let MapObject::Item(zone) = &self.object {
+                    props.save_zone.emit(zone.zone.clone());
                 }
                 false
             }
-            Msg::CancelLocation => {
+            Msg::CancelZone => {
                 if let MapObject::Item(_) = &self.object {
                     props.request_list.emit(());
                 }
@@ -560,8 +557,8 @@ impl Component for MapComponent {
                 }
                 false
             }
-            Msg::SelectLocation(location) => {
-                props.request_item.emit(location);
+            Msg::SelectZone(zone) => {
+                props.request_item.emit(zone);
                 false
             }
         }
@@ -583,11 +580,11 @@ impl Component for MapComponent {
 
         let classes = classes!("map-container", "component-container");
         let status = &ctx.props().status;
-        let update_location = ctx.link().callback(Msg::UpdateLocation);
-        let on_save = ctx.link().callback(|()| Msg::SaveLocation);
-        let on_cancel_location = ctx.link().callback(|()| Msg::CancelLocation);
+        let update_zone = ctx.link().callback(Msg::UpdateZone);
+        let on_save = ctx.link().callback(|()| Msg::SaveZone);
+        let on_cancel_zone = ctx.link().callback(|()| Msg::CancelZone);
         let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
-        let select_location = ctx.link().callback(Msg::SelectLocation);
+        let select_zone = ctx.link().callback(Msg::SelectZone);
 
         let mut messages = vec![];
 
@@ -598,10 +595,10 @@ impl Component for MapComponent {
         }
 
         match &props.status {
-            LocationStatus::Unchanged => {}
-            LocationStatus::Changed => messages.push("Changed".to_string()),
-            LocationStatus::Saving => messages.push("Saving".to_string()),
-            LocationStatus::Error(err) => messages.push(format!("Error: {err}")),
+            ZoneStatus::Unchanged => {}
+            ZoneStatus::Changed => messages.push("Changed".to_string()),
+            ZoneStatus::Saving => messages.push("Saving".to_string()),
+            ZoneStatus::Error(err) => messages.push(format!("Error: {err}")),
         }
 
         if let Connected::Disconnected { reason } = &self.connected {
@@ -615,12 +612,12 @@ impl Component for MapComponent {
         };
 
         let controls = match &self.object {
-            MapObject::List(locations, _, true) => {
+            MapObject::List(zones, _, true) => {
                 html! {
                     <div class="list">
                         <List
-                            select_location={select_location}
-                            locations={locations.clone()}
+                            select_zone={select_zone}
+                            zones={zones.clone()}
                             cancel={on_cancel_list}
                         />
                         if let Some(status_msg) = status_msg {
@@ -638,15 +635,15 @@ impl Component for MapComponent {
                     }
                 }
             }
-            MapObject::Item(location) => {
+            MapObject::Item(zone) => {
                 html! {
                     <div class="editor">
                         <EditorView
-                            location={location.location.clone()}
+                            zone={zone.zone.clone()}
                             status={status.clone()}
-                            update_location={update_location}
+                            update_zone={update_zone}
                             on_save={on_save}
-                            on_cancel={on_cancel_location}
+                            on_cancel={on_cancel_zone}
                         />
                     </div>
                 }

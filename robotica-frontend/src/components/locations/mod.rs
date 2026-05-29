@@ -2,83 +2,83 @@ use robotica_common::robotica::zones::{CreateZone, Zone};
 
 pub mod editor;
 pub mod list;
-pub mod locations_view;
 pub mod map;
+pub mod zones;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ActionLocation {
+pub enum ActionZone {
     Create(CreateZone),
     Update(Zone),
 }
 
-impl ActionLocation {
+impl ActionZone {
     fn set_name(&mut self, name: String) {
         match self {
-            ActionLocation::Create(zone) => zone.name = name,
-            ActionLocation::Update(zone) => zone.name = name,
+            ActionZone::Create(zone) => zone.name = name,
+            ActionZone::Update(zone) => zone.name = name,
         }
     }
 
     fn set_bounds(&mut self, polygon: geo::Polygon) {
         match self {
-            ActionLocation::Create(zone) => zone.bounds = polygon,
-            ActionLocation::Update(zone) => zone.bounds = polygon,
+            ActionZone::Create(zone) => zone.bounds = polygon,
+            ActionZone::Update(zone) => zone.bounds = polygon,
         }
     }
 
     fn set_color(&mut self, color: String) {
         match self {
-            ActionLocation::Create(zone) => zone.color = color,
-            ActionLocation::Update(zone) => zone.color = color,
+            ActionZone::Create(zone) => zone.color = color,
+            ActionZone::Update(zone) => zone.color = color,
         }
     }
 
     const fn set_announce_on_enter(&mut self, announce_on_enter: bool) {
         match self {
-            ActionLocation::Create(zone) => zone.announce_on_enter = announce_on_enter,
-            ActionLocation::Update(zone) => zone.announce_on_enter = announce_on_enter,
+            ActionZone::Create(zone) => zone.announce_on_enter = announce_on_enter,
+            ActionZone::Update(zone) => zone.announce_on_enter = announce_on_enter,
         }
     }
 
     const fn set_announce_on_exit(&mut self, announce_on_exit: bool) {
         match self {
-            ActionLocation::Create(zone) => zone.announce_on_exit = announce_on_exit,
-            ActionLocation::Update(zone) => zone.announce_on_exit = announce_on_exit,
+            ActionZone::Create(zone) => zone.announce_on_exit = announce_on_exit,
+            ActionZone::Update(zone) => zone.announce_on_exit = announce_on_exit,
         }
     }
 
     fn name(&self) -> String {
         match self {
-            ActionLocation::Create(zone) => zone.name.clone(),
-            ActionLocation::Update(zone) => zone.name.clone(),
+            ActionZone::Create(zone) => zone.name.clone(),
+            ActionZone::Update(zone) => zone.name.clone(),
         }
     }
 
     fn bounds(&self) -> geo::Polygon {
         match self {
-            ActionLocation::Create(zone) => zone.bounds.clone(),
-            ActionLocation::Update(zone) => zone.bounds.clone(),
+            ActionZone::Create(zone) => zone.bounds.clone(),
+            ActionZone::Update(zone) => zone.bounds.clone(),
         }
     }
 
     fn color(&self) -> String {
         match self {
-            ActionLocation::Create(zone) => zone.color.clone(),
-            ActionLocation::Update(zone) => zone.color.clone(),
+            ActionZone::Create(zone) => zone.color.clone(),
+            ActionZone::Update(zone) => zone.color.clone(),
         }
     }
 
     const fn announce_on_enter(&self) -> bool {
         match self {
-            ActionLocation::Create(zone) => zone.announce_on_enter,
-            ActionLocation::Update(zone) => zone.announce_on_enter,
+            ActionZone::Create(zone) => zone.announce_on_enter,
+            ActionZone::Update(zone) => zone.announce_on_enter,
         }
     }
 
     const fn announce_on_exit(&self) -> bool {
         match self {
-            ActionLocation::Create(zone) => zone.announce_on_exit,
-            ActionLocation::Update(zone) => zone.announce_on_exit,
+            ActionZone::Create(zone) => zone.announce_on_exit,
+            ActionZone::Update(zone) => zone.announce_on_exit,
         }
     }
 }

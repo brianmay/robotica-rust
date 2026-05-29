@@ -41,7 +41,7 @@ use yew_router::prelude::*;
 use robotica_common::version;
 
 use components::car::CarComponent;
-use components::locations::locations_view::LocationsView;
+use components::locations::zones::ZonesView;
 use components::occupancy_view::OccupancyViewComponent;
 use components::schedule_view::ScheduleView;
 use components::tags_view::TagsView;
@@ -81,7 +81,7 @@ fn switch(selected_route: Route) -> Html {
         Route::WaterHeater { id } => html! { <WaterHeaterComponent id={id}/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
-        Route::Locations => return html! { <><NavBar/><LocationsView/></> },
+        Route::Locations => return html! { <><NavBar/><ZonesView/></> },
         Route::Occupancy => html! { <OccupancyViewComponent id={"all".to_string()}/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
