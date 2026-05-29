@@ -54,8 +54,11 @@ impl Context {
             Value::Int(i64::from(self.days_since_epoch)),
         )
         .ok();
-        ctx.set_value("day_of_week".into(), Value::String(self.day_of_week.clone()))
-            .ok();
+        ctx.set_value(
+            "day_of_week".into(),
+            Value::String(self.day_of_week.clone()),
+        )
+        .ok();
         ctx.set_value("hour".into(), Value::Int(i64::from(self.hour)))
             .ok();
         ctx.set_value(
@@ -68,7 +71,8 @@ impl Context {
             Value::Float(f64::from(self.weighted_price)),
         )
         .ok();
-        ctx.set_value("is_on".into(), Value::Boolean(self.is_on)).ok();
+        ctx.set_value("is_on".into(), Value::Boolean(self.is_on))
+            .ok();
         ctx
     }
 }
