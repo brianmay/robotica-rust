@@ -23,7 +23,8 @@ create_object_with_properties!(
 create_object_with_properties!(
     (EditOptions, EditOptions, Object),
     // Options
-    (feature_group, featureGroup, leaflet::FeatureGroup)
+    (feature_group, featureGroup, leaflet::FeatureGroup),
+    (remove, remove, bool)
 );
 
 create_object_with_properties!(

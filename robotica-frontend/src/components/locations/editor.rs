@@ -40,6 +40,7 @@ pub struct Props {
     pub status: ZoneStatus,
     pub update_zone: Callback<UpdateZone>,
     pub on_save: Callback<()>,
+    pub on_delete: Callback<()>,
     pub on_cancel: Callback<()>,
 }
 
@@ -100,6 +101,7 @@ impl Component for EditorView {
 
         let save = props.on_save.reform(|_| ());
         let cancel = props.on_cancel.reform(|_| ());
+        let delete = props.on_delete.reform(|_| ());
 
         let update_name = ctx.link().callback(Msg::Name);
         let update_color = ctx.link().callback(Msg::Color);
@@ -122,11 +124,14 @@ impl Component for EditorView {
                     <Checkbox id="announce_on_enter" label="Announce on enter" value={zone.announce_on_enter()} on_change={update_announce_on_enter} />
                     <Checkbox id="announce_on_exit" label="Announce on exit" value={zone.announce_on_exit()} on_change={update_announce_on_exit} />
 
-                    <button onclick={save} disabled={disable_save} >
+                    <button type="button" onclick={save} disabled={disable_save} >
                         {"Save"}
                     </button>
-                    <button onclick={cancel} >
+                    <button type="button" onclick={cancel} >
                         {"Cancel"}
+                    </button>
+                    <button type="button" onclick={delete} disabled={disable_save} class="delete">
+                        {"Delete Zone"}
                     </button>
                     <p>{status_msg}</p>
                 </form>

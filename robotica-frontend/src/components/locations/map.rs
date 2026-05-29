@@ -38,11 +38,11 @@ pub enum Msg {
     MqttEvent(WsEvent),
     CreatePolygon(leaflet::Polygon),
     UpdatePolygon(leaflet::Polygon),
-    DeletePolygon(leaflet::Polygon),
     UpdateZone(UpdateZone),
     SelectZone(Zone),
     ShowList,
     SaveZone,
+    DeleteItemZone,
     CancelZone,
     CancelList,
     Tick,
@@ -119,9 +119,9 @@ pub struct MapComponent {
     object: MapObject,
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
+    draw_control: draw_control::DrawControl,
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
-    _delete_handler: Closure<dyn FnMut(leaflet::Event)>,
     _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
     tracked_subscription: SubscriptionStatus,
     event_subscription: Option<Subscription>,
@@ -342,11 +342,12 @@ impl Component for MapComponent {
         draw_layer.add_to(&leaflet_map);
 
         let draw_control = draw_control(&draw_layer);
-        leaflet_map.add_control(&draw_control);
+        if !matches!(object, ParamObject::Item(_)) {
+            leaflet_map.add_control(&draw_control);
+        }
 
         let create_handler = create_handler(ctx);
         let update_handler = update_handler(ctx);
-        let delete_handler = delete_handler(ctx);
         let show_list_handler = {
             let callback = ctx.link().callback(|()| Msg::ShowList);
             Closure::<dyn FnMut(_)>::new(move |_event| {
@@ -356,7 +357,6 @@ impl Component for MapComponent {
 
         leaflet_map.on("draw:created", create_handler.as_ref());
         leaflet_map.on("draw:edited", update_handler.as_ref());
-        leaflet_map.on("draw:deleted", delete_handler.as_ref());
         leaflet_map.on("show_locations", show_list_handler.as_ref());
 
         Button::new(&ButtonOptions::default()).add_to(&leaflet_map);
@@ -377,9 +377,9 @@ impl Component for MapComponent {
             object: MapObject::None,
             container,
             draw_layer,
+            draw_control,
             _create_handler: create_handler,
             _update_handler: update_handler,
-            _delete_handler: delete_handler,
             _show_locations_handler: show_list_handler,
             tracked_subscription: SubscriptionStatus::Unsubscribed,
             event_subscription: None,
@@ -509,14 +509,6 @@ impl Component for MapComponent {
                 }
                 false
             }
-            Msg::DeletePolygon(polygon) => {
-                let id = self.draw_layer.get_layer_id(&polygon);
-                let zone = self.object.get_action_zone_by_id(id);
-                if let Some(zone) = zone {
-                    props.delete_zone.emit(zone);
-                }
-                false
-            }
             Msg::UpdateZone(updates) => {
                 if let MapObject::Item(zone) = &mut self.object {
                     let mut zone = zone.zone.clone();
@@ -536,6 +528,20 @@ impl Component for MapComponent {
             Msg::SaveZone => {
                 if let MapObject::Item(zone) = &self.object {
                     props.save_zone.emit(zone.zone.clone());
+                }
+                false
+            }
+            Msg::DeleteItemZone => {
+                if let MapObject::Item(zone) = &self.object {
+                    let confirmed = web_sys::window()
+                        .and_then(|w| {
+                            w.confirm_with_message("Are you sure you want to delete this zone?")
+                                .ok()
+                        })
+                        .unwrap_or(false);
+                    if confirmed {
+                        props.delete_zone.emit(zone.zone.clone());
+                    }
                 }
                 false
             }
@@ -570,6 +576,15 @@ impl Component for MapComponent {
         if props.object != old_props.object {
             self.set_object(&props.object);
             self.position_map();
+
+            match &props.object {
+                ParamObject::Item(_) => {
+                    self.map.remove_control(&self.draw_control);
+                }
+                ParamObject::List(_) => {
+                    self.map.add_control(&self.draw_control);
+                }
+            }
         }
 
         true
@@ -583,6 +598,7 @@ impl Component for MapComponent {
         let update_zone = ctx.link().callback(Msg::UpdateZone);
         let on_save = ctx.link().callback(|()| Msg::SaveZone);
         let on_cancel_zone = ctx.link().callback(|()| Msg::CancelZone);
+        let on_delete_zone = ctx.link().callback(|()| Msg::DeleteItemZone);
         let on_cancel_list = ctx.link().callback(|()| Msg::CancelList);
         let select_zone = ctx.link().callback(Msg::SelectZone);
 
@@ -643,6 +659,7 @@ impl Component for MapComponent {
                             status={status.clone()}
                             update_zone={update_zone}
                             on_save={on_save}
+                            on_delete={on_delete_zone}
                             on_cancel={on_cancel_zone}
                         />
                     </div>
@@ -688,6 +705,7 @@ fn subscribe_to_tracked_objects(ctx: &Context<MapComponent>) {
 fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl {
     let edit_options = draw_control::EditOptions::new();
     edit_options.set_feature_group(draw_layer.clone());
+    edit_options.set_remove(false);
 
     let draw_options = draw_control::DrawOptions::new();
     draw_options.set_polyline(false);
@@ -729,25 +747,6 @@ fn update_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Eve
             // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
             let layer: leaflet::Polygon = layer.unchecked_into();
             update_polygon.emit(layer);
-        }
-    })
-}
-
-fn delete_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
-    debug!("delete_handler");
-    let delete_polygon = ctx.link().callback(Msg::DeletePolygon);
-
-    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        let layers = event
-            .pipe(|x| Reflect::get(&x, &"layers".into()))
-            .unwrap()
-            .unchecked_into::<leaflet::LayerGroup>()
-            .get_layers();
-
-        for layer in layers {
-            // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
-            let layer: leaflet::Polygon = layer.unchecked_into();
-            delete_polygon.emit(layer);
         }
     })
 }
