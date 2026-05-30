@@ -41,7 +41,7 @@ pub fn login() -> Html {
             let login_url = login_url.clone();
             let onclick = Callback::from(move |_| {
                 let login_url = login_url.clone();
-                wasm_bindgen_futures::spawn_local(async move {
+                spawn_local(async move {
                     if let Some(window) = window() {
                         let _ = window.location().set_href(&login_url);
                     }

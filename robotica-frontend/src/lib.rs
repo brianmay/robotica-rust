@@ -118,6 +118,8 @@ enum AppMsg {
     Config(Arc<Config>),
     ConfigSubscription(Subscription),
     ConfigError(String),
+    AuthEvent(WsEvent),
+    AuthSubscription(Subscription),
 }
 
 struct App {
@@ -125,6 +127,9 @@ struct App {
     config: Option<Arc<Config>>,
     config_subscription: Option<Subscription>,
     config_error: Option<String>,
+    connected: bool,
+    event_subscription: Option<Subscription>,
+    subscribed: bool,
 }
 
 fn subscribe_to_config(ctx: &Context<App>, wss: WebsocketService, name: &str) {
@@ -153,11 +158,15 @@ impl Component for App {
     fn create(ctx: &Context<Self>) -> Self {
         let wss = WebsocketService::new();
         subscribe_to_config(ctx, wss.clone(), "default");
+
         App {
             wss,
             config: None,
             config_subscription: None,
             config_error: None,
+            connected: false,
+            event_subscription: None,
+            subscribed: false,
         }
     }
 
@@ -179,6 +188,31 @@ impl Component for App {
                 self.config_error = Some(msg);
                 true
             }
+            AppMsg::AuthEvent(event) => {
+                let connected = matches!(event, WsEvent::Connected { .. });
+                if self.connected == connected {
+                    false
+                } else {
+                    self.connected = connected;
+                    true
+                }
+            }
+            AppMsg::AuthSubscription(subscription) => {
+                self.event_subscription = Some(subscription);
+                false
+            }
+        }
+    }
+
+    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
+        if !self.subscribed {
+            self.subscribed = true;
+            let callback = ctx.link().callback(AppMsg::AuthEvent);
+            let mut wss = self.wss.clone();
+            ctx.link().send_future(async move {
+                let s = wss.subscribe_events(callback).await;
+                AppMsg::AuthSubscription(s)
+            });
         }
     }
 
@@ -189,6 +223,19 @@ impl Component for App {
                     <h1>{"Config Error"}</h1>
                     <p>{error}</p>
                 </div>
+            };
+        }
+        if !self.connected {
+            return html! {
+                <ContextProvider<WebsocketService> context={self.wss.clone()}>
+                    <ContextProvider<Option<Arc<Config>>> context={&self.config}>
+                        <BrowserRouter>
+                            <NavBar/>
+                            <Welcome/>
+                            {footer()}
+                        </BrowserRouter>
+                    </ContextProvider<Option<Arc<Config>>>>
+                </ContextProvider<WebsocketService>>
             };
         }
         html! {
