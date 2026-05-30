@@ -1,6 +1,7 @@
 use crate::services::websocket::WebsocketService;
 use crate::services::websocket::WsEvent;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::window;
 use yew::functional::{function_component, use_context, use_mut_ref, use_state};
 use yew::prelude::*;
 
@@ -34,6 +35,24 @@ pub fn login() -> Html {
                     <div>{if user.is_admin { "Admin" } else { "Not admin" }}</div>
                     <div class="backend">{format!("Connected to backend version {}", version)}</div>
                 </>
+            )
+        }
+        WsEvent::LoginRequired { login_url } => {
+            let login_url = login_url.clone();
+            let onclick = Callback::from(move |_| {
+                let login_url = login_url.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    if let Some(window) = window() {
+                        let _ = window.location().set_href(&login_url);
+                    }
+                });
+            });
+            html!(
+                <div>
+                    <h1>{ "Robotica" }</h1>
+                    <p>{ "You need to log in to continue." }</p>
+                    <button class="btn btn-primary" {onclick}>{ "Login" }</button>
+                </div>
             )
         }
         WsEvent::Disconnected(reason) => {

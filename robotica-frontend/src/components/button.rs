@@ -421,6 +421,7 @@ impl<T: yew::Properties + ConfigTrait + ButtonPropsTrait + 'static> Component fo
                 self.controller.process_message(label, msg);
             }
             Message::Event(WsEvent::Disconnected(_)) => self.controller.process_disconnected(),
+            Message::Event(WsEvent::LoginRequired { .. }) => self.controller.process_disconnected(),
             Message::Event(WsEvent::Connected { .. }) => {}
             Message::Subscribed(s) => {
                 self.subscriptions.push(s);

@@ -12,13 +12,10 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use axum::body::Body;
 use axum::extract::{FromRef, State};
-use axum::http::uri::PathAndQuery;
 use axum::http::Request;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::{extract::Query, routing::get, Router};
 use hyper::{Method, StatusCode};
-use maud::{html, Markup, DOCTYPE};
-use robotica_common::version;
 use serde::Deserialize;
 use tap::Pipe;
 use thiserror::Error;
@@ -125,10 +122,6 @@ impl Manifest {
     fn get_path(&self, key: &str) -> PathBuf {
         self.1.join(self.get_internal(key))
     }
-
-    fn get_url(&self, key: &str) -> String {
-        format!("/{}", self.get_internal(key))
-    }
 }
 
 #[derive(Clone, FromRef)]
@@ -215,7 +208,6 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
     let http_listener = state.config.http_listener.clone();
 
     let app = Router::new()
-        .route("/", get(root))
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
         .route("/logout", get(logout_handler))
@@ -261,8 +253,6 @@ const ASSET_SUFFIXES: [&str; 9] = [
 ];
 
 async fn fallback_handler(
-    session: Session,
-    State(oidc_client): State<Arc<ArcSwap<Option<Client>>>>,
     State(http_config): State<Arc<Config>>,
     State(manifest): State<Arc<Manifest>>,
     req: Request<Body>,
@@ -275,16 +265,6 @@ async fn fallback_handler(
         let path = req.uri().path();
         ASSET_SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
     };
-
-    if !asset_file && get_user(&session).await.is_none() {
-        let origin_url = req.uri().path_and_query().map_or("/", PathAndQuery::as_str);
-        let oidc_client = oidc_client.load();
-        let Some(oidc_client) = oidc_client.as_ref() else {
-            return Err(ResponseError::OidcError());
-        };
-        let auth_url = oidc_client.get_auth_url(origin_url);
-        return Ok(Redirect::to(&auth_url).into_response());
-    }
 
     let static_path = &http_config.static_path;
     match ServeDir::new(static_path).oneshot(req).await {
@@ -308,71 +288,6 @@ async fn serve_index_html(manifest: &Manifest) -> Result<Response, ResponseError
             .map(|index_content| Html(index_content).into_response())
             .map_err(|_| ResponseError::internal_error("index.html not found"))
     }
-}
-
-fn nav_bar() -> Markup {
-    html! {
-        nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top" role="navigation" {
-            div class="container-fluid" {
-                a class="navbar-brand" href="/" { "Robotica" }
-                button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation" {
-                    span class="navbar-toggler-icon" {}
-                }
-                div class="collapse navbar-collapse" id="navbarNav" {
-                    div class="navbar-nav" {
-                        li class="nav-item" {
-                            a class="nav-link" href="/welcome" { "Login" }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn footer() -> Markup {
-    let version = version::Version::get();
-
-    html! {
-        footer {
-            div {
-                div { (format!("Build Date: {}", version.build_date)) }
-                div { (format!("Version: {}", version.vcs_ref)) }
-            }
-            div {
-                "Robotica"
-            }
-        }
-    }
-}
-
-#[allow(clippy::unused_async)]
-async fn root(session: Session, State(manifest): State<Arc<Manifest>>) -> Response {
-    let user = get_user(&session).await;
-    let backend_js = manifest.get_url("backend.js");
-
-    html!(
-        (DOCTYPE)
-        html {
-            head {
-                title { "Robotica" }
-                meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" {}
-                link rel="icon" type="image/svg+xml" href="/favicon.svg" {}
-                script src=(backend_js) {}
-            }
-            body {
-                ( nav_bar() )
-                h1 { "Robotica" }
-                p {
-                    @match user {
-                        Some(user) => ( format!("Hello, {user}! {}", if user.is_admin { "You are admin!"} else { "You are not admin!" })),
-                        None => ( "You are not logged in!" ),
-                    }
-                }
-                ( footer() )
-            }
-        }
-    ).pipe(axum_core::response::IntoResponse::into_response).into_response()
 }
 
 async fn oidc_callback(

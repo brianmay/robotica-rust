@@ -1,5 +1,6 @@
 use crate::services::websocket::{WebsocketService, WsEvent};
 use wasm_bindgen_futures::spawn_local;
+use web_sys::window;
 use yew::prelude::*;
 
 /// The yew properties for the `RequireConnection` component
@@ -36,6 +37,24 @@ pub fn require_connection(props: &Props) -> Html {
                     { for props.children.iter() }
                     <div class="backend">{format!("Connected to backend as {} with version {}", user, version)}</div>
                 </>
+            )
+        }
+        WsEvent::LoginRequired { login_url } => {
+            let login_url = login_url.clone();
+            let onclick = Callback::from(move |_| {
+                let login_url = login_url.clone();
+                spawn_local(async move {
+                    if let Some(window) = window() {
+                        let _ = window.location().set_href(&login_url);
+                    }
+                });
+            });
+            html!(
+                <div>
+                    <h1>{ "Robotica" }</h1>
+                    <p>{ "You need to log in to continue." }</p>
+                    <button class="btn btn-primary" {onclick}>{ "Login" }</button>
+                </div>
             )
         }
         WsEvent::Disconnected(reason) => {

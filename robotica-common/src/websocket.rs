@@ -24,7 +24,13 @@ pub enum WsStatus {
     },
 
     /// The websocket is disconnected
-    Disconnected(WsError),
+    Disconnected {
+        /// The error
+        error: WsError,
+
+        /// The login URL, if the user needs to authenticate
+        login_url: Option<String>,
+    },
 }
 
 #[cfg(feature = "websockets")]
@@ -40,8 +46,11 @@ impl ProtobufIntoFrom for WsStatus {
                         version: Some(version.into_protobuf()),
                     })
                 }
-                WsStatus::Disconnected(error) => {
-                    protos::ws_status::Status::Disconnected(error as i32)
+                WsStatus::Disconnected { error, login_url } => {
+                    protos::ws_status::Status::Disconnected(protos::WsDisconnected {
+                        error: error as i32,
+                        login_url: login_url.unwrap_or_default(),
+                    })
                 }
             }),
         }
@@ -53,12 +62,20 @@ impl ProtobufIntoFrom for WsStatus {
                 user: User::from_protobuf(connected.user?)?,
                 version: Version::from_protobuf(connected.version?)?,
             },
-            protos::ws_status::Status::Disconnected(error) => {
-                let err = match error {
+            protos::ws_status::Status::Disconnected(disconnected) => {
+                let err = match disconnected.error {
                     x if x == protos::WsError::NotAuthorized as i32 => WsError::NotAuthorized,
                     _ => return None,
                 };
-                WsStatus::Disconnected(err)
+                let login_url = if disconnected.login_url.is_empty() {
+                    None
+                } else {
+                    Some(disconnected.login_url)
+                };
+                WsStatus::Disconnected {
+                    error: err,
+                    login_url,
+                }
             }
         })
     }

@@ -29,12 +29,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::services::websocket::WebsocketService;
+use crate::services::websocket::{WebsocketService, WsEvent};
 use itertools::Itertools;
 use robotica_common::config::Config;
 use robotica_common::config::RoomConfig;
 use tracing::info;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -52,7 +53,7 @@ use crate::components::rooms::Room;
 
 #[derive(Debug, Clone, Eq, PartialEq, Routable)]
 enum Route {
-    #[at("/welcome")]
+    #[at("/")]
     Welcome,
     #[at("/room/:id")]
     Room { id: String },
@@ -220,8 +221,12 @@ pub fn run() -> Result<(), JsValue> {
 
 #[function_component(NavBar)]
 fn nav_bar() -> Html {
+    let wss: WebsocketService = use_context().unwrap();
     let config = use_context::<Option<Arc<Config>>>().unwrap();
     let menu_open = use_state(|| false);
+    let connected = use_state(|| false);
+    let subscription = use_mut_ref(|| None);
+
     let toggle_menu = {
         let menu_open = menu_open.clone();
         Callback::from(move |_| menu_open.set(!*menu_open))
@@ -230,6 +235,21 @@ fn nav_bar() -> Html {
         let menu_open = menu_open.clone();
         Callback::from(move |_| menu_open.set(false))
     };
+
+    {
+        let connected = connected.clone();
+        let callback = Callback::from(move |msg: WsEvent| {
+            connected.set(matches!(msg, WsEvent::Connected { .. }));
+        });
+
+        let mut wss = wss;
+        use_mut_ref(move || {
+            spawn_local(async move {
+                let sub = wss.subscribe_events(callback).await;
+                *subscription.borrow_mut() = Some(sub);
+            });
+        });
+    }
 
     let rooms = match &config {
         Some(config) => config
@@ -269,13 +289,30 @@ fn nav_bar() -> Html {
         classes
     };
 
-    let link = |link_route: Route, text| {
+    let nav_link = |link_route: Route, text| {
         html! {
             <Link<Route> classes={classes(&link_route)} to={link_route}>
                 {text}
             </Link<Route>>
         }
     };
+
+    if !*connected {
+        return html! {
+            <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="/">{ "Robotica" }</a>
+                    <div class="navbar-nav">
+                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                            <li class="nav-item">
+                                { nav_link(Route::Welcome, "Welcome") }
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+        };
+    }
 
     let dropdown_classes = |link_route: &Route| {
         let mut classes = classes!("dropdown-item");
@@ -303,7 +340,7 @@ fn nav_bar() -> Html {
                 <div class={classes!("collapse", "navbar-collapse", if *menu_open { "show" } else { "" })}>
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item" onclick={close_menu.clone()}>
-                        { link(Route::Welcome, "Welcome") }
+                        { nav_link(Route::Welcome, "Welcome") }
                         </li>
                         {
                             menus.iter().map(|(menu, rooms)| html! {
@@ -340,16 +377,16 @@ fn nav_bar() -> Html {
                             </ul>
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
-                            { link(Route::Schedule, "Schedule") }
+                            { nav_link(Route::Schedule, "Schedule") }
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
-                            { link(Route::Tags, "Tags") }
+                            { nav_link(Route::Tags, "Tags") }
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
-                            { link(Route::Locations, "Locations") }
+                            { nav_link(Route::Locations, "Locations") }
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
-                            { link(Route::Occupancy, "Occupancy") }
+                            { nav_link(Route::Occupancy, "Occupancy") }
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="/logout">{ "Logout" }</a>

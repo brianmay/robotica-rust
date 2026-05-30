@@ -90,6 +90,11 @@ pub enum WsEvent {
     },
     /// Disconnected from the websocket server
     Disconnected(String),
+    /// Login is required to connect
+    LoginRequired {
+        /// The URL to redirect to for login
+        login_url: String,
+    },
 }
 
 /// The websocket service
@@ -393,6 +398,9 @@ enum ConnectError {
 
     #[error("RetryableError: {0}")]
     RetryableError(#[from] RetryableError),
+
+    #[error("Login required")]
+    LoginRequired { login_url: String },
 }
 
 enum ProcessCommandResult {
@@ -546,6 +554,12 @@ async fn reconnect_and_set_keep_alive(state: &mut State) {
             state.backend = BackendState::Disconnected;
             state.dispatch_event(&WsEvent::Disconnected(err.to_string()));
         }
+        Err(ConnectError::LoginRequired { login_url }) => {
+            info!("ws: Login required, not retrying.");
+            state.keep_alive_timer.cancel();
+            state.backend = BackendState::Disconnected;
+            state.dispatch_event(&WsEvent::LoginRequired { login_url });
+        }
     }
 }
 
@@ -579,9 +593,14 @@ async fn reconnect(url: &str, subscriptions: &Subscriptions) -> Result<Backend, 
                         )
                         .into());
                     }
-                    WsStatus::Disconnected(WsError::NotAuthorized) => {
+                    WsStatus::Disconnected {
+                        error: WsError::NotAuthorized,
+                        login_url,
+                    } => {
                         info!("ws: Not authorized to connect to websocket.");
-                        return Err(FatalError::Error("Not authorized".into()).into());
+                        return Err(ConnectError::LoginRequired {
+                            login_url: login_url.unwrap_or_default(),
+                        });
                     }
                 }
             } else {

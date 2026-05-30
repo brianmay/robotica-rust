@@ -475,6 +475,17 @@ impl Component for MapComponent {
                 self.connected = Connected::Disconnected { reason };
                 true
             }
+            Msg::MqttEvent(WsEvent::LoginRequired { .. }) => {
+                self.tracked_subscription = SubscriptionStatus::Unsubscribed;
+                for (_, (_, marker)) in self.tracked_objects.drain() {
+                    marker.remove_from(&self.map);
+                }
+                self.update_zone_styles();
+                self.connected = Connected::Disconnected {
+                    reason: "Login required".to_string(),
+                };
+                true
+            }
             Msg::CreatePolygon(polygon) => {
                 let exterior = polygon
                     .get_lat_lngs()

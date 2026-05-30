@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use arc_swap::ArcSwap;
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -24,13 +25,14 @@ use crate::{
     services::mqtt::MqttTx,
 };
 
-use super::{get_user, Config, User};
+use super::{get_user, oidc::Client, Config, User};
 
 #[allow(clippy::unused_async)]
 pub(super) async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(config): State<Arc<Config>>,
     State(mqtt): State<MqttTx>,
+    State(oidc_client): State<Arc<ArcSwap<Option<Client>>>>,
     session: Session,
 ) -> Response {
     #[allow(clippy::option_if_let_else)]
@@ -40,14 +42,19 @@ pub(super) async fn websocket_handler(
             .into_response()
     } else {
         error!("Permission denied to websocket");
-        ws.on_upgrade(|socket| websocket_error(socket, WsError::NotAuthorized))
+        let login_url = oidc_client
+            .load()
+            .as_ref()
+            .as_ref()
+            .map(|client| client.get_auth_url("/"));
+        ws.on_upgrade(|socket| websocket_error(socket, WsError::NotAuthorized, login_url))
             .into_response()
     }
 }
 
-async fn websocket_error(stream: WebSocket, error: WsError) {
+async fn websocket_error(stream: WebSocket, error: WsError, login_url: Option<String>) {
     let mut stream = stream;
-    let message = WsStatus::Disconnected(error);
+    let message = WsStatus::Disconnected { error, login_url };
     let message = match message.encode() {
         Ok(msg) => msg,
         Err(e) => {

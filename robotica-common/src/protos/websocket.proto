@@ -36,10 +36,15 @@ message WsConnected {
     User user = 2;
 }
 
+message WsDisconnected {
+    WsError error = 1;
+    string login_url = 2;
+}
+
 message WsStatus {
     oneof status {
         WsConnected connected = 1;
-        WsError disconnected = 2;
+        WsDisconnected disconnected = 2;
     }
 }
 
