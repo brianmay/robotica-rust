@@ -349,13 +349,6 @@ fn nav_bar() -> Html {
             <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
                 <div class="container-fluid">
                     <a class="navbar-brand" href="/">{ "Robotica" }</a>
-                    <div class="navbar-nav">
-                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                            <li class="nav-item">
-                                { nav_link(Route::Welcome, "Welcome") }
-                            </li>
-                        </ul>
-                    </div>
                 </div>
             </nav>
         };
@@ -386,9 +379,6 @@ fn nav_bar() -> Html {
                 </button>
                 <div class={classes!("collapse", "navbar-collapse", if *menu_open { "show" } else { "" })}>
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                        { nav_link(Route::Welcome, "Welcome") }
-                        </li>
                         {
                             menus.iter().map(|(menu, rooms)| html! {
                                 <li class="nav-item dropdown">
