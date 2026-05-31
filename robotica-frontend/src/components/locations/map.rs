@@ -40,6 +40,7 @@ pub enum Msg {
     UpdatePolygon(leaflet::Polygon),
     UpdateZone(UpdateZone),
     SelectZone(Zone),
+    SelectZoneReadOnly(Zone),
     ShowList,
     SaveZone,
     DeleteItemZone,
@@ -73,6 +74,7 @@ struct MapActionZone {
 enum MapObject {
     List(Arc<Vec<Zone>>, Vec<MapZone>, bool),
     Item(MapActionZone),
+    ReadOnlyItem(Zone),
     None,
 }
 
@@ -102,7 +104,7 @@ impl MapObject {
                     None
                 }
             }
-            MapObject::None => None,
+            MapObject::ReadOnlyItem(_) | MapObject::None => None,
         }
     }
 }
@@ -128,6 +130,8 @@ pub struct MapComponent {
     event_subscription: Option<Subscription>,
     tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
     connected: Connected,
+    is_admin: bool,
+    draw_control_added: bool,
     _tick_interval: Interval,
 }
 
@@ -175,7 +179,12 @@ impl MapComponent {
         });
     }
 
-    fn set_list(&mut self, zones: &Arc<Vec<Zone>>, select_zone: &Callback<Zone>) {
+    fn set_list(
+        &mut self,
+        zones: &Arc<Vec<Zone>>,
+        select_zone: &Callback<Zone>,
+        select_zone_read_only: &Callback<Zone>,
+    ) {
         self.draw_layer.clear_layers();
         self.zone_click_handlers.clear();
         let marked_zones = self.get_marked_zones();
@@ -195,12 +204,18 @@ impl MapComponent {
             let polygon = leaflet::Polygon::new_with_options(&lat_lngs, &options);
 
             let zone_clone = zone.clone();
-            let cb = select_zone.clone();
+            let is_admin = self.is_admin;
+            let cb_admin = select_zone.clone();
+            let cb_ro = select_zone_read_only.clone();
             let handle = Evented::on_leaflet_event(
                 &&polygon,
                 "click",
                 move |_event: leaflet::MouseEvent| {
-                    cb.emit(zone_clone.clone());
+                    if is_admin {
+                        cb_admin.emit(zone_clone.clone());
+                    } else {
+                        cb_ro.emit(zone_clone.clone());
+                    }
                 },
             );
             self.zone_click_handlers.push(handle);
@@ -221,6 +236,17 @@ impl MapComponent {
         self.object = MapObject::List(zones.clone(), list, false);
     }
 
+    fn sync_draw_control(&mut self, ctx: &Context<Self>) {
+        let want = self.is_admin && matches!(ctx.props().object, ParamObject::List(_));
+        if want && !self.draw_control_added {
+            self.map.add_control(&self.draw_control);
+            self.draw_control_added = true;
+        } else if !want && self.draw_control_added {
+            self.map.remove_control(&self.draw_control);
+            self.draw_control_added = false;
+        }
+    }
+
     fn get_marked_zones(&self) -> Vec<i32> {
         self.tracked_objects
             .values()
@@ -228,9 +254,16 @@ impl MapComponent {
             .collect()
     }
 
-    fn set_object(&mut self, object: &ParamObject, select_zone: &Callback<Zone>) {
+    fn set_object(
+        &mut self,
+        object: &ParamObject,
+        select_zone: &Callback<Zone>,
+        select_zone_read_only: &Callback<Zone>,
+    ) {
         match object {
-            ParamObject::List(zones) => self.set_list(zones, select_zone),
+            ParamObject::List(zones) => {
+                self.set_list(zones, select_zone, select_zone_read_only);
+            }
             ParamObject::Item(zone) => self.set_item(zone.clone()),
         }
     }
@@ -249,7 +282,7 @@ impl MapComponent {
                 let layer = self.draw_layer.get_layer(id);
                 f(&zone.zone, layer);
             }
-            MapObject::None => {}
+            MapObject::ReadOnlyItem(_) | MapObject::None => {}
         }
     }
 
@@ -277,7 +310,7 @@ impl MapComponent {
                     self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
                 }
             }
-            MapObject::Item(_zone) => {
+            MapObject::Item(_) | MapObject::ReadOnlyItem(_) => {
                 self.map.fit_bounds(self.draw_layer.get_bounds().as_ref());
             }
         }
@@ -356,9 +389,6 @@ impl Component for MapComponent {
         draw_layer.add_to(&leaflet_map);
 
         let draw_control = draw_control(&draw_layer);
-        if !matches!(object, ParamObject::Item(_)) {
-            leaflet_map.add_control(&draw_control);
-        }
 
         let create_handler = create_handler(ctx);
         let update_handler = update_handler(ctx);
@@ -402,9 +432,15 @@ impl Component for MapComponent {
             connected: Connected::Disconnected {
                 reason: "Loading...".to_string(),
             },
+            is_admin: false,
+            draw_control_added: false,
             _tick_interval: tick_interval,
         }
-        .tap_mut(|s| Self::set_object(s, object, &ctx.link().callback(Msg::SelectZone)))
+        .tap_mut(|s| {
+            let select_zone = ctx.link().callback(Msg::SelectZone);
+            let select_zone_ro = ctx.link().callback(Msg::SelectZoneReadOnly);
+            Self::set_object(s, object, &select_zone, &select_zone_ro);
+        })
         .tap(Self::position_map)
     }
 
@@ -445,7 +481,7 @@ impl Component for MapComponent {
                 self.event_subscription = Some(subscription);
                 false
             }
-            Msg::MqttEvent(WsEvent::Connected { .. }) => {
+            Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
                 let is_subscribed = matches!(
                     self.tracked_subscription,
                     SubscriptionStatus::Subscribed(_) | SubscriptionStatus::InProgress
@@ -454,6 +490,12 @@ impl Component for MapComponent {
                 if !is_subscribed {
                     subscribe_to_tracked_objects(ctx);
                     self.tracked_subscription = SubscriptionStatus::InProgress;
+                }
+
+                let was_admin = self.is_admin;
+                self.is_admin = user.is_admin;
+                if !was_admin && self.is_admin {
+                    self.sync_draw_control(ctx);
                 }
 
                 self.connected = Connected::Connected;
@@ -465,6 +507,11 @@ impl Component for MapComponent {
                     marker.remove_from(&self.map);
                 }
                 self.update_zone_styles();
+                self.is_admin = false;
+                if self.draw_control_added {
+                    self.map.remove_control(&self.draw_control);
+                    self.draw_control_added = false;
+                }
                 self.connected = Connected::Disconnected { reason };
                 true
             }
@@ -474,6 +521,11 @@ impl Component for MapComponent {
                     marker.remove_from(&self.map);
                 }
                 self.update_zone_styles();
+                self.is_admin = false;
+                if self.draw_control_added {
+                    self.map.remove_control(&self.draw_control);
+                    self.draw_control_added = false;
+                }
                 self.connected = Connected::Disconnected {
                     reason: "Login required".to_string(),
                 };
@@ -574,7 +626,7 @@ impl Component for MapComponent {
                 false
             }
             Msg::CancelZone => {
-                if let MapObject::Item(_) = &self.object {
+                if let MapObject::Item(_) | MapObject::ReadOnlyItem(_) = &self.object {
                     props.request_list.emit(());
                 }
                 false
@@ -595,6 +647,10 @@ impl Component for MapComponent {
                 props.request_item.emit(zone);
                 false
             }
+            Msg::SelectZoneReadOnly(zone) => {
+                self.object = MapObject::ReadOnlyItem(zone);
+                true
+            }
         }
     }
 
@@ -603,22 +659,17 @@ impl Component for MapComponent {
 
         if props.object != old_props.object {
             let select_zone = ctx.link().callback(Msg::SelectZone);
-            self.set_object(&props.object, &select_zone);
+            let select_zone_ro = ctx.link().callback(Msg::SelectZoneReadOnly);
+            self.set_object(&props.object, &select_zone, &select_zone_ro);
             self.position_map();
-
-            match &props.object {
-                ParamObject::Item(_) => {
-                    self.map.remove_control(&self.draw_control);
-                }
-                ParamObject::List(_) => {
-                    self.map.add_control(&self.draw_control);
-                }
-            }
         }
+
+        self.sync_draw_control(ctx);
 
         true
     }
 
+    #[allow(clippy::too_many_lines)]
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
 
@@ -691,6 +742,27 @@ impl Component for MapComponent {
                             on_delete={on_delete_zone}
                             on_cancel={on_cancel_zone}
                         />
+                    </div>
+                }
+            }
+            MapObject::ReadOnlyItem(zone) => {
+                let on_close = ctx.link().callback(|_| Msg::CancelZone);
+                let color_swatch = format!("background-color: {};", zone.color);
+                html! {
+                    <div class="editor">
+                        <h1>{&zone.name}</h1>
+                        <div class="read-only-details">
+                            <p>
+                                <span class="color-swatch" style={color_swatch}></span>
+                                {" "}{&zone.color}
+                            </p>
+                            <p>{if zone.announce_on_enter { "Announces on enter" } else { "Silent on enter" }}</p>
+                            <p>{if zone.announce_on_exit { "Announces on exit" } else { "Silent on exit" }}</p>
+                        </div>
+                        <button onclick={on_close}>{"Close"}</button>
+                        if let Some(status_msg) = status_msg {
+                            <p>{status_msg}</p>
+                        }
                     </div>
                 }
             }
