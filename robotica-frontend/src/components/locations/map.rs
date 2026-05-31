@@ -661,7 +661,11 @@ impl Component for MapComponent {
             let select_zone = ctx.link().callback(Msg::SelectZone);
             let select_zone_ro = ctx.link().callback(Msg::SelectZoneReadOnly);
             self.set_object(&props.object, &select_zone, &select_zone_ro);
-            self.position_map();
+
+            let old_was_item = matches!(old_props.object, ParamObject::Item(_));
+            if !old_was_item {
+                self.position_map();
+            }
         }
 
         self.sync_draw_control(ctx);
