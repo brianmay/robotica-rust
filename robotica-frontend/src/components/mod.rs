@@ -1,9 +1,11 @@
 //! Yew frontend components for robotica
 
+pub mod app;
 pub mod button;
 pub mod car;
 pub mod forms;
 pub mod locations;
+pub mod nav_bar;
 pub mod occupancy_view;
 pub mod require_connection;
 pub mod rooms;
