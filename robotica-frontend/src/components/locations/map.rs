@@ -133,6 +133,8 @@ pub struct MapComponent {
     is_admin: bool,
     draw_control_added: bool,
     _tick_interval: Interval,
+    saved_center: Option<LatLng>,
+    saved_zoom: Option<f64>,
 }
 
 #[derive(PartialEq, Properties, Clone)]
@@ -435,6 +437,8 @@ impl Component for MapComponent {
             is_admin: false,
             draw_control_added: false,
             _tick_interval: tick_interval,
+            saved_center: None,
+            saved_zoom: None,
         }
         .tap_mut(|s| {
             let select_zone = ctx.link().callback(Msg::SelectZone);
@@ -445,6 +449,9 @@ impl Component for MapComponent {
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+        if let (Some(center), Some(zoom)) = (self.saved_center.take(), self.saved_zoom.take()) {
+            self.map.set_view(&center, zoom);
+        }
         if first_render {}
     }
 
@@ -481,6 +488,11 @@ impl Component for MapComponent {
                 self.event_subscription = Some(subscription);
                 false
             }
+            // Handlers that mutate the Leaflet map state (markers, draw control,
+            // zone styles) AND return true (triggering a Yew re-render) must save
+            // the map view beforehand. The re-render causes DOM reconciliation of
+            // the VRef container, which can reset the Leaflet view. saved_center
+            // and saved_zoom are restored in rendered().
             Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
                 let is_subscribed = matches!(
                     self.tracked_subscription,
@@ -499,9 +511,13 @@ impl Component for MapComponent {
                 }
 
                 self.connected = Connected::Connected;
+                self.saved_center = Some(self.map.get_center());
+                self.saved_zoom = Some(self.map.get_zoom());
                 true
             }
             Msg::MqttEvent(WsEvent::Disconnected(reason)) => {
+                self.saved_center = Some(self.map.get_center());
+                self.saved_zoom = Some(self.map.get_zoom());
                 self.tracked_subscription = SubscriptionStatus::Unsubscribed;
                 for (_, (_, marker)) in self.tracked_objects.drain() {
                     marker.remove_from(&self.map);
@@ -516,6 +532,8 @@ impl Component for MapComponent {
                 true
             }
             Msg::MqttEvent(WsEvent::LoginRequired { .. }) => {
+                self.saved_center = Some(self.map.get_center());
+                self.saved_zoom = Some(self.map.get_zoom());
                 self.tracked_subscription = SubscriptionStatus::Unsubscribed;
                 for (_, (_, marker)) in self.tracked_objects.drain() {
                     marker.remove_from(&self.map);
