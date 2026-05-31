@@ -348,7 +348,9 @@ fn nav_bar() -> Html {
         return html! {
             <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
                 <div class="container-fluid">
-                    <a class="navbar-brand" href="/">{ "Robotica" }</a>
+                    <Link<Route> classes={ classes!("navbar-brand") } to={Route::Welcome}>
+                        { "Robotica" }
+                    </Link<Route>>
                 </div>
             </nav>
         };
@@ -373,7 +375,9 @@ fn nav_bar() -> Html {
     html! {
         <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
             <div class="container-fluid">
-                <a class="navbar-brand" href="/">{ "Robotica" }</a>
+                <Link<Route> classes={ classes!("navbar-brand") } to={Route::Welcome}>
+                    { "Robotica" }
+                </Link<Route>>
                 <button class="navbar-toggler" type="button" onclick={toggle_menu} aria-controls="navbarSupportedContent" aria-expanded={(*menu_open).to_string()} aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
