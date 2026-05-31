@@ -455,8 +455,10 @@ impl Component for MapComponent {
                 false
             }
             Msg::MqttEvent(WsEvent::Connected { .. }) => {
-                let is_subscribed =
-                    matches!(self.tracked_subscription, SubscriptionStatus::Subscribed(_));
+                let is_subscribed = matches!(
+                    self.tracked_subscription,
+                    SubscriptionStatus::Subscribed(_) | SubscriptionStatus::InProgress
+                );
 
                 if !is_subscribed {
                     subscribe_to_tracked_objects(ctx);
