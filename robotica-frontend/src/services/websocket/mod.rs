@@ -491,7 +491,6 @@ async fn process_command(command: Option<Command>, state: &mut State) -> Process
         Some(Command::Reconnect) => {
             debug!("ws: Got Reconnect command, forcing disconnect+reconnect.");
             state.backend = BackendState::Disconnected;
-            state.dispatch_event(&WsEvent::Disconnected("Page foregrounded".to_string()));
             state.keep_alive_timer.disconnected(&state.in_tx);
             reconnect_and_set_keep_alive(state).await;
             ProcessCommandResult::Continue
