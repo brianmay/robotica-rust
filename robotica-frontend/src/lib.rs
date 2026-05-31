@@ -127,7 +127,7 @@ struct App {
     config: Option<Arc<Config>>,
     config_subscription: Option<Subscription>,
     config_error: Option<String>,
-    connected: bool,
+    show_full_ui: bool,
     event_subscription: Option<Subscription>,
     subscribed: bool,
 }
@@ -164,7 +164,7 @@ impl Component for App {
             config: None,
             config_subscription: None,
             config_error: None,
-            connected: false,
+            show_full_ui: false,
             event_subscription: None,
             subscribed: false,
         }
@@ -189,11 +189,12 @@ impl Component for App {
                 true
             }
             AppMsg::AuthEvent(event) => {
-                let connected = matches!(event, WsEvent::Connected { .. });
-                if self.connected == connected {
+                let show_full_ui =
+                    matches!(event, WsEvent::Connected { .. } | WsEvent::Disconnected(..));
+                if self.show_full_ui == show_full_ui {
                     false
                 } else {
-                    self.connected = connected;
+                    self.show_full_ui = show_full_ui;
                     true
                 }
             }
@@ -225,7 +226,7 @@ impl Component for App {
                 </div>
             };
         }
-        if !self.connected {
+        if !self.show_full_ui {
             return html! {
                 <ContextProvider<WebsocketService> context={self.wss.clone()}>
                     <ContextProvider<Option<Arc<Config>>> context={&self.config}>
@@ -271,7 +272,7 @@ fn nav_bar() -> Html {
     let wss: WebsocketService = use_context().unwrap();
     let config = use_context::<Option<Arc<Config>>>().unwrap();
     let menu_open = use_state(|| false);
-    let connected = use_state(|| false);
+    let show_full_ui = use_state(|| false);
     let subscription = use_mut_ref(|| None);
 
     let toggle_menu = {
@@ -284,9 +285,12 @@ fn nav_bar() -> Html {
     };
 
     {
-        let connected = connected.clone();
+        let show_full_ui = show_full_ui.clone();
         let callback = Callback::from(move |msg: WsEvent| {
-            connected.set(matches!(msg, WsEvent::Connected { .. }));
+            show_full_ui.set(matches!(
+                msg,
+                WsEvent::Connected { .. } | WsEvent::Disconnected(..)
+            ));
         });
 
         let mut wss = wss;
@@ -344,7 +348,7 @@ fn nav_bar() -> Html {
         }
     };
 
-    if !*connected {
+    if !*show_full_ui {
         return html! {
             <nav class="navbar navbar-expand-sm navbar-dark bg-dark navbar-fixed-top">
                 <div class="container-fluid">
