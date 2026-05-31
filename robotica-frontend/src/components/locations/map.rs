@@ -13,7 +13,6 @@ use crate::{
 use chrono::Utc;
 use geo::coord;
 use gloo_utils::document;
-use js_sys::Reflect;
 use leaflet::{Evented, LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
@@ -38,7 +37,6 @@ pub enum Msg {
     MqttEvent(WsEvent),
     CreatePolygon(leaflet::Polygon),
     CreatePolyline(leaflet::Polyline),
-    UpdatePolygon(leaflet::Polygon),
     UpdateZone(UpdateZone),
     SelectZone(Zone),
     SelectZoneReadOnly(Zone),
@@ -48,6 +46,7 @@ pub enum Msg {
     CancelZone,
     CancelList,
     Tick,
+    ToggleEditBounds,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -79,42 +78,19 @@ enum MapObject {
     None,
 }
 
-impl MapObject {
-    // fn get_location_by_id(&self, id: i32) -> Option<&Location> {
-    //     match self {
-    //         MapObject::List(locations) => locations
-    //             .iter()
-    //             .find(|location| location.leaflet_id == id)
-    //             .map(|location| &location.location),
-    //         MapObject::Item(_location) => None,
-    //         MapObject::None => None,
-    //     }
-    // }
-
-    fn get_action_zone_by_id(&self, id: i32) -> Option<ActionZone> {
-        match self {
-            MapObject::List(_, zones, _) => zones
-                .iter()
-                .find(|zone| zone.leaflet_id == id)
-                .map(|zone| ActionZone::Update(zone.zone.clone())),
-
-            MapObject::Item(zone) => {
-                if zone.leaflet_id == id {
-                    Some(zone.zone.clone())
-                } else {
-                    None
-                }
-            }
-            MapObject::ReadOnlyItem(_) | MapObject::None => None,
-        }
-    }
-}
+impl MapObject {}
 
 enum SubscriptionStatus {
     InProgress,
     #[allow(dead_code)]
     Subscribed(Subscription),
     Unsubscribed,
+}
+
+#[derive(PartialEq, Eq)]
+enum ActiveControl {
+    None,
+    DrawEdit,
 }
 
 pub struct MapComponent {
@@ -125,7 +101,6 @@ pub struct MapComponent {
     draw_control: draw_control::DrawControl,
     measurement_layer: leaflet::FeatureGroup,
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
-    _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
     zone_click_handlers: Vec<leaflet::EventedHandle<leaflet::MouseEvent>>,
     tracked_subscription: SubscriptionStatus,
@@ -133,7 +108,8 @@ pub struct MapComponent {
     tracked_objects: HashMap<String, (LocationMessage, leaflet::Marker)>,
     connected: Connected,
     is_admin: bool,
-    draw_control_added: bool,
+    active_control: ActiveControl,
+    editing_bounds: bool,
     _tick_interval: Interval,
 }
 
@@ -240,12 +216,115 @@ impl MapComponent {
 
     fn sync_draw_control(&mut self, ctx: &Context<Self>) {
         let want = self.is_admin && matches!(ctx.props().object, ParamObject::List(_));
-        if want && !self.draw_control_added {
-            self.map.add_control(&self.draw_control);
-            self.draw_control_added = true;
-        } else if !want && self.draw_control_added {
+        let want = if want {
+            ActiveControl::DrawEdit
+        } else {
+            ActiveControl::None
+        };
+
+        if want == self.active_control {
+            return;
+        }
+
+        if self.active_control == ActiveControl::DrawEdit {
             self.map.remove_control(&self.draw_control);
-            self.draw_control_added = false;
+        }
+
+        if want == ActiveControl::DrawEdit {
+            self.map.add_control(&self.draw_control);
+        }
+
+        self.active_control = want;
+    }
+
+    fn enable_polygon_editing(&self) {
+        if let MapObject::Item(ref map_zone) = &self.object {
+            let layer = self.draw_layer.get_layer(map_zone.leaflet_id);
+            let polygon = layer.unchecked_into::<leaflet::Polygon>();
+            Self::enable_editing_on_polygon(&polygon);
+        }
+    }
+
+    fn disable_polygon_editing(&self) {
+        if let MapObject::Item(ref map_zone) = &self.object {
+            let layer = self.draw_layer.get_layer(map_zone.leaflet_id);
+            let polygon = layer.unchecked_into::<leaflet::Polygon>();
+            Self::disable_editing_on_polygon(&polygon);
+        }
+    }
+
+    fn enable_editing_on_polygon(polygon: &leaflet::Polygon) {
+        let window = web_sys::window().unwrap();
+        let l_obj = js_sys::Reflect::get(&window, &JsValue::from_str("L")).unwrap();
+        let edit = js_sys::Reflect::get(&l_obj, &JsValue::from_str("Edit")).unwrap();
+        let poly_ctor = js_sys::Reflect::get(&edit, &JsValue::from_str("Poly")).unwrap();
+
+        let options = js_sys::Object::new();
+        let selected_path_options = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(
+            &selected_path_options,
+            &JsValue::from_str("maintainColor"),
+            &JsValue::TRUE,
+        );
+        let _ = js_sys::Reflect::set(
+            &options,
+            &JsValue::from_str("selectedPathOptions"),
+            &selected_path_options,
+        );
+
+        let edit_handler = js_sys::Reflect::construct(
+            &poly_ctor.unchecked_into::<js_sys::Function>(),
+            &js_sys::Array::of2(polygon.as_ref(), &options),
+        )
+        .unwrap();
+
+        let _ = js_sys::Reflect::set(
+            polygon.as_ref(),
+            &JsValue::from_str("editing"),
+            &edit_handler,
+        );
+
+        let editing =
+            js_sys::Reflect::get(polygon.as_ref(), &JsValue::from_str("editing")).unwrap();
+        let enable_fn = js_sys::Reflect::get(&editing, &JsValue::from_str("enable"))
+            .unwrap()
+            .unchecked_into::<js_sys::Function>();
+        let _ = js_sys::Reflect::apply(&enable_fn, &editing, &js_sys::Array::new());
+    }
+
+    fn disable_editing_on_polygon(polygon: &leaflet::Polygon) {
+        if let Ok(editing) = js_sys::Reflect::get(polygon.as_ref(), &JsValue::from_str("editing")) {
+            if !editing.is_undefined() && !editing.is_null() {
+                let disable_fn = js_sys::Reflect::get(&editing, &JsValue::from_str("disable"))
+                    .unwrap()
+                    .unchecked_into::<js_sys::Function>();
+                let _ = js_sys::Reflect::apply(&disable_fn, &editing, &js_sys::Array::new());
+            }
+        }
+    }
+
+    fn capture_bounds_from_map(&mut self, leaflet_id: i32) {
+        let layer = self.draw_layer.get_layer(leaflet_id);
+        let polygon: leaflet::Polygon = layer.unchecked_into();
+        let exterior = polygon
+            .get_lat_lngs()
+            .iter()
+            .flat_map(|lat_lng_array| {
+                let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
+                lat_lng_array
+                    .iter()
+                    .map(|lat_lng| {
+                        let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
+                        coord! {x: lat_lng.lng(), y: lat_lng.lat()}
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .pipe(geo::LineString::from);
+
+        let new_bounds = geo::Polygon::new(exterior, vec![]);
+        if let MapObject::Item(ref mut map_zone) = &mut self.object {
+            map_zone.zone.set_bounds(new_bounds);
         }
     }
 
@@ -262,6 +341,10 @@ impl MapComponent {
         select_zone: &Callback<Zone>,
         select_zone_read_only: &Callback<Zone>,
     ) {
+        if self.editing_bounds {
+            self.disable_polygon_editing();
+            self.editing_bounds = false;
+        }
         match object {
             ParamObject::List(zones) => {
                 self.set_list(zones, select_zone, select_zone_read_only);
@@ -358,6 +441,10 @@ fn get_zone_color(marked_zones: &[i32], zone: &Zone) -> String {
     }
 }
 
+fn is_same_zone_item(a: &ParamObject, b: &ParamObject) -> bool {
+    matches!((a, b), (ParamObject::Item(a), ParamObject::Item(b)) if a.id() == b.id())
+}
+
 impl Component for MapComponent {
     type Message = Msg;
     type Properties = Props;
@@ -393,10 +480,9 @@ impl Component for MapComponent {
         let measurement_layer = leaflet::FeatureGroup::new();
         measurement_layer.add_to(&leaflet_map);
 
-        let draw_control = draw_control(&draw_layer);
+        let draw_control = draw_control();
 
         let create_handler = create_handler(ctx);
-        let update_handler = update_handler(ctx);
         let show_list_handler = {
             let callback = ctx.link().callback(|()| Msg::ShowList);
             Closure::<dyn FnMut(_)>::new(move |_event| {
@@ -405,7 +491,6 @@ impl Component for MapComponent {
         };
 
         leaflet_map.on("draw:created", create_handler.as_ref());
-        leaflet_map.on("draw:edited", update_handler.as_ref());
         leaflet_map.on("show_locations", show_list_handler.as_ref());
 
         Button::new(&ButtonOptions::default()).add_to(&leaflet_map);
@@ -429,7 +514,6 @@ impl Component for MapComponent {
             draw_control,
             measurement_layer,
             _create_handler: create_handler,
-            _update_handler: update_handler,
             _show_locations_handler: show_list_handler,
             zone_click_handlers: Vec::new(),
             tracked_subscription: SubscriptionStatus::Unsubscribed,
@@ -439,7 +523,8 @@ impl Component for MapComponent {
                 reason: "Loading...".to_string(),
             },
             is_admin: false,
-            draw_control_added: false,
+            active_control: ActiveControl::None,
+            editing_bounds: false,
             _tick_interval: tick_interval,
         }
         .tap_mut(|s| {
@@ -514,10 +599,10 @@ impl Component for MapComponent {
                 }
                 self.update_zone_styles();
                 self.is_admin = false;
-                if self.draw_control_added {
+                if self.active_control == ActiveControl::DrawEdit {
                     self.map.remove_control(&self.draw_control);
-                    self.draw_control_added = false;
                 }
+                self.active_control = ActiveControl::None;
                 self.connected = Connected::Disconnected { reason };
                 true
             }
@@ -528,10 +613,10 @@ impl Component for MapComponent {
                 }
                 self.update_zone_styles();
                 self.is_admin = false;
-                if self.draw_control_added {
+                if self.active_control == ActiveControl::DrawEdit {
                     self.map.remove_control(&self.draw_control);
-                    self.draw_control_added = false;
                 }
+                self.active_control = ActiveControl::None;
                 self.connected = Connected::Disconnected {
                     reason: "Login required".to_string(),
                 };
@@ -614,36 +699,6 @@ impl Component for MapComponent {
 
                 false
             }
-            Msg::UpdatePolygon(polygon) => {
-                let id = self.draw_layer.get_layer_id(&polygon);
-                let zone = self.object.get_action_zone_by_id(id);
-
-                if let Some(zone) = zone {
-                    let exterior = polygon
-                        .get_lat_lngs()
-                        .iter()
-                        .flat_map(|lat_lng_array| {
-                            let lat_lng_array = lat_lng_array.dyn_into::<js_sys::Array>().unwrap();
-                            lat_lng_array
-                                .iter()
-                                .map(|lat_lng| {
-                                    let lat_lng = lat_lng.unchecked_into::<leaflet::LatLng>();
-                                    coord! {x: lat_lng.lng(), y: lat_lng.lat()}
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .collect::<Vec<_>>()
-                        .pipe(geo::LineString::from);
-
-                    let new_bounds = geo::Polygon::new(exterior, vec![]);
-                    // let updates = UpdateZone::Bounds(new_bounds);
-
-                    let mut zone = zone;
-                    zone.set_bounds(new_bounds);
-                    props.save_zone.emit(zone.clone());
-                }
-                false
-            }
             Msg::UpdateZone(updates) => {
                 if let MapObject::Item(zone) = &mut self.object {
                     let mut zone = zone.zone.clone();
@@ -661,8 +716,13 @@ impl Component for MapComponent {
                 true
             }
             Msg::SaveZone => {
-                if let MapObject::Item(zone) = &self.object {
-                    props.save_zone.emit(zone.zone.clone());
+                let leaflet_id = match &self.object {
+                    MapObject::Item(zone) => zone.leaflet_id,
+                    _ => return false,
+                };
+                self.capture_bounds_from_map(leaflet_id);
+                if let MapObject::Item(ref map_zone) = self.object {
+                    props.save_zone.emit(map_zone.zone.clone());
                 }
                 false
             }
@@ -681,6 +741,10 @@ impl Component for MapComponent {
                 false
             }
             Msg::CancelZone => {
+                if self.editing_bounds {
+                    self.disable_polygon_editing();
+                    self.editing_bounds = false;
+                }
                 if let MapObject::Item(_) | MapObject::ReadOnlyItem(_) = &self.object {
                     props.request_list.emit(());
                 }
@@ -689,6 +753,15 @@ impl Component for MapComponent {
             Msg::CancelList => {
                 if let MapObject::List(_, _, show_locations) = &mut self.object {
                     *show_locations = false;
+                }
+                true
+            }
+            Msg::ToggleEditBounds => {
+                self.editing_bounds = !self.editing_bounds;
+                if self.editing_bounds {
+                    self.enable_polygon_editing();
+                } else {
+                    self.disable_polygon_editing();
                 }
                 true
             }
@@ -713,13 +786,23 @@ impl Component for MapComponent {
         let props = ctx.props();
 
         if props.object != old_props.object {
-            let select_zone = ctx.link().callback(Msg::SelectZone);
-            let select_zone_ro = ctx.link().callback(Msg::SelectZoneReadOnly);
-            self.set_object(&props.object, &select_zone, &select_zone_ro);
+            if !is_same_zone_item(&props.object, &old_props.object) {
+                let select_zone = ctx.link().callback(Msg::SelectZone);
+                let select_zone_ro = ctx.link().callback(Msg::SelectZoneReadOnly);
+                self.set_object(&props.object, &select_zone, &select_zone_ro);
 
-            let old_was_item = matches!(old_props.object, ParamObject::Item(_));
-            if !old_was_item {
-                self.position_map();
+                let skip = match (&old_props.object, &props.object) {
+                    (ParamObject::Item(_), _) => true,
+                    (ParamObject::List(old), ParamObject::List(_)) => !old.is_empty(),
+                    _ => false,
+                };
+                if !skip {
+                    self.position_map();
+                }
+            } else if let (ParamObject::Item(new_zone), MapObject::Item(ref mut existing)) =
+                (&props.object, &mut self.object)
+            {
+                existing.zone = new_zone.clone();
             }
         }
 
@@ -750,8 +833,7 @@ impl Component for MapComponent {
         }
 
         match &props.status {
-            ZoneStatus::Unchanged => {}
-            ZoneStatus::Changed => messages.push("Changed".to_string()),
+            ZoneStatus::Idle => {}
             ZoneStatus::Saving => messages.push("Saving".to_string()),
             ZoneStatus::Error(err) => messages.push(format!("Error: {err}")),
         }
@@ -791,6 +873,7 @@ impl Component for MapComponent {
                 }
             }
             MapObject::Item(zone) => {
+                let on_edit_bounds = ctx.link().callback(|()| Msg::ToggleEditBounds);
                 html! {
                     <div class="editor">
                         <EditorView
@@ -800,6 +883,7 @@ impl Component for MapComponent {
                             on_save={on_save}
                             on_delete={on_delete_zone}
                             on_cancel={on_cancel_zone}
+                            on_edit_bounds={on_edit_bounds}
                         />
                     </div>
                 }
@@ -862,11 +946,7 @@ fn subscribe_to_tracked_objects(ctx: &Context<MapComponent>) {
     });
 }
 
-fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl {
-    let edit_options = draw_control::EditOptions::new();
-    edit_options.set_feature_group(draw_layer.clone());
-    edit_options.set_remove(false);
-
+fn draw_control() -> draw_control::DrawControl {
     let draw_options = draw_control::DrawOptions::new();
     draw_options.set_polyline(true);
     draw_options.set_polygon(true);
@@ -877,7 +957,6 @@ fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl
 
     let options = draw_control::DrawControlOptions::new();
     options.set_draw(draw_options);
-    options.set_edit(edit_options);
 
     draw_control::DrawControl::new(&options)
 }
@@ -894,25 +973,6 @@ fn create_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Eve
         } else {
             let polygon = layer.unchecked_into::<leaflet::Polygon>();
             create_polygon.emit(polygon);
-        }
-    })
-}
-
-fn update_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
-    debug!("update_handler");
-    let update_polygon = ctx.link().callback(Msg::UpdatePolygon);
-
-    Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        let layers = event
-            .pipe(|x| Reflect::get(&x, &"layers".into()))
-            .unwrap()
-            .unchecked_into::<leaflet::LayerGroup>()
-            .get_layers();
-
-        for layer in layers {
-            // let layer: leaflet::Polygon = layer.dyn_into().unwrap();
-            let layer: leaflet::Polygon = layer.unchecked_into();
-            update_polygon.emit(layer);
         }
     })
 }

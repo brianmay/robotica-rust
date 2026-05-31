@@ -42,6 +42,7 @@ pub struct Props {
     pub on_save: Callback<()>,
     pub on_delete: Callback<()>,
     pub on_cancel: Callback<()>,
+    pub on_edit_bounds: Callback<()>,
 }
 
 impl Component for EditorView {
@@ -93,15 +94,15 @@ impl Component for EditorView {
         let status = &props.status;
 
         let status_msg = match status {
-            ZoneStatus::Unchanged => "Unchanged".to_string(),
-            ZoneStatus::Changed => "Changed".to_string(),
-            ZoneStatus::Saving => "Saving".to_string(),
-            ZoneStatus::Error(err) => format!("Error {err}"),
+            ZoneStatus::Saving => Some("Saving".to_string()),
+            ZoneStatus::Error(err) => Some(format!("Error {err}")),
+            ZoneStatus::Idle => None,
         };
 
         let save = props.on_save.reform(|_| ());
         let cancel = props.on_cancel.reform(|_| ());
         let delete = props.on_delete.reform(|_| ());
+        let edit_bounds = props.on_edit_bounds.reform(|_| ());
 
         let update_name = ctx.link().callback(Msg::Name);
         let update_color = ctx.link().callback(Msg::Color);
@@ -124,6 +125,9 @@ impl Component for EditorView {
                     <Checkbox id="announce_on_enter" label="Announce on enter" value={zone.announce_on_enter()} on_change={update_announce_on_enter} />
                     <Checkbox id="announce_on_exit" label="Announce on exit" value={zone.announce_on_exit()} on_change={update_announce_on_exit} />
 
+                    <button type="button" onclick={edit_bounds} >
+                        {"Edit Bounds"}
+                    </button>
                     <button type="button" onclick={save} disabled={disable_save} >
                         {"Save"}
                     </button>
@@ -133,7 +137,9 @@ impl Component for EditorView {
                     <button type="button" onclick={delete} disabled={disable_save} class="delete">
                         {"Delete Zone"}
                     </button>
-                    <p>{status_msg}</p>
+                    if let Some(msg) = status_msg {
+                        <p>{msg}</p>
+                    }
                 </form>
             </>
         }

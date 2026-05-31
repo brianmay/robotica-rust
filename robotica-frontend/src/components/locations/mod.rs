@@ -12,6 +12,14 @@ pub enum ActionZone {
 }
 
 impl ActionZone {
+    #[must_use]
+    pub const fn id(&self) -> Option<i32> {
+        match self {
+            ActionZone::Create(_) => None,
+            ActionZone::Update(zone) => Some(zone.id),
+        }
+    }
+
     fn set_name(&mut self, name: String) {
         match self {
             ActionZone::Create(zone) => zone.name = name,

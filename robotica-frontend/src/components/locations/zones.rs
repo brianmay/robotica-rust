@@ -37,8 +37,7 @@ pub enum LoadingStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZoneStatus {
-    Unchanged,
-    Changed,
+    Idle,
     Saving,
     Error(String),
 }
@@ -49,10 +48,7 @@ impl ZoneStatus {
     }
 
     pub const fn can_save(&self) -> bool {
-        matches!(
-            self,
-            ZoneStatus::Unchanged | ZoneStatus::Changed | ZoneStatus::Error(_)
-        )
+        !matches!(self, ZoneStatus::Saving)
     }
 }
 
@@ -95,7 +91,7 @@ impl Component for ZonesView {
 
         Self {
             zone: None,
-            status: ZoneStatus::Unchanged,
+            status: ZoneStatus::Idle,
             loading_status: LoadingStatus::Loading,
             list: Arc::new(Vec::new()),
         }
@@ -124,7 +120,7 @@ impl Component for ZonesView {
             Msg::UpdateZone(zone) => {
                 debug!("Updating zone: {:?}", zone);
                 self.zone = Some(zone);
-                self.status = ZoneStatus::Changed;
+                self.status = ZoneStatus::Idle;
                 true
             }
             Msg::DeleteZone(zone) => {
@@ -148,15 +144,15 @@ impl Component for ZonesView {
             }
             Msg::CreateSuccess(zone) => {
                 self.zone = zone.pipe(ActionZone::Update).pipe(Some);
-                self.status = ZoneStatus::Unchanged;
+                self.status = ZoneStatus::Idle;
                 load_list(ctx);
                 true
             }
             Msg::SaveSuccess(_zone) => {
                 self.zone = None;
-                self.status = ZoneStatus::Unchanged;
+                self.status = ZoneStatus::Idle;
                 load_list(ctx);
-                true
+                false
             }
             Msg::SaveFailed(zone, error) => {
                 self.status = ZoneStatus::error(error);
@@ -165,10 +161,10 @@ impl Component for ZonesView {
             }
             Msg::DeleteSuccess(_zone) => {
                 self.zone = None;
-                self.status = ZoneStatus::Unchanged;
+                self.status = ZoneStatus::Idle;
                 self.loading_status = LoadingStatus::Loading;
                 load_list(ctx);
-                true
+                false
             }
             Msg::DeleteFailed(_zone, error) => {
                 self.status = ZoneStatus::error(error);
@@ -176,12 +172,12 @@ impl Component for ZonesView {
             }
             Msg::RequestItem(zone) => {
                 self.zone = Some(ActionZone::Update(zone));
-                self.status = ZoneStatus::Unchanged;
+                self.status = ZoneStatus::Idle;
                 true
             }
             Msg::RequestList => {
                 self.zone = None;
-                self.status = ZoneStatus::Unchanged;
+                self.status = ZoneStatus::Idle;
                 true
             }
         }
