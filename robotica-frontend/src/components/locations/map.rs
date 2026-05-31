@@ -14,7 +14,7 @@ use chrono::Utc;
 use geo::coord;
 use gloo_utils::document;
 use js_sys::Reflect;
-use leaflet::{Evented, LatLng, Map, MapOptions, TileLayer, Tooltip, TooltipOptions};
+use leaflet::{Evented, LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
     mqtt::{Json, MqttMessage},
     robotica::zones::{CreateZone, LocationMessage, Zone},
@@ -193,15 +193,6 @@ impl MapComponent {
                 .collect();
 
             let polygon = leaflet::Polygon::new_with_options(&lat_lngs, &options);
-
-            let tooltip_opts = TooltipOptions::default();
-            tooltip_opts.set_permanent(true);
-            tooltip_opts.set_direction("center".to_string());
-            let tooltip = Tooltip::new(&tooltip_opts, None);
-            tooltip.set_content(&JsValue::from_str(&zone.name));
-            polygon
-                .unchecked_ref::<leaflet::Layer>()
-                .bind_tooltip(&tooltip);
 
             let zone_clone = zone.clone();
             let cb = select_zone.clone();
