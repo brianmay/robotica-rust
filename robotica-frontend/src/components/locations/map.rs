@@ -37,6 +37,7 @@ pub enum Msg {
     SubscribedEvents(Subscription),
     MqttEvent(WsEvent),
     CreatePolygon(leaflet::Polygon),
+    CreatePolyline(leaflet::Polyline),
     UpdatePolygon(leaflet::Polygon),
     UpdateZone(UpdateZone),
     SelectZone(Zone),
@@ -122,6 +123,7 @@ pub struct MapComponent {
     container: HtmlElement,
     draw_layer: leaflet::FeatureGroup,
     draw_control: draw_control::DrawControl,
+    measurement_layer: leaflet::FeatureGroup,
     _create_handler: Closure<dyn FnMut(leaflet::Event)>,
     _update_handler: Closure<dyn FnMut(leaflet::Event)>,
     _show_locations_handler: Closure<dyn FnMut(leaflet::Event)>,
@@ -388,6 +390,9 @@ impl Component for MapComponent {
         let draw_layer = leaflet::FeatureGroup::new();
         draw_layer.add_to(&leaflet_map);
 
+        let measurement_layer = leaflet::FeatureGroup::new();
+        measurement_layer.add_to(&leaflet_map);
+
         let draw_control = draw_control(&draw_layer);
 
         let create_handler = create_handler(ctx);
@@ -422,6 +427,7 @@ impl Component for MapComponent {
             container,
             draw_layer,
             draw_control,
+            measurement_layer,
             _create_handler: create_handler,
             _update_handler: update_handler,
             _show_locations_handler: show_list_handler,
@@ -557,6 +563,55 @@ impl Component for MapComponent {
                 };
 
                 props.create_zone.emit(zone);
+                false
+            }
+            Msg::CreatePolyline(polyline) => {
+                let lat_lngs = polyline.get_lat_lngs();
+                let points: Vec<leaflet::LatLng> = lat_lngs
+                    .iter()
+                    .flat_map(|inner| {
+                        let inner = inner.dyn_into::<js_sys::Array>().unwrap();
+                        inner
+                            .iter()
+                            .map(wasm_bindgen::JsCast::unchecked_into::<leaflet::LatLng>)
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+
+                let total_distance = if points.len() >= 2 {
+                    let mut total = 0.0;
+                    for i in 1..points.len() {
+                        total += self.map.distance(&points[i - 1], &points[i]);
+                    }
+                    total
+                } else {
+                    0.0
+                };
+
+                let polyline_options = leaflet::PolylineOptions::default();
+                polyline_options.set_color("blue".to_string());
+                polyline_options.set_weight(3.0);
+                polyline_options.set_dash_array("10, 10".to_string());
+                polyline.set_style(&polyline_options);
+
+                let tooltip_options = leaflet::TooltipOptions::default();
+                tooltip_options.set_permanent(true);
+                tooltip_options.set_direction("center".to_string());
+                let tooltip = leaflet::Tooltip::new(&tooltip_options, None);
+                let text = if total_distance >= 1000.0 {
+                    format!("{:.2} km", total_distance / 1000.0)
+                } else {
+                    format!("{total_distance:.1} m")
+                };
+                tooltip.set_content(&JsValue::from_str(&text));
+
+                let layer: &leaflet::Layer = polyline.unchecked_ref();
+                layer.bind_tooltip(&tooltip);
+                let center = polyline.get_center();
+                layer.open_tooltip(&center);
+
+                layer.add_to_layer_group(&self.measurement_layer);
+
                 false
             }
             Msg::UpdatePolygon(polygon) => {
@@ -813,7 +868,7 @@ fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl
     edit_options.set_remove(false);
 
     let draw_options = draw_control::DrawOptions::new();
-    draw_options.set_polyline(false);
+    draw_options.set_polyline(true);
     draw_options.set_polygon(true);
     draw_options.set_rectangle(false);
     draw_options.set_circle(false);
@@ -830,10 +885,16 @@ fn draw_control(draw_layer: &leaflet::FeatureGroup) -> draw_control::DrawControl
 fn create_handler(ctx: &Context<MapComponent>) -> Closure<dyn FnMut(leaflet::Event)> {
     debug!("create_handler");
     let create_polygon = ctx.link().callback(Msg::CreatePolygon);
+    let create_polyline = ctx.link().callback(Msg::CreatePolyline);
 
     Closure::<dyn FnMut(_)>::new(move |event: leaflet::Event| {
-        let polygon = event.layer().unchecked_into::<leaflet::Polygon>();
-        create_polygon.emit(polygon);
+        let layer = event.layer();
+        if let Ok(polyline) = layer.clone().dyn_into::<leaflet::Polyline>() {
+            create_polyline.emit(polyline);
+        } else {
+            let polygon = layer.unchecked_into::<leaflet::Polygon>();
+            create_polygon.emit(polygon);
+        }
     })
 }
 
