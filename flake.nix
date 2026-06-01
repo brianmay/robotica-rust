@@ -2,7 +2,7 @@
   description = "IOT automation for people who think like programmers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -45,7 +45,7 @@
           # };
           pkgs = inputs.nixpkgs.legacyPackages.${system}.extend (import rust-overlay);
           pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
-          nodejs = pkgs.nodejs_22;
+          nodejs = pkgs.nodejs;
 
           wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
             src = pkgs.fetchCrate {
@@ -288,11 +288,11 @@
                   protobuf
                   fontconfig
                   freetype
-                  xorg.libxcb
-                  xorg.libX11
-                  xorg.libXcursor
-                  xorg.libXrandr
-                  xorg.libXi
+                  libxcb
+                  libX11
+                  libXcursor
+                  libXrandr
+                  libXi
                   mesa
                   wayland
                   libxkbcommon
@@ -379,7 +379,7 @@
                   pkgs.sqlx-cli
                   pkgs.influxdb2
                   pkgs.mosquitto
-                  pkgs-unstable.osv-scanner
+                  pkgs.osv-scanner
                 ];
                 enterShell = ''
                   export ROBOTICA_DEBUG=true
