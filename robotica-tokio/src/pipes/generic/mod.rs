@@ -67,9 +67,11 @@ where
                             let changed = prev_data.as_ref().is_none_or(|saved| saved != &data);
                             if changed {
                                 indexed_data.insert(key, data.clone());
-                                if let Err(_err) = out_tx.send((prev_data, data)) {
-                                    // It is not an error if there are no subscribers.
-                                }
+                            }
+                            // Always broadcast — stateless subscribers need
+                            // every message, even when the per-key value is unchanged.
+                            if let Err(_err) = out_tx.send((prev_data, data)) {
+                                // It is not an error if there are no subscribers.
                             }
                         }
                         None => {
