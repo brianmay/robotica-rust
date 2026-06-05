@@ -2,8 +2,7 @@ use data_encoding::BASE64;
 use opentelemetry::{global, trace::TracerProvider, InstrumentationScope, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{
-    ExporterBuildError, LogExporter, MetricExporter, SpanExporter, WithExportConfig,
-    WithTonicConfig,
+    ExporterBuildError, LogExporter, MetricExporter, SpanExporter, WithExportConfig, WithTonicConfig,
 };
 use opentelemetry_sdk::{
     logs::SdkLoggerProvider,
@@ -75,9 +74,6 @@ pub enum Error {
     #[error("Invalid metadata value: {0}")]
     InvalidMetadataValue(#[from] InvalidMetadataValue),
 
-    #[error("Trace error: {0}")]
-    Trace(#[from] opentelemetry_sdk::trace::TraceError),
-
     #[error("Exporter build error: {0}")]
     Log(#[from] ExporterBuildError),
 
@@ -92,12 +88,7 @@ fn init_tracer_provider(
 ) -> Result<SdkTracerProvider, Error> {
     let exporter = SpanExporter::builder()
         .with_tonic()
-        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
         .with_endpoint(remote.endpoint.clone())
-        // .with_interceptor(|request| {
-        //     println!("xxxxx {request:?}");
-        //     Ok(request)
-        // })
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
     SdkTracerProvider::builder()
@@ -113,7 +104,6 @@ fn init_metrics(
 ) -> Result<opentelemetry_sdk::metrics::SdkMeterProvider, Error> {
     let exporter = MetricExporter::builder()
         .with_tonic()
-        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
         .with_endpoint(remote.endpoint.clone())
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
@@ -130,7 +120,6 @@ fn init_metrics(
 fn init_logs(resource: &Resource, remote: &RemoteConfig) -> Result<SdkLoggerProvider, Error> {
     let exporter = LogExporter::builder()
         .with_tonic()
-        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
         .with_endpoint(remote.endpoint.clone())
         .with_metadata(otlp_metadata(remote)?)
         .build()?;
