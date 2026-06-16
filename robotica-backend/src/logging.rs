@@ -2,7 +2,8 @@ use data_encoding::BASE64;
 use opentelemetry::{global, trace::TracerProvider, InstrumentationScope, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{
-    ExporterBuildError, LogExporter, MetricExporter, SpanExporter, WithExportConfig, WithTonicConfig,
+    ExporterBuildError, LogExporter, MetricExporter, SpanExporter, WithExportConfig,
+    WithTonicConfig,
 };
 use opentelemetry_sdk::{
     logs::SdkLoggerProvider,
