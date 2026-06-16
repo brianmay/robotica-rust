@@ -27,7 +27,7 @@ tokio = { version = "1.46.1", features = ["full"] }
 futures = "0.3.31"
 clap = { version = "4.5.56", features = ["derive"] }
 chrono = "0.4.42"
-itertools = "0.14.0"
+itertools = "0.15.0"
 envconfig = "0.11.0"
 tokio-util = "0.7.16"
 tap = "1.0.1"
