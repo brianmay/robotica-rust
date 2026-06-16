@@ -2452,7 +2452,6 @@ dependencies = [
  "log",
  "scroll",
  "serde_json",
- "sqlx 0.8.6",
  "thiserror 2.0.18",
  "wkt",
 ]

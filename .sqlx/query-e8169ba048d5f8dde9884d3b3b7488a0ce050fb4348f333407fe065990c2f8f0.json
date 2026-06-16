@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: wkb::Decode<geo::Geometry<f64>>\" FROM zones WHERE id = $1",
+  "query": "SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as \"bounds!: PgGeoDecode<geo::Geometry<f64>>\" FROM zones WHERE ST_DWithin($1, bounds, $2)",
   "describe": {
     "columns": [
       {
@@ -30,7 +30,7 @@
       },
       {
         "ordinal": 5,
-        "name": "bounds!: wkb::Decode<geo::Geometry<f64>>",
+        "name": "bounds!: PgGeoDecode<geo::Geometry<f64>>",
         "type_info": {
           "Custom": {
             "name": "geography",
@@ -41,7 +41,13 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        {
+          "Custom": {
+            "name": "geography",
+            "kind": "Simple"
+          }
+        },
+        "Float8"
       ]
     },
     "nullable": [
@@ -53,5 +59,5 @@
       false
     ]
   },
-  "hash": "5b39a97ede87e531554b336714f92f5e7d66834c3962a51e89ab3341407dedc0"
+  "hash": "e8169ba048d5f8dde9884d3b3b7488a0ce050fb4348f333407fe065990c2f8f0"
 }

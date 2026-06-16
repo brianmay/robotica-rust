@@ -1,9 +1,10 @@
 //! Access zones table in the database
 use geo::Geometry;
-use geozero::wkb;
 use robotica_common::robotica::zones::Zone;
 use tap::Pipe;
 use tracing::error;
+
+use super::postgis::{PgGeoDecode, PgGeoEncode};
 
 /// List zones from the database.
 ///
@@ -30,7 +31,7 @@ use tracing::error;
 /// ```
 pub async fn list_zones(postgres: &sqlx::PgPool) -> Result<Vec<Zone>, sqlx::Error> {
     sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones"#
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: PgGeoDecode<geo::Geometry<f64>>" FROM zones"#
     )
     .fetch_all(postgres)
     .await?
@@ -96,7 +97,7 @@ pub async fn create_zone(
     zone: &robotica_common::robotica::zones::CreateZone,
 ) -> Result<i32, sqlx::Error> {
     let geometry = Geometry::Polygon(zone.bounds.clone());
-    let geo = wkb::Encode(geometry);
+    let geo = PgGeoEncode(geometry);
 
     sqlx::query!(
         r#"INSERT INTO zones (name, color, announce_on_enter, announce_on_exit, bounds) VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
@@ -212,7 +213,7 @@ pub async fn update_zone(
     zone: &robotica_common::robotica::zones::Zone,
 ) -> Result<(), sqlx::Error> {
     let geometry = Geometry::Polygon(zone.bounds.clone());
-    let geo = wkb::Encode(geometry);
+    let geo = PgGeoEncode(geometry);
 
     sqlx::query!(
         r#"UPDATE zones SET name = $1, color = $2, announce_on_enter = $3, announce_on_exit = $4, bounds = $5 WHERE id = $6"#,
@@ -266,7 +267,7 @@ pub async fn update_zone(
 /// ```
 pub async fn get_zone(postgres: &sqlx::PgPool, id: i32) -> Result<Option<Zone>, sqlx::Error> {
     let rc = sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones WHERE id = $1"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: PgGeoDecode<geo::Geometry<f64>>" FROM zones WHERE id = $1"#,
         id
     )
     .fetch_optional(postgres)
@@ -338,10 +339,10 @@ pub async fn search_zones(
     distance: f64,
 ) -> Result<Vec<Zone>, sqlx::Error> {
     let geometry = Geometry::Point(location);
-    let geo = wkb::Encode(geometry);
+    let geo = PgGeoEncode(geometry);
 
     sqlx::query!(
-        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>" FROM zones WHERE ST_DWithin($1, bounds, $2)"#,
+        r#"SELECT id, name, color, announce_on_enter, announce_on_exit, bounds as "bounds!: PgGeoDecode<geo::Geometry<f64>>" FROM zones WHERE ST_DWithin($1, bounds, $2)"#,
         geo as _,
         distance,
     )
@@ -384,11 +385,11 @@ pub async fn search_zones_with_distance(
     candidate_radius: f64,
 ) -> Result<Vec<(Zone, f64)>, sqlx::Error> {
     let geometry = Geometry::Point(location);
-    let geo = wkb::Encode(geometry);
+    let geo = PgGeoEncode(geometry);
 
     sqlx::query!(
         r#"SELECT id, name, color, announce_on_enter, announce_on_exit,
-                  bounds as "bounds!: wkb::Decode<geo::Geometry<f64>>",
+                  bounds as "bounds!: PgGeoDecode<geo::Geometry<f64>>",
                   ST_Distance($1::geography, bounds) AS "dist!: f64"
            FROM zones
            WHERE ST_DWithin($1::geography, bounds, $2)"#,
@@ -434,7 +435,7 @@ mod test {
             vec![],
         );
         let geometry = Geometry::Polygon(bounds);
-        let geo = wkb::Encode(geometry);
+        let geo = PgGeoEncode(geometry);
 
         sqlx::query("INSERT INTO zones (name,color,announce_on_enter,announce_on_exit, bounds) VALUES ('test', 'red', false, false, $1);",)
             .bind(geo)
