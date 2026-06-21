@@ -23,7 +23,8 @@
     "webpack-manifest-plugin": "^6.0.0"
   },
   "overrides": {
-    "uuid": ">=11.1.1"
+    "uuid": ">=11.1.1",
+    "http-proxy-middleware": ">=3.0.6"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
