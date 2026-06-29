@@ -119,7 +119,7 @@ impl Plan {
                 // Calculate the remaining time for this period.
                 let duration = end_time - now;
 
-                p.per_kwh * self.kw * duration.num_seconds() as f32 / 3600.0
+                p.effective_per_kwh() * self.kw * duration.num_seconds() as f32 / 3600.0
             };
 
             total += new_cost;

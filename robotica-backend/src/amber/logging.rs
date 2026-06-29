@@ -66,7 +66,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     for data in &prices.list {
         let reading = PriceReading {
             duration: data.duration,
-            per_kwh: data.per_kwh,
+            per_kwh: data.effective_per_kwh(),
             renewables: data.renewables,
             time: data.start_time,
             interval_type: data.interval_type,
@@ -86,7 +86,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
 
     if let Some(current) = prices.current(&now) {
         let reading = PriceSummaryReading {
-            per_kwh: current.per_kwh,
+            per_kwh: current.effective_per_kwh(),
             time: Utc::now(),
         };
 

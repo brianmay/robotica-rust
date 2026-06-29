@@ -132,6 +132,17 @@ impl PriceResponse {
     pub fn is_current(&self, dt: DateTime<Utc>) -> bool {
         self.start_time <= dt && self.end_time > dt
     }
+
+    /// Get the price per kWh to use for calculations.
+    ///
+    /// Prefers Amber's predicted advanced price when available, falling back to
+    /// the reported `per_kwh` price otherwise.
+    pub const fn effective_per_kwh(&self) -> f32 {
+        match &self.advanced_price {
+            Some(advanced_price) => advanced_price.predicted,
+            None => self.per_kwh,
+        }
+    }
 }
 
 /// Amber usage response

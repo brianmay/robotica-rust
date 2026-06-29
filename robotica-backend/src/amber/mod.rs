@@ -71,9 +71,9 @@ impl Prices {
         let prefix_pos = if pos > 0 { pos - 1 } else { 0 };
         let postfix_pos = if pos + 1 < prices.len() { pos + 1 } else { pos };
 
-        let prefix = prices[prefix_pos].per_kwh;
-        let current = prices[pos].per_kwh;
-        let postfix = prices[postfix_pos].per_kwh;
+        let prefix = prices[prefix_pos].effective_per_kwh();
+        let current = prices[pos].effective_per_kwh();
+        let postfix = prices[postfix_pos].effective_per_kwh();
 
         let values = [prefix, current, postfix];
         let weights = [25u8, 50u8, 25u8];

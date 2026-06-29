@@ -34,7 +34,9 @@ impl Context {
         let hour = i32::try_from(local.hour()).unwrap_or(-1);
         let date = local.date_naive();
 
-        let current_price = prices.current(&now).map_or(100.0, |f| f.per_kwh);
+        let current_price = prices
+            .current(&now)
+            .map_or(100.0, super::api::PriceResponse::effective_per_kwh);
         let weighted_price = prices.get_weighted_price(id, now).unwrap_or(100.0);
 
         Self {
