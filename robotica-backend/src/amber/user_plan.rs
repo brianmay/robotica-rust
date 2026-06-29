@@ -375,7 +375,9 @@ mod tests {
         use chrono::FixedOffset;
         use float_cmp::assert_approx_eq;
 
-        use crate::amber::api::{ChannelType, PeriodType, PriceResponse, TariffInformation};
+        use crate::amber::api::{
+            ChannelType, Descriptor, PeriodType, PriceResponse, TariffInformation,
+        };
 
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
         let id = Id::new("test");
@@ -393,8 +395,11 @@ mod tests {
                 renewables: 0.0,
                 duration: 0,
                 channel_type: ChannelType::General,
+                nem_time: start_time,
+                descriptor: Descriptor::Neutral,
                 estimate: Some(false),
                 spike_status: "None".to_string(),
+                advanced_price: None,
                 tariff_information: TariffInformation {
                     period: PeriodType::Peak,
                     season: None,

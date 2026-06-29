@@ -82,6 +82,29 @@ pub struct TariffInformation {
     pub demand_window: Option<bool>,
 }
 
+/// Amber advanced (forecast) price, present on current and forecast intervals.
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvancedPrice {
+    pub low: f32,
+    pub predicted: f32,
+    pub high: f32,
+}
+
+/// Amber price descriptor, a human-friendly bucket for the interval price.
+#[derive(Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Descriptor {
+    Negative,
+    ExtremelyLow,
+    VeryLow,
+    Low,
+    Neutral,
+    High,
+    Spike,
+}
+
 /// Amber price response
 #[allow(dead_code)]
 #[derive(Deserialize, Debug, Clone)]
@@ -95,11 +118,14 @@ pub struct PriceResponse {
     pub date: NaiveDate,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
+    pub nem_time: DateTime<Utc>,
     pub renewables: f32,
     pub channel_type: ChannelType,
     pub tariff_information: TariffInformation,
     pub spike_status: String,
+    pub descriptor: Descriptor,
     pub estimate: Option<bool>,
+    pub advanced_price: Option<AdvancedPrice>,
 }
 
 impl PriceResponse {
@@ -121,10 +147,12 @@ pub struct UsageResponse {
     pub date: NaiveDate,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
+    pub nem_time: DateTime<Utc>,
     pub renewables: f32,
     pub channel_type: ChannelType,
     pub tariff_information: TariffInformation,
     pub spike_status: String,
+    pub descriptor: Descriptor,
     pub channel_identifier: String,
     pub kwh: f32,
     pub quality: Quality,
@@ -199,14 +227,17 @@ mod tests {
             date: start_time.with_timezone(&Utc).date_naive(),
             start_time,
             end_time,
+            nem_time: start_time,
             per_kwh: 0.0,
             spot_per_kwh: 0.0,
             interval_type,
             renewables: 0.0,
             duration: 0,
             channel_type: ChannelType::General,
+            descriptor: Descriptor::Neutral,
             estimate: Some(false),
             spike_status: "None".to_string(),
+            advanced_price: None,
             tariff_information: TariffInformation {
                 period: PeriodType::Peak,
                 season: None,

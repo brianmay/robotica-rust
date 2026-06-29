@@ -296,7 +296,7 @@ mod tests {
     #![allow(clippy::bool_assert_comparison)]
 
     use crate::amber::api::{
-        ChannelType, IntervalType, PeriodType, PriceResponse, TariffInformation,
+        ChannelType, Descriptor, IntervalType, PeriodType, PriceResponse, TariffInformation,
     };
     use chrono::FixedOffset;
     use float_cmp::assert_approx_eq;
@@ -424,8 +424,11 @@ mod tests {
                 renewables: 0.0,
                 duration: 0,
                 channel_type: ChannelType::General,
+                nem_time: start_time,
+                descriptor: Descriptor::Neutral,
                 estimate: Some(false),
                 spike_status: "None".to_string(),
+                advanced_price: None,
                 tariff_information: TariffInformation {
                     period: PeriodType::Peak,
                     season: None,
@@ -623,8 +626,11 @@ mod tests {
                 renewables: 0.0,
                 duration: 0,
                 channel_type: ChannelType::General,
+                nem_time: start_time,
+                descriptor: Descriptor::Neutral,
                 estimate: Some(false),
                 spike_status: "None".to_string(),
+                advanced_price: None,
                 tariff_information: tariff_information.clone(),
             }
         };

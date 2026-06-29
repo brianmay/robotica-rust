@@ -184,8 +184,11 @@ mod tests {
             renewables: 0.0,
             duration: 0,
             channel_type: api::ChannelType::General,
+            nem_time: start_time,
+            descriptor: api::Descriptor::Neutral,
             estimate: Some(false),
             spike_status: "None".to_string(),
+            advanced_price: None,
             tariff_information: api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
