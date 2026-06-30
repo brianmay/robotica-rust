@@ -47,3 +47,9 @@ ecosystem = "crates.io"
 ignore = true
 reason = "Compile-time proc macro only — no runtime impact (transitive via validator_derive → openid)"
 
+[[PackageOverrides]]
+name = "ttf-parser"
+ecosystem = "crates.io"
+ignore = true
+reason = "Unmaintained (RUSTSEC-2026-0192); transitive via slint font stack (fontdb/sctk-adwaita). No known vulns; only processes local font files in the embedded GUI binary. Fix requires upstream Slint migration to skrifa."
+
