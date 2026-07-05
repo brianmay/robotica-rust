@@ -19,7 +19,7 @@
     "style-loader": "^4.0.0",
     "webpack": "^5.107.0",
     "webpack-cli": "^7.0.0",
-    "webpack-dev-server": "^5.2.2",
+    "webpack-dev-server": "^6.0.0",
     "webpack-manifest-plugin": "^6.0.0"
   },
   "overrides": {
