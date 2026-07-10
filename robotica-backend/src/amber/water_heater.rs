@@ -11,7 +11,7 @@ use robotica_common::{
     mqtt::Json,
     robotica::entities::Id,
 };
-use robotica_macro::time_delta_constant;
+use robotica_macro::{naive_time_constant, time_delta_constant};
 use robotica_tokio::{
     pipes::{
         stateful::{create_pipe, Receiver, Sender},
@@ -153,9 +153,10 @@ impl DayState {
     }
 }
 
+const END_TIME: NaiveTime = naive_time_constant!(16:00:0);
+
 fn get_cheap_day<T: TimeZone>(now: DateTime<Utc>, local: &T) -> (DateTime<Utc>, DateTime<Utc>) {
-    let end_time: NaiveTime = NaiveTime::from_hms_opt(15, 0, 0).unwrap_or_default();
-    let (start_day, end_day) = super::private::get_day(now, end_time, local);
+    let (start_day, end_day) = super::private::get_day(now, END_TIME, local);
     (start_day, end_day)
 }
 
@@ -319,8 +320,8 @@ mod tests {
         assert_eq!(
             ds,
             DayState {
-                start: dt("2019-12-31T04:00:00Z"),
-                end: dt("2020-01-01T04:00:00Z"),
+                start: dt("2019-12-31T05:00:00Z"),
+                end: dt("2020-01-01T05:00:00Z"),
                 cheap_power_for_day: TimeDelta::minutes(0),
                 last_cheap_update: now,
                 is_on: false,
@@ -683,7 +684,7 @@ mod tests {
         let timezone = FixedOffset::east_opt(60 * 60 * 11).unwrap();
         let now = dt("2020-01-02T00:00:00Z");
         let (start, stop) = get_cheap_day(now, &timezone);
-        assert_eq!(start, dt("2020-01-01T04:00:00Z"));
-        assert_eq!(stop, dt("2020-01-02T04:00:00Z"));
+        assert_eq!(start, dt("2020-01-01T05:00:00Z"));
+        assert_eq!(stop, dt("2020-01-02T05:00:00Z"));
     }
 }
