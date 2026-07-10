@@ -7,6 +7,7 @@ pub mod forms;
 pub mod locations;
 pub mod nav_bar;
 pub mod occupancy_view;
+pub mod prices;
 pub mod require_connection;
 pub mod rooms;
 pub mod schedule;

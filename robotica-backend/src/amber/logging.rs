@@ -40,7 +40,15 @@ struct PriceReading {
     per_kwh: f32,
     renewables: f32,
     time: chrono::DateTime<Utc>,
-    interval_type: api::IntervalType,
+    interval_type: String,
+}
+
+const fn interval_type_name(interval_type: api::IntervalType) -> &'static str {
+    match interval_type {
+        api::IntervalType::ActualInterval => "actual",
+        api::IntervalType::ForecastInterval => "forecast",
+        api::IntervalType::CurrentInterval => "current",
+    }
 }
 
 #[derive(InfluxDbWriteable)]
@@ -69,7 +77,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
             per_kwh: data.effective_per_kwh(),
             renewables: data.renewables,
             time: data.start_time,
-            interval_type: data.interval_type,
+            interval_type: interval_type_name(data.interval_type).to_string(),
         };
 
         match reading.try_into_query("amber/price") {

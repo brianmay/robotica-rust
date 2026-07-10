@@ -36,6 +36,8 @@ enum Route {
     Car { id: String },
     #[at("/water_heater/:id")]
     WaterHeater { id: String },
+    #[at("/prices")]
+    Prices,
     #[at("/schedule")]
     Schedule,
     #[at("/tags")]

@@ -284,6 +284,12 @@ async fn setup_pipes(
         amber::logging::log_prices(prices.clone(), &config.influxdb);
         amber::logging::log_usage(usage, &config.influxdb);
 
+        prices.clone().map(|(_, prices)| prices.list.clone()).send_to_mqtt_json(
+            &state.mqtt,
+            Id::new("amber_account").get_state_topic("prices"),
+            &SendOptions::new(),
+        );
+
         for water_heater in config.water_heaters {
             monitor_water_heater(&mut state, water_heater, &prices, message_sink.clone());
         }

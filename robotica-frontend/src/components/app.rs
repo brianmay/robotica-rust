@@ -12,6 +12,7 @@ use crate::components::car::CarComponent;
 use crate::components::locations::zones::ZonesView;
 use crate::components::nav_bar::NavBar;
 use crate::components::occupancy_view::OccupancyViewComponent;
+use crate::components::prices::PricesComponent;
 use crate::components::rooms::Room;
 use crate::components::schedule_view::ScheduleView;
 use crate::components::tags_view::TagsView;
@@ -44,6 +45,7 @@ fn switch(selected_route: Route) -> Html {
         Route::Room { id } => html! { <Room id={id}/> },
         Route::Car { id } => html! { <CarComponent id={id}/> },
         Route::WaterHeater { id } => html! { <WaterHeaterComponent id={id}/> },
+        Route::Prices => html! { <PricesComponent/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },
         Route::Locations => return html! { <><NavBar/><ZonesView/></> },

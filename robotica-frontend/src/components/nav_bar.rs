@@ -166,6 +166,9 @@ pub fn nav_bar() -> Html {
                             </ul>
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
+                            { nav_link(Route::Prices, "Prices") }
+                        </li>
+                        <li class="nav-item" onclick={close_menu.clone()}>
                             { nav_link(Route::Schedule, "Schedule") }
                         </li>
                         <li class="nav-item" onclick={close_menu.clone()}>
