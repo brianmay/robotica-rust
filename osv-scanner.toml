@@ -54,6 +54,13 @@ ignore = true
 reason = "Unmaintained (RUSTSEC-2026-0192); transitive via slint font stack (fontdb/sctk-adwaita). No known vulns; only processes local font files in the embedded GUI binary. Fix requires upstream Slint migration to skrifa."
 
 [[PackageOverrides]]
+name = "rustybuzz"
+ecosystem = "crates.io"
+version = "0.20.1"
+ignore = true
+reason = "Unmaintained (RUSTSEC-2026-0206); transitive via Slint (resvg/usvg) text shaping stack. Embedded GUI only; processes local UI/font assets, not untrusted network payloads. No patched version available yet."
+
+[[PackageOverrides]]
 name = "quick-xml"
 ecosystem = "crates.io"
 version = "0.38.4"
