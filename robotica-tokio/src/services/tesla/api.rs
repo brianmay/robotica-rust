@@ -402,6 +402,30 @@ pub struct Vehicle {
     // backseat_token_updated_at: Option<String>,
 }
 
+/// A product returned by `/api/1/products`, which is a heterogeneous list of
+/// vehicles and energy devices (Powerwall, wall connector, solar). The
+/// `device_type` field discriminates between them.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "device_type", rename_all = "snake_case")]
+pub enum Product {
+    /// A Tesla vehicle.
+    Vehicle(Vehicle),
+    /// An energy product (Powerwall, wall connector, solar, etc.).
+    Energy(EnergyProduct),
+}
+
+/// An energy product returned by `/api/1/products`.
+///
+/// Only the discriminator-relevant fields are captured; the rest of the
+/// payload is ignored by serde.
+#[derive(Debug, Deserialize)]
+pub struct EnergyProduct {
+    /// Energy site identifier.
+    pub energy_site_id: u64,
+    /// Resource type, e.g. `wall_connector`, `solar`, `battery`.
+    pub resource_type: String,
+}
+
 /// Is the car currently charging?
 #[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq)]
 pub enum ChargingStateEnum {
@@ -517,7 +541,7 @@ struct OuterResponse<T> {
     pub response: T,
 }
 
-type OuterVehiclesResponse = OuterResponse<Vec<Vehicle>>;
+type OuterVehiclesResponse = OuterResponse<Vec<Product>>;
 type OuterChargeState = OuterResponse<ChargeState>;
 type OuterWakeUpResponse = OuterResponse<WakeUpResponse>;
 type OuterGenericResponse = OuterResponse<GenericResponse>;
@@ -760,7 +784,14 @@ impl Token {
                 .pipe(|result| {
                     increment_other_count(url, OtherOperation::GetProducts, result, meters)
                 })?;
-        Ok(response.response)
+        Ok(response
+            .response
+            .into_iter()
+            .filter_map(|product| match product {
+                Product::Vehicle(vehicle) => Some(vehicle),
+                Product::Energy(_) => None,
+            })
+            .collect())
     }
 
     /// Wait for the car to wake up
