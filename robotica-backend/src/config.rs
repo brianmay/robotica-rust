@@ -240,8 +240,16 @@ pub struct PresenceTrackerConfig {
 #[derive(Debug, Deserialize)]
 pub struct OccupancySensorConfig {
     pub room: String,
+    #[serde(default = "OccupancySensorConfig::default_sensor_id")]
+    pub sensor_id: String,
     #[serde(flatten)]
     pub config: occupancy::Config,
+}
+
+impl OccupancySensorConfig {
+    fn default_sensor_id() -> String {
+        "default".to_string()
+    }
 }
 
 #[derive(Debug, Deserialize)]

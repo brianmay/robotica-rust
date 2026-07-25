@@ -59,6 +59,13 @@ fn extract_id_from_topic(topic: &str, suffix: &str) -> Option<String> {
     }
 }
 
+#[must_use]
+fn extract_room_from_id(combined_id: &str) -> String {
+    combined_id
+        .split_once('/')
+        .map_or_else(|| combined_id.to_string(), |(room, _)| room.to_string())
+}
+
 fn subscribe_presence(ctx: &Context<OccupancyViewComponent>) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
@@ -80,7 +87,7 @@ fn subscribe_occupancy(ctx: &Context<OccupancyViewComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = "robotica/state/+/occupancy".to_string();
+    let topic = "robotica/state/+/+/occupancy".to_string();
     let callback = ctx.link().callback(Msg::Occupancy);
     let mut wss = wss;
     ctx.link().send_future(async move {
@@ -179,7 +186,7 @@ impl Component for OccupancyViewComponent {
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         let mut all_rooms: Vec<String> = self.room_presences.keys().cloned().collect();
-        all_rooms.extend(self.occupancies.keys().cloned());
+        all_rooms.extend(self.occupancies.keys().map(|id| extract_room_from_id(id)));
         all_rooms.sort();
         all_rooms.dedup();
 
@@ -202,7 +209,8 @@ impl Component for OccupancyViewComponent {
                                 {
                                     all_rooms.iter().map(|room| {
                                         let presences = self.room_presences.get(room);
-                                        let occupancy = self.occupancies.get(room);
+                                        let occupancy_key = format!("{room}/default");
+                                        let occupancy = self.occupancies.get(&occupancy_key);
                                         html! {
                                             <tr>
                                                 <td>{ room }</td>

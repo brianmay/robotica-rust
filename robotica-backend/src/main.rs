@@ -225,9 +225,10 @@ async fn setup_pipes(
     let occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>> = config
         .occupancy_sensors
         .into_iter()
-        .map(|room| {
-            let rx = occupancy::subscribe(&room.config, &mut state.subscriptions);
-            (room.room, rx)
+        .map(|sensor| {
+            let rx = occupancy::subscribe(&sensor.config, &mut state.subscriptions);
+            let occupancy_id = format!("{}/{}", sensor.room, sensor.sensor_id);
+            (occupancy_id, rx)
         })
         .collect();
 
@@ -741,7 +742,9 @@ impl SharedAutoLight {
 
         let occupied = self
             .occupancy_sensors
-            .get(room)
+            // TODO: only the "default" sensor is consumed here for now; the
+            // OR-merge across all sensors in a room happens in a later refactor.
+            .get(&format!("{room}/default"))
             .cloned()
             .unwrap_or_else(|| {
                 stateful::static_entity(
