@@ -5,6 +5,7 @@ use robotica_common::mqtt::Json;
 use robotica_common::mqtt::QoS;
 use robotica_common::mqtt::Retain;
 use robotica_common::robotica::commands::Command;
+use robotica_common::robotica::entities::Id;
 // ...existing code...
 use robotica_common::robotica::message::Message;
 use robotica_tokio::devices::presence_tracker;
@@ -21,11 +22,7 @@ use crate::config::MessageRouteConfig;
 pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
     mqtt: MqttTx,
     message_routes: Vec<MessageRouteConfig>,
-    presence_trackers: &HashMap<
-        String,
-        stateful::Receiver<presence_tracker::PresenceTrackerValue>,
-        S,
-    >,
+    presence_trackers: &HashMap<Id, stateful::Receiver<presence_tracker::PresenceTrackerValue>, S>,
 ) -> stateless::Sender<Message> {
     let presence_trackers_for_routes = Arc::new(
         message_routes

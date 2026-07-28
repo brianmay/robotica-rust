@@ -1,3 +1,4 @@
+use robotica_common::robotica::entities::AnyId;
 use std::sync::Arc;
 
 use crate::{
@@ -21,7 +22,7 @@ pub enum Msg {
 
 #[derive(Eq, PartialEq, Properties, Clone)]
 pub struct Props {
-    pub id: String,
+    pub id: Id,
 }
 
 pub struct WaterHeaterComponent {
@@ -60,7 +61,7 @@ impl Component for WaterHeaterComponent {
             .unwrap();
 
         let props = ctx.props();
-        let id = Id::new(&props.id);
+        let id = props.id.clone();
 
         subscribe(ctx, &id);
         Self {
@@ -98,7 +99,7 @@ impl Component for WaterHeaterComponent {
     #[allow(clippy::too_many_lines)]
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
-        let id = Id::new(&props.id);
+        let id = props.id.clone();
 
         let water_heater = if let Some(config) = &self.config {
             config

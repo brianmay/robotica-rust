@@ -12,7 +12,6 @@ pub mod owntracks;
 
 pub mod config;
 pub mod controllers;
-#[cfg(feature = "chrono")]
 pub mod location_source;
 pub mod mqtt;
 pub mod robotica;
@@ -30,17 +29,12 @@ pub mod protobuf;
 #[cfg(feature = "websockets")]
 mod protos;
 
-#[cfg(feature = "chrono")]
 pub mod datetime;
 
-#[cfg(feature = "chrono")]
 pub mod scheduler;
 
-#[cfg(feature = "chrono")]
 pub use chrono::NaiveTime;
 
-#[cfg(feature = "chrono")]
 pub use chrono::TimeDelta;
 
-#[cfg(feature = "chrono")]
 pub use std::time::Duration;

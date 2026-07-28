@@ -6,9 +6,11 @@ use crate::{
 use envconfig::Envconfig;
 use robotica_common::{
     mqtt::Json,
-    robotica::entities::Id,
-    robotica::lights::{PowerColor, SceneName},
-    robotica::message::Audience,
+    robotica::{
+        entities::{Id, IdWithRoom},
+        lights::{PowerColor, SceneName},
+        message::Audience,
+    },
 };
 use robotica_tokio::{
     devices::{lifx::LifxId, occupancy, presence_tracker},
@@ -149,7 +151,7 @@ impl LightSceneConfig {
 #[derive(Debug, Deserialize)]
 pub struct LightConfig {
     pub device: LightDeviceConfig,
-    pub id: Id,
+    pub id: IdWithRoom,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,
@@ -161,7 +163,7 @@ pub struct LightConfig {
 #[derive(Debug, Deserialize)]
 pub struct StripConfig {
     pub device: LightDeviceConfig,
-    pub id: Id,
+    pub id: IdWithRoom,
     pub number_of_lights: usize,
     pub splits: Vec<SplitLightConfig>,
     pub room: String,
@@ -180,7 +182,7 @@ pub enum LightDeviceConfig {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
 pub struct SplitLightConfig {
-    pub id: Id,
+    pub id: IdWithRoom,
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,
@@ -206,7 +208,7 @@ pub struct WaterHeaterConfig {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize)]
 pub struct HdmiMatrixConfig {
-    pub id: Id,
+    pub id: IdWithRoom,
     pub addr: String,
 }
 
@@ -239,17 +241,9 @@ pub struct PresenceTrackerConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct OccupancySensorConfig {
-    pub room: String,
-    #[serde(default = "OccupancySensorConfig::default_sensor_id")]
-    pub sensor_id: String,
+    pub id: IdWithRoom,
     #[serde(flatten)]
     pub config: occupancy::Config,
-}
-
-impl OccupancySensorConfig {
-    fn default_sensor_id() -> String {
-        "default".to_string()
-    }
 }
 
 #[derive(Debug, Deserialize)]

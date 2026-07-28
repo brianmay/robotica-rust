@@ -373,7 +373,7 @@ mod tests {
         #[case] expected_time_left: TimeDelta,
     ) {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let mut ds = DayState {
             start: dt("2019-12-31T04:00:00Z"),
@@ -410,7 +410,7 @@ mod tests {
         #[case] expected_cost: f32,
     ) {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&timezone).date_naive();
@@ -605,7 +605,7 @@ mod tests {
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let tariff_information = TariffInformation {
             period: PeriodType::Peak,

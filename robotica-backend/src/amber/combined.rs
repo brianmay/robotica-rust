@@ -298,7 +298,7 @@ mod tests {
         .pipe(rules::RuleSet::new);
 
         let plan = MaybeUserPlan::new_test(10.0, now, now + TimeDelta::hours(6), expected_plan);
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let state = get_request(&id, &plan, &rules, &prices, false, None, now, &timezone);
 

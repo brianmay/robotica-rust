@@ -4,13 +4,13 @@ use tracing::debug;
 
 use robotica_common::mqtt::{Json, MqttMessage, QoS, Retain};
 use robotica_common::robotica::commands;
-use robotica_common::robotica::entities::Id;
+use robotica_common::robotica::entities::{AnyId, IdWithRoom};
 use robotica_tokio::devices::hdmi_matrix::{Command, Options};
 use robotica_tokio::spawn;
 
 use crate::InitState;
 
-pub fn run(state: &mut InitState, id: &Id, addr: &str) {
+pub fn run(state: &mut InitState, id: &IdWithRoom, addr: &str) {
     let id = id.clone();
     let topic = id.get_command_topic("");
 
@@ -18,7 +18,7 @@ pub fn run(state: &mut InitState, id: &Id, addr: &str) {
         .subscriptions
         .subscribe_into_stateless::<Json<commands::Command>>(&topic);
 
-    let name = format!("{}_hdmi", id.as_str().replace('/', "_"));
+    let name = format!("{}_hdmi", id.to_id_string());
     let (tx, rx) = stateless::create_pipe(&name);
 
     spawn(async move {

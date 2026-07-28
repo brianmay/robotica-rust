@@ -439,7 +439,7 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         debug!("{start_time:?} {duration:?} {now:?} {expected:?}");
         let plan = Plan::new(20.0, start_time, start_time + duration);
@@ -473,7 +473,7 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         debug!("{start_time:?} {end_time:?} {now:?} {expected:?}");
         let plan = Plan::new(20.0, start_time, end_time);
@@ -546,7 +546,7 @@ mod tests {
         #[case] expected_end_time: chrono::DateTime<Utc>,
         #[case] expected_price: f32,
     ) {
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let prices = Prices {
             list: pr_list_descending(50.0),
@@ -640,7 +640,7 @@ mod tests {
             list: pr_list_constant(50.0),
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let (plan, cost) = get_cheapest(
             &id,
@@ -676,7 +676,7 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let result = get_cheapest(
             &id,
@@ -712,7 +712,7 @@ mod tests {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let (plan, cost) = get_cheapest(
             &id,

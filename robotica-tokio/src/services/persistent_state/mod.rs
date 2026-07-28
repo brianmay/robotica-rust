@@ -4,7 +4,7 @@ use std::{io::Write, marker::PhantomData, path::PathBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
-use robotica_common::robotica::entities::Id;
+use robotica_common::robotica::entities::AnyId;
 
 /// Configuration for `PersistentState`.
 #[derive(Deserialize)]
@@ -50,11 +50,11 @@ impl PersistentStateDatabase {
 
     /// Get a `PersistentState` instance for a given name.
     #[must_use]
-    pub fn for_name<T>(&self, id: &Id, name: &str) -> PersistentStateRow<T>
+    pub fn for_name<T>(&self, id: &impl AnyId, name: &str) -> PersistentStateRow<T>
     where
         T: Serialize + DeserializeOwned,
     {
-        let id = id.as_str().replace('/', "_");
+        let id = id.to_components().join("_");
         let name = name.replace('/', "_");
         let name = format!("{name}.json");
         let path = self.path.join(id).join(name);

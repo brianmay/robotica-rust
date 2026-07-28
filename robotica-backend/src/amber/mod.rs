@@ -316,7 +316,7 @@ mod tests {
             list: vec![],
             interval: INTERVAL,
         };
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let result = prices.get_next_period(&id, now).unwrap();
         assert_eq!(result, expected);
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn test_get_weighted_price() {
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let pr = |start_time: DateTime<Utc>,
                   end_time: DateTime<Utc>,

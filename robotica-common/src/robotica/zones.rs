@@ -168,7 +168,6 @@ pub struct LocationMessage {
     pub longitude: f64,
 
     /// Timestamp of the location fix.
-    #[cfg(feature = "chrono")]
     pub timestamp: chrono::DateTime<chrono::Utc>,
 
     /// The zones the object is currently inside.

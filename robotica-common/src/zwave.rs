@@ -1,6 +1,5 @@
 //! Structures for Z-Wave devices over MQTT
 
-#[cfg(feature = "chrono")]
 use chrono::{DateTime, Utc};
 
 /// Generic Z-Wave Data
@@ -15,7 +14,6 @@ pub struct Data<T> {
 
 impl<T> Data<T> {
     /// Get the datetime of the reading.
-    #[cfg(feature = "chrono")]
     pub const fn get_datetime(&self) -> Option<DateTime<Utc>> {
         DateTime::from_timestamp_millis(self.time)
     }
@@ -51,7 +49,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     #[test]
-    #[cfg(feature = "chrono")]
     fn test_zwave() {
         let data = r#"{
             "time": 1684470932558,

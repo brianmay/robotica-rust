@@ -22,7 +22,7 @@ pub use robotica_common::robotica::occupancy::PresenceTrackerValue;
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// A unique identifier for this Presence Tracker.
-    pub id: String,
+    pub id: Id,
 }
 
 #[derive(Deserialize)]
@@ -158,7 +158,7 @@ fn calculate_away_instant(away_timeout: chrono::TimeDelta, updated: DateTime<Utc
 #[must_use]
 pub fn is_any_presence_in_room<S: 'static + ::std::hash::BuildHasher + Send>(
     room: &str,
-    presences: HashMap<String, stateful::Receiver<PresenceTrackerValue>, S>,
+    presences: HashMap<Id, stateful::Receiver<PresenceTrackerValue>, S>,
 ) -> stateful::Receiver<bool> {
     if presences.is_empty() {
         return stateful::static_pipe(false, format!("IsAnyPresenceInRoom_{room}"));
@@ -193,10 +193,9 @@ pub fn is_any_presence_in_room<S: 'static + ::std::hash::BuildHasher + Send>(
 #[must_use]
 pub fn get_room_for_id<S: 'static + ::std::hash::BuildHasher + Send>(
     id: &Id,
-    presences: &HashMap<String, stateful::Receiver<PresenceTrackerValue>, S>,
+    presences: &HashMap<Id, stateful::Receiver<PresenceTrackerValue>, S>,
 ) -> stateful::Receiver<Option<String>> {
-    let id = id.to_string();
-    let tracker = presences.get(&id).cloned();
+    let tracker = presences.get(id).cloned();
 
     tracker.map_or_else(
         || {

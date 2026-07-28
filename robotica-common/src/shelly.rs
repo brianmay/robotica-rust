@@ -1,10 +1,8 @@
 //! Shelly EM types
 
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde::Serialize;
-
-#[cfg(feature = "chrono")]
-use chrono::{DateTime, Utc};
 
 /// MQTT message sent by the Shelly EM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +57,6 @@ pub enum Params {
 
 impl Params {
     /// Get the datetime of the reading.
-    #[cfg(feature = "chrono")]
     #[must_use]
     pub fn get_datetime(&self) -> Option<DateTime<Utc>> {
         let ts = match self {
@@ -214,7 +211,6 @@ mod tests {
     use approx::assert_abs_diff_eq;
 
     #[test]
-    #[cfg(feature = "chrono")]
     fn test_shelly_em() {
         let data = r#"{
             "src": "emeter/0",

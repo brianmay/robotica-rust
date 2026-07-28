@@ -110,7 +110,7 @@ fn start_services(config: LoadedConfig) -> Result<(), anyhow::Error> {
     let (tx_screen_command, rx_screen_command) = mpsc::channel(1);
 
     audio::run(
-        Id::new("audio"),
+        Id::new("audio")?,
         tx_screen_command.clone(),
         &mut subscriptions,
         mqtt.clone(),

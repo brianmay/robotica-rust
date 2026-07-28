@@ -380,7 +380,7 @@ mod tests {
         };
 
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
-        let id = Id::new("test");
+        let id = Id::new("test").unwrap();
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&timezone).date_naive();

@@ -1079,9 +1079,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_token() {
         let meters = Meters::new();
-        let id = Id::new("tesla/0");
+        let id = Id::new("tesla_account").unwrap();
 
-        let state_path = PathBuf::from("state");
+        let state_path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../state"));
         let config = persistent_state::Config { state_path };
         let psd = PersistentStateDatabase::new(&config).unwrap();
         let psr = psd.for_name(&id, "tesla_token");

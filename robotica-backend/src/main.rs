@@ -32,7 +32,7 @@ use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::owntracks;
 use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
-use robotica_common::robotica::entities::Id;
+use robotica_common::robotica::entities::{AnyId, Id, IdWithRoom};
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::tasks::{Payload, Task};
@@ -191,7 +191,7 @@ async fn setup_pipes(
     postgres: sqlx::PgPool,
 ) {
     // espresence sensors
-    let presence_trackers: HashMap<String, stateful::Receiver<PresenceTrackerValue>> = config
+    let presence_trackers: HashMap<Id, stateful::Receiver<PresenceTrackerValue>> = config
         .presence_trackers
         .into_iter()
         .map(|tracker| {
@@ -222,13 +222,12 @@ async fn setup_pipes(
     // });
 
     // motion sensors, etc.
-    let occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>> = config
+    let occupancy_sensors: HashMap<IdWithRoom, stateful::Receiver<OccupiedState>> = config
         .occupancy_sensors
         .into_iter()
         .map(|sensor| {
             let rx = occupancy::subscribe(&sensor.config, &mut state.subscriptions);
-            let occupancy_id = format!("{}/{}", sensor.room, sensor.sensor_id);
-            (occupancy_id, rx)
+            (sensor.id, rx)
         })
         .collect();
 
@@ -238,7 +237,7 @@ async fn setup_pipes(
         occupancy.clone().for_each(move |(_, value)| {
             debug!("Occupancy sensor {occupancy_id} value: {value:?}");
             mqtt.try_serialize_send(
-                format!("robotica/state/{occupancy_id}/occupancy"),
+                occupancy_id.get_state_topic("occupancy"),
                 &Json(value),
                 Retain::Retain,
                 QoS::AtLeastOnce,
@@ -278,18 +277,23 @@ async fn setup_pipes(
     }
 
     if let Some(amber_config) = config.amber {
-        let (prices, usage) =
-            amber::run(&Id::new("amber_account"), amber_config).unwrap_or_else(|e| {
-                panic!("Error running amber: {e}");
-            });
+        let amber_account_id = Id::new("amber_account")
+            .unwrap_or_else(|e| panic!("amber_account_id must be a valid Id: {e}"));
+
+        let (prices, usage) = amber::run(&amber_account_id, amber_config).unwrap_or_else(|e| {
+            panic!("Error running amber: {e}");
+        });
         amber::logging::log_prices(prices.clone(), &config.influxdb);
         amber::logging::log_usage(usage, &config.influxdb);
 
-        prices.clone().map(|(_, prices)| prices.list.clone()).send_to_mqtt_json(
-            &state.mqtt,
-            Id::new("amber_account").get_state_topic("prices"),
-            &SendOptions::new(),
-        );
+        prices
+            .clone()
+            .map(|(_, prices)| prices.list.clone())
+            .send_to_mqtt_json(
+                &state.mqtt,
+                amber_account_id.get_state_topic("prices"),
+                &SendOptions::new(),
+            );
 
         for water_heater in config.water_heaters {
             monitor_water_heater(&mut state, water_heater, &prices, message_sink.clone());
@@ -515,7 +519,8 @@ fn monitor_cars(
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
     message_sink: &stateless::Sender<Message>,
 ) {
-    let id = Id::new("tesla_account");
+    let id = Id::new("tesla_account")
+        .unwrap_or_else(|e| panic!("must be a valid tesla account id: {e}"));
     let token = tesla::token::run(&id, state).unwrap_or_else(|e| {
         panic!("Error running tesla token generator: {e}");
     });
@@ -714,8 +719,8 @@ struct SharedAutoLight {
     brightness: stateful::Receiver<f32>,
     temperature: stateful::Receiver<u16>,
     night_mode_for_room: HashMap<String, stateful::Receiver<bool>>,
-    presence_trackers: HashMap<String, stateful::Receiver<PresenceTrackerValue>>,
-    occupancy_sensors: HashMap<String, stateful::Receiver<OccupiedState>>,
+    presence_trackers: HashMap<Id, stateful::Receiver<PresenceTrackerValue>>,
+    occupancy_sensors: HashMap<IdWithRoom, stateful::Receiver<OccupiedState>>,
 }
 
 impl SharedAutoLight {
@@ -740,11 +745,13 @@ impl SharedAutoLight {
 
         let presence = is_any_presence_in_room(room, self.presence_trackers.clone());
 
+        let default_id = IdWithRoom::new(room, "default")
+            .unwrap_or_else(|e| panic!("occupancy_id must be a valid IdWithRoom: {e}"));
         let occupied = self
             .occupancy_sensors
             // TODO: only the "default" sensor is consumed here for now; the
             // OR-merge across all sensors in a room happens in a later refactor.
-            .get(&format!("{room}/default"))
+            .get(&default_id)
             .cloned()
             .unwrap_or_else(|| {
                 stateful::static_entity(
@@ -906,7 +913,7 @@ fn strip_light(
 
 #[instrument(skip_all)]
 fn send_to_device(
-    id: &Id,
+    id: &IdWithRoom,
     device: &config::LightDeviceConfig,
     pc: stateful::Receiver<PowerColor>,
     discover: &stateless::Receiver<lifx::Device>,

@@ -10,7 +10,7 @@ use robotica_common::{
     mqtt::{Json, MqttMessage},
     robotica::{
         amber::price::{ChannelType, Descriptor, IntervalType, PriceResponse},
-        entities::Id,
+        entities::{AnyId, Id},
     },
 };
 use yew::prelude::*;
@@ -31,7 +31,10 @@ fn subscribe(ctx: &Context<PricesComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = Id::new("amber_account").get_state_topic("prices");
+    let Ok(id) = Id::new("amber_account") else {
+        unreachable!("\"amber_account\" is a valid Id literal");
+    };
+    let topic = id.get_state_topic("prices");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         let Json(prices): Json<Vec<PriceResponse>> = msg.try_into().unwrap();
         Msg::Prices(prices)

@@ -1,6 +1,7 @@
 use robotica_common::config::Config;
 use robotica_common::mqtt::Json;
 use robotica_common::mqtt::MqttMessage;
+use robotica_common::robotica::entities::Id;
 use robotica_common::version;
 use std::sync::Arc;
 use tracing::debug;
@@ -43,8 +44,14 @@ fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
         Route::Room { id } => html! { <Room id={id}/> },
-        Route::Car { id } => html! { <CarComponent id={id}/> },
-        Route::WaterHeater { id } => html! { <WaterHeaterComponent id={id}/> },
+        Route::Car { id } => match Id::new(id) {
+            Ok(id) => html! { <CarComponent {id}/> },
+            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
+        },
+        Route::WaterHeater { id } => match Id::new(id) {
+            Ok(id) => html! { <WaterHeaterComponent {id}/> },
+            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
+        },
         Route::Prices => html! { <PricesComponent/> },
         Route::Schedule => html! { <ScheduleView/> },
         Route::Tags => html! { <TagsView/> },

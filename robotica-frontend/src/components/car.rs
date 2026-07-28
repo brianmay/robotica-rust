@@ -13,7 +13,10 @@ use robotica_common::{
     controllers::Action,
     datetime::{datetime_to_string, time_delta},
     mqtt::{Json, MqttMessage, QoS, Retain},
-    robotica::{amber, amber::car::SetChargeEndTime, entities::Id},
+    robotica::{
+        amber::{self, car::SetChargeEndTime},
+        entities::{AnyId, Id},
+    },
 };
 use tracing::debug;
 use yew::prelude::*;
@@ -35,7 +38,7 @@ pub enum Msg {
 
 #[derive(Eq, PartialEq, Properties, Clone)]
 pub struct Props {
-    pub id: String,
+    pub id: Id,
 }
 
 pub struct CarComponent {
@@ -82,7 +85,7 @@ impl Component for CarComponent {
             .unwrap();
 
         let props = ctx.props();
-        let id = Id::new(&props.id);
+        let id = props.id.clone();
 
         subscribe(ctx, &id, wss.clone());
         Self {
@@ -144,7 +147,7 @@ impl Component for CarComponent {
                 if let Ok(value) = self.edit_min_charge.parse::<u8>() {
                     if value <= 100 {
                         let props = ctx.props();
-                        let id = Id::new(&props.id);
+                        let id = props.id.clone();
                         let topic = id.get_command_topic("min_charge_tomorrow");
                         let msg = MqttMessage::new(
                             &topic,
@@ -190,7 +193,7 @@ impl Component for CarComponent {
                 if let Ok(override_min_charge) = self.edit_override_min_charge.parse::<u8>() {
                     if override_min_charge <= 100 {
                         let props = ctx.props();
-                        let id = Id::new(&props.id);
+                        let id = props.id.clone();
                         let topic = id.get_command_topic("set_charge_end_time");
                         if let Ok(local_dt) = chrono::NaiveDateTime::parse_from_str(
                             &self.edit_end_time,
@@ -248,7 +251,7 @@ impl Component for CarComponent {
     #[allow(clippy::too_many_lines)]
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
-        let id = Id::new(&props.id);
+        let id = props.id.clone();
 
         let car = if let Some(config) = &self.config {
             config.cars.iter().find(|car| car.id == id).cloned()

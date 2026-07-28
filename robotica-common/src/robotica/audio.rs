@@ -119,7 +119,6 @@ pub struct AudioCommand {
 
 impl AudioCommand {
     /// Decide if we should play this message
-    #[cfg(feature = "chrono")]
     #[must_use]
     pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
         use chrono::Timelike;

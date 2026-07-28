@@ -20,6 +20,11 @@ let
   robotica-backend = self.packages.${system}.robotica-backend;
   robotica-frontend = self.packages.${system}.robotica-frontend;
 
+  # Regexes mirror `validate_string` in robotica-common/src/robotica/entities.rs.
+  # Keep these in sync if the Rust validation rules change.
+  id_type = types.strMatching "^[_A-Za-z0-9-]+$";
+  id_with_room_type = types.strMatching "^[_A-Za-z0-9-]+/[_A-Za-z0-9-]+$";
+
   robotica_config = pkgs.writeTextFile {
     name = "robotica-backend-config";
     text = lib.generators.toYAML { } cfg.config;
@@ -105,7 +110,7 @@ let
 
   car_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_type; };
       make = mkOption { type = types.enum [ "tesla" ]; };
       name = mkOption { type = types.str; };
       teslamate_id = mkOption { type = types.number; };
@@ -177,7 +182,7 @@ let
 
   light_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
       device = mkOption { type = light_device_type; };
       scenes = mkOption {
         type = types.attrsOf light_scene_type;
@@ -194,7 +199,7 @@ let
 
   split_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
       scenes = mkOption {
         type = types.attrsOf light_scene_type;
         default = { };
@@ -207,7 +212,7 @@ let
 
   strip_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
       device = mkOption { type = light_device_type; };
       number_of_lights = mkOption { type = types.number; };
       splits = mkOption { type = types.listOf split_type; };
@@ -247,7 +252,7 @@ let
 
   water_heater_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_type; };
       status_topic = mkOption { type = types.str; };
       command_topic = mkOption { type = types.str; };
       audience = mkOption { type = types.str; };
@@ -256,7 +261,7 @@ let
 
   hdmi_matrix_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
       addr = mkOption { type = types.str; };
     };
   };
@@ -290,14 +295,14 @@ let
 
   presence_tracker_type = types.submodule {
     options = {
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_type; };
       topic = mkOption { type = types.str; };
     };
   };
 
   occupancy_sensor_type = types.submodule {
     options = {
-      room = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
       sensor_type = mkOption {
         type = types.enum [
           "Zigbee"
@@ -317,7 +322,7 @@ let
 
   presence_requirement_type = types.submodule {
     options = {
-      presence_id = mkOption { type = types.str; };
+      presence_id = mkOption { type = id_type; };
       room = mkOption { type = types.str; };
     };
   };
@@ -346,7 +351,7 @@ let
   owntracks_source_type = types.submodule {
     options = {
       topic = mkOption { type = types.str; };
-      id = mkOption { type = types.str; };
+      id = mkOption { type = id_type; };
       name = mkOption { type = types.str; };
       audience = mkOption { type = owntracks_audience_type; };
       arrival_radius_m = mkOption {

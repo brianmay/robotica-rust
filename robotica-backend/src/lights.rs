@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use robotica_common::robotica::entities::Id;
+use robotica_common::robotica::entities::IdWithRoom;
 use robotica_common::{
     mqtt::Json,
     robotica::{
@@ -175,7 +175,7 @@ pub fn run_auto_light(
     persistent_state_database: &crate::PersistentStateDatabase,
     scene_map: SceneMap,
     flash_color: PowerColor,
-    id: &Id,
+    id: &IdWithRoom,
 ) -> Outputs {
     // let (state_tx, state_rx) = stateful::create_pipe(format!("{lifx_id}-state"));
     let (pc_rx, scene_rx) = switch_entity(
@@ -213,7 +213,7 @@ pub fn run_split_light(
     scene_map: SceneMap,
     flash_color: PowerColor,
     // id: impl Into<String>,
-    id: &Id,
+    id: &IdWithRoom,
     // lifx_id: LifxId,
     priority: usize,
 ) -> SplitOutputs {
@@ -250,7 +250,7 @@ pub struct MergeLightConfig {
 #[must_use]
 pub fn run_merge_light(
     split_rx: stateful::Receiver<SplitPowerColor>,
-    id: &Id,
+    id: &IdWithRoom,
     config: MergeLightConfig,
 ) -> stateful::Receiver<PowerColor> {
     let (merged_tx, merged_rx) = stateful::create_pipe(format!("{id}/merged"));
@@ -316,7 +316,7 @@ struct LightState {
 fn switch_entity(
     rx_command: stateless::Receiver<Json<Command>>,
     persistent_state_database: &crate::PersistentStateDatabase,
-    id: &Id,
+    id: &IdWithRoom,
     scene_map: SceneMap,
     flash_color: PowerColor,
 ) -> (
