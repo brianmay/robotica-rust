@@ -313,8 +313,7 @@ let
 
   night_mode_type = types.submodule {
     options = {
-      room = mkOption { type = types.str; };
-      topic = mkOption { type = types.str; };
+      id = mkOption { type = id_with_room_type; };
     };
   };
 

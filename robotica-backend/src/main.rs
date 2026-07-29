@@ -351,8 +351,12 @@ async fn setup_pipes(
         .night_mode
         .into_iter()
         .map(|mode| {
-            let rx = fake_switch(&mut state, &mode.topic);
-            (mode.room, rx)
+            let rx = fake_switch(
+                &mut state,
+                &mode.id.get_command_topic(""),
+                &mode.id.get_state_topic("power"),
+            );
+            (mode.id.room, rx)
         })
         .collect();
 
@@ -672,17 +676,18 @@ fn monitor_owntracks(
 }
 
 #[must_use]
-fn fake_switch(state: &mut InitState, topic_substr: &str) -> stateful::Receiver<bool> {
-    let topic_substr: String = topic_substr.into();
-    let topic = format!("robotica/command/{topic_substr}");
+fn fake_switch(
+    state: &mut InitState,
+    command_topic: &str,
+    state_topic: &str,
+) -> stateful::Receiver<bool> {
     let rx = state
         .subscriptions
-        .subscribe_into_stateless::<Json<Command>>(&topic);
+        .subscribe_into_stateless::<Json<Command>>(command_topic);
 
-    let topic = format!("robotica/state/{topic_substr}/power");
     let rx = fake_switch::run(rx);
     rx.clone()
-        .send_to_mqtt_string(&state.mqtt, topic, &SendOptions::new());
+        .send_to_mqtt_string(&state.mqtt, state_topic, &SendOptions::new());
     rx.map(|(_, power)| power.is_on())
 }
 

@@ -246,8 +246,7 @@ pub struct OccupancySensorConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct NightModeConfig {
-    pub room: String,
-    pub topic: String,
+    pub id: IdWithRoom,
 }
 
 #[derive(Debug, Deserialize)]
