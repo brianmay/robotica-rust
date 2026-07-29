@@ -66,6 +66,17 @@ fn extract_room_from_id(combined_id: &str) -> String {
         .map_or_else(|| combined_id.to_string(), |(room, _)| room.to_string())
 }
 
+/// Split a combined occupancy id (`room/sensor`) into its `(room, sensor)` parts.
+/// When the id has no `/`, the whole string is treated as the room and the sensor
+/// defaults to `"default"` for backwards compatibility with the display.
+#[must_use]
+fn split_room_and_sensor(combined_id: &str) -> (String, String) {
+    match combined_id.split_once('/') {
+        Some((room, sensor)) => (room.to_string(), sensor.to_string()),
+        None => (combined_id.to_string(), "default".to_string()),
+    }
+}
+
 fn subscribe_presence(ctx: &Context<OccupancyViewComponent>) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
@@ -190,6 +201,18 @@ impl Component for OccupancyViewComponent {
         all_rooms.sort();
         all_rooms.dedup();
 
+        // Group occupancy sensors by room: `room -> Vec<(sensor_id, OccupiedState)>`,
+        // supporting multiple occupancy sensors per room rather than a single
+        // hardcoded "default" sensor.
+        let mut room_sensors: HashMap<String, Vec<(String, OccupiedState)>> = HashMap::new();
+        for (id, state) in &self.occupancies {
+            let (room, sensor) = split_room_and_sensor(id);
+            room_sensors.entry(room).or_default().push((sensor, *state));
+        }
+        for sensors in room_sensors.values_mut() {
+            sensors.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+
         html! {
             <RequireConnection>
                 <div class="container">
@@ -209,8 +232,7 @@ impl Component for OccupancyViewComponent {
                                 {
                                     all_rooms.iter().map(|room| {
                                         let presences = self.room_presences.get(room);
-                                        let occupancy_key = format!("{room}/default");
-                                        let occupancy = self.occupancies.get(&occupancy_key);
+                                        let sensors = room_sensors.get(room);
                                         html! {
                                             <tr>
                                                 <td>{ room }</td>
@@ -236,12 +258,22 @@ impl Component for OccupancyViewComponent {
                                                 </td>
                                                 <td>
                                                     {
-                                                        if let Some(o) = occupancy {
-                                                            html! {
-                                                                if o.is_occupied() {
-                                                                    {"Occupied"}
-                                                                } else {
-                                                                    {"Vacant"}
+                                                        if let Some(sensors) = sensors {
+                                                            if sensors.is_empty() {
+                                                                html! { "—" }
+                                                            } else {
+                                                                html! {
+                                                                    { sensors.iter().map(|(sensor, state)| {
+                                                                        let label = if sensor == "default" {
+                                                                            String::new()
+                                                                        } else {
+                                                                            format!("{sensor}: ")
+                                                                        };
+                                                                        let state_text = if state.is_occupied() { "Occupied" } else { "Vacant" };
+                                                                        html! {
+                                                                            <div>{ format!("{label}{state_text}") }</div>
+                                                                        }
+                                                                    }).collect::<Html>() }
                                                                 }
                                                             }
                                                         } else {
