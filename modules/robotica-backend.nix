@@ -305,6 +305,7 @@ let
         type = types.enum [
           "Zigbee"
           "Zwave"
+          "Msr2"
         ];
       };
       topic = mkOption { type = types.str; };
