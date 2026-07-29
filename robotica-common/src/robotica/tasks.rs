@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::error;
 
-use crate::mqtt::{self, MqttMessage, Retain};
+use crate::{
+    mqtt::{self, MqttMessage, Retain},
+    robotica::entities::{AnyId, IdWithRoom},
+};
 
 use super::commands::Command;
 
@@ -102,13 +105,13 @@ pub struct SubTask {
 impl SubTask {
     /// Convert `SubTask` to a `Task`
     #[must_use]
-    pub fn to_task(self, targets: &HashMap<String, String>) -> Task {
+    pub fn to_task(self, targets: &HashMap<String, IdWithRoom>) -> Task {
         let topics = targets.get(&self.target).map_or_else(
             || {
                 error!("Target {} not found", self.target);
                 vec![]
             },
-            |target| vec![target.clone()],
+            |target| vec![target.get_command_topic("")],
         );
 
         Task {

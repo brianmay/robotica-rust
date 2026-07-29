@@ -14,7 +14,6 @@ mod ui;
 
 use std::sync::Arc;
 
-use robotica_common::robotica::entities::Id;
 use robotica_common::version;
 use robotica_tokio::services::{
     mqtt::{self, mqtt_channel, run_client, MqttTx, Subscriptions},
@@ -110,7 +109,6 @@ fn start_services(config: LoadedConfig) -> Result<(), anyhow::Error> {
     let (tx_screen_command, rx_screen_command) = mpsc::channel(1);
 
     audio::run(
-        Id::new("audio")?,
         tx_screen_command.clone(),
         &mut subscriptions,
         mqtt.clone(),

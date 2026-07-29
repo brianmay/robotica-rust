@@ -64,7 +64,7 @@ impl ControllerTrait for Controller {
         let mut result: Vec<Subscription> = Vec::new();
         let config = &self.config;
 
-        let p = ["state", &config.topic_substr];
+        let p = ["robotica", "state", &config.topic_substr, "status"];
         let s = Subscription {
             topic: topic(&p),
             label: ButtonStateMsgType::State as u32,
@@ -133,7 +133,7 @@ impl ControllerTrait for Controller {
             volume: None,
         };
         let payload = Json(Command::Audio(audio_command));
-        let topic = format!("command/{}", self.config.topic_substr);
+        let topic = format!("robotica/command/{}", self.config.topic_substr);
         mqtt_command_vec(&topic, &payload)
     }
 

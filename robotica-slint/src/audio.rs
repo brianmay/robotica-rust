@@ -11,7 +11,7 @@ use robotica_common::{
     robotica::{
         audio::{AudioCommand, Message, State},
         commands::Command,
-        entities::Id,
+        entities::{AnyId, IdWithRoom},
         lights::LightCommand,
         switch::{DeviceAction, DevicePower},
         tasks::{Payload, SubTask, Task},
@@ -27,7 +27,7 @@ use robotica_tokio::{
 };
 use serde::Deserialize;
 use tokio::{select, sync::mpsc};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info};
 
 use crate::{
     command::{self, ErrorKind},
@@ -48,9 +48,9 @@ pub struct ProgramsConfig {
 #[derive(Deserialize)]
 pub struct Config {
     programs: ProgramsConfig,
-    topic_substr: String,
-    targets: HashMap<String, String>,
-    messages_enabled_subtopic: String,
+    audio: IdWithRoom,
+    messages_enabled: IdWithRoom,
+    targets: HashMap<String, IdWithRoom>,
     sound_path: PathBuf,
 }
 
@@ -67,9 +67,9 @@ pub struct LoadedProgramsConfig {
 #[derive()]
 pub struct LoadedConfig {
     programs: LoadedProgramsConfig,
-    topic_substr: String,
-    targets: HashMap<String, String>,
-    messages_enabled_subtopic: String,
+    audio_id: IdWithRoom,
+    messages_enabled_id: IdWithRoom,
+    targets: HashMap<String, IdWithRoom>,
     sound_path: PathBuf,
 }
 
@@ -87,51 +87,48 @@ impl TryFrom<Config> for LoadedConfig {
         };
         Ok(Self {
             programs,
-            topic_substr: config.topic_substr,
+            audio_id: config.audio,
+            messages_enabled_id: config.messages_enabled,
             targets: config.targets,
-            messages_enabled_subtopic: config.messages_enabled_subtopic,
             sound_path: config.sound_path,
         })
     }
 }
 
 pub fn run(
-    id: Id,
     tx_screen_command: mpsc::Sender<ScreenCommand>,
     subscriptions: &mut Subscriptions,
     mqtt: MqttTx,
     database: &PersistentStateDatabase,
     config: Arc<LoadedConfig>,
 ) {
-    let topic_substr = &config.topic_substr;
-    let topic = format!("command/{topic_substr}");
+    let audio_command_topic = config.audio_id.get_command_topic("");
+    let audio_state_topic = config.audio_id.get_state_topic("status");
+
+    let messages_enabled_command_topic = config.messages_enabled_id.get_command_topic("");
+    let messages_enabled_state_topic = config.messages_enabled_id.get_state_topic("power");
+
     let command_rx: stateless::Receiver<Json<Command>> =
-        subscriptions.subscribe_into_stateless(topic);
-    let messages_enabled_rx: stateful::Receiver<Json<Command>> = subscriptions
-        .subscribe_into_stateful(format!(
-            "robotica/command/{}",
-            config.messages_enabled_subtopic
-        ));
-    let psr = database.for_name::<State>(&id, topic_substr);
+        subscriptions.subscribe_into_stateless(audio_command_topic);
+
+    let messages_enabled_rx: stateful::Receiver<Json<Command>> =
+        subscriptions.subscribe_into_stateful(messages_enabled_command_topic);
+
+    let psr = database.for_name::<State>(&config.audio_id, "audio");
     let state = psr.load().unwrap_or_default();
 
     let (state_tx, state_rx) = stateful::create_pipe("audio_state");
-    state_rx.send_to_mqtt_json(
-        &mqtt,
-        format!("state/{topic_substr}"),
-        &mqtt::SendOptions::default(),
-    );
+    state_rx.send_to_mqtt_json(&mqtt, audio_state_topic, &mqtt::SendOptions::default());
 
     let (power_tx, power_rx) = stateful::create_pipe("audio_messages_enabled");
     power_rx.send_to_mqtt_string(
         &mqtt,
-        format!("robotica/state/{}/power", config.messages_enabled_subtopic),
+        messages_enabled_state_topic,
         &mqtt::SendOptions::default(),
     );
 
     spawn(async move {
         watch_audio(
-            id,
             command_rx,
             messages_enabled_rx,
             state,
@@ -147,9 +144,7 @@ pub fn run(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(fields(id=%id), skip_all)]
 async fn watch_audio(
-    id: Id,
     command_rx: stateless::Receiver<Json<Command>>,
     messages_enabled_rx: stateful::Receiver<Json<Command>>,
     mut state: State,

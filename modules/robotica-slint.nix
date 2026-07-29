@@ -15,6 +15,11 @@ let
 
   system = pkgs.stdenv.hostPlatform.system;
 
+  # Regexes mirror `validate_string` in robotica-common/src/robotica/entities.rs.
+  # Keep these in sync if the Rust validation rules change.
+  # id_type = types.strMatching "^[_A-Za-z0-9-]+$";
+  id_with_room_type = types.strMatching "^[_A-Za-z0-9-]+/[_A-Za-z0-9-]+$";
+
   cfg = config.services.robotica-slint;
   robotica-slint = cfg.package;
   sound_path = cfg.config.audio.sound_path;
@@ -101,7 +106,7 @@ let
       };
     };
   };
-  audio_targets_type = types.attrsOf types.str;
+  audio_targets_type = types.attrsOf id_with_room_type;
 
   audio_type = types.submodule {
     options = {
@@ -109,8 +114,8 @@ let
         type = audio_programs_type;
         default = { };
       };
-      messages_enabled_subtopic = mkOption { type = types.str; };
-      topic_substr = mkOption { type = types.str; };
+      audio_id = mkOption { type = id_with_room_type; };
+      messages_enabled_id = mkOption { type = id_with_room_type; };
       targets = mkOption { type = audio_targets_type; };
       sound_path = mkOption { type = types.path; };
     };
