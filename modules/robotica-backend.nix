@@ -189,7 +189,6 @@ let
         default = { };
       };
       flash_color = mkOption { type = power_color_type; };
-      room = mkOption { type = types.str; };
       fixed_brightness = mkOption {
         type = lib.types.nullOr types.float;
         default = null;
@@ -216,7 +215,6 @@ let
       device = mkOption { type = light_device_type; };
       number_of_lights = mkOption { type = types.number; };
       splits = mkOption { type = types.listOf split_type; };
-      room = mkOption { type = types.str; };
       fixed_brightness = mkOption {
         type = lib.types.nullOr types.float;
         default = null;

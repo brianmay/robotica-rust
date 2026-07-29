@@ -155,7 +155,6 @@ pub struct LightConfig {
     #[serde(default)]
     pub scenes: std::collections::HashMap<SceneName, LightSceneConfig>,
     pub flash_color: PowerColor,
-    pub room: String,
     pub fixed_brightness: Option<f32>,
 }
 
@@ -166,7 +165,6 @@ pub struct StripConfig {
     pub id: IdWithRoom,
     pub number_of_lights: usize,
     pub splits: Vec<SplitLightConfig>,
-    pub room: String,
     pub fixed_brightness: Option<f32>,
 }
 

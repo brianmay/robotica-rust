@@ -794,7 +794,7 @@ fn auto_light(
         })
         .collect();
 
-    let auto_scene = shared.get_auto_scene(&config.room, config.fixed_brightness);
+    let auto_scene = shared.get_auto_scene(&config.id.room, config.fixed_brightness);
 
     let scene_map = {
         let mut scene_map = SceneMap::new(HashMap::new());
@@ -847,7 +847,7 @@ fn split_light(
         })
         .collect();
 
-    let auto_scene = shared.get_auto_scene(&strip_config.room, strip_config.fixed_brightness);
+    let auto_scene = shared.get_auto_scene(&id.room, strip_config.fixed_brightness);
 
     let scene_map = {
         let mut scene_map = SceneMap::new(HashMap::new());
