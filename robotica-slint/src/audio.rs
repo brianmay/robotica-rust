@@ -111,8 +111,8 @@ pub fn run(
     let command_rx: stateless::Receiver<Json<Command>> =
         subscriptions.subscribe_into_stateless(audio_command_topic);
 
-    let messages_enabled_rx: stateful::Receiver<Json<Command>> =
-        subscriptions.subscribe_into_stateful(messages_enabled_command_topic);
+    let messages_enabled_rx: stateless::Receiver<Json<Command>> =
+        subscriptions.subscribe_into_stateless(messages_enabled_command_topic);
 
     let psr = database.for_name::<State>(&config.audio_id, "audio");
     let state = psr.load().unwrap_or_default();
@@ -146,7 +146,7 @@ pub fn run(
 #[allow(clippy::too_many_arguments)]
 async fn watch_audio(
     command_rx: stateless::Receiver<Json<Command>>,
-    messages_enabled_rx: stateful::Receiver<Json<Command>>,
+    messages_enabled_rx: stateless::Receiver<Json<Command>>,
     mut state: State,
     config: Arc<LoadedConfig>,
     state_tx: stateful::Sender<State>,
