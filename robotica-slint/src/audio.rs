@@ -48,8 +48,8 @@ pub struct ProgramsConfig {
 #[derive(Deserialize)]
 pub struct Config {
     programs: ProgramsConfig,
-    audio: IdWithRoom,
-    messages_enabled: IdWithRoom,
+    audio_id: IdWithRoom,
+    messages_enabled_id: IdWithRoom,
     targets: HashMap<String, IdWithRoom>,
     sound_path: PathBuf,
 }
@@ -87,8 +87,8 @@ impl TryFrom<Config> for LoadedConfig {
         };
         Ok(Self {
             programs,
-            audio_id: config.audio,
-            messages_enabled_id: config.messages_enabled,
+            audio_id: config.audio_id,
+            messages_enabled_id: config.messages_enabled_id,
             targets: config.targets,
             sound_path: config.sound_path,
         })
