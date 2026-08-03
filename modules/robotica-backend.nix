@@ -236,6 +236,7 @@ let
           "anavi_humidity"
           "zwave_f64"
           "zwave_u8"
+          "climacontrol_ac"
         ];
       };
     };
