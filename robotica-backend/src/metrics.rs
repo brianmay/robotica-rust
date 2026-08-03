@@ -11,7 +11,7 @@ use tracing::error;
 
 use crate::influxdb::Config;
 
-#[derive(Deserialize, Copy, Clone, Debug)]
+#[derive(Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigMetricType {
     ShellySwitchStatus,
@@ -32,7 +32,7 @@ pub struct ConfigMetric {
     metric_type: ConfigMetricType,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RawMetricType {
     ShellySwitchStatus,
     ShellyNotify,
@@ -626,4 +626,105 @@ fn monitor_reading<T>(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use rstest::rstest;
+
+    /// A `ClimacontrolAc` config entry should expand into one `RawMetric` per
+    /// MQTT subtopic, with the suffix appended to both the MQTT and InfluxDB
+    /// topic prefixes.
+    #[rstest]
+    #[case("climacontrol/HVAC_E07578", "ac/dining_room")]
+    #[case("climacontrol/HVAC_DEADBEEF", "ac/living_room")]
+    fn test_climacontrol_ac_expands_all_subtopics(
+        #[case] mqtt_prefix: &str,
+        #[case] influx_prefix: &str,
+    ) {
+        let metric = ConfigMetric {
+            mqtt_topic: mqtt_prefix.to_string(),
+            influx_topic: influx_prefix.to_string(),
+            metric_type: ConfigMetricType::ClimacontrolAc,
+        };
+
+        let raw: Vec<RawMetric> = metric.into();
+        assert_eq!(raw.len(), 21, "expected 21 subtopics per AC unit");
+
+        // Every entry should carry the supplied prefixes followed by its suffix.
+        for rm in &raw {
+            assert!(
+                rm.mqtt_topic.starts_with(&format!("{mqtt_prefix}/")),
+                "mqtt topic {} missing prefix {mqtt_prefix}/",
+                rm.mqtt_topic,
+            );
+            assert!(
+                rm.influx_topic.starts_with(&format!("{influx_prefix}/")),
+                "influx topic {} missing prefix {influx_prefix}/",
+                rm.influx_topic,
+            );
+        }
+    }
+
+    /// Spot-check that specific high-value subtopics are present and wired to
+    /// the correct `RawMetricType` (so e.g. `fault_code` is recorded as a
+    /// string tag, and `pinp` as a u32 field).
+    #[test]
+    fn test_climacontrol_ac_subtopic_types() {
+        let metric = ConfigMetric {
+            mqtt_topic: "climacontrol/HVAC_E07578".to_string(),
+            influx_topic: "ac/dining_room".to_string(),
+            metric_type: ConfigMetricType::ClimacontrolAc,
+        };
+        let raw: Vec<RawMetric> = metric.into();
+
+        let find = |suffix: &str| {
+            raw.iter()
+                .find(|rm| rm.mqtt_topic.ends_with(suffix))
+                .unwrap_or_else(|| panic!("no entry for {suffix}"))
+        };
+
+        assert_eq!(
+            find("heatpump/fault_code").metric_type,
+            RawMetricType::ClimacontrolString
+        );
+        assert_eq!(
+            find("heatpump/mode").metric_type,
+            RawMetricType::ClimacontrolString
+        );
+        assert_eq!(
+            find("heatpump/pinp").metric_type,
+            RawMetricType::ClimacontrolU32
+        );
+        assert_eq!(
+            find("heatpump/actual_temperature").metric_type,
+            RawMetricType::ClimacontrolF64
+        );
+        assert_eq!(
+            find("heatpump/oper").metric_type,
+            RawMetricType::ClimacontrolBool
+        );
+        assert_eq!(find("sys/up").metric_type, RawMetricType::ClimacontrolU64);
+        assert_eq!(
+            find("wifi/rssi").metric_type,
+            RawMetricType::ClimacontrolI32
+        );
+        assert_eq!(
+            find("sensor/thermometer/hact").metric_type,
+            RawMetricType::ClimacontrolU8
+        );
+    }
+
+    /// `climacontrol_ac` should round-trip from snake_case YAML/JSON through the
+    /// `serde(rename_all = "snake_case")` attribute on `ConfigMetricType`.
+    #[test]
+    fn test_climacontrol_ac_deserialises_from_snake_case() {
+        let yaml = "mqtt_topic: climacontrol/HVAC_E07578\n\
+                    influx_topic: ac/dining_room\n\
+                    metric_type: climacontrol_ac\n";
+        let metric: ConfigMetric = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(metric.metric_type, ConfigMetricType::ClimacontrolAc);
+    }
 }
