@@ -350,10 +350,14 @@ struct InfluxFieldReading<T: Into<influxdb::Type>> {
 
 /// `InfluxDB` reading for a single string value, written as a tag named `value`
 /// so it can be indexed and used in `GROUP BY` clauses.
+///
+/// A constant boolean `present` field is included because `InfluxDB` line
+/// protocol rejects writes that contain only tags and no fields.
 #[derive(Debug, InfluxDbWriteable)]
 struct InfluxTagReading {
     #[influxdb(tag)]
     value: String,
+    present: bool,
     time: DateTime<Utc>,
 }
 
@@ -550,6 +554,7 @@ impl GetQueries for String {
     fn get_queries(self, topic: &str) -> Result<Vec<WriteQuery>, Self::Error> {
         Ok(vec![InfluxTagReading {
             value: self,
+            present: true,
             time: Utc::now(),
         }
         .try_into_query(topic)?])
