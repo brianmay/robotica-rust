@@ -76,20 +76,18 @@
 
           craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
 
-          nodePackages = pkgs.buildNpmPackage {
-            name = "robotica-frontend";
-            src = ./robotica-frontend;
-            npmDepsHash = "sha256-Bz2gi4PlzyWCJoBkT6iGRPcY7ZgvVuOPEGNx3/yI5DM=";
-            # npmDepsHash = pkgs.lib.fakeHash;
-            dontNpmBuild = true;
+          nodePackages = pkgs.importNpmLock.buildNodeModules {
             inherit nodejs;
-
-            installPhase = ''
-              mkdir $out
-              cp -r node_modules $out
-              ln -s $out/node_modules/.bin $out/bin
-            '';
+            npmRoot = ./robotica-frontend;
           };
+
+          # Expose the npm CLI tools (webpack etc.) on PATH, like buildNpmPackage's $out/bin used to.
+          nodePackagesCli = pkgs.runCommand "robotica-frontend-cli" {
+            nativeBuildInputs = [ nodePackages ];
+          } ''
+            mkdir -p $out/bin
+            ln -s ${nodePackages}/node_modules/.bin/* $out/bin/
+          '';
 
           build_env = {
             BUILD_DATE = with flockenzeit.lib.splitSecondsSinceEpoch { } self.lastModified; "${F}T${T}${Z}";
@@ -152,7 +150,7 @@
                 ${robotica-frontend.pkg}/lib/robotica_frontend.wasm
 
               ln -s ${nodePackages}/node_modules ./node_modules
-              export PATH="${nodejs}/bin:${nodePackages}/bin:$PATH"
+              export PATH="${nodejs}/bin:${nodePackages}/node_modules/.bin:$PATH"
               webpack
             '';
 
@@ -373,8 +371,7 @@
                   pkgs.cargo-expand
                   # https://github.com/NixOS/nixpkgs/issues/156890
                   pkgs.binaryen
-                  nodePackages
-                  pkgs.prefetch-npm-deps
+                  nodePackagesCli
                   pkgs.gcc
                   pkgs.sqlx-cli
                   pkgs.influxdb2
