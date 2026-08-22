@@ -164,7 +164,7 @@ impl<T: PartialEq> PartialEq for Rule<T> {
 
 impl<T> Rule<T> {
     #[cfg(test)]
-    pub fn new(condition: Condition, result: T) -> Self {
+    pub const fn new(condition: Condition, result: T) -> Self {
         Self { condition, result }
     }
 }

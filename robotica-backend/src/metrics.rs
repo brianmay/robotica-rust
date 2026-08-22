@@ -640,7 +640,7 @@ mod tests {
     use rstest::rstest;
 
     /// A `ClimacontrolAc` config entry should expand into one `RawMetric` per
-    /// MQTT subtopic, with the suffix appended to both the MQTT and InfluxDB
+    /// MQTT subtopic, with the suffix appended to both the MQTT and `InfluxDB`
     /// topic prefixes.
     #[rstest]
     #[case("climacontrol/HVAC_E07578", "ac/dining_room")]
@@ -722,7 +722,7 @@ mod tests {
         );
     }
 
-    /// `climacontrol_ac` should round-trip from snake_case YAML/JSON through the
+    /// `climacontrol_ac` should round-trip from `snake_case` YAML/JSON through the
     /// `serde(rename_all = "snake_case")` attribute on `ConfigMetricType`.
     #[test]
     fn test_climacontrol_ac_deserialises_from_snake_case() {

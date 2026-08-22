@@ -479,10 +479,17 @@ async fn is_music_paused(programs: &LoadedProgramsConfig) -> Result<bool, String
     let cl = programs.mpc.to_line_with_arg("pause-if-playing");
     match cl.run().await {
         Ok(_output) => Ok(true),
-        Err(command::Error {
-            kind: ErrorKind::BadExitCode { .. },
-            ..
-        }) => Ok(false),
+        Err(err)
+            if matches!(
+                &*err,
+                command::Error {
+                    kind: ErrorKind::BadExitCode { .. },
+                    ..
+                }
+            ) =>
+        {
+            Ok(false)
+        }
         Err(err) => {
             error!("Failed to get mpc status: {err}");
             Err(format!("Failed to get mpc status: {err}"))

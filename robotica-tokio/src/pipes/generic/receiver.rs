@@ -343,17 +343,12 @@ mod tests {
         let mut found_chatty = false;
 
         // Collect initial replay
-        loop {
-            match tokio::time::timeout(Duration::from_millis(50), sub.recv()).await {
-                Ok(Ok(data)) => {
-                    if data.payload == b"important" {
-                        found_quiet = true;
-                    }
-                    if data.topic == "chatty/topic" {
-                        found_chatty = true;
-                    }
-                }
-                _ => break,
+        while let Ok(Ok(data)) = tokio::time::timeout(Duration::from_millis(50), sub.recv()).await {
+            if data.payload == b"important" {
+                found_quiet = true;
+            }
+            if data.topic == "chatty/topic" {
+                found_chatty = true;
             }
         }
 
@@ -379,15 +374,10 @@ mod tests {
 
         // Receive the broadcast for B
         let mut saw_b1 = false;
-        loop {
-            match tokio::time::timeout(Duration::from_millis(50), sub.recv()).await {
-                Ok(Ok(data)) => {
-                    if data.payload == b"b1" {
-                        saw_b1 = true;
-                        break;
-                    }
-                }
-                _ => break,
+        while let Ok(Ok(data)) = tokio::time::timeout(Duration::from_millis(50), sub.recv()).await {
+            if data.payload == b"b1" {
+                saw_b1 = true;
+                break;
             }
         }
         assert!(saw_b1, "did not receive topic B's message");
