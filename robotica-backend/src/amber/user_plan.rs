@@ -184,6 +184,7 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
         prices: &Prices,
         now: DateTime<Utc>,
         maybe_new_user_plan: Self,
+        is_on: bool,
     ) -> Self {
         let old_user_plan = self;
 
@@ -233,6 +234,22 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
 
         let old_plan_is_on = old_user_plan.is_current(now);
         let new_plan_is_on = new_user_plan.is_current(now);
+
+        // When not on, always prefer the new plan so we have a plan ready
+        // for when the device turns on. Cost doesn't matter in this case.
+        if !is_on {
+            info!(
+                %id,
+                ?old_user_plan,
+                old_plan_is_on,
+                ?new_user_plan,
+                new_plan_is_on,
+                is_on,
+                plan=?new_user_plan,
+                "Not charging; choosing new plan"
+            );
+            return Self(Some(new_user_plan));
+        }
 
         // If new plan continues old plan, use the old start time.
         let new_user_plan = if old_plan_is_on && new_plan_is_on {
@@ -482,7 +499,7 @@ mod tests {
             Request {},
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan);
+        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan, false);
 
         let plan = user_plan.0.unwrap();
         let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();

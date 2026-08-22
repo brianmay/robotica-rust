@@ -184,7 +184,9 @@ fn process<T: TimeZone>(
     timezone: &T,
 ) -> DayState {
     let maybe_new_plan = get_new_plan(&mut day, id, now, timezone, prices);
-    let plan = day.plan.update_plan(id, prices, now, maybe_new_plan);
+    let plan = day
+        .plan
+        .update_plan(id, prices, now, maybe_new_plan, day.is_on);
 
     let state = combined::get_request(
         id, &plan, &day.rules, prices, day.is_on, meters, now, timezone,
@@ -512,7 +514,7 @@ mod tests {
             Request::Heat,
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan);
+        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan, false);
 
         let plan = user_plan.get_plan().unwrap();
         let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();

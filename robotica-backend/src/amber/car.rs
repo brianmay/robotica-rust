@@ -268,7 +268,9 @@ fn prices_to_charge_request<T: TimeZone>(
     timezone: &T,
 ) -> (State, PersistentState) {
     let maybe_new_plan = get_new_plan(id, battery_level, now, &ps, timezone, prices);
-    ps.charge_plan = ps.charge_plan.update_plan(id, prices, now, maybe_new_plan);
+    ps.charge_plan = ps
+        .charge_plan
+        .update_plan(id, prices, now, maybe_new_plan, is_charging);
 
     let request = combined::get_request(
         id,
