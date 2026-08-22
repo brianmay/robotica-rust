@@ -120,7 +120,7 @@ impl Display for Error {
 
 impl std::error::Error for Error {}
 
-pub type Result = core::result::Result<Success, Error>;
+pub type Result = core::result::Result<Success, Box<Error>>;
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Line {
@@ -175,14 +175,14 @@ impl Line {
         let (stdout, stderr) = match get_stdin_out(&output) {
             Ok(output) => output,
             Err(err) => {
-                return Err(Error {
+                return Err(Box::new(Error {
                     cmd: self.clone(),
                     stdout: String::new(),
                     stderr: String::new(),
                     exit_code,
                     duration,
                     kind: err,
-                })
+                }));
             }
         };
 
@@ -204,14 +204,14 @@ impl Line {
                 stderr,
                 duration,
             }),
-            Err(kind) => Err(Error {
+            Err(kind) => Err(Box::new(Error {
                 cmd: self.clone(),
                 stdout,
                 stderr,
                 exit_code,
                 duration,
                 kind,
-            }),
+            })),
         }
     }
 }

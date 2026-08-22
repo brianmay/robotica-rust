@@ -265,7 +265,7 @@ mod tests {
             &Berlin,
         )
         .unwrap();
-        assert!(c.len() == 7);
+        assert_eq!(c.len(), 7);
     }
 
     #[test]
@@ -290,12 +290,21 @@ mod tests {
         )
         .unwrap();
 
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "test7");
-        assert!(c[0].description == Some("description should be the same".to_string()));
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "test7");
+        assert_eq!(
+            c[0].description,
+            Some("description should be the same".to_string())
+        );
         assert!(!c[0].is_all_day);
-        assert!(c[0].start == Utc.with_ymd_and_hms(2019, 3, 18, 3, 0, 0).unwrap());
-        assert!(c[0].end == Utc.with_ymd_and_hms(2019, 3, 18, 4, 0, 0).unwrap());
+        assert_eq!(
+            c[0].start,
+            Utc.with_ymd_and_hms(2019, 3, 18, 3, 0, 0).unwrap()
+        );
+        assert_eq!(
+            c[0].end,
+            Utc.with_ymd_and_hms(2019, 3, 18, 4, 0, 0).unwrap()
+        );
     }
 
     #[test]
@@ -307,11 +316,17 @@ mod tests {
             &chrono_tz::Australia::Melbourne,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Eat Cheese");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Eat Cheese");
         assert!(c[0].is_all_day);
-        assert!(c[0].start == Utc.with_ymd_and_hms(2026, 4, 21, 14, 0, 0).unwrap());
-        assert!(c[0].end == Utc.with_ymd_and_hms(2026, 4, 22, 14, 0, 0).unwrap());
+        assert_eq!(
+            c[0].start,
+            Utc.with_ymd_and_hms(2026, 4, 21, 14, 0, 0).unwrap()
+        );
+        assert_eq!(
+            c[0].end,
+            Utc.with_ymd_and_hms(2026, 4, 22, 14, 0, 0).unwrap()
+        );
     }
 
     #[test]
@@ -323,11 +338,17 @@ mod tests {
             &chrono_tz::Australia::Melbourne,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Each super tasty cheese");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Each super tasty cheese");
         assert!(c[0].is_all_day);
-        assert!(c[0].start == Utc.with_ymd_and_hms(2026, 4, 22, 14, 0, 0).unwrap());
-        assert!(c[0].end == Utc.with_ymd_and_hms(2026, 4, 23, 14, 0, 0).unwrap());
+        assert_eq!(
+            c[0].start,
+            Utc.with_ymd_and_hms(2026, 4, 22, 14, 0, 0).unwrap()
+        );
+        assert_eq!(
+            c[0].end,
+            Utc.with_ymd_and_hms(2026, 4, 23, 14, 0, 0).unwrap()
+        );
     }
 
     #[test]
@@ -340,8 +361,8 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Count Limited Daily Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Count Limited Daily Event");
         assert!(c[0].is_all_day);
     }
 
@@ -355,7 +376,7 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 5);
+        assert_eq!(c.len(), 5);
         for event in &c {
             assert_eq!(event.summary, "Count Limited Daily Event");
         }
@@ -371,8 +392,8 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Until Limited Daily Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Until Limited Daily Event");
     }
 
     #[test]
@@ -397,8 +418,8 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Multi BYDAY Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Multi BYDAY Event");
     }
 
     #[test]
@@ -411,8 +432,8 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Multi-day All-day Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Multi-day All-day Event");
         assert!(c[0].is_all_day);
     }
 
@@ -426,7 +447,7 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 2);
+        assert_eq!(c.len(), 2);
         let summaries: Vec<_> = c.iter().map(|e| e.summary.as_str()).collect();
         assert!(summaries.contains(&"Multi-day All-day Event"));
         assert!(summaries.contains(&"Timed Event in New York"));
@@ -452,8 +473,8 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Single All-day Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Single All-day Event");
     }
 
     #[test]
@@ -478,7 +499,7 @@ mod tests {
             &chrono_tz::America::New_York,
         )
         .unwrap();
-        assert!(c.len() == 1);
-        assert!(c[0].summary == "Future All-day Event");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].summary, "Future All-day Event");
     }
 }
