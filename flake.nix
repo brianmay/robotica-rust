@@ -52,7 +52,7 @@
               pname = "wasm-bindgen-cli";
               version = "0.2.128";
               registryDl = "https://static.crates.io/crates";
-              hash = "sha256-LikUDAToGDKQK3Dl03uc4b+oEcj+RWO+oI9234OIzyA=";
+              hash = "sha256-a7lcXJnnZkYReja+iUO7NqqrWyv3toxnUgQb8s4IS5s=";
             };
             # src = pkgs.fetchFromGitHub {
             #   owner = "rustwasm";
