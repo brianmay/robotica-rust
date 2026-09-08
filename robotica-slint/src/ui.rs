@@ -3,7 +3,11 @@
 #![allow(clippy::unwrap_used)]
 
 use itertools::Itertools;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
+    time::Duration,
+};
 use tap::Pipe;
 use tokio_util::sync::CancellationToken;
 
@@ -326,7 +330,17 @@ fn monitor_screen_reset(state: &Arc<RunningState>, ui: &slint::AppWindow) {
 }
 
 fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>>) {
+    let debouncing = Arc::new(AtomicBool::new(false));
+    let debouncing_clone = debouncing.clone();
+
     ui.on_clicked_widget(move |button| {
+        if debouncing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+
         let button = usize::try_from(button).unwrap_or(0);
         tx_click
             .get(button)
@@ -335,6 +349,12 @@ fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>
             .unwrap_or_else(|_| {
                 error!("Failed to send click event");
             });
+
+        let db = debouncing_clone.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            db.store(false, Ordering::SeqCst);
+        });
     });
 }
 
