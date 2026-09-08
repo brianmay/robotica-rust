@@ -352,7 +352,7 @@ fn monitor_buttons_presses(ui: &slint::AppWindow, tx_click: Vec<mpsc::Sender<()>
 
         let db = debouncing_clone.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_millis(1000)).await;
             db.store(false, Ordering::SeqCst);
         });
     });
