@@ -93,7 +93,6 @@ impl<R> UserPlan<R> {
         self.cost
     }
 
-    #[cfg(test)]
     pub const fn get_kw(&self) -> f32 {
         self.plan.get_kw()
     }

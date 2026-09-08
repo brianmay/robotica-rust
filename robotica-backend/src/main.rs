@@ -593,6 +593,7 @@ fn monitor_tesla(
         set_charge_end_time,
         receivers.is_charging.clone(),
         rules,
+        Some(postgres.clone()),
     );
     charge_state.clone().send_to_mqtt_json(
         &state.mqtt,

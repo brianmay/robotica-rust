@@ -10,6 +10,7 @@ use robotica_common::{
 };
 use robotica_macro::naive_time_constant;
 use robotica_tokio::{
+    database::diagnostic::{self, PlanInfo, PlanSelectionPayload},
     pipes::{
         stateful::{self, create_pipe, Receiver},
         stateless, Subscriber, Subscription,
@@ -144,6 +145,7 @@ pub fn run(
     set_charge_end_time: stateless::Receiver<Json<SetChargeEndTime>>,
     is_charging: stateful::Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<ChargeRequest>>>,
+    postgres: Option<sqlx::PgPool>,
 ) -> Receiver<State> {
     let (tx_out, rx_out) = create_pipe("amber/car");
     let id = car.id.clone();
@@ -164,6 +166,7 @@ pub fn run(
         let mut s_battery_level = battery_level.subscribe().await;
         let mut s_is_charging = is_charging.subscribe().await;
         let mut s_rules = rules.subscribe().await;
+        let postgres = postgres.clone();
 
         let Ok(mut v_prices) = s.recv().await else {
             error!(%id, "Failed to get initial prices");
@@ -189,6 +192,7 @@ pub fn run(
                 Some(&meters),
                 Utc::now(),
                 &timezone,
+                postgres.as_ref(),
             );
             ps = new_ps;
 
@@ -257,6 +261,95 @@ fn save_state(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn record_diagnostic_event(
+    id: &Id,
+    battery_level: u8,
+    is_on: bool,
+    is_charging: bool,
+    now: DateTime<Utc>,
+    old_plan: Option<&MaybeUserPlan<ChargeRequest>>,
+    new_plan: &MaybeUserPlan<ChargeRequest>,
+    decision: &str,
+    decision_reason: &str,
+    prices: &Prices,
+    postgres: Option<&sqlx::PgPool>,
+) {
+    let Some(postgres) = postgres else {
+        return;
+    };
+
+    let id = id.clone();
+    let old_plan_info = old_plan.and_then(|plan| {
+        plan.get().map(|p| {
+            let start_time = p.get_start_time();
+            let end_time = p.get_end_time();
+            PlanInfo {
+                start_time: start_time.to_rfc3339(),
+                end_time: end_time.to_rfc3339(),
+                duration_secs: (end_time - start_time).num_seconds(),
+                kw: p.get_kw(),
+                request: format!("{:?}", p.get_request()),
+                cost: p.get_total_cost(),
+                cost_per_hour: p.get_average_cost_per_hour(),
+            }
+        })
+    });
+
+    let new_plan_info = new_plan.get().map(|p| {
+        let start_time = p.get_start_time();
+        let end_time = p.get_end_time();
+        PlanInfo {
+            start_time: start_time.to_rfc3339(),
+            end_time: end_time.to_rfc3339(),
+            duration_secs: (end_time - start_time).num_seconds(),
+            kw: p.get_kw(),
+            request: format!("{:?}", p.get_request()),
+            cost: p.get_total_cost(),
+            cost_per_hour: p.get_average_cost_per_hour(),
+        }
+    });
+
+    let payload = PlanSelectionPayload {
+        battery_level,
+        is_on,
+        is_charging,
+        now: now.to_rfc3339(),
+        old_plan: old_plan_info,
+        new_plan: new_plan_info,
+        decision: decision.to_string(),
+        decision_reason: decision_reason.to_string(),
+        prices: prices
+            .list
+            .iter()
+            .map(|p| diagnostic::PriceInfo {
+                start_time: p.start_time.to_rfc3339(),
+                end_time: p.end_time.to_rfc3339(),
+                per_kwh: p.per_kwh,
+                spot_per_kwh: p.spot_per_kwh,
+                renewables: p.renewables,
+                interval_type: format!("{:?}", p.interval_type),
+                spike_status: p.spike_status.clone(),
+            })
+            .collect(),
+    };
+
+    let payload_json = serde_json::to_value(&payload).unwrap_or_else(|e| {
+        error!(%id, "Failed to serialize diagnostic payload: {:?}", e);
+        serde_json::json!({"error": e.to_string()})
+    });
+
+    let device_id = id.to_string();
+    let pg_clone = postgres.clone();
+    spawn(async move {
+        if let Err(e) =
+            diagnostic::insert_event(&pg_clone, &device_id, "plan_selection", payload_json).await
+        {
+            error!(%id, "Failed to insert diagnostic event: {:?}", e);
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
 fn prices_to_charge_request<T: TimeZone>(
     id: &Id,
     prices: &Prices,
@@ -266,11 +359,27 @@ fn prices_to_charge_request<T: TimeZone>(
     meters: Option<&combined::Meters<ChargeRequest>>,
     now: DateTime<Utc>,
     timezone: &T,
+    postgres: Option<&sqlx::PgPool>,
 ) -> (State, PersistentState) {
     let maybe_new_plan = get_new_plan(id, battery_level, now, &ps, timezone, prices);
+    let old_plan = ps.charge_plan.clone();
     ps.charge_plan = ps
         .charge_plan
         .update_plan(id, prices, now, maybe_new_plan, is_charging);
+
+    record_diagnostic_event(
+        id,
+        battery_level,
+        is_charging,
+        is_charging,
+        now,
+        Some(&old_plan),
+        &ps.charge_plan,
+        "update",
+        "plan_updated",
+        prices,
+        postgres,
+    );
 
     let request = combined::get_request(
         id,
