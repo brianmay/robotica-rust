@@ -7,7 +7,7 @@ use chrono::{TimeDelta, Utc};
 use robotica_common::datetime::{datetime_to_string, time_delta};
 use robotica_common::robotica::entities::Id;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use super::Prices;
 
@@ -171,6 +171,15 @@ pub fn get_cheapest(
         return None;
     };
 
+    info!(
+        %id,
+        start_search = %start_search,
+        end_search = %end_search,
+        required_duration = %required_duration,
+        next_interval = %next_interval,
+        "get_cheapest inputs"
+    );
+
     let now_time = {
         let end_time = min(start_search + required_duration, end_search);
         std::iter::once(Plan::new(kw, start_search, end_time))
@@ -193,6 +202,14 @@ pub fn get_cheapest(
                 // We need the largest value, hence we get the negative duration.
                 let duration = -plan.get_timedelta();
                 let start_time = plan.start_time;
+                info!(
+                    %id,
+                    plan_start = %plan.start_time,
+                    plan_end = %plan.end_time,
+                    duration_secs = plan.get_timedelta().num_seconds(),
+                    cost = price,
+                    "get_cheapest candidate"
+                );
                 (plan, duration, price, start_time)
             })
         })

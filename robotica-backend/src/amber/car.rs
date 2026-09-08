@@ -355,6 +355,17 @@ fn get_new_plan(
             let user_plan_cost_per_hour = plan.get_average_cost_per_hour();
             let propose_plan = f64::from(user_plan_cost_per_hour) < max_cost_per_hour;
 
+            info!(
+                %id,
+                limit,
+                user_plan_cost_per_hour,
+                max_cost_per_hour,
+                propose_plan,
+                plan_start = %plan.get_start_time(),
+                plan_end = %plan.get_end_time(),
+                "get_new_plan decision"
+            );
+
             if propose_plan {
                 info!(
                     %id,
