@@ -3532,7 +3532,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -3546,9 +3546,9 @@ dependencies = [
 
 [[package]]
 name = "icalendar"
-version = "0.17.13"
+version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fda1b791865374063fa57e84adfe3823c2d5cd5968d721533be4556a24cffd8"
+checksum = "785af055d3fda0cd975e77b358d8e5d20dd7dbcca6a61eefd197410b8a1cbfe7"
 dependencies = [
  "chrono",
  "chrono-tz",
