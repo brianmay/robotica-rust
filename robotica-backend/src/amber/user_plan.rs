@@ -225,9 +225,12 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
         // If either of the costs is NaN this means the period had no time,
         // so we should force the new plan.
         let time_left = old_user_plan.get_time_left(now);
+        let absolute_savings = old_average_cost - new_average_cost;
         let threshold_reached = new_average_cost.is_nan()
             || old_average_cost.is_nan()
-            || new_average_cost < old_average_cost * 0.8 && time_left >= TimeDelta::minutes(30);
+            || (new_average_cost < old_average_cost * 0.8
+                && absolute_savings > 1.0
+                && time_left >= TimeDelta::minutes(30));
         let has_changed = old_user_plan.request != new_user_plan.request;
         let force = threshold_reached || has_changed;
 
