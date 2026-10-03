@@ -53,39 +53,28 @@ impl Component for EditorView {
         Self {}
     }
 
-    #[allow(clippy::cognitive_complexity)]
-    #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        match msg {
+        let update = match msg {
             Msg::Name(name) => {
                 debug!("Updating name: {}", name);
-                let props = ctx.props();
-                let update = UpdateZone::Name(name);
-                props.update_zone.emit(update);
-                false
+                UpdateZone::Name(name)
             }
             Msg::Color(color) => {
                 debug!("Updating color: {}", color);
-                let props = ctx.props();
-                let update = UpdateZone::Color(color);
-                props.update_zone.emit(update);
-                false
+                UpdateZone::Color(color)
             }
             Msg::AnnounceOnEnter(announce_on_enter) => {
                 debug!("Updating announce_on_enter: {}", announce_on_enter);
-                let props = ctx.props();
-                let update = UpdateZone::AnnounceOnEnter(announce_on_enter);
-                props.update_zone.emit(update);
-                false
+                UpdateZone::AnnounceOnEnter(announce_on_enter)
             }
             Msg::AnnounceOnExit(announce_on_exit) => {
                 debug!("Updating announce_on_exit: {}", announce_on_exit);
-                let props = ctx.props();
-                let update = UpdateZone::AnnounceOnExit(announce_on_exit);
-                props.update_zone.emit(update);
-                false
+                UpdateZone::AnnounceOnExit(announce_on_exit)
             }
-        }
+        };
+        let props = ctx.props();
+        props.update_zone.emit(update);
+        false
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
