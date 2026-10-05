@@ -11,6 +11,13 @@ ignore = true
 reason = "Dev dependency — not shipped to production"
 
 [[PackageOverrides]]
+name = "braces"
+ecosystem = "npm"
+version = "3.0.3"
+ignore = true
+reason = "Unpatched (GHSA-vfj7-8cjw-p6xm); dev dependency only, not shipped to production"
+
+[[PackageOverrides]]
 name = "path-to-regexp"
 ecosystem = "npm"
 ignore = true
