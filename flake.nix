@@ -367,6 +367,8 @@
                   pkgs.wasm-pack
                   wasm-bindgen-cli
                   pkgs.slint-lsp
+                  pkgs.nil
+                  pkgs.nixd
                   rustPlatform
                   pkgs.cargo-expand
                   # https://github.com/NixOS/nixpkgs/issues/156890
