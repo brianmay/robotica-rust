@@ -1,9 +1,6 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use opentelemetry::{global, metrics::Counter, KeyValue};
-use robotica_common::robotica::{
-    audio::MessagePriority,
-    message::{Audience, Message},
-};
+use robotica_common::robotica::message::{Audience, Message, MessagePriority};
 use robotica_macro::time_delta_constant;
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
@@ -195,7 +192,7 @@ impl<'a> Errors<'a> {
         if self.notified {
             let msg = new_message(
                 "I am on talking terms with the Tesla again",
-                MessagePriority::Urgent,
+                MessagePriority::Error,
                 self.audience,
             );
             message_sink.try_send(msg);
@@ -213,7 +210,7 @@ impl<'a> Errors<'a> {
             meters.increment_notified_errors();
             let msg = new_message(
                 "The Tesla and I have not been talking to each other for 30 minutes",
-                MessagePriority::Urgent,
+                MessagePriority::Error,
                 self.audience,
             );
             message_sink.try_send(msg);

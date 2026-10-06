@@ -1,4 +1,4 @@
-use robotica_common::robotica::{audio::MessagePriority, message::Message, zones::OccupiedZones};
+use robotica_common::robotica::{message::Message, message::MessagePriority, zones::OccupiedZones};
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     services::tesla::api::ChargingStateEnum,
@@ -89,7 +89,7 @@ fn announce_charging_state(
             .join(" and ");
 
         let msg = format!("{name} {msg}");
-        let msg = new_message(msg, MessagePriority::DaytimeOnly, &car.audience.charging);
+        let msg = new_message(msg, MessagePriority::Info, &car.audience.charging);
         message_sink.try_send(msg);
     }
 }
@@ -159,7 +159,7 @@ pub fn monitor(
                         } else {
                             format!("{name} is at {level}% and the {limit_type} limit is {limit}%")
                         };
-                        let msg = new_message(msg, MessagePriority::DaytimeOnly, &car.audience.locations);
+                        let msg = new_message(msg, MessagePriority::Info, &car.audience.locations);
                         message_sink.try_send(msg);
                     }
 

@@ -1,5 +1,5 @@
 use chrono::Timelike;
-use robotica_common::robotica::{audio::MessagePriority, message::Message};
+use robotica_common::robotica::{message::Message, message::MessagePriority};
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
     spawn,
@@ -33,7 +33,7 @@ pub fn plug_in_reminder(
                 let name = &car.name;
                 let msg = new_message(
                     format!("{name} might fly away and should be leashed"),
-                    MessagePriority::Low,
+                    MessagePriority::Error,
                     &car.audience.charging,
                 );
                 message_tx.try_send(msg);

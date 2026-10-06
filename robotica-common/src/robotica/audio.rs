@@ -4,6 +4,8 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
+use super::message::MessagePriority;
+
 use super::tasks::SubTask;
 
 /// The current volume levels
@@ -57,31 +59,9 @@ pub struct VolumeCommand {
     pub message: Option<u8>,
 }
 
-/// The priority of a message
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub enum MessagePriority {
-    /// The message is urgent and should be delivered immediately.
-    Urgent,
-
-    /// The message is not important.
-    #[default]
-    Low,
-
-    /// The message is important and should be delivered during the day if allowed.
-    DaytimeOnly,
-}
-
-impl Display for MessagePriority {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Urgent => write!(f, "Urgent"),
-            Self::Low => write!(f, "Low"),
-            Self::DaytimeOnly => write!(f, "Daytime Only"),
-        }
-    }
-}
-
 /// A message to send
+///
+/// This is different from `message::Message` in that it is used in an audio command only.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Message {
     /// The title of the message.
@@ -89,6 +69,10 @@ pub struct Message {
 
     /// The message to send.
     pub body: String,
+
+    /// The priority of this command.
+    #[serde(default)]
+    pub priority: MessagePriority,
 }
 
 /// An audio command
@@ -96,13 +80,6 @@ pub struct Message {
 pub struct AudioCommand {
     /// The message to send.
     pub message: Option<Message>,
-
-    /// The priority of this command.
-    #[serde(default)]
-    pub priority: MessagePriority,
-
-    /// The sounds to play.
-    pub sound: Option<String>,
 
     /// The music to play.
     pub music: Option<MusicCommand>,
@@ -115,32 +92,6 @@ pub struct AudioCommand {
 
     /// Post tasks to execute after playing the message.
     pub post_tasks: Option<Vec<SubTask>>,
-}
-
-impl AudioCommand {
-    /// Decide if we should play this message
-    #[must_use]
-    pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
-        use chrono::Timelike;
-        use tracing::info;
-        let day_hour = matches!(now.hour(), 8..=21);
-
-        let priority = self.priority;
-        #[allow(clippy::match_same_arms)]
-        let result = match (priority, day_hour, enabled) {
-            (MessagePriority::Urgent, _, _) => true,
-            (MessagePriority::Low, _, true) => true,
-            (MessagePriority::Low, _, _) => false,
-            (MessagePriority::DaytimeOnly, true, true) => true,
-            (MessagePriority::DaytimeOnly, _, _) => false,
-        };
-
-        info!(
-            "Deciding whether to play message with priority {} at time {} with enabled {}: {}",
-            priority, now, enabled, result
-        );
-        result
-    }
 }
 
 impl Display for AudioCommand {
@@ -175,5 +126,32 @@ impl Display for AudioCommand {
         } else {
             write!(f, "{results}", results = results.join(", "))
         }
+    }
+}
+
+impl Message {
+    /// Decide if we should play this message
+    #[must_use]
+    pub fn should_play(&self, now: chrono::DateTime<chrono::Local>, enabled: bool) -> bool {
+        use chrono::Timelike;
+        use tracing::info;
+        let day_hour = matches!(now.hour(), 8..=21);
+
+        let priority = self.priority;
+        #[allow(clippy::match_same_arms)]
+        let result = match (priority, day_hour, enabled) {
+            (MessagePriority::Emergency, _, _) => true,
+            (MessagePriority::Error, _, _) => true,
+            (MessagePriority::Important, true, true) => true,
+            (MessagePriority::Important, _, _) => false,
+            (MessagePriority::Info, true, true) => true,
+            (MessagePriority::Info, _, _) => false,
+        };
+
+        info!(
+            "Deciding whether to play message with priority {} at time {} with enabled {}: {}",
+            priority, now, enabled, result
+        );
+        result
     }
 }

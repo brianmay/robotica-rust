@@ -30,11 +30,11 @@ use chrono::Local;
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::owntracks;
-use robotica_common::robotica::audio::MessagePriority;
 use robotica_common::robotica::commands::Command;
 use robotica_common::robotica::entities::{AnyId, Id, IdWithRoom};
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
 use robotica_common::robotica::message::Message;
+use robotica_common::robotica::message::MessagePriority;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
@@ -138,7 +138,7 @@ fn calendar_to_sequence(
         let payload = Message::new(
             &config.message_label,
             &event.summary,
-            MessagePriority::Low,
+            MessagePriority::Info,
             config.audience.clone(),
         );
         vec![Task {
@@ -438,7 +438,7 @@ fn monitor_door(
                 message_sink.try_send(Message::new(
                     &room_name,
                     message,
-                    MessagePriority::DaytimeOnly,
+                    MessagePriority::Info,
                     audience.clone(),
                 ));
             }
@@ -509,7 +509,7 @@ fn monitor_water_heater(
             message_sink.try_send(Message::new(
                 "Water Heater",
                 message,
-                MessagePriority::DaytimeOnly,
+                MessagePriority::Info,
                 water_heater.audience.clone(),
             ));
         }

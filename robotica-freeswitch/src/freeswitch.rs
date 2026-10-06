@@ -4,9 +4,8 @@ use freeswitch_esl::{Esl, EslConnection, EslError};
 use robotica_common::{
     mqtt::{MqttMessage, Retain},
     robotica::{
-        audio::MessagePriority,
         commands::Command,
-        message::{Audience, Message},
+        message::{Audience, Message, MessagePriority},
     },
 };
 use robotica_tokio::{services::mqtt::MqttTx, spawn};
@@ -114,7 +113,7 @@ fn send_message(message: &str, config: &Config, mqtt: &MqttTx) {
     let msg = Message::new(
         "Home Phone",
         message,
-        MessagePriority::Low,
+        MessagePriority::Important,
         &config.audience,
     );
     let msg = Command::Message(msg);

@@ -1,7 +1,4 @@
-use robotica_common::robotica::{
-    audio::MessagePriority,
-    message::{Audience, Message},
-};
+use robotica_common::robotica::message::{Audience, Message, MessagePriority};
 
 pub fn new_message(
     message: impl Into<String>,

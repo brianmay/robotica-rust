@@ -2,7 +2,7 @@
 use crate::{
     mqtt::{Json, MqttMessage},
     robotica::{
-        audio::{self, AudioCommand, MessagePriority, MusicCommand},
+        audio::{self, AudioCommand, MusicCommand},
         commands::Command,
     },
 };
@@ -122,10 +122,7 @@ impl ControllerTrait for Controller {
             },
         };
 
-        // FIXME: This is yuck.
         let audio_command = AudioCommand {
-            priority: MessagePriority::Urgent,
-            sound: None,
             pre_tasks: None,
             post_tasks: None,
             message: None,

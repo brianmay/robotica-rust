@@ -8,8 +8,7 @@ use robotica_common::{
     mqtt::Json,
     robotica::{
         self,
-        audio::MessagePriority,
-        message::{Audience, Message},
+        message::{Audience, Message, MessagePriority},
         zones::{NearbyZone, OccupiedZones},
     },
 };
@@ -219,7 +218,7 @@ async fn process_location(
             } else {
                 &audience.private
             };
-            message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
+            message_tx.try_send(new_message(title, msg, MessagePriority::Info, aud.clone()));
         }
         for loc in left {
             let msg = format!("{tracked_name} left {}", loc.name);
@@ -228,7 +227,7 @@ async fn process_location(
             } else {
                 &audience.private
             };
-            message_tx.try_send(new_message(title, msg, MessagePriority::Low, aud.clone()));
+            message_tx.try_send(new_message(title, msg, MessagePriority::Info, aud.clone()));
         }
     }
 

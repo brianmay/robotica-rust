@@ -49,7 +49,6 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                 message_body = message.body,
                 priority = ?message.priority,
                 audience = ?message.audience,
-                flash_lights = message.flash_lights,
                 "Received message to route"
             );
             let message_routes = Arc::clone(&message_routes);
@@ -89,7 +88,6 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                             message_body = message.body,
                             priority = ?message.priority,
                             audience = ?message.audience,
-                            flash_lights = message.flash_lights,
                             router_topic = route.topic,
                             "Routing message"
                         );
@@ -114,7 +112,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use robotica_common::robotica::{audio::MessagePriority, message::Audience};
+    use robotica_common::robotica::{message::Audience, message::MessagePriority};
     use serde_json::json;
 
     #[test]
@@ -122,16 +120,14 @@ mod tests {
         let message = Message {
             title: "Title".to_string(),
             body: "Body".to_string(),
-            priority: MessagePriority::Low,
+            priority: MessagePriority::Info,
             audience: Audience::new("everyone"),
-            flash_lights: false,
         };
         let json = json!({
             "title": "Title",
             "body": "Body",
-            "priority": "Low",
+            "priority": "Info",
             "audience": "everyone",
-            "flash_lights": false,
         });
         assert_eq!(json, serde_json::to_value(message).unwrap());
     }

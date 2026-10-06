@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use robotica_common::{
     mqtt::{BoolError, MqttMessage},
-    robotica::{audio::MessagePriority, message::Message},
+    robotica::message::{Message, MessagePriority},
 };
 use robotica_tokio::{
     pipes::{delays::DelayInputOptions, stateful, stateless, Subscriber, Subscription},
@@ -178,10 +178,9 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
                     open.push(Door::Doors);
                 }
 
-                // Ignore windows for now, as Tesla often reporting these are open when they are not.
-                // if let Some(TeslaDoorState::Open) = maybe_wo {
-                //     open.push(Door::Windows)
-                // }
+                if Some(DoorState::Open) == maybe_windows {
+                    open.push(Door::Windows);
+                }
             } else {
                 debug!(%id, "up: {:?}", maybe_user_present);
             }
@@ -216,7 +215,7 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
         while let Ok(open) = s.recv().await {
             debug!("open received: {:?}", open);
             let msg = doors_to_message(&tesla, &open);
-            let msg = new_message(msg, MessagePriority::Low, &tesla.audience.doors);
+            let msg = new_message(msg, MessagePriority::Error, &tesla.audience.doors);
             message_tx.try_send(msg);
         }
     });

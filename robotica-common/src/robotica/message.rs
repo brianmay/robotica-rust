@@ -4,8 +4,6 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
-use super::audio::MessagePriority;
-
 /// The audience for a message
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Audience(String);
@@ -41,6 +39,34 @@ impl From<String> for Audience {
     }
 }
 
+/// The priority of a message
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum MessagePriority {
+    /// The message is a routine message.
+    #[default]
+    Info,
+
+    /// The message is important and should be displayed prominently.
+    Important,
+
+    /// The message indicates something went wrong that needs to be fixed.
+    Error,
+
+    /// The message indicates a life threatening situation. e.g. building fire, medical emergency.
+    Emergency,
+}
+
+impl Display for MessagePriority {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Info => write!(f, "Info"),
+            Self::Important => write!(f, "Important"),
+            Self::Error => write!(f, "Error"),
+            Self::Emergency => write!(f, "Emergency"),
+        }
+    }
+}
+
 /// A HA audio command
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Message {
@@ -55,10 +81,6 @@ pub struct Message {
 
     /// The audience of the message
     pub audience: Audience,
-
-    /// Should we flash the lights?
-    #[serde(default)]
-    pub flash_lights: bool,
 }
 
 impl Message {
@@ -74,7 +96,6 @@ impl Message {
             body: body.into(),
             priority,
             audience: audience.into(),
-            flash_lights: false,
         }
     }
 }
@@ -83,11 +104,7 @@ impl Display for Message {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let audience = &self.audience;
         let body = &self.body;
-        let flash_lights = if self.flash_lights {
-            " and flash lights"
-        } else {
-            ""
-        };
-        write!(f, "tell {audience} \"{body}\"{flash_lights}")
+        let priority = &self.priority;
+        write!(f, "tell {audience} {priority} \"{body}\"")
     }
 }

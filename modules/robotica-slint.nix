@@ -43,36 +43,57 @@ let
     mpc repeat on
   '';
   pre_speech = pkgs.writeShellScript "pre-speech" ''
-    mkdir -p "$HOME/cache"
-    hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
-    tmp1="$HOME/cache/$hash.1.wav"
-    tmp2="$HOME/cache/$hash.2.wav"
-    filename="$HOME/cache/$hash.wav"
-    if ! test -f "$filename"; then
-      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${cfg.voice.onnx_file} --config ${cfg.voice.json_file} --output_file "$tmp1"
-      ${pkgs.sox}/bin/sox -G "$tmp1" -r 44100 -c 2 "$tmp2"
-      rm "$tmp1"
-      mv "$tmp2" "$filename"
+    priority="''$1"
+    text="''$2"
+    mkdir -p "''$HOME/cache"
+    hash="$(echo -n "''$text" | md5sum | awk '{print $1}')"
+    tmp1="''$HOME/cache/''$hash.1.wav"
+    tmp2="''$HOME/cache/''$hash.2.wav"
+    filename="''$HOME/cache/''$hash.wav"
+    if ! test -f "''$filename"; then
+      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${cfg.voice.onnx_file} --config ${cfg.voice.json_file} --output_file "''$tmp1"
+      ${pkgs.sox}/bin/sox -G "''$tmp1" -r 44100 -c 2 "''$tmp2"
+      rm "''$tmp1"
+      mv "''$tmp2" "''$filename"
     fi
   '';
   speech = pkgs.writeShellScript "speech" ''
-    mkdir -p "$HOME/cache"
-    hash="$(echo -n "$*" | md5sum | awk '{print $1}')"
-    filename="$HOME/cache/$hash.wav"
-    if ! test -f "$filename"; then
-      ${pkgs.espeak}/bin/espeak-ng -ven+f5 -k5 -s 130 -w /tmp/out.wav "$*"
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
-      ${pkgs.alsa-utils}/bin/aplay -q /tmp/out.wav
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
-      ${pkgs.alsa-utils}/bin/aplay -q /tmp/out.wav
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
-    else
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
-      ${pkgs.alsa-utils}/bin/aplay -q "$filename"
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
-      ${pkgs.alsa-utils}/bin/aplay -q "$filename"
-      ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
+    priority="''$1"
+    text="''$2"
+    mkdir -p "''$HOME/cache"
+    hash="$(echo -n "''$text" | md5sum | awk '{print $1}')"
+    filename="''$HOME/cache/''$hash.wav"
+    if ! test -f "''$filename"; then
+      filename="/tmp/out.wav"
+      ${pkgs.espeak}/bin/espeak-ng -ven+f5 -k5 -s 130 -w "''$filename" "''$*"
     fi
+    case "''$priority" in
+      Emergency)
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/emergency.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/emergency.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/emergency.wav
+        ;;
+      Error)
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/middle.wav
+        ;;
+      Important)
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
+        ;;
+      *)
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
+        ${pkgs.alsa-utils}/bin/aplay -q "$filename"
+        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
+        ;;
+    esac
   '';
   audio_programs_type = types.submodule {
     options = {

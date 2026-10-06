@@ -13,6 +13,7 @@ use robotica_common::{
         commands::Command,
         entities::{AnyId, IdWithRoom},
         lights::LightCommand,
+        message::MessagePriority,
         switch::{DeviceAction, DevicePower},
         tasks::{Payload, SubTask, Task},
     },
@@ -70,6 +71,7 @@ pub struct LoadedConfig {
     audio_id: IdWithRoom,
     messages_enabled_id: IdWithRoom,
     targets: HashMap<String, IdWithRoom>,
+    #[allow(dead_code)]
     sound_path: PathBuf,
 }
 
@@ -176,7 +178,8 @@ async fn watch_audio(
                         error!("Failed to save state: {}", e);
                     });
                 } else if let Command::Message(command) = command {
-                    let pre_tasks = if command.flash_lights {
+                    let flash_lights = matches!(command.priority, MessagePriority::Emergency | MessagePriority::Important | MessagePriority::Error);
+                    let pre_tasks = if flash_lights {
                         vec![SubTask{
                             title: "Flash lights".to_string(),
                             target: "light".to_string(),
@@ -188,13 +191,12 @@ async fn watch_audio(
                         vec![]
                     };
                     let command = AudioCommand {
-                        priority: command.priority,
-                        sound: None,
                         pre_tasks: Some(pre_tasks),
                         post_tasks: None,
                         message: Some(Message {
                             title: command.title,
                             body: command.body,
+                            priority: command.priority,
                         }),
                         music: None,
                         volume: None,
@@ -285,18 +287,11 @@ async fn handle_command(
         state.volume.message = message_volume;
     }
 
-    let should_play = {
-        let now = chrono::Local::now();
-        command.should_play(now, state.messages_enabled)
-    };
-
-    if should_play {
-        if let Some(music) = &command.music {
-            state.play_list.clone_from(&music.play_list);
-        }
+    if let Some(music) = &command.music {
+        state.play_list.clone_from(&music.play_list);
     }
 
-    process_command(tx_screen_command, should_play, state, command, config, mqtt)
+    process_command(tx_screen_command, state, command, config, mqtt)
         .await
         .unwrap_or_else(|e| {
             state.error = Some(e);
@@ -305,10 +300,9 @@ async fn handle_command(
 }
 
 enum Action<'a> {
-    Sound(&'a String),
     Display(&'a Message, &'a mpsc::Sender<ScreenCommand>),
-    PreSay(&'a String),
-    Say(&'a String),
+    PreSay(&'a Message),
+    Say(&'a Message),
     Play(&'a String),
     Tasks(&'a Vec<SubTask>),
     Stop,
@@ -322,11 +316,6 @@ impl Action<'_> {
         mqtt: &MqttTx,
     ) -> Result<(), String> {
         match self {
-            Self::Sound(sound) => {
-                info!("Playing sound: {sound}");
-                set_volume(state.volume.message, &config.programs).await?;
-                play_sound(sound, &config.programs, &config.sound_path).await?;
-            }
             Self::Display(msg, tx) => {
                 info!("Displaying message: {}", msg.title);
                 tx.try_send(ScreenCommand::Message(msg.clone()))
@@ -335,11 +324,11 @@ impl Action<'_> {
                     });
             }
             Self::PreSay(msg) => {
-                info!("Pre-saying message: {msg}");
+                info!("Pre-saying message: {}", msg.body);
                 pre_say(msg, &config.programs).await?;
             }
             Self::Say(msg) => {
-                info!("Saying message: {msg}");
+                info!("Saying message: {}", msg.body);
                 set_volume(state.volume.message, &config.programs).await?;
                 say(msg, &config.programs).await?;
             }
@@ -367,49 +356,51 @@ impl Action<'_> {
 fn get_actions_for_command<'a>(
     command: &'a AudioCommand,
     tx_screen_command: &'a mpsc::Sender<ScreenCommand>,
-    should_play: bool,
+    state: &State,
 ) -> (Vec<Action<'a>>, bool) {
     let mut actions = Vec::new();
     let mut should_stop_music = false;
 
-    if should_play {
-        if let Some(message) = &command.message {
-            actions.push(Action::PreSay(&message.body));
+    let msg = if let Some(msg) = &command.message {
+        let now = chrono::Local::now();
+        if msg.should_play(now, state.messages_enabled) {
+            Some(msg)
+        } else {
+            None
         }
+    } else {
+        None
+    };
+
+    if let Some(message) = &msg {
+        actions.push(Action::PreSay(message));
     }
 
     if let Some(message) = &command.message {
         actions.push(Action::Display(message, tx_screen_command));
     }
 
-    if should_play {
-        if let Some(tasks) = &command.pre_tasks {
-            actions.push(Action::Tasks(tasks));
+    if let Some(tasks) = &command.pre_tasks {
+        actions.push(Action::Tasks(tasks));
+    }
+
+    if let Some(msg) = &msg {
+        actions.push(Action::Say(msg));
+        should_stop_music = true;
+    }
+
+    if let Some(music) = &command.music {
+        if let Some(play_list) = &music.play_list {
+            actions.push(Action::Play(play_list));
         }
 
-        if let Some(sound) = &command.sound {
-            actions.push(Action::Sound(sound));
-            should_stop_music = true;
+        if music.stop == Some(true) {
+            actions.push(Action::Stop);
         }
+    }
 
-        if let Some(msg) = &command.message {
-            actions.push(Action::Say(&msg.body));
-            should_stop_music = true;
-        }
-
-        if let Some(music) = &command.music {
-            if let Some(play_list) = &music.play_list {
-                actions.push(Action::Play(play_list));
-            }
-
-            if music.stop == Some(true) {
-                actions.push(Action::Stop);
-            }
-        }
-
-        if let Some(tasks) = &command.post_tasks {
-            actions.push(Action::Tasks(tasks));
-        }
+    if let Some(tasks) = &command.post_tasks {
+        actions.push(Action::Tasks(tasks));
     }
 
     (actions, should_stop_music)
@@ -417,18 +408,13 @@ fn get_actions_for_command<'a>(
 
 async fn process_command(
     tx_screen_command: &mpsc::Sender<ScreenCommand>,
-    should_play: bool,
     state: &mut State,
     command: AudioCommand,
     config: &LoadedConfig,
     mqtt: &MqttTx,
 ) -> Result<(), String> {
-    info!(
-        "Processing command: {:?} with should_play: {}",
-        command, should_play
-    );
-    let (actions, should_stop_music) =
-        get_actions_for_command(&command, tx_screen_command, should_play);
+    info!("Processing command: {:?}", command);
+    let (actions, should_stop_music) = get_actions_for_command(&command, tx_screen_command, state);
 
     if should_stop_music {
         info!("Executing command with stopping music");
@@ -506,6 +492,7 @@ async fn music_resume(programs: &LoadedProgramsConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn play_sound(
     sound: &str,
     programs: &LoadedProgramsConfig,
@@ -524,8 +511,11 @@ async fn play_sound(
     }
     Ok(())
 }
-async fn pre_say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
-    let cl = programs.pre_say.to_line_with_arg(message);
+
+async fn pre_say(message: &Message, programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs
+        .pre_say
+        .to_line_with_args([message.priority.to_string(), message.body.to_string()]);
     if let Err(err) = cl.run().await {
         error!("Failed to pre say message: {err}");
         return Err(format!("Failed to pre say message: {err}"));
@@ -533,8 +523,10 @@ async fn pre_say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), S
     Ok(())
 }
 
-async fn say(message: &str, programs: &LoadedProgramsConfig) -> Result<(), String> {
-    let cl = programs.say.to_line_with_arg(message);
+async fn say(message: &Message, programs: &LoadedProgramsConfig) -> Result<(), String> {
+    let cl = programs
+        .say
+        .to_line_with_args([message.priority.to_string(), message.body.to_string()]);
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
