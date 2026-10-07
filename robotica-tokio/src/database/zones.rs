@@ -419,6 +419,7 @@ pub async fn search_zones_with_distance(
     .pipe(Ok)
 }
 
+#[cfg(test)]
 mod test {
     #![allow(clippy::unwrap_used)]
     #![allow(clippy::wildcard_imports)]
@@ -464,7 +465,7 @@ mod test {
     async fn test_list_zones(postgres: Pool<Postgres>) {
         db_create_zone(&postgres).await;
         let zones = list_zones(&postgres).await.unwrap();
-        assert!(!zones.is_empty());
+        assert_ne!(zones, [] as [robotica_common::robotica::zones::Zone; 0]);
     }
 
     #[sqlx::test(migrations = "../migrations")]
