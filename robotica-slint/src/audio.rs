@@ -361,16 +361,14 @@ fn get_actions_for_command<'a>(
     let mut actions = Vec::new();
     let mut should_stop_music = false;
 
-    let msg = if let Some(msg) = &command.message {
+    let msg = command.message.as_ref().and_then(|msg| {
         let now = chrono::Local::now();
         if msg.should_play(now, state.messages_enabled) {
             Some(msg)
         } else {
             None
         }
-    } else {
-        None
-    };
+    });
 
     if let Some(message) = &msg {
         actions.push(Action::PreSay(message));
@@ -515,7 +513,7 @@ async fn play_sound(
 async fn pre_say(message: &Message, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let cl = programs
         .pre_say
-        .to_line_with_args([message.priority.to_string(), message.body.to_string()]);
+        .to_line_with_args([message.priority.to_string(), message.body.clone()]);
     if let Err(err) = cl.run().await {
         error!("Failed to pre say message: {err}");
         return Err(format!("Failed to pre say message: {err}"));
@@ -526,7 +524,7 @@ async fn pre_say(message: &Message, programs: &LoadedProgramsConfig) -> Result<(
 async fn say(message: &Message, programs: &LoadedProgramsConfig) -> Result<(), String> {
     let cl = programs
         .say
-        .to_line_with_args([message.priority.to_string(), message.body.to_string()]);
+        .to_line_with_args([message.priority.to_string(), message.body.clone()]);
     if let Err(err) = cl.run().await {
         error!("Failed to say message: {err}");
         return Err(format!("Failed to say message: {err}"));
