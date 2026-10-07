@@ -142,8 +142,8 @@ impl Message {
         let result = match (priority, day_hour, enabled) {
             (MessagePriority::Emergency, _, _) => true,
             (MessagePriority::Error, _, _) => true,
-            (MessagePriority::Important, true, true) => true,
-            (MessagePriority::Important, _, _) => false,
+            (MessagePriority::Important, _, true) => true,
+            (MessagePriority::Important, _, false) => false,
             (MessagePriority::Info, true, true) => true,
             (MessagePriority::Info, _, _) => false,
         };
