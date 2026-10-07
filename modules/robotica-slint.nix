@@ -51,7 +51,7 @@ let
     tmp2="''$HOME/cache/''$hash.2.wav"
     filename="''$HOME/cache/''$hash.wav"
     if ! test -f "''$filename"; then
-      echo "$*" | ${pkgs.piper-tts}/bin/piper --model ${cfg.voice.onnx_file} --config ${cfg.voice.json_file} --output_file "''$tmp1"
+      echo "''$text" | ${pkgs.piper-tts}/bin/piper --model ${cfg.voice.onnx_file} --config ${cfg.voice.json_file} --output_file "''$tmp1"
       ${pkgs.sox}/bin/sox -G "''$tmp1" -r 44100 -c 2 "''$tmp2"
       rm "''$tmp1"
       mv "''$tmp2" "''$filename"
@@ -65,7 +65,7 @@ let
     filename="''$HOME/cache/''$hash.wav"
     if ! test -f "''$filename"; then
       filename="/tmp/out.wav"
-      ${pkgs.espeak}/bin/espeak-ng -ven+f5 -k5 -s 130 -w "''$filename" "''$*"
+      ${pkgs.espeak}/bin/espeak-ng -ven+f5 -k5 -s 130 -w "''$filename" "''$text"
     fi
     case "''$priority" in
       Emergency)
