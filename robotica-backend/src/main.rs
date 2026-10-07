@@ -10,11 +10,11 @@
 mod amber;
 mod car;
 mod config;
-mod ha;
 mod hdmi_matrix;
 mod influxdb;
 mod lights;
 mod logging;
+mod messages;
 mod metrics;
 mod monitor_location;
 mod open_epaper_link;
@@ -255,7 +255,7 @@ async fn setup_pipes(
     //     error!("Auto temperature level: {level}");
     // });
 
-    let message_sink = ha::create_message_sink(
+    let message_sink = messages::create_message_sink(
         state.mqtt.clone(),
         config.message_routes,
         &presence_trackers,
