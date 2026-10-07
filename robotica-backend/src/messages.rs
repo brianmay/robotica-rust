@@ -76,13 +76,19 @@ pub fn create_message_sink<S: 'static + ::std::hash::BuildHasher + Send>(
                     let audience_matches =
                         route.audience.contains(&message.audience) || route.audience.is_empty();
 
+                    let priority: robotica_common::robotica::message::MessagePriority =
+                        message.priority;
+                    let priority_matches =
+                        route.priority.contains(&priority) || route.priority.is_empty();
+
                     debug!(
                         topic = route.topic.as_str(),
                         matches_presence = presence_matches,
                         audience_matches = audience_matches,
+                        priority_matches = priority_matches,
                         "Checking message route presence requirements"
                     );
-                    if presence_matches && audience_matches {
+                    if presence_matches && audience_matches && priority_matches {
                         debug!(
                             title = message.title,
                             message_body = message.body,

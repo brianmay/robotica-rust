@@ -9,7 +9,7 @@ use robotica_common::{
     robotica::{
         entities::{Id, IdWithRoom},
         lights::{PowerColor, SceneName},
-        message::Audience,
+        message::{Audience, MessagePriority},
     },
 };
 use robotica_tokio::{
@@ -257,9 +257,13 @@ pub struct PresenceRequirements {
 
 #[derive(Debug, Deserialize)]
 pub struct MessageRouteConfig {
+    #[serde(default)]
     pub audience: Vec<Audience>,
-    pub topic: String,
+    #[serde(default)]
+    pub priority: Vec<MessagePriority>,
+    #[serde(default)]
     pub presence_requirements: Vec<PresenceRequirements>,
+    pub topic: String,
 }
 
 /// Audience configuration for an `OwnTracks` location source.

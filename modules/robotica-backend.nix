@@ -332,6 +332,11 @@ let
         type = types.listOf types.str;
         default = [ ];
       };
+      priority = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "List of priorities to match (Info, Important, Error, Emergency). Empty matches all.";
+      };
       topic = mkOption { type = types.str; };
       presence_requirements = mkOption {
         type = types.listOf presence_requirement_type;
