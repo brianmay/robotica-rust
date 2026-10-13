@@ -73,3 +73,9 @@ ecosystem = "crates.io"
 version = "0.39.2"
 ignore = true
 reason = "Transitive via wayland-scanner (proc-macro) in the Slint stack. Compile-time code generation from trusted Wayland protocol files only."
+
+[[PackageOverrides]]
+name = "unsafe-libyaml"
+ecosystem = "crates.io"
+ignore = true
+reason = "Unmaintained (RUSTSEC-2024-0449); transitive via serde_yaml_ng for YAML config parsing. No fixed release is available."
