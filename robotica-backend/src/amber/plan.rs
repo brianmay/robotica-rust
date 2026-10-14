@@ -9,7 +9,7 @@ use robotica_common::robotica::entities::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
-use super::Prices;
+use super::GeneralPrices;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct Plan {
@@ -93,7 +93,7 @@ impl Plan {
         &self,
         id: &Id,
         now: chrono::DateTime<Utc>,
-        prices: &Prices,
+        prices: &GeneralPrices,
     ) -> Option<f32> {
         // We can't go back in time unfortunately.
         if self.end_time <= self.start_time {
@@ -151,7 +151,7 @@ pub fn get_cheapest(
     start_search: chrono::DateTime<Utc>,
     end_search: chrono::DateTime<Utc>,
     required_duration: chrono::TimeDelta,
-    prices: &Prices,
+    prices: &GeneralPrices,
 ) -> Option<(Plan, f32)> {
     // Short circuit entire process if the search period is invalid.
     if end_search <= start_search {
@@ -303,12 +303,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         }
     }
 
@@ -451,7 +451,7 @@ mod tests {
         #[case] now: chrono::DateTime<Utc>,
         #[case] expected: f32,
     ) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
@@ -485,7 +485,7 @@ mod tests {
         #[case] now: chrono::DateTime<Utc>,
         #[case] expected: f32,
     ) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
@@ -564,7 +564,7 @@ mod tests {
     ) {
         let id = Id::new("test").unwrap();
 
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
@@ -652,7 +652,7 @@ mod tests {
         #[case] expected_end_time: chrono::DateTime<Utc>,
         #[case] expected_price: f32,
     ) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_constant(50.0),
             interval: INTERVAL,
         };
@@ -688,7 +688,7 @@ mod tests {
         #[case] required_duration: chrono::TimeDelta,
         #[case] kw: f32,
     ) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };
@@ -724,7 +724,7 @@ mod tests {
         #[case] required_duration: chrono::TimeDelta,
         #[case] kw: f32,
     ) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(50.0),
             interval: INTERVAL,
         };

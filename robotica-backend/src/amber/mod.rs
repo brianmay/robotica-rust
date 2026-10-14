@@ -41,6 +41,38 @@ impl PartialEq for Prices {
 impl Eq for Prices {}
 
 impl Prices {
+    pub fn general(&self) -> GeneralPrices {
+        GeneralPrices {
+            list: self
+                .list
+                .iter()
+                .filter(|pr| pr.channel_type == api::ChannelType::General)
+                .cloned()
+                .collect(),
+            interval: self.interval,
+        }
+    }
+
+    pub fn current(&self, dt: &DateTime<Utc>) -> Vec<&api::PriceResponse> {
+        self.list.iter().filter(|pr| pr.is_current(*dt)).collect()
+    }
+}
+
+#[derive(Debug)]
+pub struct GeneralPrices {
+    pub list: Vec<api::PriceResponse>,
+    pub interval: Duration,
+}
+
+impl PartialEq for GeneralPrices {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+impl Eq for GeneralPrices {}
+
+impl GeneralPrices {
     pub fn current(&self, dt: &DateTime<Utc>) -> Option<&api::PriceResponse> {
         get_current_price_response(&self.list, dt)
     }
@@ -196,7 +228,10 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                     let next_delay = match prices {
                         Ok(prices) => {
 
-                            let update_time = get_current_price_response(&prices, &now).map_or_else(|| {
+                            let update_time = get_current_price_response(&prices, &now)
+                                .into_iter()
+                                .next()
+                                .map_or_else(|| {
                                 error!(%id, "No current price found in prices: {prices:?}");
                                 // If we failed to get a current price, try again in 1 minute
                                 now + RETRY_TIME
@@ -312,7 +347,7 @@ mod tests {
     #[case(dt("2020-01-01T00:29:00Z"), dt("2020-01-01T00:30:00Z"))]
     #[case(dt("2020-01-01T00:30:00Z"), dt("2020-01-01T01:00:00Z"))]
     fn test_get_next_period(#[case] now: DateTime<Utc>, #[case] expected: DateTime<Utc>) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: vec![],
             interval: INTERVAL,
         };
@@ -346,12 +381,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         };
 
         let prices = vec![
@@ -374,7 +409,7 @@ mod tests {
                 IntervalType::ActualInterval,
             ),
         ];
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: prices,
             interval: INTERVAL,
         };
@@ -388,7 +423,7 @@ mod tests {
     #[case(dt("2020-01-01T00:10:00Z"))]
     #[case(dt("2020-01-01T00:29:00Z"))]
     fn test_find_none(#[case] now: DateTime<Utc>) {
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: vec![],
             interval: INTERVAL,
         };
@@ -416,12 +451,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         };
 
         let it = |current, n: i32| match n.cmp(&current) {
@@ -498,12 +533,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         };
 
         let it = |current, n: i32| match n.cmp(&current) {
@@ -567,12 +602,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         };
 
         let it = |current, n: i32| match n.cmp(&current) {
@@ -602,7 +637,7 @@ mod tests {
                     it(current, 2),
                 ),
             ];
-            Prices {
+            GeneralPrices {
                 list: prices,
                 interval: INTERVAL,
             }

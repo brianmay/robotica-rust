@@ -186,10 +186,10 @@ fn process<T: TimeZone>(
     let maybe_new_plan = get_new_plan(&mut day, id, now, timezone, prices);
     let plan = day
         .plan
-        .update_plan(id, prices, now, maybe_new_plan, day.is_on);
+        .update_plan(id, &prices.general(), now, maybe_new_plan, day.is_on);
 
     let state = combined::get_request(
-        id, &plan, &day.rules, prices, day.is_on, meters, now, timezone,
+        id, &plan, &day.rules, &prices.general(), day.is_on, meters, now, timezone,
     );
     let request = state.get_result();
 
@@ -216,7 +216,7 @@ fn get_new_plan(
         now,
         day.end,
         required_time_left,
-        prices,
+        &prices.general(),
         Request::Heat,
     )
 }
@@ -432,12 +432,12 @@ mod tests {
                 estimate: Some(false),
                 spike_status: "None".to_string(),
                 advanced_price: None,
-                tariff_information: TariffInformation {
+                tariff_information: Some(TariffInformation {
                     period: PeriodType::Peak,
                     season: None,
                     block: None,
                     demand_window: None,
-                },
+                }),
             }
         };
 
@@ -510,14 +510,14 @@ mod tests {
             start_time,
             end_time,
             required_duration,
-            &prices,
+            &prices.general(),
             Request::Heat,
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan, false);
+        let user_plan = user_plan.update_plan(&id, &prices.general(), start_time, maybe_new_plan, false);
 
         let plan = user_plan.get_plan().unwrap();
-        let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();
+        let cost = plan.get_forecast_cost(&id, start_time, &prices.general()).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
         assert_eq!(plan.get_start_time(), expected_start_time);
@@ -609,12 +609,12 @@ mod tests {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
         let id = Id::new("test").unwrap();
 
-        let tariff_information = TariffInformation {
+        let tariff_information = Some(TariffInformation {
             period: PeriodType::Peak,
             season: None,
             block: None,
             demand_window: None,
-        };
+        });
 
         let pr = |start_time: DateTime<Utc>, price, interval_type| {
             let date = start_time.with_timezone(&timezone).date_naive();
@@ -674,7 +674,7 @@ mod tests {
 
         // Act
         let request =
-            combined::get_request(&id, &plan, &rules, &prices, is_on, None, now, &timezone)
+            combined::get_request(&id, &plan, &rules, &prices.general(), is_on, None, now, &timezone)
                 .get_result();
 
         // Assert

@@ -365,7 +365,7 @@ fn prices_to_charge_request<T: TimeZone>(
     let old_plan = ps.charge_plan.clone();
     ps.charge_plan = ps
         .charge_plan
-        .update_plan(id, prices, now, maybe_new_plan, is_charging);
+        .update_plan(id, &prices.general(), now, maybe_new_plan, is_charging);
 
     record_diagnostic_event(
         id,
@@ -385,7 +385,7 @@ fn prices_to_charge_request<T: TimeZone>(
         id,
         &ps.charge_plan,
         &ps.rules,
-        prices,
+        &prices.general(),
         is_charging,
         meters,
         now,
@@ -421,7 +421,7 @@ fn get_new_plan_to_min_charge(
             now,
             end_time,
             estimated_charge_time_to_min,
-            prices,
+            &prices.general(),
             request,
         )
     })

@@ -52,8 +52,9 @@ const fn interval_type_name(interval_type: api::IntervalType) -> &'static str {
 }
 
 #[derive(InfluxDbWriteable)]
-struct PriceSummaryReading {
+struct PriceSummarySummary {
     per_kwh: f32,
+    channel_type: String,
     time: chrono::DateTime<Utc>,
 }
 
@@ -80,7 +81,13 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
             interval_type: interval_type_name(data.interval_type).to_string(),
         };
 
-        match reading.try_into_query("amber/price") {
+        let measurement = match data.channel_type {
+            api::ChannelType::FeedIn => "amber/price_feed_in",
+            api::ChannelType::ControlledLoad => "amber/price_controlled_load",
+            api::ChannelType::General => "amber/price",
+        };
+
+        match reading.try_into_query(measurement) {
             Ok(query) => {
                 if let Err(e) = client.query(&query).await {
                     error!("Failed to write to influxdb: {}", e);
@@ -92,13 +99,25 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
         }
     }
 
-    if let Some(current) = prices.current(&now) {
-        let reading = PriceSummaryReading {
+    let current_prices = prices.current(&now);
+    for current in &current_prices {
+        let reading = PriceSummarySummary {
             per_kwh: current.effective_per_kwh(),
+            channel_type: match current.channel_type {
+                api::ChannelType::General => "general".to_string(),
+                api::ChannelType::ControlledLoad => "controlled_load".to_string(),
+                api::ChannelType::FeedIn => "feed_in".to_string(),
+            },
             time: Utc::now(),
         };
 
-        match reading.try_into_query("amber/price_summary") {
+        let measurement = match current.channel_type {
+            api::ChannelType::FeedIn => "amber/price_feed_in_summary",
+            api::ChannelType::ControlledLoad => "amber/price_controlled_load_summary",
+            api::ChannelType::General => "amber/price_summary",
+        };
+
+        match reading.try_into_query(measurement) {
             Ok(query) => {
                 if let Err(e) = client.query(&query).await {
                     error!("Failed to write to influxdb: {}", e);

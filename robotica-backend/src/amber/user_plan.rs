@@ -7,7 +7,7 @@ use tracing::info;
 
 use super::{
     plan::{get_cheapest, Plan},
-    Prices,
+    GeneralPrices,
 };
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -24,7 +24,7 @@ impl<R> UserPlan<R> {
         start_search: DateTime<Utc>,
         end_search: DateTime<Utc>,
         required_duration: TimeDelta,
-        prices: &Prices,
+        prices: &GeneralPrices,
         request: R,
     ) -> Option<Self> {
         let plan = get_cheapest(id, kw, start_search, end_search, required_duration, prices);
@@ -64,7 +64,7 @@ impl<R> UserPlan<R> {
     }
 
     #[cfg(test)]
-    pub fn get_forecast_cost(&self, id: &Id, now: DateTime<Utc>, prices: &Prices) -> Option<f32> {
+    pub fn get_forecast_cost(&self, id: &Id, now: DateTime<Utc>, prices: &GeneralPrices) -> Option<f32> {
         self.plan.get_forecast_cost(id, now, prices)
     }
 
@@ -72,7 +72,7 @@ impl<R> UserPlan<R> {
         &self,
         id: &Id,
         now: DateTime<Utc>,
-        prices: &Prices,
+        prices: &GeneralPrices,
     ) -> Option<f32> {
         let duration = self.plan.get_timedelta();
         #[allow(clippy::cast_precision_loss)]
@@ -117,7 +117,7 @@ impl<R> MaybeUserPlan<R> {
         start_search: DateTime<Utc>,
         end_search: DateTime<Utc>,
         required_duration: TimeDelta,
-        prices: &Prices,
+        prices: &GeneralPrices,
         request: R,
     ) -> Self {
         let maybe_plan = UserPlan::get_cheapest(
@@ -180,7 +180,7 @@ impl<T: Copy + Debug + PartialEq> MaybeUserPlan<T> {
     pub fn update_plan(
         self,
         id: &Id,
-        prices: &Prices,
+        prices: &GeneralPrices,
         now: DateTime<Utc>,
         maybe_new_user_plan: Self,
         is_on: bool,
@@ -419,12 +419,12 @@ mod tests {
                 estimate: Some(false),
                 spike_status: "None".to_string(),
                 advanced_price: None,
-                tariff_information: TariffInformation {
+                tariff_information: Some(TariffInformation {
                     period: PeriodType::Peak,
                     season: None,
                     block: None,
                     demand_window: None,
-                },
+                }),
             }
         };
 
@@ -486,7 +486,7 @@ mod tests {
             ),
         ];
 
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: prices,
             interval: INTERVAL,
         };

@@ -131,12 +131,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: TariffInformation {
+            tariff_information: Some(TariffInformation {
                 period: PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         };
 
         let now = dt("2020-01-01T00:00:00Z");

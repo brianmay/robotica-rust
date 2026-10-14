@@ -175,7 +175,7 @@ pub struct PriceResponse {
     pub channel_type: ChannelType,
 
     /// The tariff information for the interval.
-    pub tariff_information: TariffInformation,
+    pub tariff_information: Option<TariffInformation>,
 
     /// The spike status of the interval.
     pub spike_status: String,

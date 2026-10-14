@@ -9,7 +9,7 @@ use robotica_common::datetime::{num_days_from_ce, week_day_to_string};
 use robotica_common::robotica::entities::Id;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::Prices;
+use super::GeneralPrices;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Context {
@@ -24,7 +24,7 @@ pub struct Context {
 impl Context {
     pub fn new<TZ: TimeZone>(
         id: &Id,
-        prices: &Prices,
+        prices: &GeneralPrices,
         now: DateTime<Utc>,
         is_on: bool,
         timezone: &TZ,

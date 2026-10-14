@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::amber::rules::Context;
 
-use super::{rules::RuleSet, user_plan::MaybeUserPlan, Prices};
+use super::{rules::RuleSet, user_plan::MaybeUserPlan, GeneralPrices};
 
 pub trait Max {
     fn max(self, other: Self) -> Self;
@@ -97,7 +97,7 @@ pub fn get_request<R, TZ>(
     id: &Id,
     plan: &MaybeUserPlan<R>,
     rules: &RuleSet<R>,
-    prices: &Prices,
+    prices: &GeneralPrices,
     is_on: bool,
     meters: Option<&Meters<R>>,
     now: DateTime<Utc>,
@@ -189,12 +189,12 @@ mod tests {
             estimate: Some(false),
             spike_status: "None".to_string(),
             advanced_price: None,
-            tariff_information: api::TariffInformation {
+            tariff_information: Some(api::TariffInformation {
                 period: api::PeriodType::Peak,
                 season: None,
                 block: None,
                 demand_window: None,
-            },
+            }),
         }
     }
 
@@ -263,7 +263,7 @@ mod tests {
 
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
-        let prices = Prices {
+        let prices = GeneralPrices {
             list: pr_list_descending(100.0),
             interval: INTERVAL,
         };
