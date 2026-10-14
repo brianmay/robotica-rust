@@ -43,7 +43,7 @@ pub struct UsageResponse {
     pub nem_time: DateTime<Utc>,
     pub renewables: f32,
     pub channel_type: ChannelType,
-    pub tariff_information: TariffInformation,
+    pub tariff_information: Option<TariffInformation>,
     pub spike_status: String,
     pub descriptor: Descriptor,
     pub channel_identifier: String,
