@@ -79,3 +79,24 @@ name = "unsafe-libyaml"
 ecosystem = "crates.io"
 ignore = true
 reason = "Unmaintained (RUSTSEC-2024-0449); transitive via serde_yaml_ng for YAML config parsing. No fixed release is available."
+
+[[PackageOverrides]]
+name = "zbus_names"
+ecosystem = "crates.io"
+version = "4.3.1"
+ignore = true
+reason = "RUSTSEC-2026-0371; no fixed release available. Transitive via zbus in the Slint desktop stack; only handles trusted local D-Bus traffic in the embedded GUI binary."
+
+[[PackageOverrides]]
+name = "zvariant"
+ecosystem = "crates.io"
+version = "5.10.0"
+ignore = true
+reason = "RUSTSEC-2026-0370; no fixed release available. Transitive via zbus in the Slint desktop stack; only handles trusted local D-Bus traffic in the embedded GUI binary."
+
+[[PackageOverrides]]
+name = "zvariant_derive"
+ecosystem = "crates.io"
+version = "5.10.0"
+ignore = true
+reason = "RUSTSEC-2026-0372; no fixed release available. Transitive via zbus in the Slint desktop stack; only handles trusted local D-Bus traffic in the embedded GUI binary."
