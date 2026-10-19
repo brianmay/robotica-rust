@@ -215,7 +215,6 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
         while let Ok(open) = s.recv().await {
             debug!("open received: {:?}", open);
             let msg = doors_to_message(&tesla, &open);
-            let msg = new_message(msg, MessagePriority::Error, &tesla.audience.doors);
             message_tx.try_send(msg);
         }
     });
@@ -223,7 +222,7 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
     message_rx
 }
 
-fn doors_to_message(car: &car::Config, open: &[Door]) -> String {
+fn doors_to_message(car: &car::Config, open: &[Door]) -> Message {
     let name = &car.name;
 
     let msg = match open {
@@ -248,5 +247,12 @@ fn doors_to_message(car: &car::Config, open: &[Door]) -> String {
             format!("{name} {doors} and {last} are open")
         }
     };
-    msg
+
+    let priority = if open.is_empty() {
+        MessagePriority::Info
+    } else {
+        MessagePriority::Error
+    };
+
+    new_message(msg, priority, &car.audience.doors)
 }
