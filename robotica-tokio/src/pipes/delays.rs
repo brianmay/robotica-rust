@@ -68,11 +68,8 @@ where
                             state = DelayInputState::Idle;
                             tx_out.try_send(v);
                         },
-                        (true, DelayInputState::Idle) => {
+                        (true, DelayInputState::Idle | DelayInputState::Delaying(_, _)) => {
                             state = DelayInputState::Delaying(Instant::now() + duration, v);
-                        },
-                        (true, DelayInputState::Delaying(instant, _)) => {
-                            state = DelayInputState::Delaying(*instant, v);
                         },
                         (true, DelayInputState::NoDelay) => {
                             tx_out.try_send(v);
