@@ -264,12 +264,12 @@ pub fn run(
                                 info!(%id, "Nil command succeeded.");
                                 // If we didn't actually have a command, don't rate limit.
                                 None
-                                } else {
-                                    info!(%id, "Command succeeded.");
-                                    // If we did have a command, rate limit next command to 5 minutes.
-                                    Some(TryCommand {
+                            } else {
+                                info!(%id, "Command succeeded.");
+                                // If we did have a command, rate limit next command to 5 minutes.
+                                Some(TryCommand {
                                     command: Command::new(),
-                                    next_try_instant: Instant::now() + Duration::from_mins(5),
+                                    next_try_instant: Instant::now() + Duration::from_mins(1),
                                 })
                             };
                             errors.notify_success(&message_tx, &meters);
