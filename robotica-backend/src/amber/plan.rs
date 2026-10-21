@@ -452,7 +452,7 @@ mod tests {
         #[case] expected: f32,
     ) {
         let prices = GeneralPrices {
-            list: pr_list_descending(50.0),
+            list: &pr_list_descending(50.0),
             interval: INTERVAL,
         };
         let id = Id::new("test").unwrap();
@@ -486,7 +486,7 @@ mod tests {
         #[case] expected: f32,
     ) {
         let prices = GeneralPrices {
-            list: pr_list_descending(50.0),
+            list: &pr_list_descending(50.0),
             interval: INTERVAL,
         };
         let id = Id::new("test").unwrap();
@@ -565,7 +565,7 @@ mod tests {
         let id = Id::new("test").unwrap();
 
         let prices = GeneralPrices {
-            list: pr_list_descending(50.0),
+            list: &pr_list_descending(50.0),
             interval: INTERVAL,
         };
 
@@ -653,7 +653,7 @@ mod tests {
         #[case] expected_price: f32,
     ) {
         let prices = GeneralPrices {
-            list: pr_list_constant(50.0),
+            list: &pr_list_constant(50.0),
             interval: INTERVAL,
         };
         let id = Id::new("test").unwrap();
@@ -689,7 +689,7 @@ mod tests {
         #[case] kw: f32,
     ) {
         let prices = GeneralPrices {
-            list: pr_list_descending(50.0),
+            list: &pr_list_descending(50.0),
             interval: INTERVAL,
         };
         let id = Id::new("test").unwrap();
@@ -725,7 +725,7 @@ mod tests {
         #[case] kw: f32,
     ) {
         let prices = GeneralPrices {
-            list: pr_list_descending(50.0),
+            list: &pr_list_descending(50.0),
             interval: INTERVAL,
         };
         let id = Id::new("test").unwrap();

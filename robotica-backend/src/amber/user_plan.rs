@@ -64,7 +64,12 @@ impl<R> UserPlan<R> {
     }
 
     #[cfg(test)]
-    pub fn get_forecast_cost(&self, id: &Id, now: DateTime<Utc>, prices: &GeneralPrices) -> Option<f32> {
+    pub fn get_forecast_cost(
+        &self,
+        id: &Id,
+        now: DateTime<Utc>,
+        prices: &GeneralPrices,
+    ) -> Option<f32> {
         self.plan.get_forecast_cost(id, now, prices)
     }
 
@@ -487,7 +492,7 @@ mod tests {
         ];
 
         let prices = GeneralPrices {
-            list: prices,
+            list: &prices,
             interval: INTERVAL,
         };
 

@@ -1,4 +1,7 @@
-use crate::{amber::combined, car};
+use crate::{
+    amber::{combined, GeneralPrices},
+    car,
+};
 
 use super::{rules, user_plan::MaybeUserPlan, Prices};
 use chrono::{DateTime, Local, NaiveTime, TimeDelta, TimeZone, Utc};
@@ -185,7 +188,7 @@ pub fn run(
             info!(%id, ?ps, "Persistent State");
             let (request, new_ps) = prices_to_charge_request(
                 &id,
-                &v_prices,
+                &v_prices.general(),
                 v_battery_level,
                 v_is_charging,
                 ps,
@@ -271,7 +274,7 @@ fn record_diagnostic_event(
     new_plan: &MaybeUserPlan<ChargeRequest>,
     decision: &str,
     decision_reason: &str,
-    prices: &Prices,
+    prices: &GeneralPrices,
     postgres: Option<&sqlx::PgPool>,
 ) {
     let Some(postgres) = postgres else {
@@ -352,7 +355,7 @@ fn record_diagnostic_event(
 #[allow(clippy::too_many_arguments)]
 fn prices_to_charge_request<T: TimeZone>(
     id: &Id,
-    prices: &Prices,
+    prices: &GeneralPrices,
     battery_level: u8,
     is_charging: bool,
     mut ps: PersistentState,
@@ -365,7 +368,7 @@ fn prices_to_charge_request<T: TimeZone>(
     let old_plan = ps.charge_plan.clone();
     ps.charge_plan = ps
         .charge_plan
-        .update_plan(id, &prices.general(), now, maybe_new_plan, is_charging);
+        .update_plan(id, prices, now, maybe_new_plan, is_charging);
 
     record_diagnostic_event(
         id,
@@ -385,7 +388,7 @@ fn prices_to_charge_request<T: TimeZone>(
         id,
         &ps.charge_plan,
         &ps.rules,
-        &prices.general(),
+        prices,
         is_charging,
         meters,
         now,
@@ -407,7 +410,7 @@ fn get_new_plan_to_min_charge(
     battery_level: u8,
     now: DateTime<Utc>,
     timezone: &impl TimeZone,
-    prices: &Prices,
+    prices: &GeneralPrices,
     limit: u8,
     end_time: DateTime<Utc>,
 ) -> MaybeUserPlan<ChargeRequest> {
@@ -421,7 +424,7 @@ fn get_new_plan_to_min_charge(
             now,
             end_time,
             estimated_charge_time_to_min,
-            &prices.general(),
+            prices,
             request,
         )
     })
@@ -434,7 +437,7 @@ fn get_new_plan(
     now: DateTime<Utc>,
     ps: &PersistentState,
     timezone: &impl TimeZone,
-    prices: &Prices,
+    prices: &GeneralPrices,
 ) -> MaybeUserPlan<ChargeRequest> {
     let charge_end_time = &ps.charge_end_time;
 

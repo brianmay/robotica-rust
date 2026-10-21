@@ -288,7 +288,7 @@ async fn setup_pipes(
 
         prices
             .clone()
-            .map(|(_, prices)| prices.list.clone())
+            .map(|(_, prices)| amber::CombinedPrices(prices))
             .send_to_mqtt_json(
                 &state.mqtt,
                 amber_account_id.get_state_topic("prices"),

@@ -264,7 +264,7 @@ mod tests {
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
 
         let prices = GeneralPrices {
-            list: pr_list_descending(100.0),
+            list: &pr_list_descending(100.0),
             interval: INTERVAL,
         };
         let rules = vec![

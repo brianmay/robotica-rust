@@ -189,7 +189,14 @@ fn process<T: TimeZone>(
         .update_plan(id, &prices.general(), now, maybe_new_plan, day.is_on);
 
     let state = combined::get_request(
-        id, &plan, &day.rules, &prices.general(), day.is_on, meters, now, timezone,
+        id,
+        &plan,
+        &day.rules,
+        &prices.general(),
+        day.is_on,
+        meters,
+        now,
+        timezone,
     );
     let request = state.get_result();
 
@@ -411,6 +418,8 @@ mod tests {
         #[case] expected_end_time: DateTime<Utc>,
         #[case] expected_cost: f32,
     ) {
+        use crate::amber::GeneralPrices;
+
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
         let id = Id::new("test").unwrap();
 
@@ -499,8 +508,8 @@ mod tests {
             ),
         ];
 
-        let prices = Prices {
-            list: prices,
+        let prices = GeneralPrices {
+            list: &prices,
             interval: INTERVAL,
         };
 
@@ -510,14 +519,14 @@ mod tests {
             start_time,
             end_time,
             required_duration,
-            &prices.general(),
+            &prices,
             Request::Heat,
         );
         let user_plan = MaybeUserPlan::new_none();
-        let user_plan = user_plan.update_plan(&id, &prices.general(), start_time, maybe_new_plan, false);
+        let user_plan = user_plan.update_plan(&id, &prices, start_time, maybe_new_plan, false);
 
         let plan = user_plan.get_plan().unwrap();
-        let cost = plan.get_forecast_cost(&id, start_time, &prices.general()).unwrap();
+        let cost = plan.get_forecast_cost(&id, start_time, &prices).unwrap();
 
         assert_approx_eq!(f32, plan.get_kw(), 3.6);
         assert_eq!(plan.get_start_time(), expected_start_time);
@@ -604,8 +613,10 @@ mod tests {
         #[case] expected: Request,
     ) {
         // Arrange
+        use crate::amber::GeneralPrices;
         use IntervalType::CurrentInterval;
         use IntervalType::ForecastInterval;
+
         let timezone = FixedOffset::east_opt(11 * 60 * 60).unwrap();
         let id = Id::new("test").unwrap();
 
@@ -653,8 +664,8 @@ mod tests {
             pr(dt("2020-01-01T05:30:00Z"), 16.0, ForecastInterval),
         ];
 
-        let prices = Prices {
-            list: prices,
+        let prices = GeneralPrices {
+            list: &prices,
             interval: INTERVAL,
         };
 
@@ -674,7 +685,7 @@ mod tests {
 
         // Act
         let request =
-            combined::get_request(&id, &plan, &rules, &prices.general(), is_on, None, now, &timezone)
+            combined::get_request(&id, &plan, &rules, &prices, is_on, None, now, &timezone)
                 .get_result();
 
         // Assert

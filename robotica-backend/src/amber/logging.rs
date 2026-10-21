@@ -72,7 +72,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     let client = influxdb_config.get_client();
     let now = utc_now();
 
-    for data in &prices.list {
+    for data in prices.combined_iter() {
         let reading = PriceReading {
             duration: data.duration,
             per_kwh: data.effective_per_kwh(),
