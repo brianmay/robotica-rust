@@ -222,8 +222,7 @@ pub enum Error {
 
 const ONE_DAY: TimeDelta = time_delta_constant!(1 days);
 const RETRY_TIME: TimeDelta = time_delta_constant!(1 minutes);
-const MIN_POLL_TIME: TimeDelta = time_delta_constant!(1 minutes);
-const MAX_POLL_TIME: TimeDelta = time_delta_constant!(5 minutes);
+const POLL_TIME: TimeDelta = time_delta_constant!(5 minutes);
 const DEFAULT_INTERVAL: Duration = duration_constant!(5 minutes);
 
 /// Outputs of the Amber service.
@@ -321,19 +320,6 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                     // Process the results.
                     let next_delay = match prices {
                         Ok(prices) => {
-
-                            let update_time = get_current_price_response(&prices, &now)
-                                .into_iter()
-                                .next()
-                                .map_or_else(|| {
-                                error!(%id, "No current price found in prices: {prices:?}");
-                                // If we failed to get a current price, try again in 1 minute
-                                now + RETRY_TIME
-                            }, |current_price| {
-                                info!(%id, "Current price: {current_price:?}");
-                                current_price.end_time
-                            });
-
                             let prices = Arc::new(Prices::new(&id, prices));
                             tx_prices.try_send(prices.clone());
                             last_prices = Some(prices);
@@ -344,15 +330,7 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                                 get_current_period_end(last_prices.as_deref(), utc_now())
                                     .map(boundary_instant);
 
-                            {
-                                // How long to the current interval expires?
-                                let now = utc_now();
-                                let duration: TimeDelta = update_time - now;
-                                info!(%id, "Next price update: {update_time:?} in {duration}");
-
-                                // Ensure we update prices at least once once every 5 minutes.
-                                duration.clamp(MIN_POLL_TIME, MAX_POLL_TIME)
-                            }
+                            POLL_TIME
                         }
                         Err(err) => {
                             log_error!(err, %id, "Failed to get prices");
