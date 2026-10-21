@@ -1,23 +1,44 @@
 use super::{api, Prices, Usage};
 use crate::influxdb as influx;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use influxdb::InfluxDbWriteable;
 use robotica_common::datetime::utc_now;
 use robotica_tokio::{
-    pipes::{stateful::Receiver, Subscriber, Subscription},
+    pipes::{stateful::Receiver, stateless, Subscriber, Subscription},
     spawn,
 };
 use std::sync::Arc;
+use tokio::select;
 use tracing::error;
 
-pub fn log_prices(rx: Receiver<Arc<Prices>>, influxdb_config: &influx::Config) {
+pub fn log_prices(
+    rx_prices: Receiver<Arc<Prices>>,
+    rx_tick: stateless::Receiver<DateTime<Utc>>,
+    influxdb_config: &influx::Config,
+) {
     let influxdb_config = influxdb_config.clone();
 
     spawn(async move {
-        let mut s = rx.subscribe().await;
+        let mut s_prices = rx_prices.subscribe().await;
+        let mut s_tick = rx_tick.subscribe().await;
+        let mut last_prices: Option<Arc<Prices>> = None;
 
-        while let Ok(prices) = s.recv().await {
-            prices_to_influxdb(&influxdb_config, &prices).await;
+        loop {
+            select! {
+                Ok(prices) = s_prices.recv() => {
+                    price_readings_to_influxdb(&influxdb_config, &prices).await;
+                    price_summaries_to_influxdb(&influxdb_config, &prices).await;
+                    last_prices = Some(prices);
+                }
+                // Record the current price at each interval boundary,
+                // even if the price data has not changed.
+                Ok(_boundary) = s_tick.recv() => {
+                    if let Some(prices) = &last_prices {
+                        price_summaries_to_influxdb(&influxdb_config, prices).await;
+                    }
+                }
+                else => break,
+            }
         }
     });
 }
@@ -68,9 +89,8 @@ struct UsageReading {
     time: chrono::DateTime<Utc>,
 }
 
-async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
+async fn price_readings_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
     let client = influxdb_config.get_client();
-    let now = utc_now();
 
     for data in prices.combined_iter() {
         let reading = PriceReading {
@@ -98,6 +118,11 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
             }
         }
     }
+}
+
+async fn price_summaries_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
+    let client = influxdb_config.get_client();
+    let now = utc_now();
 
     let current_prices = prices.current(&now);
     for current in &current_prices {
@@ -108,7 +133,7 @@ async fn prices_to_influxdb(influxdb_config: &influx::Config, prices: &Prices) {
                 api::ChannelType::ControlledLoad => "controlled_load".to_string(),
                 api::ChannelType::FeedIn => "feed_in".to_string(),
             },
-            time: Utc::now(),
+            time: now,
         };
 
         let measurement = match current.channel_type {

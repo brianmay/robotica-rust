@@ -232,6 +232,7 @@ pub fn run(
     id: &Id,
     persistent_state_database: &persistent_state::PersistentStateDatabase,
     rx: Receiver<Arc<Prices>>,
+    tick: stateless::Receiver<DateTime<Utc>>,
     is_on: Receiver<bool>,
     rules: stateless::Receiver<Json<rules::RuleSet<Request>>>,
 ) -> Receiver<State> {
@@ -245,6 +246,7 @@ pub fn run(
 
     spawn(async move {
         let mut s = rx.subscribe().await;
+        let mut s_tick = tick.subscribe().await;
         let mut s_is_on = is_on.subscribe().await;
         let mut s_rules = rules.subscribe().await;
 
@@ -277,6 +279,12 @@ pub fn run(
                 Ok(new_prices) = s.recv() => {
                     info!(%id, "Received new prices");
                     prices = new_prices;
+                    day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
+                }
+                Ok(boundary) = s_tick.recv() => {
+                    // We have entered a new pricing interval; re-evaluate with
+                    // the last known prices.
+                    info!(%id, boundary = %boundary, "Pricing interval boundary");
                     day = process(&id, day, &prices, &tx_out, &psr, Some(&meters), utc_now(), timezone);
                 }
                 Ok(Json(new_rules)) = s_rules.recv() => {

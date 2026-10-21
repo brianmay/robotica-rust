@@ -5,7 +5,10 @@ use robotica_common::datetime::utc_now;
 use robotica_common::robotica::entities::Id;
 use robotica_macro::{duration_constant, time_delta_constant};
 use robotica_tokio::{
-    pipes::stateful::{create_pipe, Receiver},
+    pipes::{
+        stateful::{create_pipe, Receiver},
+        stateless,
+    },
     spawn,
 };
 use serde::ser::{Serialize, Serializer};
@@ -27,21 +30,13 @@ pub mod water_heater;
 
 // pub use user_plan::MaybeUserPlan;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Prices {
     general: Vec<api::PriceResponse>,
     controlled_load: Vec<api::PriceResponse>,
     feed_in: Vec<api::PriceResponse>,
     pub interval: Duration,
 }
-
-impl PartialEq for Prices {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-
-impl Eq for Prices {}
 
 impl Prices {
     fn get_vec_for_type(
@@ -147,14 +142,6 @@ pub struct GeneralPrices<'a> {
     pub interval: Duration,
 }
 
-impl PartialEq for GeneralPrices<'_> {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-
-impl Eq for GeneralPrices<'_> {}
-
 impl GeneralPrices<'_> {
     pub fn current(&self, dt: &DateTime<Utc>) -> Option<&api::PriceResponse> {
         get_current_price_response(self.list, dt)
@@ -215,12 +202,10 @@ pub struct Usage {
 }
 
 impl PartialEq for Usage {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.list == other.list
     }
 }
-
-impl Eq for Usage {}
 
 const HOURS_TO_SECONDS: u16 = 3600;
 const fn hours(num: u16) -> u16 {
@@ -241,11 +226,28 @@ const MIN_POLL_TIME: TimeDelta = time_delta_constant!(1 minutes);
 const MAX_POLL_TIME: TimeDelta = time_delta_constant!(5 minutes);
 const DEFAULT_INTERVAL: Duration = duration_constant!(5 minutes);
 
-type Outputs = (Receiver<Arc<Prices>>, Receiver<Arc<Usage>>);
+/// Outputs of the Amber service.
+pub struct Outputs {
+    /// Current prices.
+    ///
+    /// The value only changes when the price data actually changes;
+    /// identical poll results are deduplicated by the pipe.
+    pub prices: Receiver<Arc<Prices>>,
+    /// The time each new pricing interval begins.
+    ///
+    /// Fires at each interval boundary, even if prices are unchanged or the
+    /// Amber API is temporarily unavailable, so consumers can re-evaluate on
+    /// interval changes. When the price data runs out it fires once more,
+    /// then stops until the poll loop fetches fresh prices.
+    pub tick: stateless::Receiver<DateTime<Utc>>,
+    /// Usage data, updated hourly.
+    pub usage: Receiver<Arc<Usage>>,
+}
 
 pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
     let (tx_prices, rx_prices) = create_pipe("amber_prices");
     let (tx_usage, rx_usage) = create_pipe("amber_usage");
+    let (tx_tick, rx_tick) = stateless::create_pipe("amber_interval_boundary");
 
     let nem_timezone = FixedOffset::east_opt(hours(10).into())
         .ok_or_else(|| Error::Internal("Failed to create NEM timezone".to_string()))?;
@@ -255,6 +257,15 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
     spawn(async move {
         // Update prices maximum every 5 minutes
         let mut price_instant = Instant::now() + tokio::time::Duration::from_secs(0);
+
+        // The deadline of the next pricing interval boundary, or [`None`]
+        // while there is no price data covering a boundary. Armed whenever
+        // fresh prices arrive.
+        let mut tick_instant: Option<Instant> = None;
+
+        // The last prices successfully fetched from Amber. Used to compute the
+        // next boundary when polls fail.
+        let mut last_prices: Option<Arc<Prices>> = None;
 
         // Update usage once an hour
         let mut usage_interval = interval(tokio::time::Duration::from_secs(hours(1).into()));
@@ -323,8 +334,15 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                                 current_price.end_time
                             });
 
-                            let prices = Prices::new(&id, prices);
-                            tx_prices.try_send(Arc::new(prices));
+                            let prices = Arc::new(Prices::new(&id, prices));
+                            tx_prices.try_send(prices.clone());
+                            last_prices = Some(prices);
+
+                            // Arm the interval boundary tick at the end of
+                            // the current period.
+                            tick_instant =
+                                get_current_period_end(last_prices.as_deref(), utc_now())
+                                    .map(boundary_instant);
 
                             {
                                 // How long to the current interval expires?
@@ -347,6 +365,26 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
                     info!(%id, "Next poll in {}", next_delay);
                     let next_delay: std::time::Duration = next_delay.to_std().unwrap_or(std::time::Duration::from_mins(5));
                     price_instant = Instant::now() + next_delay;
+                }
+                () = async {
+                    match tick_instant {
+                        Some(instant) => sleep_until(instant).await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    // We have entered a new pricing interval. Notify
+                    // consumers so they can re-evaluate, even if prices are
+                    // unchanged or the Amber API is unavailable.
+                    let now = utc_now();
+                    info!(%id, boundary = %now, "Pricing interval boundary");
+                    tx_tick.try_send(now);
+
+                    // Arm the next tick at the end of the current period;
+                    // disarms (None) when the price data runs out, until
+                    // the poll loop fetches fresh prices.
+                    tick_instant =
+                        get_current_period_end(last_prices.as_deref(), now)
+                            .map(boundary_instant);
                 }
                 _ = usage_interval.tick() => {
                     // Update the amber usage once an hour.
@@ -371,11 +409,32 @@ pub fn run(id: &Id, config: api::Config) -> Result<Outputs, Error> {
         }
     });
 
-    Ok((rx_prices, rx_usage))
+    Ok(Outputs {
+        prices: rx_prices,
+        tick: rx_tick,
+        usage: rx_usage,
+    })
 }
 
 fn is_period_current(pr: &api::PriceResponse, dt: &DateTime<Utc>) -> bool {
     pr.start_time <= *dt && pr.end_time > *dt
+}
+
+/// Get the end time of the pricing interval that covers `now`.
+///
+/// Returns [`None`] when the price list doesn't cover `now`: the next
+/// interval boundary is then unknown, and the poll loop retries the fetch
+/// until fresh prices cover `now` again.
+fn get_current_period_end(prices: Option<&Prices>, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    prices
+        .and_then(|prices| get_current_price_response(&prices.general, &now))
+        .map(|pr| pr.end_time)
+}
+
+/// Convert a wall clock time to a timer deadline.
+fn boundary_instant(boundary: DateTime<Utc>) -> Instant {
+    let delta = boundary - utc_now();
+    Instant::now() + delta.to_std().unwrap_or_default()
 }
 
 fn get_current_price_response<'a>(
@@ -425,6 +484,68 @@ mod tests {
 
         let result = prices.get_next_period(&id, now).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_get_current_period_end_with_current_period() {
+        let id = Id::new("test").unwrap();
+
+        let prices = Prices::new(
+            &id,
+            vec![
+                pr_channel(
+                    dt("2020-01-01T00:00:00Z"),
+                    dt("2020-01-01T00:30:00Z"),
+                    1.0,
+                    api::ChannelType::General,
+                ),
+                pr_channel(
+                    dt("2020-01-01T00:30:00Z"),
+                    dt("2020-01-01T01:00:00Z"),
+                    2.0,
+                    api::ChannelType::General,
+                ),
+            ],
+        );
+
+        // The current period's end time is the next boundary.
+        let now = dt("2020-01-01T00:10:00Z");
+        assert_eq!(
+            get_current_period_end(Some(&prices), now),
+            Some(dt("2020-01-01T00:30:00Z"))
+        );
+
+        // Once the boundary has passed, the next period's end time is used.
+        let now = dt("2020-01-01T00:30:00Z");
+        assert_eq!(
+            get_current_period_end(Some(&prices), now),
+            Some(dt("2020-01-01T01:00:00Z"))
+        );
+    }
+
+    #[test]
+    fn test_get_current_period_end_with_stale_prices() {
+        let id = Id::new("test").unwrap();
+
+        // The price list expired long ago; the next boundary is unknown.
+        let prices = Prices::new(
+            &id,
+            vec![pr_channel(
+                dt("2020-01-01T00:00:00Z"),
+                dt("2020-01-01T00:30:00Z"),
+                1.0,
+                api::ChannelType::General,
+            )],
+        );
+
+        let now = dt("2020-01-01T05:10:00Z");
+        assert_eq!(get_current_period_end(Some(&prices), now), None);
+    }
+
+    #[test]
+    fn test_get_current_period_end_without_prices() {
+        let now = dt("2020-01-01T00:10:00Z");
+        assert_eq!(get_current_period_end(None, now), None);
     }
 
     #[rstest::rstest]

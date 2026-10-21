@@ -143,6 +143,7 @@ pub fn run(
     car: &car::Config,
     persistent_state_database: &robotica_tokio::services::persistent_state::PersistentStateDatabase,
     rx: Receiver<Arc<Prices>>,
+    tick: stateless::Receiver<DateTime<Utc>>,
     battery_level: stateful::Receiver<Parsed<u8>>,
     min_charge_tomorrow: stateless::Receiver<Parsed<u8>>,
     set_charge_end_time: stateless::Receiver<Json<SetChargeEndTime>>,
@@ -164,6 +165,7 @@ pub fn run(
 
     spawn(async move {
         let mut s = rx.subscribe().await;
+        let mut s_tick = tick.subscribe().await;
         let mut s_min_charge_tomorrow = min_charge_tomorrow.subscribe().await;
         let mut s_set_charge_end_time = set_charge_end_time.subscribe().await;
         let mut s_battery_level = battery_level.subscribe().await;
@@ -207,6 +209,11 @@ pub fn run(
             select! {
                 Ok(prices) = s.recv() => {
                     v_prices = prices;
+                },
+                Ok(boundary) = s_tick.recv() => {
+                    // We have entered a new pricing interval; the loop will
+                    // re-evaluate with the last known prices.
+                    info!(%id, boundary = %boundary, "Pricing interval boundary");
                 },
                 Ok(battery_level) = s_battery_level.recv() => {
                     v_battery_level = *battery_level;

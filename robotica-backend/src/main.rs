@@ -26,7 +26,7 @@ use std::time::Duration;
 use amber::car::ChargeRequest;
 use amber::rules;
 use anyhow::Result;
-use chrono::Local;
+use chrono::{DateTime, Local, Utc};
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
 use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::owntracks;
@@ -280,10 +280,14 @@ async fn setup_pipes(
         let amber_account_id = Id::new("amber_account")
             .unwrap_or_else(|e| panic!("amber_account_id must be a valid Id: {e}"));
 
-        let (prices, usage) = amber::run(&amber_account_id, amber_config).unwrap_or_else(|e| {
+        let amber::Outputs {
+            prices,
+            tick,
+            usage,
+        } = amber::run(&amber_account_id, amber_config).unwrap_or_else(|e| {
             panic!("Error running amber: {e}");
         });
-        amber::logging::log_prices(prices.clone(), &config.influxdb);
+        amber::logging::log_prices(prices.clone(), tick.clone(), &config.influxdb);
         amber::logging::log_usage(usage, &config.influxdb);
 
         prices
@@ -296,10 +300,23 @@ async fn setup_pipes(
             );
 
         for water_heater in config.water_heaters {
-            monitor_water_heater(&mut state, water_heater, &prices, message_sink.clone());
+            monitor_water_heater(
+                &mut state,
+                water_heater,
+                &prices,
+                &tick,
+                message_sink.clone(),
+            );
         }
 
-        monitor_cars(&config.cars, &mut state, &postgres, &prices, &message_sink);
+        monitor_cars(
+            &config.cars,
+            &mut state,
+            &postgres,
+            &prices,
+            &tick,
+            &message_sink,
+        );
     } else {
         info!("No amber configuration found; skipping water heater and car monitoring");
     }
@@ -451,6 +468,7 @@ fn monitor_water_heater(
     state: &mut InitState,
     water_heater: config::WaterHeaterConfig,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    tick: &stateless::Receiver<DateTime<Utc>>,
     message_sink: stateless::Sender<Message>,
 ) {
     let id = water_heater.id;
@@ -474,6 +492,7 @@ fn monitor_water_heater(
         &id,
         &state.persistent_state_database,
         prices.clone(),
+        tick.clone(),
         is_on,
         rules,
     );
@@ -521,6 +540,7 @@ fn monitor_cars(
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    tick: &stateless::Receiver<DateTime<Utc>>,
     message_sink: &stateless::Sender<Message>,
 ) {
     let id = Id::new("tesla_account")
@@ -535,17 +555,28 @@ fn monitor_cars(
     });
 
     for (car, tesla) in teslas {
-        monitor_tesla(car, tesla, state, postgres, prices, &token, message_sink);
+        monitor_tesla(
+            car,
+            tesla,
+            state,
+            postgres,
+            prices,
+            tick,
+            &token,
+            message_sink,
+        );
     }
 }
 
 #[instrument(fields(id=%car.id), skip_all)]
+#[allow(clippy::too_many_arguments)]
 fn monitor_tesla(
     car: &car::Config,
     tesla: &tesla::Config,
     state: &mut InitState,
     postgres: &sqlx::Pool<sqlx::Postgres>,
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
+    tick: &stateless::Receiver<DateTime<Utc>>,
     token: &stateful::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
     message_sink: &stateless::Sender<Message>,
 ) {
@@ -588,6 +619,7 @@ fn monitor_tesla(
         car,
         &state.persistent_state_database,
         prices.clone(),
+        tick.clone(),
         receivers.battery_level.clone(),
         min_charge_tomorrow,
         set_charge_end_time,

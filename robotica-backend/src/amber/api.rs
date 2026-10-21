@@ -14,7 +14,7 @@ pub struct Config {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Quality {
     Estimated,
@@ -22,14 +22,14 @@ pub enum Quality {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 pub enum UsageType {
     Usage,
 }
 
 /// Amber usage response
 #[allow(dead_code)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageResponse {
     #[serde(rename = "type")]
@@ -110,6 +110,34 @@ mod tests {
 
     fn dt(dt: impl Into<String>) -> DateTime<Utc> {
         dt.into().parse().unwrap()
+    }
+
+    #[test]
+    fn test_usage_response_deserialize() {
+        // Wire format from the Amber usage API. Note the type is "Usage",
+        // unlike the lower-cased values of the other enums.
+        let json = r#"{
+            "type": "Usage",
+            "duration": 30,
+            "spotPerKwh": 5.11,
+            "perKwh": 9.11,
+            "date": "2026-10-20",
+            "nemTime": "2026-10-20T00:00:00Z",
+            "startTime": "2026-10-20T00:00:00Z",
+            "endTime": "2026-10-20T00:30:00Z",
+            "renewables": 36.05,
+            "channelType": "general",
+            "tariffInformation": null,
+            "spikeStatus": "none",
+            "descriptor": "high",
+            "channelIdentifier": "E1",
+            "kwh": 0.261,
+            "quality": "estimated",
+            "cost": 2.38
+        }"#;
+        let response: UsageResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.usage_type, UsageType::Usage);
+        assert_eq!(response.quality, Quality::Estimated);
     }
 
     #[test]
