@@ -89,9 +89,7 @@ let
         ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
         ;;
       *)
-        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/start.wav
         ${pkgs.alsa-utils}/bin/aplay -q "$filename"
-        ${pkgs.alsa-utils}/bin/aplay ${sound_path}/stop.wav
         ;;
     esac
   '';
