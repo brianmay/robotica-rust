@@ -27,7 +27,8 @@
     "http-proxy-middleware": ">=3.0.6",
     "js-yaml": "^5.0.0",
     "browserslist": "4.29.5",
-    "fast-uri": "^4.0.0"
+    "fast-uri": "^4.0.0",
+    "body-parser": "^2.4.0"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
