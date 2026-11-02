@@ -6,10 +6,10 @@ use crate::{
 };
 use chrono::{DateTime, Local, NaiveDate, Utc};
 use robotica_common::{
-    datetime::utc_now,
+    datetime::{datetime_to_string, utc_now},
     mqtt::{Json, MqttMessage},
     robotica::{
-        amber::price::{ChannelType, Descriptor, PriceResponse},
+        amber::price::{ChannelType, Descriptor, PriceResponse, Prices},
         entities::{AnyId, Id},
     },
 };
@@ -18,14 +18,14 @@ use yew::prelude::*;
 pub enum Msg {
     SubscribedPrices(Subscription),
     SubscribedTick(Subscription),
-    Prices(Vec<PriceResponse>),
+    Prices(Prices),
     Tick,
 }
 
 pub struct PricesComponent {
     prices_subscription: Option<Subscription>,
     tick_subscription: Option<Subscription>,
-    prices: Option<Vec<PriceResponse>>,
+    prices: Option<Prices>,
 }
 
 fn amber_account_id() -> Id {
@@ -43,7 +43,7 @@ fn subscribe_prices(ctx: &Context<PricesComponent>) {
 
     let topic = amber_account_id().get_state_topic("prices");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
-        let Json(prices): Json<Vec<PriceResponse>> = msg.try_into().unwrap();
+        let Json(prices): Json<Prices> = msg.try_into().unwrap();
         Msg::Prices(prices)
     });
     let mut wss = wss;
@@ -110,9 +110,9 @@ struct IntervalSummary {
 
 type DateGroup<'a> = (NaiveDate, Vec<(&'a DateTime<Utc>, &'a IntervalSummary)>);
 
-fn summarize(prices: &[PriceResponse]) -> BTreeMap<DateTime<Utc>, IntervalSummary> {
+fn summarize(prices: &Prices) -> BTreeMap<DateTime<Utc>, IntervalSummary> {
     let mut intervals: BTreeMap<DateTime<Utc>, IntervalSummary> = BTreeMap::new();
-    for price in prices {
+    for price in prices.combined_iter() {
         let summary = intervals.entry(price.start_time).or_default();
         match price.channel_type {
             ChannelType::General => summary.general = Some(price.clone()),
@@ -166,17 +166,12 @@ impl Component for PricesComponent {
                     {
                         if let Some(prices) = &self.prices {
                             let now = utc_now();
-                            let has_channel = |channel_type: ChannelType| {
-                                prices.iter().any(|price| price.channel_type == channel_type)
-                            };
-                            let has_controlled_load = has_channel(ChannelType::ControlledLoad);
-                            let has_feed_in = has_channel(ChannelType::FeedIn);
+                            let has_controlled_load = !prices.controlled_load.is_empty();
+                            let has_feed_in = !prices.feed_in.is_empty();
                             let current = prices
+                                .general
                                 .iter()
-                                .find(|price| {
-                                    matches!(price.channel_type, ChannelType::General)
-                                        && price.is_current(now)
-                                });
+                                .find(|price| price.is_current(now));
                             let intervals = summarize(prices);
                             let columns = 3 + usize::from(has_controlled_load) + usize::from(has_feed_in);
 
@@ -191,6 +186,7 @@ impl Component for PricesComponent {
 
                             html! {
                                 <>
+                                <p>{ format!("Last updated: {}", datetime_to_string(prices.last_updated)) }</p>
                                 {
                                     current.map_or_else(
                                         || html! { <p>{ "No current price available" }</p> },

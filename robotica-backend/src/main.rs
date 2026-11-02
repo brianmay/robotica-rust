@@ -290,14 +290,13 @@ async fn setup_pipes(
         amber::logging::log_prices(prices.clone(), tick.clone(), &config.influxdb);
         amber::logging::log_usage(usage, &config.influxdb);
 
-        prices
-            .clone()
-            .map(|(_, prices)| amber::CombinedPrices(prices))
-            .send_to_mqtt_json(
-                &state.mqtt,
-                amber_account_id.get_state_topic("prices"),
-                &SendOptions::new(),
-            );
+        // Publish the current prices as a struct, so the frontend can
+        // access each channel and know when the prices were last updated.
+        prices.clone().send_to_mqtt_json(
+            &state.mqtt,
+            amber_account_id.get_state_topic("prices"),
+            &SendOptions::new(),
+        );
 
         // Publish the interval boundary tick so the frontend can
         // re-evaluate the current interval at each boundary, even when

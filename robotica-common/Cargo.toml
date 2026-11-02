@@ -24,6 +24,8 @@ prost-build = { version = "0.14.1", optional = true }
 [dev-dependencies]
 approx = "0.5.1"
 chrono-tz = "0.10.4"
+float-cmp = "0.10.0"
+rstest = "0.28.0"
 
 [features]
 websockets = ["dep:prost", "dep:prost-types", "dep:prost-build"]
