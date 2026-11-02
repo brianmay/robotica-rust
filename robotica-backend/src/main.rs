@@ -299,6 +299,15 @@ async fn setup_pipes(
                 &SendOptions::new(),
             );
 
+        // Publish the interval boundary tick so the frontend can
+        // re-evaluate the current interval at each boundary, even when
+        // the price data itself is unchanged.
+        tick.clone().send_to_mqtt_json(
+            &state.mqtt,
+            amber_account_id.get_state_topic("tick"),
+            &SendOptions::new(),
+        );
+
         for water_heater in config.water_heaters {
             monitor_water_heater(
                 &mut state,

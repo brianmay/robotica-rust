@@ -9,7 +9,7 @@ use robotica_common::{
     datetime::utc_now,
     mqtt::{Json, MqttMessage},
     robotica::{
-        amber::price::{ChannelType, Descriptor, IntervalType, PriceResponse},
+        amber::price::{ChannelType, Descriptor, PriceResponse},
         entities::{AnyId, Id},
     },
 };
@@ -17,24 +17,31 @@ use yew::prelude::*;
 
 pub enum Msg {
     SubscribedPrices(Subscription),
+    SubscribedTick(Subscription),
     Prices(Vec<PriceResponse>),
+    Tick,
 }
 
 pub struct PricesComponent {
     prices_subscription: Option<Subscription>,
+    tick_subscription: Option<Subscription>,
     prices: Option<Vec<PriceResponse>>,
 }
 
-fn subscribe(ctx: &Context<PricesComponent>) {
+fn amber_account_id() -> Id {
+    let Ok(id) = Id::new("amber_account") else {
+        unreachable!("\"amber_account\" is a valid Id literal");
+    };
+    id
+}
+
+fn subscribe_prices(ctx: &Context<PricesComponent>) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let Ok(id) = Id::new("amber_account") else {
-        unreachable!("\"amber_account\" is a valid Id literal");
-    };
-    let topic = id.get_state_topic("prices");
+    let topic = amber_account_id().get_state_topic("prices");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         let Json(prices): Json<Vec<PriceResponse>> = msg.try_into().unwrap();
         Msg::Prices(prices)
@@ -43,6 +50,25 @@ fn subscribe(ctx: &Context<PricesComponent>) {
     ctx.link().send_future(async move {
         let s = wss.subscribe_mqtt(topic, callback).await;
         Msg::SubscribedPrices(s)
+    });
+}
+
+/// Subscribe to the interval boundary tick published by the backend.
+///
+/// The tick fires at each pricing interval boundary, even when the price
+/// data itself is unchanged, so the current interval can be re-evaluated.
+fn subscribe_tick(ctx: &Context<PricesComponent>) {
+    let (wss, _): (WebsocketService, _) = ctx
+        .link()
+        .context(ctx.link().batch_callback(|_| None))
+        .unwrap();
+
+    let topic = amber_account_id().get_state_topic("tick");
+    let callback = ctx.link().callback(|_msg: MqttMessage| Msg::Tick);
+    let mut wss = wss;
+    ctx.link().send_future(async move {
+        let s = wss.subscribe_mqtt(topic, callback).await;
+        Msg::SubscribedTick(s)
     });
 }
 
@@ -102,9 +128,11 @@ impl Component for PricesComponent {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        subscribe(ctx);
+        subscribe_prices(ctx);
+        subscribe_tick(ctx);
         Self {
             prices_subscription: None,
+            tick_subscription: None,
             prices: None,
         }
     }
@@ -115,10 +143,17 @@ impl Component for PricesComponent {
                 self.prices_subscription = Some(subscription);
                 false
             }
+            Msg::SubscribedTick(subscription) => {
+                self.tick_subscription = Some(subscription);
+                false
+            }
             Msg::Prices(prices) => {
                 self.prices = Some(prices);
                 true
             }
+            // Re-render so the current interval is re-evaluated against
+            // the current time.
+            Msg::Tick => true,
         }
     }
 
@@ -214,7 +249,7 @@ impl Component for PricesComponent {
                                                         rows.iter().map(|(start_time, summary)| {
                                                             let general = summary.general.as_ref();
                                                             let row_class = general.map_or("", |price| {
-                                                                if matches!(price.interval_type, IntervalType::CurrentInterval) {
+                                                                if price.is_current(now) {
                                                                     "table-primary"
                                                                 } else {
                                                                     descriptor_to_class(price.descriptor)
