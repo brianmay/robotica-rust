@@ -1,14 +1,13 @@
 //! A zwave switch controller
 use crate::{
-    mqtt::{Json, MqttMessage},
+    mqtt::{topics::Topics, Json, MqttMessage},
     zwave::{Data, Status, StatusMessage},
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
-    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
+    ControllerTrait, DisplayState, ParseError, Subscription, TurnOnOff,
 };
 
 /// The configuration for a switch controller
@@ -21,6 +20,26 @@ pub struct Config {
     pub action: Action,
 }
 
+impl Config {
+    /// The topic that reports the device status.
+    #[must_use]
+    pub fn status_topic(&self) -> String {
+        format!("zwave/{}/status", self.topic_substr)
+    }
+
+    /// The topic that reports the target power value.
+    #[must_use]
+    pub fn power_topic(&self) -> String {
+        format!("zwave/{}/37/0/targetValue", self.topic_substr)
+    }
+
+    /// The topic that commands the target power value.
+    #[must_use]
+    pub fn command_topic(&self) -> String {
+        format!("zwave/{}/37/0/targetValue/set", self.topic_substr)
+    }
+}
+
 impl ConfigTrait for Config {
     type Controller = Controller;
 
@@ -31,6 +50,34 @@ impl ConfigTrait for Config {
             power: None,
         }
     }
+
+    fn topics(&self) -> Topics {
+        let mut topics = Topics::default();
+        topics.subscribe_exact(self.status_topic());
+        topics.subscribe_exact(self.power_topic());
+        topics.send_exact(self.command_topic());
+        topics
+    }
+}
+
+/// A typed message from a zwave device
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Message {
+    /// The device status
+    Status(Status),
+
+    /// The target power value
+    Power(bool),
+}
+
+fn parse_status(msg: MqttMessage) -> Result<Message, ParseError> {
+    let Json(message): Json<StatusMessage> = msg.try_into()?;
+    Ok(Message::Status(message.status))
+}
+
+fn parse_power(msg: MqttMessage) -> Result<Message, ParseError> {
+    let Json(data): Json<Data<bool>> = msg.try_into()?;
+    Ok(Message::Power(data.value))
 }
 
 /// The controller for a switch
@@ -40,51 +87,30 @@ pub struct Controller {
     power: Option<bool>,
 }
 
-fn topic(parts: &[&str]) -> String {
-    parts.join("/")
-}
-
 impl ControllerTrait for Controller {
-    fn get_subscriptions(&self) -> Vec<Subscription> {
-        let mut result: Vec<Subscription> = Vec::new();
-        let config = &self.config;
+    type Message = Message;
 
-        let p = ["zwave", &config.topic_substr, "status"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::Status as u32,
-        };
-        result.push(s);
-
-        let p = ["zwave", &config.topic_substr, "37", "0", "targetValue"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::Power as u32,
-        };
-        result.push(s);
-
-        result
+    fn subscriptions(&self) -> Vec<Subscription<Message>> {
+        vec![
+            Subscription {
+                topic: self.config.status_topic(),
+                parse: parse_status,
+            },
+            Subscription {
+                topic: self.config.power_topic(),
+                parse: parse_power,
+            },
+        ]
     }
 
-    fn process_message(&mut self, label: Label, data: MqttMessage) {
-        match label.try_into() {
-            Ok(ButtonStateMsgType::Status) => {
-                let maybe_msg: Result<Json<StatusMessage>, _> = data.try_into();
-                match maybe_msg {
-                    Ok(Json(msg)) => self.status = Some(msg.status),
-                    Err(err) => error!("Invalid power state: {err}"),
-                }
+    fn process_message(&mut self, message: Message) {
+        match message {
+            Message::Status(status) => {
+                self.status = Some(status);
             }
-
-            Ok(ButtonStateMsgType::Power) => {
-                let maybe_msg: Result<Json<Data<bool>>, _> = data.try_into();
-                match maybe_msg {
-                    Ok(Json(json)) => self.power = Some(json.value),
-                    Err(err) => error!("Invalid power state: {err}"),
-                }
+            Message::Power(power) => {
+                self.power = Some(power);
             }
-
-            Err(()) => error!("Invalid message label {}", label),
         }
     }
 
@@ -114,7 +140,7 @@ impl ControllerTrait for Controller {
             TurnOnOff::TurnOff => "False",
         };
 
-        let topic = format!("zwave/{}/37/0/targetValue/set", self.config.topic_substr);
+        let topic = self.config.command_topic();
         mqtt_command_vec(&topic, &payload.to_string())
     }
 
@@ -123,19 +149,41 @@ impl ControllerTrait for Controller {
     }
 }
 
-enum ButtonStateMsgType {
-    Status,
-    Power,
-}
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
 
-impl TryFrom<u32> for ButtonStateMsgType {
-    type Error = ();
-
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        match v {
-            x if x == ButtonStateMsgType::Status as u32 => Ok(ButtonStateMsgType::Status),
-            x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
-            _ => Err(()),
+    fn config() -> Config {
+        Config {
+            topic_substr: "lounge_light".to_string(),
+            action: Action::Toggle,
         }
+    }
+
+    #[test]
+    fn test_topics() {
+        let topics = config().topics();
+        assert!(topics.is_subscribe_allowed("zwave/lounge_light/status"));
+        assert!(topics.is_subscribe_allowed("zwave/lounge_light/37/0/targetValue"));
+        assert!(topics.is_send_allowed("zwave/lounge_light/37/0/targetValue/set"));
+        assert!(!topics.is_subscribe_allowed("zwave/other/status"));
+    }
+
+    #[test]
+    fn test_process_message() {
+        let mut controller = config().create_controller();
+
+        controller.process_message(Message::Status(Status::Alive));
+        assert_eq!(controller.get_display_state(), DisplayState::Unknown);
+
+        controller.process_message(Message::Power(true));
+        assert_eq!(controller.get_display_state(), DisplayState::On);
+
+        controller.process_message(Message::Power(false));
+        assert_eq!(controller.get_display_state(), DisplayState::Off);
+
+        controller.process_message(Message::Status(Status::Dead));
+        assert_eq!(controller.get_display_state(), DisplayState::Error);
     }
 }

@@ -57,6 +57,7 @@ pub struct ZonesView {
     list: Arc<Vec<Zone>>,
     status: ZoneStatus,
     loading_status: LoadingStatus,
+    objects: Vec<String>,
 }
 
 async fn process_response<T: DeserializeOwned + std::fmt::Debug>(
@@ -82,9 +83,16 @@ async fn process_response<T: DeserializeOwned + std::fmt::Debug>(
     }
 }
 
+/// Properties for the zones view.
+#[derive(Debug, Clone, PartialEq, Eq, Properties)]
+pub struct Props {
+    /// The ids of the objects to track on the map.
+    pub objects: Vec<String>,
+}
+
 impl Component for ZonesView {
     type Message = Msg;
-    type Properties = ();
+    type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
         load_list(ctx);
@@ -94,7 +102,13 @@ impl Component for ZonesView {
             status: ZoneStatus::Idle,
             loading_status: LoadingStatus::Loading,
             list: Arc::new(Vec::new()),
+            objects: ctx.props().objects.clone(),
         }
+    }
+
+    fn changed(&mut self, ctx: &Context<Self>, _old_props: &Self::Properties) -> bool {
+        self.objects.clone_from(&ctx.props().objects);
+        true
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -210,6 +224,7 @@ impl Component for ZonesView {
                 save_zone={save_zone}
                 request_item={request_item}
                 request_list={request_list}
+                objects={self.objects.clone()}
                 />
         }
     }

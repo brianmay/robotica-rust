@@ -25,7 +25,10 @@ use chrono::{Local, Timelike};
 use serde::Deserialize;
 
 use robotica_common::{
-    config::{ButtonConfig, ButtonRowConfig, Config as CommonConfig, ControllerConfig, Icon},
+    config::{
+        schedule_topic, tags_topic, ButtonConfig, ButtonRowConfig, Config as CommonConfig,
+        ControllerConfig, Icon, ViewConfig, ViewKind,
+    },
     scheduler::{Importance, Status},
 };
 use robotica_common::{
@@ -159,6 +162,15 @@ pub fn run_gui(
     }
 }
 
+/// Get the controls views from a config: the views the wall panel can show.
+fn controls_views(config: &CommonConfig) -> Vec<&ViewConfig> {
+    config
+        .views
+        .iter()
+        .filter(|view| matches!(view.kind, ViewKind::Controls(_)))
+        .collect()
+}
+
 fn spawn_config_monitor(
     handle_weak: Weak<slint::AppWindow>,
     name: String,
@@ -182,7 +194,10 @@ fn spawn_config_monitor(
             select! {
                 msg = rx_room.recv() => if let Some(room) = msg {
                     if let Some(common_config) = &maybe_common_config {
-                        maybe_selected_room = common_config.rooms.iter().find(|r| r.title == room).map(|r| r.id.clone());
+                        maybe_selected_room = controls_views(common_config)
+                            .into_iter()
+                            .find(|r| r.title == room)
+                            .map(|r| r.id.clone());
                     } else {
                         maybe_selected_room = None;
                     }
@@ -206,18 +221,18 @@ fn spawn_config_monitor(
                 let cancellation = CancellationToken::new();
                 _guard = cancellation.clone().drop_guard().pipe(Some);
 
-                let rooms = common_config
-                    .rooms
+                let controls_views = controls_views(&common_config);
+
+                let rooms = controls_views
                     .iter()
                     .map(|r| r.title.clone().pipe(SharedString::from))
                     .collect::<Vec<_>>();
 
-                let selected_room = common_config
-                    .rooms
+                let selected_room = controls_views
                     .iter()
                     .find(|r| Some(&r.id) == maybe_selected_room.as_ref())
-                    .cloned()
-                    .or_else(|| common_config.rooms.first().cloned());
+                    .map(|r| (*r).clone())
+                    .or_else(|| controls_views.first().map(|r| (*r).clone()));
 
                 handle_weak
                     .upgrade_in_event_loop(move |handle| {
@@ -242,19 +257,23 @@ fn spawn_config_monitor(
 fn setup_config(
     ui: &slint::AppWindow,
     config: &Arc<CommonConfig>,
-    room: Option<&String>,
+    view_id: Option<&String>,
     mqtt: &MqttTx,
     cancellation: &CancellationToken,
 ) {
     let icons = ui.get_all_icons();
     let mut id = 0;
 
-    let no_room = vec![];
+    let no_rows: Vec<ButtonRowConfig> = vec![];
     let buttons: &[ButtonRowConfig] = config
-        .rooms
+        .views
         .iter()
-        .find(|r| Some(&r.id) == room)
-        .map_or(&no_room, |r| &r.rows);
+        .find(|view| Some(&view.id) == view_id)
+        .and_then(|view| match &view.kind {
+            ViewKind::Controls(controls) => Some(&controls.rows),
+            _ => None,
+        })
+        .map_or(&no_rows, |rows| rows);
 
     let all_buttons: Vec<slint::ButtonRowData> = buttons
         .iter()
@@ -370,79 +389,158 @@ fn monitor_buttons_state(
         let handle_weak = ui.as_weak();
 
         tokio::spawn(async move {
-            let button = button;
-            let mut rx_click = button.rx_click;
-            let lbc = &button.config;
-
-            let mut controller: Box<dyn ControllerTrait + Send + Sync> = match &lbc.controller {
-                ControllerConfig::HdmiMatrix(config) => Box::new(config.create_controller()),
-                ControllerConfig::Light(config) => Box::new(config.create_controller()),
-                ControllerConfig::Switch(config) => Box::new(config.create_controller()),
-                ControllerConfig::Zwave(config) => Box::new(config.create_controller()),
-                ControllerConfig::Music(config) => Box::new(config.create_controller()),
-                ControllerConfig::Tasmota(config) => Box::new(config.create_controller()),
-            };
-
-            let requested_subscriptions = controller.get_subscriptions();
-
-            let (labels, receivers) = {
-                let mut labels = Vec::with_capacity(requested_subscriptions.len());
-                let mut receivers = Vec::with_capacity(requested_subscriptions.len());
-                for s in controller.get_subscriptions() {
-                    let label = s.label;
-                    let s = mqtt.subscribe_into_stateful(s.topic).await.unwrap();
-                    labels.push(label);
-                    receivers.push(s);
+            let lbc = button.config.clone();
+            match &lbc.controller {
+                ControllerConfig::HdmiMatrix(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
                 }
-                (labels, receivers)
-            };
-
-            let combined = stateful::combine_latest("combined_subscriptions", receivers);
-            let mut combined_subscribe = combined.subscribe().await;
-
-            loop {
-                select! {
-                    result = rx_click.recv() => if result == Some(()) {
-                        controller.get_press_commands().into_iter().for_each(|message| {
-                            mqtt.try_send(message);
-                        });
-                    } else {
-                        debug!("Exiting button press loop");
-                        break;
-                    },
-
-                    () = cancellation.cancelled() => {
-                        debug!("Cancelled; Exiting button press loop");
-                        break;
-                    },
-
-                    Ok((i, msg)) = combined_subscribe.recv() => {
-                        let Some(label) = labels.get(i).copied() else {
-                            error!("Received message for missing subscription index {i}");
-                            continue;
-                        };
-
-                        controller.process_message(label, msg);
-
-                        let display_state = controller.get_display_state();
-                        let lbc = button.config.clone();
-                        handle_weak
-                            .upgrade_in_event_loop(move |handle| {
-                                let icons = handle.get_all_icons();
-                                let bd = get_button_data(id, &lbc, display_state, &icons);
-
-                                let row = button.row;
-                                let col = button.col;
-                                let buttons = handle.get_buttons();
-                                if let Some(br) = buttons.row_data(row) {
-                                    br.buttons.set_row_data(col, bd);
-                                }
-                            })
-                            .unwrap();
-                    }
+                ControllerConfig::Light(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
+                }
+                ControllerConfig::Switch(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
+                }
+                ControllerConfig::Zwave(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
+                }
+                ControllerConfig::Music(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
+                }
+                ControllerConfig::Tasmota(config) => {
+                    button_state_loop(
+                        config.create_controller(),
+                        id,
+                        button,
+                        handle_weak,
+                        mqtt,
+                        cancellation,
+                    )
+                    .await;
                 }
             }
         });
+    }
+}
+
+/// Run the state loop for a single button with a typed controller.
+///
+/// Subscribes to the controller's topics, parses each incoming message with
+/// the parser declared alongside the topic, and updates the display state
+/// of the button.
+#[allow(clippy::too_many_lines)]
+async fn button_state_loop<C>(
+    mut controller: C,
+    id: usize,
+    button: Button,
+    handle_weak: Weak<slint::AppWindow>,
+    mqtt: MqttTx,
+    cancellation: CancellationToken,
+) where
+    C: ControllerTrait + Send + Sync + 'static,
+{
+    let mut rx_click = button.rx_click;
+    let lbc = button.config;
+
+    let subscriptions = controller.subscriptions();
+
+    let receivers = {
+        let mut receivers = Vec::with_capacity(subscriptions.len());
+        for s in &subscriptions {
+            let receiver = mqtt.subscribe_into_stateful(s.topic.clone()).await.unwrap();
+            receivers.push(receiver);
+        }
+        receivers
+    };
+
+    let combined = stateful::combine_latest("combined_subscriptions", receivers);
+    let mut combined_subscribe = combined.subscribe().await;
+
+    loop {
+        select! {
+            result = rx_click.recv() => if result == Some(()) {
+                controller.get_press_commands().into_iter().for_each(|message| {
+                    mqtt.try_send(message);
+                });
+            } else {
+                debug!("Exiting button press loop");
+                break;
+            },
+
+            () = cancellation.cancelled() => {
+                debug!("Cancelled; Exiting button press loop");
+                break;
+            },
+
+            Ok((i, msg)) = combined_subscribe.recv() => {
+                let Some(subscription) = subscriptions.get(i) else {
+                    error!("Received message for missing subscription index {i}");
+                    continue;
+                };
+
+                match (subscription.parse)(msg) {
+                    Ok(message) => controller.process_message(message),
+                    Err(err) => {
+                        error!("Failed to parse message on topic {}: {err}", subscription.topic);
+                    }
+                }
+
+                let display_state = controller.get_display_state();
+                let lbc = lbc.clone();
+                handle_weak
+                    .upgrade_in_event_loop(move |handle| {
+                        let icons = handle.get_all_icons();
+                        let bd = get_button_data(id, &lbc, display_state, &icons);
+
+                        let row = button.row;
+                        let col = button.col;
+                        let buttons = handle.get_buttons();
+                        if let Some(br) = buttons.row_data(row) {
+                            br.buttons.set_row_data(col, bd);
+                        }
+                    })
+                    .unwrap();
+            }
+        }
     }
 }
 
@@ -454,7 +552,7 @@ fn monitor_tags(
 ) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
-        let topic = format!("robotica/{}/tags", config.instance);
+        let topic = tags_topic(&config.instance);
         let rx = mqtt
             .subscribe_into_stateful::<Arc<Json<Tags>>>(topic)
             .await
@@ -527,7 +625,7 @@ fn monitor_schedule(
 ) {
     let handle_weak = ui.as_weak();
     tokio::spawn(async move {
-        let topic = format!("schedule/{}/pending", config.instance);
+        let topic = schedule_topic(&config.instance);
         let rx = mqtt
             .subscribe_into_stateful::<Arc<Json<Vec<Sequence>>>>(topic)
             .await

@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::{
     components::require_connection::RequireConnection,
     services::websocket::{Subscription, WebsocketService},
 };
 use robotica_common::{
-    config::Config,
+    config::{occupancy_topic_pattern, presence_topic},
     mqtt::{Json, MqttMessage},
     robotica::occupancy::{OccupiedState, PresenceTrackerValue},
 };
@@ -23,24 +22,21 @@ struct PersonPresence {
 pub enum Msg {
     SubscribedPresence(Subscription),
     SubscribedOccupancy(Subscription),
-    Config(Option<Arc<Config>>),
     Presence(MqttMessage),
     Occupancy(MqttMessage),
 }
 
 #[derive(Eq, PartialEq, Properties, Clone)]
 pub struct Props {
-    pub id: String,
+    pub people: Vec<String>,
 }
 
 pub struct OccupancyViewComponent {
-    presence_subscription: Option<Subscription>,
+    presence_subscriptions: Vec<Subscription>,
     occupancy_subscription: Option<Subscription>,
     room_presences: HashMap<String, Vec<PersonPresence>>,
     person_to_room: HashMap<String, String>,
     occupancies: HashMap<String, OccupiedState>,
-    config: Option<Arc<Config>>,
-    _config_handle: ContextHandle<Option<Arc<Config>>>,
 }
 
 #[must_use]
@@ -83,13 +79,15 @@ fn subscribe_presence(ctx: &Context<OccupancyViewComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = "robotica/state/+/presence".to_string();
-    let callback = ctx.link().callback(Msg::Presence);
-    let mut wss = wss;
-    ctx.link().send_future(async move {
-        let s = wss.subscribe_mqtt(topic, callback).await;
-        Msg::SubscribedPresence(s)
-    });
+    for person in ctx.props().people.clone() {
+        let topic = presence_topic(&person);
+        let callback = ctx.link().callback(Msg::Presence);
+        let mut wss = wss.clone();
+        ctx.link().send_future(async move {
+            let s = wss.subscribe_mqtt(topic, callback).await;
+            Msg::SubscribedPresence(s)
+        });
+    }
 }
 
 fn subscribe_occupancy(ctx: &Context<OccupancyViewComponent>) {
@@ -98,7 +96,7 @@ fn subscribe_occupancy(ctx: &Context<OccupancyViewComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = "robotica/state/+/+/occupancy".to_string();
+    let topic = occupancy_topic_pattern().to_string();
     let callback = ctx.link().callback(Msg::Occupancy);
     let mut wss = wss;
     ctx.link().send_future(async move {
@@ -112,21 +110,14 @@ impl Component for OccupancyViewComponent {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (config, config_handle): (Option<Arc<Config>>, _) = ctx
-            .link()
-            .context(ctx.link().batch_callback(|_| None))
-            .unwrap();
-
         subscribe_presence(ctx);
         subscribe_occupancy(ctx);
         Self {
-            presence_subscription: None,
+            presence_subscriptions: Vec::new(),
             occupancy_subscription: None,
             room_presences: HashMap::new(),
             person_to_room: HashMap::new(),
             occupancies: HashMap::new(),
-            config,
-            _config_handle: config_handle,
         }
     }
 
@@ -137,7 +128,7 @@ impl Component for OccupancyViewComponent {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::SubscribedPresence(subscription) => {
-                self.presence_subscription = Some(subscription);
+                self.presence_subscriptions.push(subscription);
                 false
             }
             Msg::SubscribedOccupancy(subscription) => {
@@ -146,6 +137,7 @@ impl Component for OccupancyViewComponent {
             }
             Msg::Presence(msg) => {
                 debug!("Presence message: {:?}", msg);
+                let mut changed = false;
                 if let Some(person_id) = extract_id_from_topic(&msg.topic, "presence") {
                     if let Ok(Json(value)) = Json::<PresenceTrackerValue>::try_from(msg) {
                         let old_room = self.person_to_room.get(&person_id).cloned();
@@ -166,31 +158,30 @@ impl Component for OccupancyViewComponent {
                                     });
                                 }
                             }
-                            if let Some(new_room) = new_room {
-                                self.person_to_room.insert(person_id.clone(), new_room);
-                            } else {
-                                self.person_to_room.remove(&person_id);
+                            match new_room {
+                                Some(new_room) => {
+                                    self.person_to_room.insert(person_id, new_room);
+                                }
+                                None => {
+                                    self.person_to_room.remove(&person_id);
+                                }
                             }
-                            return true;
+                            changed = true;
                         }
-                        return false;
                     }
                 }
-                false
+                changed
             }
             Msg::Occupancy(msg) => {
                 debug!("Occupancy message: {:?}", msg);
+                let mut changed = false;
                 if let Some(id) = extract_id_from_topic(&msg.topic, "occupancy") {
                     if let Ok(Json(value)) = msg.try_into() {
                         self.occupancies.insert(id, value);
-                        return true;
+                        changed = true;
                     }
                 }
-                false
-            }
-            Msg::Config(config) => {
-                self.config = config;
-                true
+                changed
             }
         }
     }

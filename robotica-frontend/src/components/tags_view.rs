@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use robotica_common::config::Config;
+use robotica_common::config::{tags_topic, Config};
 use yew::prelude::*;
 
 use crate::components::tags::RoboticaTags;
@@ -8,10 +8,10 @@ use crate::components::tags::RoboticaTags;
 use super::require_connection::RequireConnection;
 
 #[function_component(TagsView)]
-pub fn schedule_view() -> Html {
+pub fn tags_view() -> Html {
     match use_context::<Option<Arc<Config>>>() {
         Some(Some(config)) => {
-            let topic = format!("robotica/{}/tags", config.instance);
+            let topic = tags_topic(&config.instance);
 
             html! {
                 <RequireConnection>

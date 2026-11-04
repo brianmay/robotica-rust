@@ -15,6 +15,7 @@ use geo::coord;
 use gloo_utils::document;
 use leaflet::{Evented, LatLng, Map, MapOptions, TileLayer};
 use robotica_common::{
+    config::location_topic,
     mqtt::{Json, MqttMessage},
     robotica::zones::{CreateZone, LocationMessage, Zone},
 };
@@ -81,9 +82,7 @@ enum MapObject {
 impl MapObject {}
 
 enum SubscriptionStatus {
-    InProgress,
-    #[allow(dead_code)]
-    Subscribed(Subscription),
+    InProgress(Vec<Subscription>),
     Unsubscribed,
 }
 
@@ -124,6 +123,7 @@ pub struct Props {
     pub request_list: Callback<()>,
     pub status: ZoneStatus,
     pub loading_status: LoadingStatus,
+    pub objects: Vec<String>,
 }
 
 impl MapComponent {
@@ -560,11 +560,13 @@ impl Component for MapComponent {
                 false
             }
             Msg::SubscribedTracked(subscription) => {
-                // If tracked_subscription is unsubscribed, we lost interest in this subscription.
-                // If it is in progress, we are waiting for the user to be set.
-                // It should never be subscribed, but we handle it just in case.
-                if matches!(self.tracked_subscription, SubscriptionStatus::InProgress) {
-                    self.tracked_subscription = SubscriptionStatus::Subscribed(subscription);
+                // If tracked_subscription is unsubscribed, we lost interest
+                // in this subscription; otherwise collect it until the
+                // websocket disconnects.
+                if let SubscriptionStatus::InProgress(subscriptions) =
+                    &mut self.tracked_subscription
+                {
+                    subscriptions.push(subscription);
                 }
                 false
             }
@@ -573,14 +575,12 @@ impl Component for MapComponent {
                 false
             }
             Msg::MqttEvent(WsEvent::Connected { user, .. }) => {
-                let is_subscribed = matches!(
-                    self.tracked_subscription,
-                    SubscriptionStatus::Subscribed(_) | SubscriptionStatus::InProgress
-                );
+                let is_subscribed =
+                    matches!(self.tracked_subscription, SubscriptionStatus::InProgress(_));
 
                 if !is_subscribed {
                     subscribe_to_tracked_objects(ctx);
-                    self.tracked_subscription = SubscriptionStatus::InProgress;
+                    self.tracked_subscription = SubscriptionStatus::InProgress(Vec::new());
                 }
 
                 let was_admin = self.is_admin;
@@ -933,17 +933,20 @@ fn subscribe_to_tracked_objects(ctx: &Context<MapComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = "robotica/state/+/locations".to_string();
-    let callback = ctx.link().callback(move |msg: MqttMessage| {
-        let topic = msg.topic.clone();
-        let Json(location): Json<LocationMessage> = msg.try_into().unwrap();
-        Msg::TrackedObject(topic, location)
-    });
-    let mut wss = wss;
-    ctx.link().send_future(async move {
-        let s = wss.subscribe_mqtt(topic, callback).await;
-        Msg::SubscribedTracked(s)
-    });
+    // Subscribe to the exact location topic of each declared object.
+    for object in ctx.props().objects.clone() {
+        let topic = location_topic(&object);
+        let callback = ctx.link().callback(move |msg: MqttMessage| {
+            let topic = msg.topic.clone();
+            let Json(location): Json<LocationMessage> = msg.try_into().unwrap();
+            Msg::TrackedObject(topic, location)
+        });
+        let mut wss = wss.clone();
+        ctx.link().send_future(async move {
+            let s = wss.subscribe_mqtt(topic, callback).await;
+            Msg::SubscribedTracked(s)
+        });
+    }
 }
 
 fn draw_control() -> draw_control::DrawControl {

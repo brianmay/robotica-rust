@@ -1,16 +1,14 @@
 //! Controllers are used to control that state of the buttons
 use std::fmt::{Display, Formatter};
 
-use crate::mqtt::{MqttMessage, MqttSerializer, QoS, Retain};
+use crate::mqtt::{topics::Topics, BoolError, JsonError, MqttMessage, MqttSerializer, QoS, Retain};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tracing::error;
 
 pub mod robotica;
 pub mod tasmota;
 pub mod zwave;
-
-/// A label is used to identity an incoming MQTT message
-pub type Label = u32;
 
 /// The action to happen when a button is pressed.
 #[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
@@ -27,14 +25,64 @@ pub enum Action {
     Toggle,
 }
 
-/// A MQTT subscription request from a controller
+/// An error parsing a controller message from an MQTT message.
+#[derive(Error, Debug)]
+#[error("failed to parse MQTT message: {0}")]
+pub struct ParseError(String);
+
+impl ParseError {
+    /// Create a new parse error with a message.
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
+impl From<JsonError> for ParseError {
+    fn from(err: JsonError) -> Self {
+        Self(err.to_string())
+    }
+}
+
+impl From<std::str::Utf8Error> for ParseError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        Self(err.to_string())
+    }
+}
+
+impl From<std::string::FromUtf8Error> for ParseError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        Self(err.to_string())
+    }
+}
+
+impl From<BoolError> for ParseError {
+    fn from(err: BoolError) -> Self {
+        Self(err.to_string())
+    }
+}
+
+impl From<crate::robotica::switch::PowerError> for ParseError {
+    fn from(err: crate::robotica::switch::PowerError) -> Self {
+        Self(err.to_string())
+    }
+}
+
+/// A function that parses an MQTT message into a controller message.
+pub type ParseFn<M> = fn(MqttMessage) -> Result<M, ParseError>;
+
+/// A typed subscription for a controller.
+///
+/// Each subscription pairs an MQTT topic with the function that parses
+/// messages received on that topic into the controller's message type, so
+/// the topic and the code that decodes it can never fall out of sync.
 #[derive(Clone)]
-pub struct Subscription {
-    /// The topic to subscribe to
+pub struct Subscription<M> {
+    /// The topic to subscribe to.
     pub topic: String,
 
-    /// The label to use when the topic is received
-    pub label: Label,
+    /// Parse a message received on this topic into a controller message.
+    pub parse: ParseFn<M>,
 }
 
 /// The display state of a button
@@ -80,18 +128,30 @@ pub trait ConfigTrait {
 
     /// Get the controller for this configuration
     fn create_controller(&self) -> Self::Controller;
+
+    /// Get the MQTT topics this controller subscribes to and sends on.
+    fn topics(&self) -> Topics;
 }
 
 /// The trait to define a controller
+///
+/// Controllers process typed messages. Each subscription returned by
+/// [`ControllerTrait::subscriptions`] carries the parser for its topic, and
+/// [`ControllerTrait::process_message`] matches on the resulting message
+/// type exhaustively, so a new subscription or message variant that is not
+/// handled is a compile error rather than a silent misroute.
 pub trait ControllerTrait {
-    /// Get the subscriptions for this controller
-    fn get_subscriptions(&self) -> Vec<Subscription>;
+    /// The typed message this controller processes, parsed from its subscriptions.
+    type Message;
+
+    /// Get the subscriptions (topic and parser) for this controller
+    fn subscriptions(&self) -> Vec<Subscription<Self::Message>>;
 
     /// Process an disconnected message
     fn process_disconnected(&mut self);
 
     /// Process an incoming message
-    fn process_message(&mut self, label: Label, data: MqttMessage);
+    fn process_message(&mut self, message: Self::Message);
 
     /// Get the current display state for this controller
     fn get_display_state(&self) -> DisplayState;

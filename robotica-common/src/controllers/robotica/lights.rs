@@ -1,18 +1,17 @@
 //! A robotica light controller
 
 use crate::{
-    mqtt::{Json, MqttMessage},
+    mqtt::{topics::Topics, Json, MqttMessage},
     robotica::{
         commands::Command,
         lights::{self, LightCommand, PowerState, SceneName},
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use super::super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
-    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
+    ControllerTrait, DisplayState, ParseError, Subscription, TurnOnOff,
 };
 
 /// The configuration for a light controller
@@ -28,6 +27,26 @@ pub struct Config {
     pub scene: SceneName,
 }
 
+impl Config {
+    /// The topic that reports the current scene.
+    #[must_use]
+    pub fn scene_topic(&self) -> String {
+        format!("robotica/state/{}/scene", self.topic_substr)
+    }
+
+    /// The topic that reports the power state.
+    #[must_use]
+    pub fn power_topic(&self) -> String {
+        format!("robotica/state/{}/power", self.topic_substr)
+    }
+
+    /// The topic that commands the light.
+    #[must_use]
+    pub fn command_topic(&self) -> String {
+        format!("robotica/command/{}", self.topic_substr)
+    }
+}
+
 impl ConfigTrait for Config {
     type Controller = Controller;
 
@@ -38,6 +57,34 @@ impl ConfigTrait for Config {
             power: None,
         }
     }
+
+    fn topics(&self) -> Topics {
+        let mut topics = Topics::default();
+        topics.subscribe_exact(self.scene_topic());
+        topics.subscribe_exact(self.power_topic());
+        topics.send_exact(self.command_topic());
+        topics
+    }
+}
+
+/// A typed message from a robotica light
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Message {
+    /// The current scene
+    Scene(SceneName),
+
+    /// The power state
+    Power(PowerState),
+}
+
+fn parse_scene(msg: MqttMessage) -> Result<Message, ParseError> {
+    let scene: SceneName = msg.try_into()?;
+    Ok(Message::Scene(scene))
+}
+
+fn parse_power(msg: MqttMessage) -> Result<Message, ParseError> {
+    let Json(power): Json<PowerState> = msg.try_into()?;
+    Ok(Message::Power(power))
 }
 
 /// The controller for a light
@@ -47,49 +94,30 @@ pub struct Controller {
     power: Option<lights::PowerState>,
 }
 
-fn topic(parts: &[&str]) -> String {
-    parts.join("/")
-}
-
 impl ControllerTrait for Controller {
-    fn get_subscriptions(&self) -> Vec<Subscription> {
-        let mut result: Vec<Subscription> = Vec::new();
-        let config = &self.config;
+    type Message = Message;
 
-        let p = ["robotica", "state", &config.topic_substr, "scene"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::Scene as u32,
-        };
-        result.push(s);
-
-        let p = ["robotica", "state", &config.topic_substr, "power"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::Power as u32,
-        };
-        result.push(s);
-
-        result
+    fn subscriptions(&self) -> Vec<Subscription<Message>> {
+        vec![
+            Subscription {
+                topic: self.config.scene_topic(),
+                parse: parse_scene,
+            },
+            Subscription {
+                topic: self.config.power_topic(),
+                parse: parse_power,
+            },
+        ]
     }
 
-    fn process_message(&mut self, label: Label, data: MqttMessage) {
-        match label.try_into() {
-            Ok(ButtonStateMsgType::Scene) => {
-                self.scene = match data.try_into() {
-                    Ok(scene) => Some(scene),
-                    Err(e) => {
-                        error!("Invalid scene value: {e}");
-                        None
-                    }
-                }
+    fn process_message(&mut self, message: Message) {
+        match message {
+            Message::Scene(scene) => {
+                self.scene = Some(scene);
             }
-            Ok(ButtonStateMsgType::Power) => match data.try_into() {
-                Ok(Json(state)) => self.power = Some(state),
-                Err(e) => error!("Invalid power value: {e}"),
-            },
-
-            Err(()) => error!("Invalid message label {}", label),
+            Message::Power(power) => {
+                self.power = Some(power);
+            }
         }
     }
 
@@ -114,7 +142,7 @@ impl ControllerTrait for Controller {
         };
 
         let payload = Json(Command::Light(action));
-        let topic = format!("robotica/command/{}", self.config.topic_substr);
+        let topic = self.config.command_topic();
         mqtt_command_vec(&topic, &payload)
     }
 
@@ -138,22 +166,44 @@ fn get_display_state_internal(lb: &Controller) -> DisplayState {
     }
 }
 
-enum ButtonStateMsgType {
-    Scene,
-    Power,
-}
-
-impl TryFrom<u32> for ButtonStateMsgType {
-    type Error = ();
-
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        match v {
-            x if x == ButtonStateMsgType::Scene as u32 => Ok(ButtonStateMsgType::Scene),
-            x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
-            _ => Err(()),
-        }
-    }
-}
-
 /// The type used to represent a priority of a light scene
 pub type Priority = i32;
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    fn config() -> Config {
+        Config {
+            topic_substr: "lounge/light".to_string(),
+            action: Action::Toggle,
+            scene: SceneName::new("bright"),
+        }
+    }
+
+    #[test]
+    fn test_topics() {
+        let topics = config().topics();
+        assert!(topics.is_subscribe_allowed("robotica/state/lounge/light/scene"));
+        assert!(topics.is_subscribe_allowed("robotica/state/lounge/light/power"));
+        assert!(topics.is_send_allowed("robotica/command/lounge/light"));
+        assert!(!topics.is_subscribe_allowed("robotica/state/lounge/light/status"));
+    }
+
+    #[test]
+    fn test_process_message() {
+        let mut controller = config().create_controller();
+        assert_eq!(controller.get_display_state(), DisplayState::Unknown);
+
+        controller.process_message(Message::Scene(SceneName::new("bright")));
+        controller.process_message(Message::Power(PowerState::On));
+        assert_eq!(controller.get_display_state(), DisplayState::On);
+
+        controller.process_message(Message::Scene(SceneName::new("off")));
+        assert_eq!(controller.get_display_state(), DisplayState::Off);
+
+        controller.process_message(Message::Power(PowerState::Offline));
+        assert_eq!(controller.get_display_state(), DisplayState::HardOff);
+    }
+}

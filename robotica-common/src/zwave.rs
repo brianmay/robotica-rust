@@ -20,7 +20,7 @@ impl<T> Data<T> {
 }
 
 /// The status of a Z-Wave device
-#[derive(Copy, Clone, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 pub enum Status {
     /// The device is dead
     Dead,

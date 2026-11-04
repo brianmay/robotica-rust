@@ -6,12 +6,10 @@ use crate::{
 };
 use chrono::{DateTime, Local, NaiveDate, Utc};
 use robotica_common::{
+    config::amber_topic,
     datetime::{datetime_to_string, utc_now},
     mqtt::{Json, MqttMessage},
-    robotica::{
-        amber::price::{ChannelType, Descriptor, PriceResponse, Prices},
-        entities::{AnyId, Id},
-    },
+    robotica::amber::price::{ChannelType, Descriptor, PriceResponse, Prices},
 };
 use yew::prelude::*;
 
@@ -28,20 +26,13 @@ pub struct PricesComponent {
     prices: Option<Prices>,
 }
 
-fn amber_account_id() -> Id {
-    let Ok(id) = Id::new("amber_account") else {
-        unreachable!("\"amber_account\" is a valid Id literal");
-    };
-    id
-}
-
 fn subscribe_prices(ctx: &Context<PricesComponent>) {
     let (wss, _): (WebsocketService, _) = ctx
         .link()
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = amber_account_id().get_state_topic("prices");
+    let topic = amber_topic("prices");
     let callback = ctx.link().callback(move |msg: MqttMessage| {
         let Json(prices): Json<Prices> = msg.try_into().unwrap();
         Msg::Prices(prices)
@@ -63,7 +54,7 @@ fn subscribe_tick(ctx: &Context<PricesComponent>) {
         .context(ctx.link().batch_callback(|_| None))
         .unwrap();
 
-    let topic = amber_account_id().get_state_topic("tick");
+    let topic = amber_topic("tick");
     let callback = ctx.link().callback(|_msg: MqttMessage| Msg::Tick);
     let mut wss = wss;
     ctx.link().send_future(async move {

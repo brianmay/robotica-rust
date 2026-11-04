@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use robotica_common::config::Config;
-use robotica_common::config::RoomConfig;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -10,6 +9,16 @@ use yew_router::prelude::*;
 
 use crate::services::websocket::{WebsocketService, WsEvent};
 use crate::Route;
+
+/// A view in the navigation bar.
+#[derive(Clone)]
+struct NavView {
+    /// The view id, used as the route.
+    id: String,
+
+    /// The view title, displayed as the link text.
+    title: String,
+}
 
 #[function_component(NavBar)]
 pub fn nav_bar() -> Html {
@@ -23,6 +32,7 @@ pub fn nav_bar() -> Html {
         let menu_open = menu_open.clone();
         Callback::from(move |_| menu_open.set(!*menu_open))
     };
+
     let close_menu = {
         let menu_open = menu_open.clone();
         Callback::from(move |_| menu_open.set(false))
@@ -46,27 +56,31 @@ pub fn nav_bar() -> Html {
         });
     }
 
-    let rooms = match &config {
-        Some(config) => config
-            .rooms
-            .iter()
-            .map(|room| (room.menu.as_str(), room))
-            .into_group_map(),
-        None => HashMap::new(),
-    };
+    // Split the views into dropdown menus (views with a menu) and top level
+    // links (views without). The navbar is a pure function of the view list.
+    let mut dropdown_views: HashMap<&str, Vec<NavView>> = HashMap::new();
+    let mut top_level_views: Vec<NavView> = Vec::new();
 
-    let cars = match &config {
-        Some(config) => config.cars.clone(),
-        None => vec![],
-    };
+    if let Some(config) = &config {
+        for view in &config.views {
+            let nav_view = NavView {
+                id: view.id.clone(),
+                title: view.title.clone(),
+            };
+            match &view.menu {
+                Some(menu) => dropdown_views
+                    .entry(menu.as_str())
+                    .or_default()
+                    .push(nav_view),
+                None => top_level_views.push(nav_view),
+            }
+        }
+    }
 
-    let water_heaters = match &config {
-        Some(config) => config.water_heaters.clone(),
-        None => vec![],
-    };
-
-    // turn menus into a vector of tuples sorted by menu name
-    let menus: Vec<(&str, Vec<&RoomConfig>)> = rooms.into_iter().sorted_by_key(|x| x.0).collect();
+    // Sort menus by name; views within a menu and top level links stay in
+    // declaration order.
+    let mut dropdowns: Vec<(&str, Vec<NavView>)> = dropdown_views.into_iter().collect_vec();
+    dropdowns.sort_by_key(|(menu, _)| *menu);
 
     // get the current route
     let route = Rc::new(use_route::<Route>());
@@ -132,54 +146,26 @@ pub fn nav_bar() -> Html {
                 <div class={classes!("collapse", "navbar-collapse", if *menu_open { "show" } else { "" })}>
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         {
-                            menus.iter().map(|(menu, rooms)| html! {
+                            dropdowns.iter().map(|(menu, views)| html! {
                                 <li class="nav-item dropdown">
                                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {*menu}
                                     </a>
                                     <ul class="dropdown-menu">
-                                        { rooms.iter().map(|room| html! {
-                                            <li onclick={close_menu.clone()}>{dropdown_link(Route::Room {id: room.id.clone()}, room.title.clone())}</li>
+                                        { views.iter().map(|view| html! {
+                                            <li onclick={close_menu.clone()}>{dropdown_link(Route::View {id: view.id.clone()}, view.title.clone())}</li>
                                         }).collect::<Html>() }
                                     </ul>
                                 </li>
                             }).collect::<Html>()
                         }
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            { "Cars" }
-                            </a>
-                            <ul class="dropdown-menu">
-                                { cars.iter().map(|car| html! {
-                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::Car {id: car.id.to_string()}, car.title.clone())}</li>
-                                }).collect::<Html>() }
-                            </ul>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            { "Water Heaters" }
-                            </a>
-                            <ul class="dropdown-menu">
-                                { water_heaters.iter().map(|water_heater| html! {
-                                    <li onclick={close_menu.clone()}>{dropdown_link(Route::WaterHeater {id: water_heater.id.to_string()}, water_heater.title.clone())}</li>
-                                }).collect::<Html>() }
-                            </ul>
-                        </li>
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                            { nav_link(Route::Prices, "Prices") }
-                        </li>
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                            { nav_link(Route::Schedule, "Schedule") }
-                        </li>
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                            { nav_link(Route::Tags, "Tags") }
-                        </li>
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                            { nav_link(Route::Locations, "Locations") }
-                        </li>
-                        <li class="nav-item" onclick={close_menu.clone()}>
-                            { nav_link(Route::Occupancy, "Occupancy") }
-                        </li>
+                        {
+                            top_level_views.iter().map(|view| html! {
+                                <li class="nav-item" onclick={close_menu.clone()}>
+                                    { nav_link(Route::View {id: view.id.clone()}, view.title.clone()) }
+                                </li>
+                            }).collect::<Html>()
+                        }
                         <li class="nav-item">
                             <a class="nav-link" href="/logout">{ "Logout" }</a>
                         </li>

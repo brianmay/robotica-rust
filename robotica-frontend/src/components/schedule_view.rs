@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use robotica_common::config::Config;
+use robotica_common::config::{schedule_topic, Config};
 use yew::prelude::*;
 
 use crate::components::schedule::RoboticaSchedule;
@@ -11,7 +11,7 @@ use super::require_connection::RequireConnection;
 pub fn schedule_view() -> Html {
     match use_context::<Option<Arc<Config>>>() {
         Some(Some(config)) => {
-            let topic = format!("schedule/{}/pending", config.instance);
+            let topic = schedule_topic(&config.instance);
 
             html! {
                 <RequireConnection>

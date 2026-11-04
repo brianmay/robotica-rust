@@ -30,22 +30,8 @@ use crate::components::app::App;
 enum Route {
     #[at("/")]
     Welcome,
-    #[at("/room/:id")]
-    Room { id: String },
-    #[at("/car/:id")]
-    Car { id: String },
-    #[at("/water_heater/:id")]
-    WaterHeater { id: String },
-    #[at("/prices")]
-    Prices,
-    #[at("/schedule")]
-    Schedule,
-    #[at("/tags")]
-    Tags,
-    #[at("/locations")]
-    Locations,
-    #[at("/occupancy")]
-    Occupancy,
+    #[at("/view/:id")]
+    View { id: String },
     #[not_found]
     #[at("/404")]
     NotFound,

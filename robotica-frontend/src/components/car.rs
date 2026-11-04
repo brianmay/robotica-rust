@@ -1,16 +1,15 @@
-use std::sync::Arc;
 use wasm_bindgen::JsCast;
 
 use crate::{
     components::{
-        button::{Button, SwitchProps},
+        button::{Button, ButtonProps},
         require_connection::RequireConnection,
     },
     services::websocket::{Subscription, WebsocketService},
 };
 use robotica_common::{
-    config::{Config, Icon},
-    controllers::Action,
+    config::Icon,
+    controllers::{robotica::switch, Action},
     datetime::{datetime_to_string, time_delta},
     mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{
@@ -23,7 +22,6 @@ use yew::prelude::*;
 
 pub enum Msg {
     SubscribedState(Subscription),
-    Config(Option<Arc<Config>>),
     State(amber::car::State),
     EditMinCharge(String),
     StartEdit,
@@ -39,13 +37,12 @@ pub enum Msg {
 #[derive(Eq, PartialEq, Properties, Clone)]
 pub struct Props {
     pub id: Id,
+    pub title: String,
 }
 
 pub struct CarComponent {
     state_subscription: Option<Subscription>,
     state: Option<amber::car::State>,
-    config: Option<Arc<Config>>,
-    _config_handle: ContextHandle<Option<Arc<Config>>>,
     edit_min_charge: String,
     is_editing: bool,
     edit_error: Option<String>,
@@ -74,11 +71,6 @@ impl Component for CarComponent {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (config, config_handle): (Option<Arc<Config>>, _) = ctx
-            .link()
-            .context(ctx.link().callback(Msg::Config))
-            .unwrap();
-
         let (wss, _): (WebsocketService, _) = ctx
             .link()
             .context(ctx.link().batch_callback(|_| None))
@@ -91,8 +83,6 @@ impl Component for CarComponent {
         Self {
             state_subscription: None,
             state: None,
-            config,
-            _config_handle: config_handle,
             edit_min_charge: String::new(),
             is_editing: false,
             edit_error: None,
@@ -119,10 +109,6 @@ impl Component for CarComponent {
             Msg::State(state) => {
                 debug!("Car state: {:?}", state);
                 self.state = Some(state);
-                true
-            }
-            Msg::Config(config) => {
-                self.config = config;
                 true
             }
             Msg::EditMinCharge(value) => {
@@ -252,19 +238,15 @@ impl Component for CarComponent {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
         let id = props.id.clone();
+        let title = props.title.as_str();
 
-        let car = if let Some(config) = &self.config {
-            config.cars.iter().find(|car| car.id == id).cloned()
-        } else {
-            None
-        };
-        let title = car.as_ref().map_or("Unknown", |car| car.title.as_str());
-
-        let switch_props = SwitchProps {
-            name: "Charge".to_string(),
+        let switch_props = ButtonProps {
+            title: "Charge".to_string(),
             icon: Icon::Light,
-            action: Action::Toggle,
-            topic_substr: format!("{id}/auto_charge"),
+            config: switch::Config {
+                topic_substr: format!("{id}/auto_charge"),
+                action: Action::Toggle,
+            },
         };
 
         html! {
@@ -500,7 +482,7 @@ impl Component for CarComponent {
                     } }
                 </div>
                 <div class="mt-3">
-                  <Button<SwitchProps> ..switch_props />
+                  <Button<switch::Config> ..switch_props />
                 </div>
             </RequireConnection>
         }

@@ -1,20 +1,18 @@
-use robotica_common::config::Config;
-use robotica_common::mqtt::Json;
-use robotica_common::mqtt::MqttMessage;
-use robotica_common::robotica::entities::Id;
-use robotica_common::version;
 use std::sync::Arc;
-use tracing::debug;
-use tracing::error;
+
+use robotica_common::config::{view_id_to_entity, Config, ViewConfig, ViewKind};
+use robotica_common::mqtt::{Json, MqttMessage};
+use robotica_common::version;
+use tracing::{debug, error};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
 use crate::components::car::CarComponent;
+use crate::components::controls::Controls;
 use crate::components::locations::zones::ZonesView;
 use crate::components::nav_bar::NavBar;
 use crate::components::occupancy_view::OccupancyViewComponent;
 use crate::components::prices::PricesComponent;
-use crate::components::rooms::Room;
 use crate::components::schedule_view::ScheduleView;
 use crate::components::tags_view::TagsView;
 use crate::components::water_heater::WaterHeaterComponent;
@@ -43,20 +41,7 @@ fn footer() -> Html {
 fn switch(selected_route: Route) -> Html {
     let content = match selected_route {
         Route::Welcome => html! {<Welcome/>},
-        Route::Room { id } => html! { <Room id={id}/> },
-        Route::Car { id } => match Id::new(id) {
-            Ok(id) => html! { <CarComponent {id}/> },
-            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
-        },
-        Route::WaterHeater { id } => match Id::new(id) {
-            Ok(id) => html! { <WaterHeaterComponent {id}/> },
-            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
-        },
-        Route::Prices => html! { <PricesComponent/> },
-        Route::Schedule => html! { <ScheduleView/> },
-        Route::Tags => html! { <TagsView/> },
-        Route::Locations => return html! { <><NavBar/><ZonesView/></> },
-        Route::Occupancy => html! { <OccupancyViewComponent id={"all".to_string()}/> },
+        Route::View { id } => html! { <View {id}/> },
         Route::NotFound => html! {<h1>{"404 Please ask a Penguin for help"}</h1>},
     };
 
@@ -66,6 +51,69 @@ fn switch(selected_route: Route) -> Html {
             {content}
             {footer()}
         </>
+    }
+}
+
+/// Properties for a view.
+#[derive(Properties, Eq, PartialEq, Clone)]
+struct ViewProps {
+    /// The id of the view to render.
+    id: String,
+}
+
+/// Look up a view in the config and render it.
+///
+/// This is the single dispatcher from a view id to the component that
+/// renders it.
+#[function_component(View)]
+fn view(props: &ViewProps) -> Html {
+    let config = match use_context::<Option<Arc<Config>>>() {
+        Some(Some(config)) => config,
+        Some(None) => {
+            return html! {
+                <h1>{"Loading..."}</h1>
+            };
+        }
+        None => {
+            return html! {
+                <h1>{"Config error..."}</h1>
+            };
+        }
+    };
+
+    let Some(view) = config.get_view(&props.id) else {
+        return html!(<h1>{"404 Please ask a Penguin for help"}</h1>);
+    };
+
+    render_view(view)
+}
+
+/// Render a resolved view.
+///
+/// This is an exhaustive match: a new view kind cannot be added without
+/// also rendering it here.
+fn render_view(view: &ViewConfig) -> Html {
+    match &view.kind {
+        ViewKind::Controls(controls) => html! {
+            <Controls id={view.id.clone()} title={view.title.clone()} rows={controls.rows.clone()} />
+        },
+        ViewKind::Car => match view_id_to_entity(&view.id) {
+            Ok(id) => html! { <CarComponent {id} title={view.title.clone()} /> },
+            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
+        },
+        ViewKind::WaterHeater => match view_id_to_entity(&view.id) {
+            Ok(id) => html! { <WaterHeaterComponent {id} title={view.title.clone()} /> },
+            Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
+        },
+        ViewKind::Schedule => html! { <ScheduleView/> },
+        ViewKind::Tags => html! { <TagsView/> },
+        ViewKind::Prices => html! { <PricesComponent/> },
+        ViewKind::Locations(locations) => html! {
+            <ZonesView objects={locations.objects.clone()} />
+        },
+        ViewKind::Occupancy(occupancy) => html! {
+            <OccupancyViewComponent people={occupancy.people.clone()} />
+        },
     }
 }
 

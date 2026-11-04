@@ -1,12 +1,10 @@
 use robotica_common::robotica::entities::AnyId;
-use std::sync::Arc;
 
 use crate::{
     components::require_connection::RequireConnection,
     services::websocket::{Subscription, WebsocketService},
 };
 use robotica_common::{
-    config::Config,
     datetime::{datetime_to_time_string, time_delta},
     mqtt::{Json, MqttMessage},
     robotica::{amber, entities::Id},
@@ -16,20 +14,18 @@ use yew::prelude::*;
 
 pub enum Msg {
     SubscribedState(Subscription),
-    Config(Option<Arc<Config>>),
     State(amber::water_heater::State),
 }
 
 #[derive(Eq, PartialEq, Properties, Clone)]
 pub struct Props {
     pub id: Id,
+    pub title: String,
 }
 
 pub struct WaterHeaterComponent {
     state_subscription: Option<Subscription>,
     state: Option<amber::water_heater::State>,
-    config: Option<Arc<Config>>,
-    _config_handle: ContextHandle<Option<Arc<Config>>>,
 }
 
 fn subscribe(ctx: &Context<WaterHeaterComponent>, car_id: &Id) {
@@ -55,11 +51,6 @@ impl Component for WaterHeaterComponent {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (config, config_handle): (Option<Arc<Config>>, _) = ctx
-            .link()
-            .context(ctx.link().callback(Msg::Config))
-            .unwrap();
-
         let props = ctx.props();
         let id = props.id.clone();
 
@@ -67,8 +58,6 @@ impl Component for WaterHeaterComponent {
         Self {
             state_subscription: None,
             state: None,
-            config,
-            _config_handle: config_handle,
         }
     }
 
@@ -89,30 +78,13 @@ impl Component for WaterHeaterComponent {
                 self.state = Some(state);
                 true
             }
-            Msg::Config(config) => {
-                self.config = config;
-                true
-            }
         }
     }
 
     #[allow(clippy::too_many_lines)]
     fn view(&self, ctx: &Context<Self>) -> Html {
         let props = ctx.props();
-        let id = props.id.clone();
-
-        let water_heater = if let Some(config) = &self.config {
-            config
-                .water_heaters
-                .iter()
-                .find(|water_heater| water_heater.id == id)
-                .cloned()
-        } else {
-            None
-        };
-        let title = water_heater
-            .as_ref()
-            .map_or("Unknown", |water_heater| water_heater.title.as_str());
+        let title = props.title.as_str();
 
         html! {
             <RequireConnection>

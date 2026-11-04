@@ -1,7 +1,7 @@
 //! Common Mqtt stuff
 
 pub mod topics;
-pub use topics::{topic_matches, topic_matches_any};
+pub use topics::{topic_matches, topic_matches_any, TopicSpec, Topics};
 
 use core::fmt;
 use std::{

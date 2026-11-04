@@ -1,17 +1,16 @@
 //! A robotica switch controller
 use crate::{
-    mqtt::{Json, MqttMessage},
+    mqtt::{topics::Topics, Json, MqttMessage},
     robotica::{
         commands::Command,
         switch::{DeviceAction, DeviceCommand, DevicePower},
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use super::super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
-    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
+    ControllerTrait, DisplayState, ParseError, Subscription, TurnOnOff,
 };
 
 /// The configuration for a switch controller
@@ -24,6 +23,20 @@ pub struct Config {
     pub action: Action,
 }
 
+impl Config {
+    /// The topic that reports the power state.
+    #[must_use]
+    pub fn power_topic(&self) -> String {
+        format!("robotica/state/{}/power", self.topic_substr)
+    }
+
+    /// The topic that commands the switch.
+    #[must_use]
+    pub fn command_topic(&self) -> String {
+        format!("robotica/command/{}", self.topic_substr)
+    }
+}
+
 impl ConfigTrait for Config {
     type Controller = Controller;
 
@@ -33,6 +46,25 @@ impl ConfigTrait for Config {
             power: None,
         }
     }
+
+    fn topics(&self) -> Topics {
+        let mut topics = Topics::default();
+        topics.subscribe_exact(self.power_topic());
+        topics.send_exact(self.command_topic());
+        topics
+    }
+}
+
+/// A typed message from a robotica switch
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Message {
+    /// The power state
+    Power(DevicePower),
+}
+
+fn parse_power(msg: MqttMessage) -> Result<Message, ParseError> {
+    let power: DevicePower = msg.try_into()?;
+    Ok(Message::Power(power))
 }
 
 /// The controller for a switch
@@ -41,33 +73,21 @@ pub struct Controller {
     power: Option<DevicePower>,
 }
 
-fn topic(parts: &[&str]) -> String {
-    parts.join("/")
-}
-
 impl ControllerTrait for Controller {
-    fn get_subscriptions(&self) -> Vec<Subscription> {
-        let mut result: Vec<Subscription> = Vec::new();
-        let config = &self.config;
+    type Message = Message;
 
-        let p = ["robotica", "state", &config.topic_substr, "power"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::Power as u32,
-        };
-        result.push(s);
-
-        result
+    fn subscriptions(&self) -> Vec<Subscription<Message>> {
+        vec![Subscription {
+            topic: self.config.power_topic(),
+            parse: parse_power,
+        }]
     }
 
-    fn process_message(&mut self, label: Label, data: MqttMessage) {
-        if matches!(label.try_into(), Ok(ButtonStateMsgType::Power)) {
-            match data.try_into() {
-                Ok(json) => self.power = Some(json),
-                Err(err) => error!("Invalid power state: {err}"),
+    fn process_message(&mut self, message: Message) {
+        match message {
+            Message::Power(power) => {
+                self.power = Some(power);
             }
-        } else {
-            error!("Invalid message label {}", label);
         }
     }
 
@@ -98,7 +118,7 @@ impl ControllerTrait for Controller {
             TurnOnOff::TurnOff => DeviceAction::TurnOff,
         };
 
-        let topic = format!("robotica/command/{}", self.config.topic_substr);
+        let topic = self.config.command_topic();
         let command = DeviceCommand { action };
         let payload = Json(Command::Device(command));
         mqtt_command_vec(&topic, &payload)
@@ -109,17 +129,38 @@ impl ControllerTrait for Controller {
     }
 }
 
-enum ButtonStateMsgType {
-    Power,
-}
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
 
-impl TryFrom<u32> for ButtonStateMsgType {
-    type Error = ();
-
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        match v {
-            x if x == ButtonStateMsgType::Power as u32 => Ok(ButtonStateMsgType::Power),
-            _ => Err(()),
+    fn config() -> Config {
+        Config {
+            topic_substr: "kitchen/light".to_string(),
+            action: Action::Toggle,
         }
+    }
+
+    #[test]
+    fn test_topics() {
+        let topics = config().topics();
+        assert!(topics.is_subscribe_allowed("robotica/state/kitchen/light/power"));
+        assert!(topics.is_send_allowed("robotica/command/kitchen/light"));
+        assert!(!topics.is_subscribe_allowed("robotica/state/kitchen/light/scene"));
+    }
+
+    #[test]
+    fn test_process_message() {
+        let mut controller = config().create_controller();
+        assert_eq!(controller.get_display_state(), DisplayState::Unknown);
+
+        controller.process_message(Message::Power(DevicePower::On));
+        assert_eq!(controller.get_display_state(), DisplayState::On);
+
+        controller.process_message(Message::Power(DevicePower::Off));
+        assert_eq!(controller.get_display_state(), DisplayState::Off);
+
+        controller.process_message(Message::Power(DevicePower::HardOff));
+        assert_eq!(controller.get_display_state(), DisplayState::HardOff);
     }
 }

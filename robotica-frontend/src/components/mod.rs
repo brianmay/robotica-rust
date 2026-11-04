@@ -3,13 +3,13 @@
 pub mod app;
 pub mod button;
 pub mod car;
+pub mod controls;
 pub mod forms;
 pub mod locations;
 pub mod nav_bar;
 pub mod occupancy_view;
 pub mod prices;
 pub mod require_connection;
-pub mod rooms;
 pub mod schedule;
 pub mod schedule_view;
 pub mod tags;

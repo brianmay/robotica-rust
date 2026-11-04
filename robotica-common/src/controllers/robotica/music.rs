@@ -1,17 +1,16 @@
 //! A robotica music controller
 use crate::{
-    mqtt::{Json, MqttMessage},
+    mqtt::{topics::Topics, Json, MqttMessage},
     robotica::{
         audio::{self, AudioCommand, MusicCommand},
         commands::Command,
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use super::super::{
     get_display_state_for_action, get_press_on_or_off, mqtt_command_vec, Action, ConfigTrait,
-    ControllerTrait, DisplayState, Label, Subscription, TurnOnOff,
+    ControllerTrait, DisplayState, ParseError, Subscription, TurnOnOff,
 };
 
 /// The configuration for a music controller
@@ -27,6 +26,20 @@ pub struct Config {
     pub play_list: String,
 }
 
+impl Config {
+    /// The topic that reports the audio status.
+    #[must_use]
+    pub fn status_topic(&self) -> String {
+        format!("robotica/state/{}/status", self.topic_substr)
+    }
+
+    /// The topic that commands the audio player.
+    #[must_use]
+    pub fn command_topic(&self) -> String {
+        format!("robotica/command/{}", self.topic_substr)
+    }
+}
+
 impl ConfigTrait for Config {
     type Controller = Controller;
 
@@ -36,6 +49,25 @@ impl ConfigTrait for Config {
             state: None,
         }
     }
+
+    fn topics(&self) -> Topics {
+        let mut topics = Topics::default();
+        topics.subscribe_exact(self.status_topic());
+        topics.send_exact(self.command_topic());
+        topics
+    }
+}
+
+/// A typed message from the audio player
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Message {
+    /// The audio player status
+    Status(audio::State),
+}
+
+fn parse_status(msg: MqttMessage) -> Result<Message, ParseError> {
+    let Json(state): Json<audio::State> = msg.try_into()?;
+    Ok(Message::Status(state))
 }
 
 /// The controller for a music
@@ -55,34 +87,21 @@ impl Controller {
     }
 }
 
-fn topic(parts: &[&str]) -> String {
-    parts.join("/")
-}
-
 impl ControllerTrait for Controller {
-    fn get_subscriptions(&self) -> Vec<Subscription> {
-        let mut result: Vec<Subscription> = Vec::new();
-        let config = &self.config;
+    type Message = Message;
 
-        let p = ["robotica", "state", &config.topic_substr, "status"];
-        let s = Subscription {
-            topic: topic(&p),
-            label: ButtonStateMsgType::State as u32,
-        };
-        result.push(s);
-
-        result
+    fn subscriptions(&self) -> Vec<Subscription<Message>> {
+        vec![Subscription {
+            topic: self.config.status_topic(),
+            parse: parse_status,
+        }]
     }
 
-    fn process_message(&mut self, label: Label, data: MqttMessage) {
-        #[allow(clippy::single_match_else)]
-        match label.try_into() {
-            Ok(ButtonStateMsgType::State) => match data.try_into() {
-                Ok(Json(state)) => self.state = Some(state),
-                Err(e) => error!("Invalid state: {e}"),
-            },
-
-            Err(()) => error!("Invalid message label {}", label),
+    fn process_message(&mut self, message: Message) {
+        match message {
+            Message::Status(state) => {
+                self.state = Some(state);
+            }
         }
     }
 
@@ -130,7 +149,7 @@ impl ControllerTrait for Controller {
             volume: None,
         };
         let payload = Json(Command::Audio(audio_command));
-        let topic = format!("robotica/command/{}", self.config.topic_substr);
+        let topic = self.config.command_topic();
         mqtt_command_vec(&topic, &payload)
     }
 
@@ -139,17 +158,39 @@ impl ControllerTrait for Controller {
     }
 }
 
-enum ButtonStateMsgType {
-    State,
-}
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
 
-impl TryFrom<u32> for ButtonStateMsgType {
-    type Error = ();
-
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        match v {
-            x if x == ButtonStateMsgType::State as u32 => Ok(ButtonStateMsgType::State),
-            _ => Err(()),
+    fn config() -> Config {
+        Config {
+            topic_substr: "lounge/music".to_string(),
+            action: Action::Toggle,
+            play_list: "relax".to_string(),
         }
+    }
+
+    #[test]
+    fn test_topics() {
+        let topics = config().topics();
+        assert!(topics.is_subscribe_allowed("robotica/state/lounge/music/status"));
+        assert!(topics.is_send_allowed("robotica/command/lounge/music"));
+        assert!(!topics.is_subscribe_allowed("robotica/state/lounge/music/power"));
+    }
+
+    #[test]
+    fn test_process_message() {
+        let mut controller = config().create_controller();
+        assert_eq!(controller.get_display_state(), DisplayState::Unknown);
+
+        controller.process_message(Message::Status(audio::State {
+            play_list: Some("relax".to_string()),
+            ..audio::State::default()
+        }));
+        assert_eq!(controller.get_display_state(), DisplayState::On);
+
+        controller.process_message(Message::Status(audio::State::default()));
+        assert_eq!(controller.get_display_state(), DisplayState::Off);
     }
 }
