@@ -177,9 +177,12 @@ Standard `rustfmt` defaults — no `.rustfmt.toml`. Always run `cargo fmt` befor
 - **Runtime:** `tokio` with `#[tokio::main]` for binaries, `#[tokio::test]` for async tests
 - Use `tokio::select!` for concurrent event handling in loops
 - Use the project's `robotica_tokio::spawn` wrapper instead of `tokio::spawn` directly — it fails fast (calls `process::exit(1)`) on task panic
-- Channel/pipe types:
-  - `stateful::create_pipe(name)` — broadcasts current value, deduplicates identical values
-  - `stateless::create_pipe(name)` — fires every message through
+- Channel/pipe types (full guide in the `robotica-tokio/src/pipes/mod.rs` module docs):
+  - `stateful::create_pipe(name)` — holds the current state: replays the latest value to new subscribers (even if old) and deduplicates identical values; use for state (sensor readings, prices, battery level)
+  - `stateless::create_pipe(name)` — event stream: fires every message through with no storage, replay, or dedup; use for events (commands, button presses, interval ticks) where late consumers just wait for the next one
+  - Rule of thumb: if a late subscriber needs the most recent value, it is state → stateful; if it should wait for the next occurrence, it is an event → stateless. Values that differ on every update are still state (e.g. a temperature reading)
+  - Stateful dedup uses `PartialEq`, so value equality is part of the pipe's behaviour; per-update fields (e.g. fetch timestamps) disable dedup
+  - MQTT send helpers default differently per kind: stateful receivers publish with Retain (QoS AtLeastOnce), stateless with NoRetain (QoS ExactlyOnce) — override via `SendOptions` if a stateless stream's latest value must be retained
   - Receivers expose a functional combinator API: `.map()`, `.filter()`, `.translate()`, `.for_each()`, `.merge()`, `.rate_limit()`, `.send_to_mqtt_json()`
 
 ---

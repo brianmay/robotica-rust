@@ -1,4 +1,24 @@
-//! Stateful pipes track the current state of the entity.
+//! Stateful pipes track the current state of an entity.
+//!
+//! The pipe keeps the most recent value. New subscribers are replayed that
+//! value as their first message, so a late consumer immediately learns the
+//! current state. Sending a value equal to the current one (compared with
+//! `PartialEq`) is a no-op: nothing is stored and subscribers are not
+//! woken, so consumers only see genuine state changes.
+//!
+//! Use a stateful pipe when the values are the state of something and a new
+//! consumer would want the latest value right away, even if it is old: a
+//! sensor reading, prices, a battery level, a switch position. The classic
+//! consumer pattern is to subscribe and then make one blocking `recv()` to
+//! pick up the initial value before entering the event loop.
+//!
+//! Values are compared by content (`Arc` wrappers compare their inner
+//! value), so `PartialEq` is part of the pipe's behaviour: keep state
+//! fields in it, and note that per-update fields such as fetch timestamps
+//! disable deduplication.
+//!
+//! See the [pipes module docs](crate::pipes) for the stateful vs stateless
+//! guide.
 pub mod receiver;
 pub mod sender;
 

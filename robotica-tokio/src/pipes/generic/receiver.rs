@@ -1,8 +1,10 @@
 //! Indexed receiver code.
 //!
-//! The generic pipe is the authoritative per-key store. [`into_stateful`] creates
+//! The generic pipe is the authoritative per-key store.
+//! [`Receiver::into_stateful`] creates
 //! a thick wrapper — it subscribes and forwards deduplicated values into a
-//! [`stateful::create_indexed_pipe`]. [`into_stateless`] passes every message
+//! [`stateful::create_indexed_pipe`]. [`Receiver::into_stateless`] passes
+//! every message
 //! through to a stateless pipe.
 
 use async_trait::async_trait;

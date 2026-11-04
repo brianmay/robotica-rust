@@ -1,4 +1,17 @@
-//! Stateless pipes do not track the current state of the entity.
+//! Stateless pipes are event streams.
+//!
+//! Every value is forwarded to the current subscribers and then forgotten:
+//! nothing is stored, nothing is replayed to late subscribers, and nothing
+//! is deduplicated. A consumer that is not subscribed at the moment a value
+//! is sent never sees it.
+//!
+//! Use a stateless pipe for occurrences in time where only future
+//! occurrences matter — a button press, a command, an interval boundary —
+//! that is, whenever a late subscriber should simply wait for the next
+//! value instead of being handed the most recent one.
+//!
+//! See the [pipes module docs](crate::pipes) for the stateful vs stateless
+//! guide.
 pub mod receiver;
 pub mod sender;
 
