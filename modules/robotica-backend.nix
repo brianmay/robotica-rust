@@ -30,10 +30,40 @@ let
     text = lib.generators.toYAML { } cfg.config;
   };
 
+  # Dummy secrets for the build time configuration check. The real
+  # secrets file is only decrypted at activation time (e.g. by agenix),
+  # so the check instead merges dummy values for the fields that this
+  # module does not generate and that deployments provide via the
+  # secrets file. Set `config_check_secrets` if your secrets file
+  # provides a different set of fields.
+  default_check_secrets = pkgs.writeTextFile {
+    name = "robotica-backend-check-secrets.yaml";
+    text = ''
+      database_url: "postgresql://check:check@localhost/check"
+      mqtt:
+        host: "localhost"
+        port: 1883
+      influxdb:
+        url: "http://localhost:8086"
+        token: "check"
+        database: "check"
+      amber:
+        token: "psk_check"
+        site_id: "check"
+      http:
+        session_secret: "check"
+        oidc_discovery_url: "https://check.invalid"
+        oidc_client_id: "check"
+        oidc_client_secret: "check"
+        oidc_scopes: "openid"
+    '';
+  };
+
   # The service script. Its build first validates the generated
-  # configuration with `robotica-backend lint` (with the secrets file
-  # merged in, exactly as at runtime), so a broken configuration fails
-  # the nix build instead of the service at runtime.
+  # configuration with `robotica-backend lint` (merging
+  # `config_check_secrets`, standing in for the secrets file), so a
+  # broken configuration fails the nix build instead of the service at
+  # runtime.
   wrapper =
     let
       service = pkgs.writeShellScriptBin "robotica-backend" ''
@@ -48,7 +78,7 @@ let
       '';
     in
     pkgs.runCommand "robotica-backend-wrapper" { } ''
-      export SECRETS_FILE="${cfg.secrets}"
+      export SECRETS_FILE="${cfg.config_check_secrets}"
       ${robotica-backend}/bin/robotica-backend lint ${robotica_config}
 
       mkdir -p $out/bin
@@ -443,6 +473,18 @@ in
     config = mkOption { type = config_type; };
     debug = mkOption { type = types.bool; };
     secrets = mkOption { type = types.path; };
+    config_check_secrets = mkOption {
+      type = types.path;
+      default = default_check_secrets;
+      description = ''
+        Secrets file used by the build time configuration check. The
+        real secrets file is only decrypted at activation time (e.g. by
+        agenix), so the check instead merges this file, which should
+        provide dummy values for the fields the secrets file provides.
+        The default covers the fields this module does not generate;
+        override it if your secrets file provides a different set.
+      '';
+    };
     data_dir = mkOption {
       type = types.str;
       default = "/var/lib/robotica";

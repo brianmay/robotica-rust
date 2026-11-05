@@ -162,6 +162,42 @@ mod tests {
     }
 
     #[test]
+    fn test_lint_partial_config_with_dummy_secrets() {
+        // Simulates the nix build time check: the generated config
+        // provides only the non secret sections, and a dummy secrets
+        // file (see `config_check_secrets` in the nix module) provides
+        // the rest. The real secrets file is only decrypted at
+        // activation time, so it is not available at build time.
+        let test = "test_lint_partial_config_with_dummy_secrets";
+        let secrets = write_file(
+            test,
+            "secrets.yaml",
+            "database_url: postgresql://check:check@localhost/check\n\
+             mqtt:\n  host: localhost\n  port: 1883\n\
+             influxdb:\n  url: http://localhost:8086\n  token: check\n  database: check\n",
+        );
+        let config_file = write_file(
+            test,
+            "config.yaml",
+            &format!(
+                "persistent_state:\n  state_path: /tmp/robotica-lint-test\n\
+                 logging:\n  deployment_environment: test\n\
+                 cars: []\nlights: []\nstrips: []\nmetrics: []\nwater_heaters: []\n\
+                 hdmi_matrices: []\ndoor_monitors: []\npresence_trackers: []\n\
+                 occupancy_sensors: []\nnight_mode: []\nmessage_routes: []\nowntracks: []\n\
+                 ui:\n  instance: home\n  views: []\n  profiles:\n    default: []\n"
+            ),
+        );
+        let environment = Environment {
+            config_file,
+            secrets_file: Some(secrets),
+            static_path: None,
+            database_url: None,
+        };
+        assert!(lint(&environment).is_ok(), "{:?}", lint(&environment));
+    }
+
+    #[test]
     fn test_lint_bad_yaml() {
         let environment = environment("test_lint_bad_yaml", "this is not: [valid yaml\n");
         assert!(matches!(lint(&environment), Err(Error::Config(_))));
