@@ -38,6 +38,8 @@ pub enum Msg {
 pub struct Props {
     pub id: Id,
     pub title: String,
+    /// Are the charging controls enabled for this user?
+    pub controls: bool,
 }
 
 pub struct CarComponent {
@@ -245,6 +247,7 @@ impl Component for CarComponent {
             icon: Icon::Light,
             config: car_auto_charge_switch(&id.to_string()),
         };
+        let controls = props.controls;
 
         html! {
             <RequireConnection>
@@ -307,12 +310,20 @@ impl Component for CarComponent {
                                                         html! {
                                                             <>
                                                                 { state.min_charge_tomorrow }{ "%" }
-                                                                <button
-                                                                    class="btn btn-secondary btn-sm ms-2"
-                                                                    onclick={ctx.link().callback(|_| Msg::StartEdit)}
-                                                                >
-                                                                    { "Edit" }
-                                                                </button>
+                                                                {
+                                                                    if controls {
+                                                                        html! {
+                                                                            <button
+                                                                                class="btn btn-secondary btn-sm ms-2"
+                                                                                onclick={ctx.link().callback(|_| Msg::StartEdit)}
+                                                                            >
+                                                                                { "Edit" }
+                                                                            </button>
+                                                                        }
+                                                                    } else {
+                                                                        html! {}
+                                                                    }
+                                                                }
                                                             </>
                                                         }
                                                     }
@@ -381,12 +392,20 @@ impl Component for CarComponent {
                                                                 { datetime_to_string(state.charge_end_time.end_time) }
                                                                 { " - " }
                                                                 { state.charge_end_time.min_charge }{ "%" }
-                                                                <button
-                                                                    class="btn btn-secondary btn-sm ms-2"
-                                                                    onclick={ctx.link().callback(|_| Msg::StartEditEndTime)}
-                                                                >
-                                                                    { "Edit" }
-                                                                </button>
+                                                                {
+                                                                    if controls {
+                                                                        html! {
+                                                                            <button
+                                                                                class="btn btn-secondary btn-sm ms-2"
+                                                                                onclick={ctx.link().callback(|_| Msg::StartEditEndTime)}
+                                                                            >
+                                                                                { "Edit" }
+                                                                            </button>
+                                                                        }
+                                                                    } else {
+                                                                        html! {}
+                                                                    }
+                                                                }
                                                             </>
                                                         }
                                                     }
@@ -479,7 +498,15 @@ impl Component for CarComponent {
                     } }
                 </div>
                 <div class="mt-3">
-                  <Button<switch::Config> ..switch_props />
+                  {
+                    if controls {
+                        html! {
+                            <Button<switch::Config> ..switch_props />
+                        }
+                    } else {
+                        html! {}
+                    }
+                  }
                 </div>
             </RequireConnection>
         }

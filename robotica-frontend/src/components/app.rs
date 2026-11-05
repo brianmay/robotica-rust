@@ -97,8 +97,10 @@ fn render_view(view: &ViewConfig) -> Html {
         ViewKind::Controls(controls) => html! {
             <Controls id={view.id.clone()} title={view.title.clone()} rows={controls.rows.clone()} />
         },
-        ViewKind::Car => match view_id_to_entity(&view.id) {
-            Ok(id) => html! { <CarComponent {id} title={view.title.clone()} /> },
+        ViewKind::Car(car) => match view_id_to_entity(&view.id) {
+            Ok(id) => html! {
+                <CarComponent {id} title={view.title.clone()} controls={car.controls} />
+            },
             Err(e) => html! { <h1>{ format!("404 invalid id: {e}") }</h1> },
         },
         ViewKind::WaterHeater => match view_id_to_entity(&view.id) {

@@ -119,6 +119,31 @@ pub struct ControlsConfig {
     pub rows: Vec<ButtonRowConfig>,
 }
 
+/// Configuration for a car view.
+#[derive(Deserialize, Serialize, Clone, Eq, PartialEq)]
+pub struct CarConfig {
+    /// The groups allowed to use the charging controls (the auto charge
+    /// toggle, and the minimum charge and end time settings). Empty
+    /// means everyone who can see the view.
+    #[serde(default)]
+    pub control_groups: Vec<String>,
+
+    /// Are the charging controls enabled for the recipient of this
+    /// configuration?
+    ///
+    /// Set during per user filtering based on `control_groups`; true in
+    /// the source configuration by default. Can also be set to false in
+    /// the configuration to disable the controls for everyone.
+    #[serde(default = "default_controls_enabled")]
+    pub controls: bool,
+}
+
+/// The default for [`CarConfig::controls`].
+#[must_use]
+const fn default_controls_enabled() -> bool {
+    true
+}
+
 /// Configuration for a locations view.
 ///
 /// The view tracks the location of a declared set of objects. Only the
@@ -154,7 +179,7 @@ pub enum ViewKind {
     Controls(ControlsConfig),
 
     /// A car charging view; the view id is the car entity id
-    Car,
+    Car(CarConfig),
 
     /// A water heater view; the view id is the water heater entity id
     WaterHeater,
@@ -218,6 +243,25 @@ impl ViewConfig {
         self.groups.is_empty() || self.groups.iter().any(|group| user_groups.contains(group))
     }
 
+    /// The view as served to a user with the given groups.
+    ///
+    /// The view itself must be allowed (see [`ViewConfig::is_allowed`]);
+    /// this filters the per view options to the user's permissions, for
+    /// example stripping the car charging controls.
+    #[must_use]
+    pub fn filtered_for(&self, user_groups: &[String]) -> ViewConfig {
+        let mut view = self.clone();
+        if let ViewKind::Car(car) = &mut view.kind {
+            car.controls = car.controls
+                && (car.control_groups.is_empty()
+                    || car
+                        .control_groups
+                        .iter()
+                        .any(|group| user_groups.contains(group)));
+        }
+        view
+    }
+
     /// The MQTT topics this view subscribes to and sends on.
     ///
     /// This is an exhaustive match: a new view kind cannot be added without
@@ -234,15 +278,18 @@ impl ViewConfig {
                     }
                 }
             }
-            ViewKind::Car => {
+            ViewKind::Car(car) => {
                 topics.subscribe_exact(amber_entity_topic(&self.id));
 
                 // The charging controls in the car view: the auto charge
                 // switch button, and the charge schedule commands (which
-                // mirror `AnyId::get_command_topic`).
-                topics.merge(&car_auto_charge_switch(&self.id).topics());
-                topics.send_exact(format!("robotica/command/{}/min_charge_tomorrow", self.id));
-                topics.send_exact(format!("robotica/command/{}/set_charge_end_time", self.id));
+                // mirror `AnyId::get_command_topic`). Only present when
+                // the controls are enabled for the recipient.
+                if car.controls {
+                    topics.merge(&car_auto_charge_switch(&self.id).topics());
+                    topics.send_exact(format!("robotica/command/{}/min_charge_tomorrow", self.id));
+                    topics.send_exact(format!("robotica/command/{}/set_charge_end_time", self.id));
+                }
             }
             ViewKind::WaterHeater => {
                 topics.subscribe_exact(amber_entity_topic(&self.id));
@@ -349,10 +396,12 @@ impl Config {
     }
 
     /// The config filtered to the views a user with the given group names
-    /// is allowed to access.
+    /// is allowed to access, with per view options filtered to their
+    /// permissions.
     ///
     /// This is what a user is served: they only see the views (and
-    /// therefore the navigation items) they have access to.
+    /// therefore the navigation items) they have access to, and within a
+    /// view only the options they are permitted to use.
     #[must_use]
     pub fn filter_allowed(&self, user_groups: &[String]) -> Config {
         Config {
@@ -361,7 +410,7 @@ impl Config {
                 .views
                 .iter()
                 .filter(|view| view.is_allowed(user_groups))
-                .cloned()
+                .map(|view| view.filtered_for(user_groups))
                 .collect(),
         }
     }
@@ -459,7 +508,11 @@ mod tests {
 
     #[test]
     fn test_car_topics() {
-        let topics = view("tesla_1", ViewKind::Car).topics("home");
+        let car = ViewKind::Car(CarConfig {
+            control_groups: vec![],
+            controls: true,
+        });
+        let topics = view("tesla_1", car).topics("home");
         assert!(topics.is_subscribe_allowed("robotica/state/tesla_1/amber"));
         assert!(!topics.is_subscribe_allowed("robotica/state/other_car/amber"));
 
@@ -469,6 +522,63 @@ mod tests {
         assert!(topics.is_send_allowed("robotica/command/tesla_1/min_charge_tomorrow"));
         assert!(topics.is_send_allowed("robotica/command/tesla_1/set_charge_end_time"));
         assert!(!topics.is_send_allowed("robotica/command/other_car/auto_charge"));
+    }
+
+    #[test]
+    fn test_car_controls_restricted_to_group() {
+        let car = ViewKind::Car(CarConfig {
+            control_groups: vec!["admin".to_string()],
+            controls: true,
+        });
+        let config = Config {
+            instance: "home".to_string(),
+            views: vec![view("tesla_1", car)],
+        };
+
+        // An admin keeps the controls, and their control topics are
+        // allowed.
+        let admin_config = config.filter_allowed(&["admin".to_string()]);
+        assert!(matches!(
+            &admin_config.get_view("tesla_1").unwrap().kind,
+            ViewKind::Car(car) if car.controls
+        ));
+        let admin_topics = admin_config.topics();
+        assert!(admin_topics.is_send_allowed("robotica/command/tesla_1/auto_charge"));
+        assert!(admin_topics.is_send_allowed("robotica/command/tesla_1/set_charge_end_time"));
+
+        // A user without the group still sees the car (the amber state
+        // topic is allowed) but the controls are stripped and none of
+        // the control topics are allowed.
+        let guest_config = config.filter_allowed(&[]);
+        assert!(matches!(
+            &guest_config.get_view("tesla_1").unwrap().kind,
+            ViewKind::Car(car) if !car.controls
+        ));
+        let guest_topics = guest_config.topics();
+        assert!(guest_topics.is_subscribe_allowed("robotica/state/tesla_1/amber"));
+        assert!(!guest_topics.is_subscribe_allowed("robotica/state/tesla_1/auto_charge/power"));
+        assert!(!guest_topics.is_send_allowed("robotica/command/tesla_1/auto_charge"));
+        assert!(!guest_topics.is_send_allowed("robotica/command/tesla_1/min_charge_tomorrow"));
+        assert!(!guest_topics.is_send_allowed("robotica/command/tesla_1/set_charge_end_time"));
+    }
+
+    #[test]
+    fn test_car_controls_default_everyone() {
+        // No control groups: everyone keeps the controls.
+        let car = ViewKind::Car(CarConfig {
+            control_groups: vec![],
+            controls: true,
+        });
+        let config = Config {
+            instance: "home".to_string(),
+            views: vec![view("tesla_1", car)],
+        };
+
+        let guest_config = config.filter_allowed(&[]);
+        assert!(matches!(
+            &guest_config.get_view("tesla_1").unwrap().kind,
+            ViewKind::Car(car) if car.controls
+        ));
     }
 
     #[test]
@@ -653,7 +763,7 @@ mod tests {
 
         let car = config.get_view("brian_car").unwrap();
         assert_eq!(car.menu.as_deref(), Some("Cars"));
-        assert!(matches!(car.kind, ViewKind::Car));
+        assert!(matches!(car.kind, ViewKind::Car(_)));
 
         let prices = config.get_view("prices").unwrap();
         assert!(prices.menu.is_none());
