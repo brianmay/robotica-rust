@@ -13,6 +13,7 @@ mod config;
 mod hdmi_matrix;
 mod influxdb;
 mod lights;
+mod lint;
 mod logging;
 mod messages;
 mod metrics;
@@ -64,6 +65,14 @@ use robotica_tokio::services::mqtt::{MqttRx, MqttTx};
 #[allow(unreachable_code)]
 #[tokio::main]
 async fn main() -> Result<()> {
+    // `robotica-backend lint [config-file]` validates the configuration
+    // and exits. Used at build time by the nix module to check the
+    // configuration before the service is built.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("lint") {
+        return lint_command(&args[2..]);
+    }
+
     color_backtrace::install();
     if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
         eprintln!("Failed to install rustls crypto provider: {e:?}");
@@ -110,6 +119,32 @@ async fn main() -> Result<()> {
         tokio::time::sleep(std::time::Duration::from_mins(5)).await;
     }
 
+    Ok(())
+}
+
+/// Run the `lint` subcommand: validate the configuration and exit.
+///
+/// The config file is taken from the first argument, falling back to the
+/// `CONFIG_FILE` environment variable (like the backend itself does).
+fn lint_command(args: &[String]) -> Result<()> {
+    let environment = if let Some(config_file) = args.first() {
+        config::Environment {
+            config_file: std::path::PathBuf::from(config_file),
+            secrets_file: std::env::var("SECRETS_FILE")
+                .ok()
+                .map(std::path::PathBuf::from),
+            static_path: std::env::var("STATIC_PATH")
+                .ok()
+                .map(std::path::PathBuf::from),
+            database_url: std::env::var("DATABASE_URL").ok(),
+        }
+    } else {
+        config::Environment::load()
+            .map_err(|e| anyhow::anyhow!("Error loading environment: {e}"))?
+    };
+
+    lint::lint(&environment)?;
+    println!("Configuration OK");
     Ok(())
 }
 

@@ -30,16 +30,30 @@ let
     text = lib.generators.toYAML { } cfg.config;
   };
 
-  wrapper = pkgs.writeShellScriptBin "robotica-backend" ''
-    export RUST_LOG=info
-    export ROBOTICA_DEBUG="${boolToString (cfg.debug)}"
-    export CONFIG_FILE="${robotica_config}"
-    export SECRETS_FILE="${cfg.secrets}"
+  # The service script. Its build first validates the generated
+  # configuration with `robotica-backend lint` (with the secrets file
+  # merged in, exactly as at runtime), so a broken configuration fails
+  # the nix build instead of the service at runtime.
+  wrapper =
+    let
+      service = pkgs.writeShellScriptBin "robotica-backend" ''
+        export RUST_LOG=info
+        export ROBOTICA_DEBUG="${boolToString (cfg.debug)}"
+        export CONFIG_FILE="${robotica_config}"
+        export SECRETS_FILE="${cfg.secrets}"
 
-    mkdir -p "${cfg.data_dir}"
-    mkdir -p "${cfg.data_dir}/state"
-    exec "${robotica-backend}/bin/robotica-backend"
-  '';
+        mkdir -p "${cfg.data_dir}"
+        mkdir -p "${cfg.data_dir}/state"
+        exec "${robotica-backend}/bin/robotica-backend"
+      '';
+    in
+    pkgs.runCommand "robotica-backend-wrapper" { } ''
+      export SECRETS_FILE="${cfg.secrets}"
+      ${robotica-backend}/bin/robotica-backend lint ${robotica_config}
+
+      mkdir -p $out/bin
+      cp ${service}/bin/robotica-backend $out/bin/robotica-backend
+    '';
 
   executor_type = types.submodule {
     options = {
