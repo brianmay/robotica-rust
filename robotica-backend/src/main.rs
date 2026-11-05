@@ -19,6 +19,7 @@ mod metrics;
 mod monitor_location;
 mod open_epaper_link;
 mod tesla;
+mod ui;
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -190,6 +191,14 @@ async fn setup_pipes(
     config: config::Config,
     postgres: sqlx::PgPool,
 ) {
+    // Publish the UI configuration profiles retained, so that the web
+    // frontend and wall panels pick them up on (re)connect.
+    if let Some(ui_config) = &config.ui {
+        ui_config
+            .publish_profiles(&state.mqtt)
+            .unwrap_or_else(|e| panic!("Invalid ui configuration: {e}"));
+    }
+
     // espresence sensors
     let presence_trackers: HashMap<Id, stateful::Receiver<PresenceTrackerValue>> = config
         .presence_trackers

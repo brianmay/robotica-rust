@@ -107,6 +107,7 @@ pub struct Config {
     pub message_routes: Vec<MessageRouteConfig>,
     #[serde(default)]
     pub owntracks: Vec<OwnTracksSourceConfig>,
+    pub ui: Option<crate::ui::UiConfig>,
 }
 
 /// An error loading the Config

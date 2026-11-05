@@ -381,6 +381,13 @@ let
         type = lib.types.nullOr http_type;
         default = null;
       };
+      # The UI configuration (views and profiles), in the view based
+      # schema defined by robotica-common. Deliberately untyped: the
+      # Rust deserializer is the single source of truth for the schema.
+      ui = mkOption {
+        type = lib.types.nullOr lib.types.attrs;
+        default = null;
+      };
       persistent_state = mkOption {
         type = persistent_state_type;
         default = { };

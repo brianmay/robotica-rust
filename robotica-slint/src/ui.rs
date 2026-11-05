@@ -27,7 +27,7 @@ use serde::Deserialize;
 use robotica_common::{
     config::{
         schedule_topic, tags_topic, ButtonConfig, ButtonRowConfig, Config as CommonConfig,
-        ControllerConfig, Icon, ViewConfig, ViewKind,
+        ControllerConfig, Icon, ViewKind,
     },
     scheduler::{Importance, Status},
 };
@@ -132,7 +132,6 @@ pub fn run_gui(
     tracing::info!("run_gui called");
 
     let state = Arc::new(state);
-    let (tx_room, rx_room) = mpsc::channel::<String>(1);
 
     let ui = slint::AppWindow::new().unwrap();
     tracing::info!("Slint AppWindow created");
@@ -144,10 +143,8 @@ pub fn run_gui(
         ui.as_weak(),
         config.ui_config_name.clone(),
         state.mqtt.clone(),
-        rx_room,
     );
 
-    monitor_room_change(&ui, tx_room);
     monitor_screen_reset(&state, &ui);
     monitor_display(config, &ui, rx_screen_command);
     monitor_time(&ui);
@@ -162,21 +159,7 @@ pub fn run_gui(
     }
 }
 
-/// Get the controls views from a config: the views the wall panel can show.
-fn controls_views(config: &CommonConfig) -> Vec<&ViewConfig> {
-    config
-        .views
-        .iter()
-        .filter(|view| matches!(view.kind, ViewKind::Controls(_)))
-        .collect()
-}
-
-fn spawn_config_monitor(
-    handle_weak: Weak<slint::AppWindow>,
-    name: String,
-    mqtt: MqttTx,
-    mut rx_room: mpsc::Receiver<String>,
-) {
+fn spawn_config_monitor(handle_weak: Weak<slint::AppWindow>, name: String, mqtt: MqttTx) {
     tokio::spawn(async move {
         let topic = format!("robotica/config/{name}");
         let rx = mqtt
@@ -187,68 +170,24 @@ fn spawn_config_monitor(
 
         #[allow(clippy::collection_is_never_read)]
         let mut _guard = None;
-        let mut maybe_common_config: Option<Arc<CommonConfig>> = None;
-        let mut maybe_selected_room = None;
 
         loop {
-            select! {
-                msg = rx_room.recv() => if let Some(room) = msg {
-                    if let Some(common_config) = &maybe_common_config {
-                        maybe_selected_room = controls_views(common_config)
-                            .into_iter()
-                            .find(|r| r.title == room)
-                            .map(|r| r.id.clone());
-                    } else {
-                        maybe_selected_room = None;
-                    }
-                } else {
-                    error!("Error receiving room");
-                    break;
-                },
-                msg = rx.recv() => match msg {
-                    Ok(Json(common_config)) => {
-                        maybe_common_config = Some(common_config);
-                    }
-                    Err(err) => {
-                        error!("Error receiving config: {err}");
-                        break;
-                    }
+            match rx.recv().await {
+                Ok(Json(common_config)) => {
+                    let mqtt = mqtt.clone();
+                    let cancellation = CancellationToken::new();
+                    _guard = cancellation.clone().drop_guard().pipe(Some);
+
+                    handle_weak
+                        .upgrade_in_event_loop(move |handle| {
+                            setup_config(&handle, &common_config, &mqtt, &cancellation);
+                        })
+                        .unwrap();
                 }
-            }
-
-            if let Some(common_config) = maybe_common_config.clone() {
-                let mqtt = mqtt.clone();
-                let cancellation = CancellationToken::new();
-                _guard = cancellation.clone().drop_guard().pipe(Some);
-
-                let controls_views = controls_views(&common_config);
-
-                let rooms = controls_views
-                    .iter()
-                    .map(|r| r.title.clone().pipe(SharedString::from))
-                    .collect::<Vec<_>>();
-
-                let selected_room = controls_views
-                    .iter()
-                    .find(|r| Some(&r.id) == maybe_selected_room.as_ref())
-                    .map(|r| (*r).clone())
-                    .or_else(|| controls_views.first().map(|r| (*r).clone()));
-
-                handle_weak
-                    .upgrade_in_event_loop(move |handle| {
-                        handle.set_rooms(ModelRc::new(VecModel::from(rooms)));
-
-                        let id = if let Some(selected_room) = selected_room {
-                            handle.set_selected_room(selected_room.title.into());
-                            Some(selected_room.id)
-                        } else {
-                            handle.set_selected_room("".into());
-                            None
-                        };
-
-                        setup_config(&handle, &common_config, id.as_ref(), &mqtt, &cancellation);
-                    })
-                    .unwrap();
+                Err(err) => {
+                    error!("Error receiving config: {err}");
+                    break;
+                }
             }
         }
     });
@@ -257,23 +196,27 @@ fn spawn_config_monitor(
 fn setup_config(
     ui: &slint::AppWindow,
     config: &Arc<CommonConfig>,
-    view_id: Option<&String>,
     mqtt: &MqttTx,
     cancellation: &CancellationToken,
 ) {
     let icons = ui.get_all_icons();
     let mut id = 0;
 
-    let no_rows: Vec<ButtonRowConfig> = vec![];
-    let buttons: &[ButtonRowConfig] = config
+    // The panel shows the rows of all the controls views in its profile,
+    // concatenated. A panel profile normally contains a single controls
+    // view (the room the panel is in); listing more views adds their
+    // buttons to the same grid.
+    let rows: Vec<ButtonRowConfig> = config
         .views
         .iter()
-        .find(|view| Some(&view.id) == view_id)
-        .and_then(|view| match &view.kind {
-            ViewKind::Controls(controls) => Some(&controls.rows),
+        .filter_map(|view| match &view.kind {
+            ViewKind::Controls(controls) => Some(controls.rows.as_slice()),
             _ => None,
         })
-        .map_or(&no_rows, |rows| rows);
+        .flatten()
+        .cloned()
+        .collect();
+    let buttons: &[ButtonRowConfig] = &rows;
 
     let all_buttons: Vec<slint::ButtonRowData> = buttons
         .iter()
@@ -325,16 +268,21 @@ fn setup_config(
     monitor_buttons_presses(ui, tx_clicks);
     monitor_buttons_state(buttons, mqtt, ui, cancellation);
 
-    monitor_tags(config.clone(), mqtt.clone(), ui, cancellation.clone());
-    monitor_schedule(config.clone(), mqtt.clone(), ui, cancellation.clone());
-}
-
-fn monitor_room_change(ui: &slint::AppWindow, tx_room: mpsc::Sender<String>) {
-    ui.on_room_changed(move |room| {
-        tx_room.try_send(room.to_string()).unwrap_or_else(|_| {
-            error!("Failed to send room change event");
-        });
-    });
+    // Tags and schedule are only monitored when the profile has those views.
+    if config
+        .views
+        .iter()
+        .any(|view| matches!(view.kind, ViewKind::Tags))
+    {
+        monitor_tags(config.clone(), mqtt.clone(), ui, cancellation.clone());
+    }
+    if config
+        .views
+        .iter()
+        .any(|view| matches!(view.kind, ViewKind::Schedule))
+    {
+        monitor_schedule(config.clone(), mqtt.clone(), ui, cancellation.clone());
+    }
 }
 
 fn monitor_screen_reset(state: &Arc<RunningState>, ui: &slint::AppWindow) {
