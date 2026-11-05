@@ -8,8 +8,8 @@ use crate::{
     services::websocket::{Subscription, WebsocketService},
 };
 use robotica_common::{
-    config::Icon,
-    controllers::{robotica::switch, Action},
+    config::{car_auto_charge_switch, Icon},
+    controllers::robotica::switch,
     datetime::{datetime_to_string, time_delta},
     mqtt::{Json, MqttMessage, QoS, Retain},
     robotica::{
@@ -243,10 +243,7 @@ impl Component for CarComponent {
         let switch_props = ButtonProps {
             title: "Charge".to_string(),
             icon: Icon::Light,
-            config: switch::Config {
-                topic_substr: format!("{id}/auto_charge"),
-                action: Action::Toggle,
-            },
+            config: car_auto_charge_switch(&id.to_string()),
         };
 
         html! {

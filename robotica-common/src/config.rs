@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     controllers::{
         robotica::{hdmi_matrix, lights, music, switch},
-        ConfigTrait, {tasmota, zwave},
+        Action, ConfigTrait, {tasmota, zwave},
     },
     mqtt::topics::Topics,
     robotica::entities::Id,
@@ -234,7 +234,17 @@ impl ViewConfig {
                     }
                 }
             }
-            ViewKind::Car | ViewKind::WaterHeater => {
+            ViewKind::Car => {
+                topics.subscribe_exact(amber_entity_topic(&self.id));
+
+                // The charging controls in the car view: the auto charge
+                // switch button, and the charge schedule commands (which
+                // mirror `AnyId::get_command_topic`).
+                topics.merge(&car_auto_charge_switch(&self.id).topics());
+                topics.send_exact(format!("robotica/command/{}/min_charge_tomorrow", self.id));
+                topics.send_exact(format!("robotica/command/{}/set_charge_end_time", self.id));
+            }
+            ViewKind::WaterHeater => {
                 topics.subscribe_exact(amber_entity_topic(&self.id));
             }
             ViewKind::Schedule => {
@@ -277,6 +287,18 @@ pub fn amber_topic(name: &str) -> String {
 #[must_use]
 pub fn amber_entity_topic(id: &str) -> String {
     format!("robotica/state/{id}/amber")
+}
+
+/// The switch configuration for a car's auto charge button.
+///
+/// Used by the car view (to derive its topics) and by the car view
+/// component (for the button itself), so the two cannot drift apart.
+#[must_use]
+pub fn car_auto_charge_switch(id: &str) -> switch::Config {
+    switch::Config {
+        topic_substr: format!("{id}/auto_charge"),
+        action: Action::Toggle,
+    }
 }
 
 /// Get the schedule topic for an instance.
@@ -437,15 +459,26 @@ mod tests {
 
     #[test]
     fn test_car_topics() {
-        let topics = view("brian_car", ViewKind::Car).topics("home");
-        assert!(topics.is_subscribe_allowed("robotica/state/brian_car/amber"));
+        let topics = view("tesla_1", ViewKind::Car).topics("home");
+        assert!(topics.is_subscribe_allowed("robotica/state/tesla_1/amber"));
         assert!(!topics.is_subscribe_allowed("robotica/state/other_car/amber"));
+
+        // The charging controls in the car view.
+        assert!(topics.is_subscribe_allowed("robotica/state/tesla_1/auto_charge/power"));
+        assert!(topics.is_send_allowed("robotica/command/tesla_1/auto_charge"));
+        assert!(topics.is_send_allowed("robotica/command/tesla_1/min_charge_tomorrow"));
+        assert!(topics.is_send_allowed("robotica/command/tesla_1/set_charge_end_time"));
+        assert!(!topics.is_send_allowed("robotica/command/other_car/auto_charge"));
     }
 
     #[test]
     fn test_water_heater_topics() {
         let topics = view("hot_water", ViewKind::WaterHeater).topics("home");
         assert!(topics.is_subscribe_allowed("robotica/state/hot_water/amber"));
+
+        // The water heater view is display only; it has no controls.
+        assert!(!topics.is_send_allowed("robotica/command/hot_water/auto_charge"));
+        assert!(!topics.is_send_allowed("robotica/command/hot_water/min_charge_tomorrow"));
     }
 
     #[test]
