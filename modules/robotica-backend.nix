@@ -34,8 +34,11 @@ let
   # secrets file is only decrypted at activation time (e.g. by agenix),
   # so the check instead merges dummy values for the fields that this
   # module does not generate and that deployments provide via the
-  # secrets file. Set `config_check_secrets` if your secrets file
-  # provides a different set of fields.
+  # secrets file.
+  #
+  # Each section must be complete: if a deployment does not configure a
+  # section at all, the dummy section stands alone in the merged
+  # configuration and must still parse.
   default_check_secrets = pkgs.writeTextFile {
     name = "robotica-backend-check-secrets.yaml";
     text = ''
@@ -51,11 +54,15 @@ let
         token: "psk_check"
         site_id: "check"
       http:
+        root_url: "https://check.invalid/"
+        static_path: "/check"
         session_secret: "check"
         oidc_discovery_url: "https://check.invalid"
         oidc_client_id: "check"
         oidc_client_secret: "check"
         oidc_scopes: "openid"
+        http_listener: "[::]:4000"
+        instance: "check"
     '';
   };
 
@@ -482,7 +489,9 @@ in
         agenix), so the check instead merges this file, which should
         provide dummy values for the fields the secrets file provides.
         The default covers the fields this module does not generate;
-        override it if your secrets file provides a different set.
+        override it if your secrets file provides a different set. Each
+        section must be complete, so that it still parses when the
+        deployment does not configure that section.
       '';
     };
     data_dir = mkOption {
