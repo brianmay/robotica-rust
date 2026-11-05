@@ -326,6 +326,24 @@ impl Config {
         self.views.iter().find(|view| view.id == id)
     }
 
+    /// The config filtered to the views a user with the given group names
+    /// is allowed to access.
+    ///
+    /// This is what a user is served: they only see the views (and
+    /// therefore the navigation items) they have access to.
+    #[must_use]
+    pub fn filter_allowed(&self, user_groups: &[String]) -> Config {
+        Config {
+            instance: self.instance.clone(),
+            views: self
+                .views
+                .iter()
+                .filter(|view| view.is_allowed(user_groups))
+                .cloned()
+                .collect(),
+        }
+    }
+
     /// The MQTT topics required by all views.
     ///
     /// This is the union of the topics of every view, and is the basis of
@@ -508,6 +526,37 @@ mod tests {
         assert!(v.is_allowed(&["family".to_string()]));
         assert!(v.is_allowed(&["admin".to_string(), "family".to_string()]));
         assert!(!v.is_allowed(&["admin".to_string()]));
+    }
+
+    #[test]
+    fn test_filter_allowed() {
+        let mut kitchen = view("kitchen", ViewKind::Schedule);
+        kitchen.groups = vec!["family".to_string()];
+        let guest_view = view("guest", ViewKind::Tags);
+
+        let config = Config {
+            instance: "home".to_string(),
+            views: vec![kitchen, guest_view],
+        };
+
+        // A user with no groups sees only the views with no group
+        // restriction.
+        let guest_config = config.filter_allowed(&[]);
+        assert_eq!(guest_config.views.len(), 1);
+        assert_eq!(guest_config.views[0].id, "guest");
+
+        // A family member sees both.
+        let family_config = config.filter_allowed(&["family".to_string()]);
+        assert_eq!(family_config.views.len(), 2);
+
+        // The filtered config's derived topics only include the allowed
+        // views' topics.
+        let guest_topics = guest_config.topics();
+        assert!(guest_topics.is_subscribe_allowed("robotica/home/tags"));
+        assert!(!guest_topics.is_subscribe_allowed("schedule/home/pending"));
+        let family_topics = family_config.topics();
+        assert!(family_topics.is_subscribe_allowed("schedule/home/pending"));
+        assert!(family_topics.is_subscribe_allowed("robotica/home/tags"));
     }
 
     #[test]

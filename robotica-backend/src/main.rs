@@ -22,6 +22,7 @@ mod tesla;
 mod ui;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use amber::car::ChargeRequest;
@@ -347,9 +348,23 @@ async fn setup_pipes(
     }
 
     if let Some(http_config) = config.http {
-        http::run(state.mqtt.clone(), http_config, postgres.clone())
-            .await
-            .unwrap_or_else(|e| panic!("Error running http server: {e}"));
+        // The web frontend is served the default profile, filtered per
+        // user; it is also the basis of the per user websocket topic
+        // permissions.
+        let ui_default_config = config
+            .ui
+            .as_ref()
+            .and_then(|ui| ui.profile_config("default").ok())
+            .map(Arc::new);
+
+        http::run(
+            state.mqtt.clone(),
+            http_config,
+            ui_default_config,
+            postgres.clone(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Error running http server: {e}"));
     }
 
     for hdmi_matrix_config in config.hdmi_matrices {

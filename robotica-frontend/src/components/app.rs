@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use robotica_common::config::{view_id_to_entity, Config, ViewConfig, ViewKind};
-use robotica_common::mqtt::{Json, MqttMessage};
 use robotica_common::version;
 use tracing::{debug, error};
 use yew::prelude::*;
@@ -17,6 +16,7 @@ use crate::components::schedule_view::ScheduleView;
 use crate::components::tags_view::TagsView;
 use crate::components::water_heater::WaterHeaterComponent;
 use crate::components::welcome::Welcome;
+use crate::services::api;
 use crate::services::websocket::{Subscription, WebsocketService, WsEvent};
 use crate::Route;
 
@@ -119,7 +119,6 @@ fn render_view(view: &ViewConfig) -> Html {
 
 pub enum AppMsg {
     Config(Arc<Config>),
-    ConfigSubscription(Subscription),
     ConfigError(String),
     AuthEvent(WsEvent),
     AuthSubscription(Subscription),
@@ -128,29 +127,26 @@ pub enum AppMsg {
 pub struct App {
     wss: WebsocketService,
     config: Option<Arc<Config>>,
-    config_subscription: Option<Subscription>,
     config_error: Option<String>,
     show_full_ui: bool,
     event_subscription: Option<Subscription>,
     subscribed: bool,
 }
 
-fn subscribe_to_config(ctx: &Context<App>, wss: WebsocketService, name: &str) {
-    let topic = format!("robotica/config/{name}");
-    let callback = ctx.link().callback(move |msg: MqttMessage| {
-        debug!("Got config message");
-        match msg.try_into() as Result<Json<Arc<Config>>, _> {
-            Ok(Json(state)) => AppMsg::Config(state),
-            Err(e) => {
-                error!("Failed to deserialize config message: {e:?}");
-                AppMsg::ConfigError(format!("{e:?}"))
-            }
-        }
-    });
-    let mut wss = wss;
-    ctx.link().send_future(async move {
-        let s = wss.subscribe_mqtt(topic, callback).await;
-        AppMsg::ConfigSubscription(s)
+/// Fetch the per user UI configuration over HTTP.
+///
+/// The backend filters the default profile to the views the user's groups
+/// allow; the navbar renders exactly those views. Called once the
+/// websocket reports a successful (authenticated) connection.
+fn fetch_config(ctx: &Context<App>) {
+    let link = ctx.link().clone();
+    yew::platform::spawn_local(async move {
+        let result = api::get_ui_config().await;
+        let msg = match result {
+            Ok(config) => AppMsg::Config(Arc::new(config)),
+            Err(err) => AppMsg::ConfigError(err),
+        };
+        link.send_message(msg);
     });
 }
 
@@ -158,14 +154,12 @@ impl Component for App {
     type Message = AppMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         let wss = WebsocketService::new();
-        subscribe_to_config(ctx, wss.clone(), "default");
 
         App {
             wss,
             config: None,
-            config_subscription: None,
             config_error: None,
             show_full_ui: false,
             event_subscription: None,
@@ -173,18 +167,12 @@ impl Component for App {
         }
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AppMsg::Config(config) => {
                 debug!("Got config");
                 self.config = Some(config);
                 true
-            }
-            AppMsg::ConfigSubscription(subscription) => {
-                debug!("Got config subscription");
-                self.config_subscription = Some(subscription);
-
-                false
             }
             AppMsg::ConfigError(msg) => {
                 error!("Config error: {}", msg);
@@ -192,6 +180,13 @@ impl Component for App {
                 true
             }
             AppMsg::AuthEvent(event) => {
+                if matches!(event, WsEvent::Connected { .. }) {
+                    // The websocket only connects for authenticated
+                    // sessions, so it is now safe to fetch the per user
+                    // ui config.
+                    fetch_config(ctx);
+                }
+
                 let show_full_ui =
                     matches!(event, WsEvent::Connected { .. } | WsEvent::Disconnected(..));
                 if self.show_full_ui == show_full_ui {

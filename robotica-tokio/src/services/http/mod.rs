@@ -31,12 +31,14 @@ use tower_sessions::{Expiry, Session, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 use tracing::error;
 
+use robotica_common::config::Config as UiConfig;
 use robotica_common::user::User;
 
 use crate::services::http::websocket::websocket_handler;
 use crate::services::mqtt::MqttTx;
 use crate::spawn;
 
+use self::api::ui_config::get_ui_config;
 use self::api::zones;
 use self::errors::ResponseError;
 use self::oidc::Client;
@@ -131,6 +133,10 @@ struct HttpState {
     oidc_client: Arc<ArcSwap<Option<Client>>>,
     manifest: Arc<Manifest>,
     postgres: sqlx::PgPool,
+    /// The default ui profile, which the web frontend is served (filtered
+    /// per user). When `None`, no ui config is served and all websocket
+    /// mqtt topics are denied (fail closed).
+    ui_config: Option<Arc<UiConfig>>,
 }
 
 /// An error running the HTTP service.
@@ -143,11 +149,20 @@ pub enum HttpError {
 
 /// Run the HTTP service.
 ///
+/// `ui_config` is the default ui profile: it is served (filtered by group)
+/// at `/api/config` and is the basis of the per user mqtt topic
+/// permissions enforced on the websocket.
+///
 /// # Errors
 ///
 /// This function will return an error if there is a problem configuring the HTTP service.
 #[allow(clippy::unused_async)]
-pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result<(), HttpError> {
+pub async fn run(
+    mqtt: MqttTx,
+    config: Config,
+    ui_config: Option<Arc<UiConfig>>,
+    postgres: sqlx::PgPool,
+) -> Result<(), HttpError> {
     let session_store = PostgresStore::new(postgres.clone());
 
     tokio::task::spawn(
@@ -203,6 +218,7 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
         oidc_client,
         manifest,
         postgres,
+        ui_config,
     };
 
     let http_listener = state.config.http_listener.clone();
@@ -210,6 +226,7 @@ pub async fn run(mqtt: MqttTx, config: Config, postgres: sqlx::PgPool) -> Result
     let app = Router::new()
         .route("/openid_connect_redirect_uri", get(oidc_callback))
         .route("/websocket", get(websocket_handler))
+        .route("/api/config", get(get_ui_config))
         .route("/logout", get(logout_handler))
         .fallback(fallback_handler)
         .with_state(state.clone())

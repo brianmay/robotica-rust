@@ -1,16 +1,13 @@
 use super::ActionZone;
 use crate::components::locations::map::{MapComponent, ParamObject};
-use gloo_net::http::{Request, Response};
-use gloo_net::Error;
-use robotica_common::robotica::{
-    http_api::ApiResponse,
-    zones::{CreateZone, Zone},
-};
-use serde::de::DeserializeOwned;
+use gloo_net::http::Request;
+use robotica_common::robotica::zones::{CreateZone, Zone};
 use std::sync::Arc;
 use tap::Pipe;
-use tracing::{debug, error};
+use tracing::debug;
 use yew::{platform::spawn_local, prelude::*};
+
+use crate::services::api::process_response;
 
 pub enum Msg {
     LoadFailed(String),
@@ -58,29 +55,6 @@ pub struct ZonesView {
     status: ZoneStatus,
     loading_status: LoadingStatus,
     objects: Vec<String>,
-}
-
-async fn process_response<T: DeserializeOwned + std::fmt::Debug>(
-    response: Result<Response, Error>,
-) -> Result<T, String> {
-    match response {
-        Ok(response) => {
-            let api_response: Option<ApiResponse<T>> = response
-                .json()
-                .await
-                .map_err(|err| error!("Error parsing server response: {err:?}"))
-                .ok();
-            // debug!("api_response: {:?}", api_response);
-
-            match (response.ok(), api_response) {
-                (true, Some(ApiResponse::Success(response))) => Ok(response.data),
-                (true, None) => Err("Invalid response".to_string()),
-                (_, Some(ApiResponse::Error(err))) => err.message.pipe(Err),
-                (false, _) => response.status_text().pipe(Err),
-            }
-        }
-        Err(err) => format!("http error: {err:?}").pipe(Err),
-    }
 }
 
 /// Properties for the zones view.
