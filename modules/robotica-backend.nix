@@ -428,10 +428,11 @@ let
         type = lib.types.nullOr executor_type;
         default = null;
       };
-      http = mkOption {
-        type = lib.types.nullOr http_type;
-        default = null;
-      };
+      # The http configuration is required: every deployment serves the
+      # web frontend, and the per user ui config and mqtt topic
+      # permissions depend on it. A deployment without it would silently
+      # run headless with a dead web ui.
+      http = mkOption { type = http_type; };
       # The UI configuration (views and profiles), in the view based
       # schema defined by robotica-common. Deliberately untyped: the
       # Rust deserializer is the single source of truth for the schema.

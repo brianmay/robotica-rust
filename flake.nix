@@ -422,6 +422,10 @@
                 services.robotica-backend = {
                   enable = true;
                   config = {
+                    http = {
+                      instance = "test";
+                      root_url = "http://localhost:4000/";
+                    };
                     logging = {
                       deployment_environment = "prod";
                     };
@@ -450,6 +454,12 @@
                       url: "http://localhost:8086"
                       token: "token"
                       database: "sensors"
+                    http:
+                      session_secret: "test_session_secret_test_session_secret"
+                      oidc_discovery_url: "https://check.invalid"
+                      oidc_client_id: "check"
+                      oidc_client_secret: "check"
+                      oidc_scopes: "openid"
                   '';
                   debug = false;
                 };
@@ -498,8 +508,7 @@
 
             testScript = ''
               machine.wait_for_unit("robotica-backend.service")
-              # machine.wait_for_open_port(4000)
-              # machine.succeed("${pkgs.curl}/bin/curl --fail -v http://localhost:4000/_health")
+              machine.wait_for_open_port(4000)
             '';
           };
         in
