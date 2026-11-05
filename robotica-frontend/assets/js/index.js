@@ -5,6 +5,14 @@ import * as L from 'leaflet/dist/leaflet.js';
 import('leaflet-draw/dist/leaflet.draw.css');
 import('leaflet-draw/dist/leaflet.draw.js');
 
+// The bundler rewrites the leaflet CSS marker image to a hashed URL, so
+// leaflet's default icon path detection fails and falls back to the bare
+// relative filenames ("marker-icon.png" etc). Those resolve against the
+// current route directory, which breaks on any route with a path segment
+// (e.g. /view/locations) since the images are served from the root.
+// Point the default icon at the root, where the marker images are shipped.
+L.Icon.Default.mergeOptions({ imagePath: '/' });
+
 L.Control.Button = L.Control.extend({
     options: {
         position: 'topleft'
