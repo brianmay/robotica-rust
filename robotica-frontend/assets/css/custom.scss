@@ -171,3 +171,58 @@ html, body {
     height: 100%;
     width: 100%;
 }
+
+.reminder_list {
+    @extend .container;
+
+    .reminder_empty {
+        @extend .text-muted;
+    }
+
+    .reminder {
+        border: 2px solid black;
+        margin-top: 4px;
+        padding: 6px;
+
+        &.reminder_active {
+            background-color: lightcoral;
+        }
+
+        &.reminder_acknowledged {
+            background-color: white;
+        }
+
+        &.reminder_silenced {
+            background-color: lightgrey;
+        }
+
+        .reminder_header {
+            @extend .d-flex;
+            @extend .justify-content-between;
+            font-weight: bold;
+        }
+
+        .reminder_body {
+            margin-top: 4px;
+        }
+
+        .reminder_meta {
+            @extend .d-flex;
+            @extend .flex-wrap;
+            @extend .text-muted;
+            font-size: 0.85em;
+
+            span {
+                margin-right: 12px;
+            }
+        }
+
+        .reminder_actions {
+            margin-top: 6px;
+
+            button {
+                margin-right: 4px;
+            }
+        }
+    }
+}

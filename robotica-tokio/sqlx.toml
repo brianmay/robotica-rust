@@ -1,0 +1,6 @@
+# Use chrono types for date/time columns in the sqlx macros.
+#
+# The `time` crate is also enabled in the dependency graph, which makes the
+# mapping from PostgreSQL date/time types ambiguous. This selects chrono.
+[macros.preferred-crates]
+date-time = "chrono"

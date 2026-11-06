@@ -12,6 +12,7 @@ use crate::components::locations::zones::ZonesView;
 use crate::components::nav_bar::NavBar;
 use crate::components::occupancy_view::OccupancyViewComponent;
 use crate::components::prices::PricesComponent;
+use crate::components::reminder_view::ReminderView;
 use crate::components::schedule_view::ScheduleView;
 use crate::components::tags_view::TagsView;
 use crate::components::water_heater::WaterHeaterComponent;
@@ -110,6 +111,7 @@ fn render_view(view: &ViewConfig) -> Html {
         ViewKind::Schedule => html! { <ScheduleView/> },
         ViewKind::Tags => html! { <TagsView/> },
         ViewKind::Prices => html! { <PricesComponent/> },
+        ViewKind::Reminders => html! { <ReminderView/> },
         ViewKind::Locations(locations) => html! {
             <ZonesView objects={locations.objects.clone()} />
         },

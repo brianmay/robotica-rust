@@ -19,6 +19,7 @@ mod messages;
 mod metrics;
 mod monitor_location;
 mod open_epaper_link;
+mod reminders;
 mod tesla;
 mod ui;
 
@@ -31,6 +32,7 @@ use amber::rules;
 use anyhow::Result;
 use chrono::{DateTime, Local, Utc};
 use lights::{run_auto_light, run_split_light, Scene, SceneMap, SplitPowerColor};
+use robotica_common::config::{reminder_command_topic, reminders_topic};
 use robotica_common::mqtt::{Json, MqttMessage, Parsed, QoS, Retain};
 use robotica_common::owntracks;
 use robotica_common::robotica::commands::Command;
@@ -38,6 +40,7 @@ use robotica_common::robotica::entities::{AnyId, Id, IdWithRoom};
 use robotica_common::robotica::lights::{LightCommand, PowerColor, PowerState, SceneName, State};
 use robotica_common::robotica::message::Message;
 use robotica_common::robotica::message::MessagePriority;
+use robotica_common::robotica::reminder::ReminderCommand;
 use robotica_common::robotica::tasks::{Payload, Task};
 use robotica_common::scheduler::Importance;
 use robotica_common::shelly;
@@ -321,6 +324,25 @@ async fn setup_pipes(
             });
     }
 
+    let (reminders, reminders_rx) = reminders::ReminderService::start(
+        &config.reminders,
+        postgres.clone(),
+        message_sink.clone(),
+    )
+    .await;
+
+    reminders_rx.send_to_mqtt_json(&state.mqtt, reminders_topic(), &SendOptions::new());
+
+    {
+        let reminders = reminders.clone();
+        state
+            .subscriptions
+            .subscribe_into_stateless::<Json<ReminderCommand>>(reminder_command_topic())
+            .for_each(move |Json(command)| {
+                reminders.handle_command(command);
+            });
+    }
+
     if let Some(amber_config) = config.amber {
         let amber_account_id = Id::new("amber_account")
             .unwrap_or_else(|e| panic!("amber_account_id must be a valid Id: {e}"));
@@ -369,6 +391,7 @@ async fn setup_pipes(
             &prices,
             &tick,
             &message_sink,
+            &reminders,
         );
     } else {
         info!("No amber configuration found; skipping water heater and car monitoring");
@@ -609,6 +632,7 @@ fn monitor_cars(
     prices: &stateful::Receiver<std::sync::Arc<amber::Prices>>,
     tick: &stateless::Receiver<DateTime<Utc>>,
     message_sink: &stateless::Sender<Message>,
+    reminders: &reminders::ReminderService,
 ) {
     let id = Id::new("tesla_account")
         .unwrap_or_else(|e| panic!("must be a valid tesla account id: {e}"));
@@ -631,6 +655,7 @@ fn monitor_cars(
             tick,
             &token,
             message_sink,
+            reminders,
         );
     }
 }
@@ -646,6 +671,7 @@ fn monitor_tesla(
     tick: &stateless::Receiver<DateTime<Utc>>,
     token: &stateful::Receiver<std::sync::Arc<robotica_tokio::services::tesla::api::Token>>,
     message_sink: &stateless::Sender<Message>,
+    reminders: &reminders::ReminderService,
 ) {
     let auto_charge = state
         .subscriptions
@@ -740,7 +766,7 @@ fn monitor_tesla(
     let monitor_doors_receivers = tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
 
     tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(message_sink);
-    tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream).send_to(message_sink);
+    tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream, reminders);
 }
 
 #[instrument(fields(id=%config.id), skip_all)]

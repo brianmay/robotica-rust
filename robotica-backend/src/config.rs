@@ -90,6 +90,8 @@ pub struct Config {
     pub influxdb: influxdb::Config,
     pub executor: Option<executor::Config>,
     pub persistent_state: persistent_state::Config,
+    #[serde(default)]
+    pub reminders: crate::reminders::Config,
     pub cars: Vec<car::Config>,
     pub database_url: String,
     pub logging: crate::logging::Config,

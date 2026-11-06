@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM reminder_silences WHERE reminder_key = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "13156314f962c3d4ef48248ec6d6cc2c0c64d3610f24dfd960af5e3f3e8fcb75"
+}

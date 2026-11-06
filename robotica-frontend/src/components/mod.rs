@@ -9,6 +9,7 @@ pub mod locations;
 pub mod nav_bar;
 pub mod occupancy_view;
 pub mod prices;
+pub mod reminder_view;
 pub mod require_connection;
 pub mod schedule;
 pub mod schedule_view;

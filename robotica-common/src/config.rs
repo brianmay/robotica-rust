@@ -193,6 +193,9 @@ pub enum ViewKind {
     /// A prices view
     Prices,
 
+    /// A reminders view
+    Reminders,
+
     /// A locations view
     Locations(LocationsConfig),
 
@@ -304,6 +307,10 @@ impl ViewConfig {
                 topics.subscribe_exact(amber_topic("prices"));
                 topics.subscribe_exact(amber_topic("tick"));
             }
+            ViewKind::Reminders => {
+                topics.subscribe_exact(reminders_topic());
+                topics.send_exact(reminder_command_topic());
+            }
             ViewKind::Locations(locations) => {
                 for object in &locations.objects {
                     topics.subscribe_exact(location_topic(object));
@@ -358,6 +365,18 @@ pub fn schedule_topic(instance: &str) -> String {
 #[must_use]
 pub fn tags_topic(instance: &str) -> String {
     format!("robotica/{instance}/tags")
+}
+
+/// Get the topic the reminder service publishes its reminder list on.
+#[must_use]
+pub fn reminders_topic() -> String {
+    "robotica/state/reminders".to_string()
+}
+
+/// Get the topic the frontend sends reminder commands on.
+#[must_use]
+pub fn reminder_command_topic() -> String {
+    "robotica/command/reminders".to_string()
 }
 
 /// Get the location topic for an object.
@@ -609,6 +628,14 @@ mod tests {
         let topics = view("prices", ViewKind::Prices).topics("home");
         assert!(topics.is_subscribe_allowed("robotica/state/amber_account/prices"));
         assert!(topics.is_subscribe_allowed("robotica/state/amber_account/tick"));
+    }
+
+    #[test]
+    fn test_reminders_topics() {
+        let topics = view("reminders", ViewKind::Reminders).topics("home");
+        assert!(topics.is_subscribe_allowed("robotica/state/reminders"));
+        assert!(topics.is_send_allowed("robotica/command/reminders"));
+        assert!(!topics.is_subscribe_allowed("robotica/command/reminders"));
     }
 
     #[test]

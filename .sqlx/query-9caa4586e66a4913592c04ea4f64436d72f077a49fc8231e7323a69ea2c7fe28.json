@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT reminder_key, expires_at\n        FROM reminder_silences\n        WHERE expires_at IS NULL OR expires_at > now()\n        ORDER BY reminder_key\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reminder_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "reminder_silences",
+            "name": "reminder_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "reminder_silences",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "9caa4586e66a4913592c04ea4f64436d72f077a49fc8231e7323a69ea2c7fe28"
+}
