@@ -107,3 +107,10 @@ ecosystem = "crates.io"
 version = "5.10.0"
 ignore = true
 reason = "RUSTSEC-2026-0372; no fixed release available. Transitive via zbus in the Slint desktop stack; only handles trusted local D-Bus traffic in the embedded GUI binary."
+
+[[PackageOverrides]]
+name = "pin-utils"
+ecosystem = "crates.io"
+version = "0.1.0"
+ignore = true
+reason = "Unmaintained (RUSTSEC-2026-0441); transitive via spin_on in the Slint stack. Upstream is archived and no patched version is available."
