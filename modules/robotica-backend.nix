@@ -125,6 +125,16 @@ let
     };
   };
 
+  reminders_type = types.submodule {
+    options = {
+      repeat_interval_minutes = mkOption {
+        type = types.ints.positive;
+        default = 5;
+        description = "How often active reminders are sent, in minutes.";
+      };
+    };
+  };
+
   logging_remote_type = types.submodule {
     options = {
       endpoint = mkOption { type = types.str; };
@@ -442,6 +452,10 @@ let
       };
       persistent_state = mkOption {
         type = persistent_state_type;
+        default = { };
+      };
+      reminders = mkOption {
+        type = reminders_type;
         default = { };
       };
       cars = mkOption { type = types.listOf car_type; };
