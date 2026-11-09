@@ -2,8 +2,9 @@
 //!
 //! Reminders are created by code holding a [`Reminder`] handle. The service
 //! sends active reminders to the message sink repeatedly until they are
-//! acknowledged or the handle is dropped. The published reminder list is
-//! retained on MQTT so the frontend always has the current state.
+//! acknowledged or the handle is dropped. The message can be updated in
+//! place while the reminder exists. The published reminder list is retained
+//! on MQTT so the frontend always has the current state.
 //!
 //! Silences are stored in the database and survive restarts; reminders do
 //! not. The service publishes an empty list at startup, which clears both
@@ -95,6 +96,20 @@ impl Entry {
         }
     }
 
+    /// Replace the message, resetting acknowledgement.
+    ///
+    /// Returns `true` if the message changed; an identical message leaves
+    /// the entry untouched.
+    fn update_message(&mut self, message: Message) -> bool {
+        if self.message == message {
+            return false;
+        }
+
+        self.message = message;
+        self.acknowledged = false;
+        true
+    }
+
     fn info(&self) -> ReminderInfo {
         ReminderInfo {
             id: self.id.clone(),
@@ -113,6 +128,10 @@ enum Command {
         key: String,
         message: Message,
     },
+    Update {
+        id: ReminderId,
+        message: Message,
+    },
     Delete(ReminderId),
     Acknowledge(ReminderId),
     Silence {
@@ -126,10 +145,36 @@ enum Command {
 
 /// A handle to a single reminder.
 ///
-/// Dropping the handle deletes the reminder from the service.
+/// Dropping the handle deletes the reminder from the service. The message
+/// can be changed with [`Reminder::update_message`].
 pub struct Reminder {
     id: ReminderId,
     tx: mpsc::UnboundedSender<Command>,
+}
+
+impl Reminder {
+    /// Update the message of this reminder.
+    ///
+    /// The reminder is updated in place: the id, key, creation time and
+    /// silences are all preserved. If the message actually changed, the
+    /// reminder is sent immediately when it is active, and a previously
+    /// acknowledged reminder becomes active again. A silenced reminder is
+    /// not sent.
+    pub fn update_message(&self, message: Message) {
+        if self
+            .tx
+            .send(Command::Update {
+                id: self.id.clone(),
+                message,
+            })
+            .is_err()
+        {
+            debug!(
+                reminder_id = %self.id,
+                "Reminder service is no longer running; ignoring message update"
+            );
+        }
+    }
 }
 
 impl Drop for Reminder {
@@ -298,6 +343,22 @@ impl Runner {
                 self.entries.insert(id, entry);
                 self.publish();
             }
+            Command::Update { id, message } => {
+                let changed = if let Some(entry) = self.entries.get_mut(&id) {
+                    let changed = entry.update_message(message);
+                    if changed && entry.status() == ReminderStatus::Active {
+                        debug!(reminder_id = %id, "Sending updated reminder");
+                        self.message_sink.try_send(entry.message.clone());
+                    }
+                    changed
+                } else {
+                    warn!(reminder_id = %id, "Ignoring message update of unknown reminder");
+                    false
+                };
+                if changed {
+                    self.publish();
+                }
+            }
             Command::Delete(id) => {
                 if self.entries.remove(&id).is_some() {
                     debug!(reminder_id = %id, "Deleted reminder");
@@ -423,12 +484,173 @@ mod tests {
 
     use super::*;
     use robotica_common::robotica::message::MessagePriority;
+    use robotica_tokio::pipes::{stateful, stateless, Subscriber, Subscription};
+    use sqlx::PgPool;
+    use std::collections::HashMap;
 
     fn silence(key: &str, expires_at: Option<DateTime<Utc>>) -> Silence {
         Silence {
             reminder_key: key.to_string(),
             expires_at,
         }
+    }
+
+    fn message(body: &str) -> Message {
+        Message::new("Tesla", body, MessagePriority::Error, "audience")
+    }
+
+    fn entry(id: &str, message: Message) -> (ReminderId, Entry) {
+        let id = ReminderId::new(id);
+        (
+            id.clone(),
+            Entry {
+                id,
+                key: "tesla_1/doors".to_string(),
+                message,
+                created_at: utc_now(),
+                acknowledged: false,
+                silenced: None,
+            },
+        )
+    }
+
+    /// A runner wired to local pipes and a pool that is never connected.
+    ///
+    /// The update path never queries the database, so the lazy pool never
+    /// establishes a connection.
+    fn test_runner() -> (
+        Runner,
+        stateful::Receiver<Vec<ReminderInfo>>,
+        stateless::Receiver<Message>,
+    ) {
+        let (message_tx, message_rx) = stateless::create_pipe("test_reminder_messages");
+        let (list_tx, list_rx) = stateful::create_pipe("test_reminder_list");
+
+        let postgres = PgPool::connect_lazy("postgres://localhost/robotica_test")
+            .unwrap_or_else(|e| panic!("failed to create lazy pool: {e}"));
+
+        let runner = Runner {
+            postgres,
+            message_sink: message_tx,
+            list_tx,
+            silences: Vec::new(),
+            entries: HashMap::new(),
+        };
+        (runner, list_rx, message_rx)
+    }
+
+    #[test]
+    fn test_entry_update_message() {
+        let (_, mut entry) = entry("id", message("frunk is open"));
+
+        // An identical message changes nothing.
+        assert!(!entry.update_message(entry.message.clone()));
+        assert_eq!(entry.status(), ReminderStatus::Active);
+        assert_eq!(entry.message.body, "frunk is open");
+
+        // A changed message resets acknowledgement.
+        entry.acknowledged = true;
+        assert!(entry.update_message(message("boot is open")));
+        assert_eq!(entry.status(), ReminderStatus::Active);
+        assert_eq!(entry.message.body, "boot is open");
+    }
+
+    #[tokio::test]
+    async fn test_update_message_sends_when_active() {
+        let (mut runner, list_rx, message_rx) = test_runner();
+        let (id, entry) = entry("id", message("frunk is open"));
+        runner.entries.insert(id.clone(), entry);
+
+        let mut messages = message_rx.subscribe().await;
+        let mut list = list_rx.subscribe().await;
+
+        runner
+            .handle_command(Command::Update {
+                id: id.clone(),
+                message: message("frunk and boot are open"),
+            })
+            .await;
+
+        assert_eq!(
+            messages.recv().await.unwrap().body,
+            "frunk and boot are open"
+        );
+
+        let infos = list.recv().await.unwrap();
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].id, id);
+        assert_eq!(infos[0].message.body, "frunk and boot are open");
+        assert_eq!(infos[0].status, ReminderStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn test_update_message_reactivates_acknowledged() {
+        let (mut runner, list_rx, message_rx) = test_runner();
+        let (id, mut entry) = entry("id", message("frunk is open"));
+        entry.acknowledged = true;
+        runner.entries.insert(id.clone(), entry);
+
+        let mut messages = message_rx.subscribe().await;
+        let mut list = list_rx.subscribe().await;
+
+        runner
+            .handle_command(Command::Update {
+                id,
+                message: message("frunk and boot are open"),
+            })
+            .await;
+
+        assert_eq!(
+            messages.recv().await.unwrap().body,
+            "frunk and boot are open"
+        );
+        assert_eq!(list.recv().await.unwrap()[0].status, ReminderStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn test_update_message_same_message_is_noop() {
+        let (mut runner, list_rx, message_rx) = test_runner();
+        let (id, entry) = entry("id", message("frunk is open"));
+        runner.entries.insert(id.clone(), entry);
+
+        let mut messages = message_rx.subscribe().await;
+        let mut list = list_rx.subscribe().await;
+
+        runner
+            .handle_command(Command::Update {
+                id,
+                message: message("frunk is open"),
+            })
+            .await;
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert!(messages.try_recv().unwrap().is_none());
+        assert!(list.try_recv().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_update_message_silenced_is_not_sent() {
+        let (mut runner, list_rx, message_rx) = test_runner();
+        let (id, mut entry) = entry("id", message("frunk is open"));
+        entry.silenced = Some(SilenceExpiry::Indefinite);
+        runner.entries.insert(id.clone(), entry);
+
+        let mut messages = message_rx.subscribe().await;
+        let mut list = list_rx.subscribe().await;
+
+        runner
+            .handle_command(Command::Update {
+                id,
+                message: message("frunk and boot are open"),
+            })
+            .await;
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert!(messages.try_recv().unwrap().is_none());
+
+        let infos = list.recv().await.unwrap();
+        assert_eq!(infos[0].message.body, "frunk and boot are open");
+        assert_eq!(infos[0].status, ReminderStatus::Silenced);
     }
 
     #[test]

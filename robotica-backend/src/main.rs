@@ -765,7 +765,12 @@ fn monitor_tesla(
 
     let monitor_doors_receivers = tesla::monitor_doors::MonitorInputs::from_receivers(&receivers);
 
-    tesla::monitor_doors::monitor(car, monitor_doors_receivers).send_to(message_sink);
+    tesla::monitor_doors::monitor(
+        car,
+        monitor_doors_receivers,
+        reminders,
+        message_sink.clone(),
+    );
     tesla::plug_in_reminder::plug_in_reminder(car, should_plugin_stream, reminders);
 }
 

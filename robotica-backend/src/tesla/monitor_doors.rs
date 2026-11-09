@@ -13,7 +13,7 @@ use thiserror::Error;
 use tokio::select;
 use tracing::{debug, error};
 
-use crate::{car, tesla::private::new_message};
+use crate::{car, reminders::ReminderService, tesla::private::new_message};
 
 use super::Receivers;
 
@@ -127,11 +127,13 @@ impl MonitorInputs {
     }
 }
 
-#[must_use]
-pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiver<Message> {
+pub fn monitor(
+    car: &car::Config,
+    receivers: MonitorInputs,
+    reminders: &ReminderService,
+    message_sink: stateless::Sender<Message>,
+) {
     let id = car.id.clone();
-
-    let (message_tx, message_rx) = stateless::create_pipe("tesla_doors_message");
 
     let (tx, rx) = stateful::create_pipe("tesla_doors");
 
@@ -221,22 +223,48 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
     // Discard initial [] value and duplicate events.
     let rx = rx.filter(|(p, c)| p.is_some() || !c.is_empty());
 
-    // Repeat the last value every 5 minutes.
-    let duration = Duration::from_mins(5);
-    let rx = rx.delay_repeat("tesla_doors (repeat)", duration, |(_, c)| !c.is_empty());
+    manage_reminder(car, rx, reminders, message_sink);
+}
 
-    // Output the message.
-    let tesla = car.clone();
+/// Manage the doors reminder for the delayed open-doors stream.
+///
+/// While doors are open, create a reminder and keep its message up to date
+/// as the set of open doors changes; the reminder service re-sends the
+/// message until the reminder is acknowledged, silenced or deleted. When
+/// the doors are secured, delete the reminder and send a one-off message
+/// confirming the car is secure.
+fn manage_reminder(
+    car: &car::Config,
+    open_doors: stateful::Receiver<Vec<Door>>,
+    reminders: &ReminderService,
+    message_sink: stateless::Sender<Message>,
+) {
+    let key = format!("{}/doors", car.id);
+    let car = car.clone();
+    let reminders = reminders.clone();
     spawn(async move {
-        let mut s = rx.subscribe().await;
+        let mut s = open_doors.subscribe().await;
+        let mut reminder: Option<crate::reminders::Reminder> = None;
+
         while let Ok(open) = s.recv().await {
-            debug!("open received: {:?}", open);
-            let msg = doors_to_message(&tesla, &open);
-            message_tx.try_send(msg);
+            debug!(%key, open = ?open, "Received open doors");
+            if open.is_empty() {
+                if reminder.take().is_some() {
+                    debug!(%key, "Doors are secure; deleting reminder");
+                    message_sink.try_send(doors_to_message(&car, &open));
+                }
+            } else {
+                let message = doors_to_message(&car, &open);
+                if let Some(r) = &reminder {
+                    debug!(%key, "Open doors changed; updating reminder");
+                    r.update_message(message);
+                } else {
+                    debug!(%key, "Doors are open; creating reminder");
+                    reminder = Some(reminders.create(key.clone(), message));
+                }
+            }
         }
     });
-
-    message_rx
 }
 
 fn doors_to_message(car: &car::Config, open: &[Door]) -> Message {
@@ -272,4 +300,56 @@ fn doors_to_message(car: &car::Config, open: &[Door]) -> Message {
     };
 
     new_message(msg, priority, &car.audience.doors)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::car::{AudienceConfig, MakeConfig};
+    use robotica_common::robotica::entities::Id;
+
+    fn test_car() -> car::Config {
+        car::Config {
+            id: Id::new("tesla-1").unwrap(),
+            name: "Tesla".to_string(),
+            oel_display: None,
+            audience: AudienceConfig {
+                errors: "brian".into(),
+                locations: "brian".into(),
+                doors: "brian".into(),
+                charging: "brian".into(),
+                private: "brian".into(),
+            },
+            arrival_radius_m: 0.0,
+            exit_radius_m: 10.0,
+            make: MakeConfig::Unknown,
+        }
+    }
+
+    #[rstest::rstest]
+    #[case(&[], "Tesla is secure", MessagePriority::Info)]
+    #[case(&[Door::Frunk], "Tesla frunk is open", MessagePriority::Error)]
+    #[case(&[Door::Boot], "Tesla boot is open", MessagePriority::Error)]
+    #[case(&[Door::Doors], "Tesla doors are open", MessagePriority::Error)]
+    #[case(&[Door::Windows], "Tesla windows are open", MessagePriority::Error)]
+    #[case(&[Door::Frunk, Door::Boot], "Tesla frunk and boot are open", MessagePriority::Error)]
+    #[case(
+        &[Door::Frunk, Door::Boot, Door::Doors],
+        "Tesla frunk, boot and doors are open",
+        MessagePriority::Error
+    )]
+    fn test_doors_to_message(
+        #[case] open: &[Door],
+        #[case] body: &str,
+        #[case] priority: MessagePriority,
+    ) {
+        let car = test_car();
+        let message = doors_to_message(&car, open);
+        assert_eq!(message.title, "Tesla");
+        assert_eq!(message.body, body);
+        assert_eq!(message.priority, priority);
+        assert_eq!(message.audience.to_string(), "brian");
+    }
 }
