@@ -11,7 +11,7 @@ use robotica_tokio::{
 use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{car, tesla::private::new_message};
 
@@ -142,47 +142,64 @@ pub fn monitor(car: &car::Config, receivers: MonitorInputs) -> stateless::Receiv
         let mut windows_s = receivers.windows.subscribe().await;
         let mut user_present_s = receivers.user_present.subscribe().await;
 
+        let Ok(mut frunk) = frunk_s.recv().await else {
+            error!(%id, "Failed to get initial user_present");
+            return;
+        };
+        let Ok(mut boot) = boot_s.recv().await else {
+            error!(%id, "Failed to get initial user_present");
+            return;
+        };
+        let Ok(mut doors) = doors_s.recv().await else {
+            error!(%id, "Failed to get initial user_present");
+            return;
+        };
+        let Ok(mut windows) = windows_s.recv().await else {
+            error!(%id, "Failed to get initial user_present");
+            return;
+        };
+        let Ok(mut user_present) = user_present_s.recv().await else {
+            error!(%id, "Failed to get initial user_present");
+            return;
+        };
+
+        debug!(
+            %id, "initial fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
+            frunk, boot, doors, windows, user_present
+        );
+
         loop {
             select! {
-                Ok(_) = frunk_s.recv() => {},
-                Ok(_) = boot_s.recv() => {},
-                Ok(_) = doors_s.recv() => {},
-                Ok(_) = windows_s.recv() => {},
-                Ok(_) = user_present_s.recv() => {},
+                Ok(v) = frunk_s.recv() => frunk = v,
+                Ok(v) = boot_s.recv() => boot = v,
+                Ok(v) = doors_s.recv() => doors = v,
+                Ok(v) = windows_s.recv() => windows = v,
+                Ok(v) = user_present_s.recv() => user_present = v,
                 else => break,
             };
 
+            debug!(
+                %id, "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
+                frunk, boot, doors, windows, user_present
+            );
+
             let mut open: Vec<Door> = vec![];
-
-            let maybe_user_present = receivers.user_present.get().await;
-            if Some(UserIsPresent::UserNotPresent) == maybe_user_present {
-                let maybe_frunk = receivers.frunk.get().await;
-                let maybe_boot = receivers.boot.get().await;
-                let maybe_doors = receivers.doors.get().await;
-                let maybe_windows = receivers.windows.get().await;
-
-                debug!(
-                    %id, "fo: {:?}, to: {:?}, do: {:?}, wo: {:?}, up: {:?}",
-                    maybe_frunk, maybe_boot, maybe_doors, maybe_windows, maybe_user_present
-                );
-
-                if Some(DoorState::Open) == maybe_frunk {
+            if UserIsPresent::UserNotPresent == user_present {
+                if DoorState::Open == frunk {
                     open.push(Door::Frunk);
                 }
 
-                if Some(DoorState::Open) == maybe_boot {
+                if DoorState::Open == boot {
                     open.push(Door::Boot);
                 }
 
-                if Some(DoorState::Open) == maybe_doors {
+                if DoorState::Open == doors {
                     open.push(Door::Doors);
                 }
 
-                if Some(DoorState::Open) == maybe_windows {
+                if DoorState::Open == windows {
                     open.push(Door::Windows);
                 }
-            } else {
-                debug!(%id, "up: {:?}", maybe_user_present);
             }
 
             debug!(%id, "open: {:?}", open);
