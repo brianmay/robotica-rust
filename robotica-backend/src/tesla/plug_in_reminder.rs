@@ -1,4 +1,3 @@
-use chrono::Timelike;
 use robotica_common::robotica::{message::Message, message::MessagePriority};
 use robotica_tokio::{
     pipes::{stateful, Subscriber, Subscription},
@@ -30,9 +29,7 @@ pub fn plug_in_reminder(
         let mut reminder: Option<crate::reminders::Reminder> = None;
 
         while let Ok(should_plugin) = s.recv().await {
-            let time = chrono::Local::now();
-            let in_window = (18..=22).contains(&time.hour());
-            let active = in_window && should_plugin == ShouldPlugin::ShouldPlugin;
+            let active = should_plugin == ShouldPlugin::ShouldPlugin;
 
             if active {
                 if reminder.is_none() {
