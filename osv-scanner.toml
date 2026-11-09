@@ -114,3 +114,10 @@ ecosystem = "crates.io"
 version = "0.1.0"
 ignore = true
 reason = "Unmaintained (RUSTSEC-2026-0441); transitive via spin_on in the Slint stack. Upstream is archived and no patched version is available."
+
+[[PackageOverrides]]
+name = "libsqlite3-sys"
+ecosystem = "crates.io"
+version = "0.30.1"
+vulnerability.ignore = true
+reason = "Optional SQLite driver dependency from SQLx 0.9.0; this workspace enables PostgreSQL only. SQLx currently caps libsqlite3-sys below fixed version 0.39.0."
