@@ -235,6 +235,21 @@ pub fn monitor_charging(
             }
 
             let is_at_home = tesla_state.is_at_home;
+            if was_at_home != is_at_home && matches!(ps.auto_charge, AutoCharge::Manual) {
+                // A manual charge override is easy to forget, leaving the car
+                // charging at expensive times. Clear it whenever the car
+                // leaves or arrives home, so the override never outlives the
+                // stay it was set for.
+                ps.auto_charge = AutoCharge::Auto;
+                psr.save(&ps).unwrap_or_else(|e| {
+                    error!(%id, "Error saving persistent state: {}", e);
+                });
+                info!(
+                    %id,
+                    "Auto charge re-enabled after home transition (it was left on manual)"
+                );
+            }
+
             let send_left_home_commands = was_at_home && !is_at_home;
 
             if send_left_home_commands {

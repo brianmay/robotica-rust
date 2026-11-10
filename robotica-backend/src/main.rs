@@ -732,6 +732,12 @@ fn monitor_tesla(
 
     let charge_request = charge_state.map(|(_, state)| state.get_result());
 
+    let expensive = tesla::monitor_location::expensive_price(
+        prices.clone(),
+        tick.clone(),
+        tesla.expensive_price_threshold,
+    );
+
     let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
         &receivers,
         charge_request.clone(),
@@ -758,6 +764,7 @@ fn monitor_tesla(
         message_sink.clone(),
         locations.location,
         charge_request,
+        expensive,
         outputs.charging_information,
     );
 

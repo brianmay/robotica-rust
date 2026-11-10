@@ -192,6 +192,11 @@ let
         default = 10.0;
         description = "Extra padding in metres for exit hysteresis. Prevents flapping near zone edges.";
       };
+      expensive_price_threshold = mkOption {
+        type = types.float;
+        default = 25.0;
+        description = "Price in cents per kWh above which charging on manual charge is alerted on.";
+      };
     };
   };
 

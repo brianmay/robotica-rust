@@ -121,15 +121,24 @@ pub struct Config {
     pub teslamate_id: TeslamateId,
     pub tesla_id: VehicleId,
     pub teslamate: TeslamateConfig,
+
+    /// Price in cents per kWh above which charging while on manual charge is
+    /// expensive enough to alert on.
+    #[serde(default = "Config::default_expensive_price_threshold")]
+    pub expensive_price_threshold: f32,
+}
+
+impl Config {
+    const fn default_expensive_price_threshold() -> f32 {
+        25.0
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub struct PluginAction {
-    /// Auto charge is off while charging is needed at home; switch back to
-    /// automatic charging.
-    ///
-    /// This does not require the car to be unplugged: a plugged-in car on
-    /// manual charge is not charging even though charging is needed.
+    /// Auto charge is off and the car at home is plugged in and either
+    /// charging at an expensive price, or not charging although charging is
+    /// needed now or later tonight. Switch back to automatic charging.
     pub switch_to_auto: bool,
     /// The car is at home, unplugged, and charging is needed.
     pub plugin: bool,
