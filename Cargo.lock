@@ -8609,9 +8609,9 @@ dependencies = [
 
 [[package]]
 name = "tracing_log_error"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a5b7bc6ed61c87ac7dd47c1d4d46bf2d54e6c915d0b0ef28299dfaa3ed3ee9"
+checksum = "d7cb5e468b7d47e7a9f92ab0e028ef9286fd947f72247abcdf66f2a241c9754f"
 dependencies = [
  "tracing",
 ]
