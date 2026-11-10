@@ -179,14 +179,12 @@ mod tests {
         let config_file = write_file(
             test,
             "config.yaml",
-            &format!(
-                "persistent_state:\n  state_path: /tmp/robotica-lint-test\n\
+            "persistent_state:\n  state_path: /tmp/robotica-lint-test\n\
                  logging:\n  deployment_environment: test\n\
                  cars: []\nlights: []\nstrips: []\nmetrics: []\nwater_heaters: []\n\
                  hdmi_matrices: []\ndoor_monitors: []\npresence_trackers: []\n\
                  occupancy_sensors: []\nnight_mode: []\nmessage_routes: []\nowntracks: []\n\
-                 ui:\n  instance: home\n  views: []\n  profiles:\n    default: []\n"
-            ),
+                 ui:\n  instance: home\n  views: []\n  profiles:\n    default: []\n",
         );
         let environment = Environment {
             config_file,

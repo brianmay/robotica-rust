@@ -19,8 +19,9 @@ use serde::{Deserialize, Serialize};
 use tap::Pipe;
 use thiserror::Error;
 use tokio::select;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
+use crate::tesla::AutoCharge;
 use crate::{amber::car::ChargeRequest, car};
 
 use super::{command_processor, ChargingInformation, Receivers};
@@ -98,7 +99,7 @@ pub struct Outputs {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct PersistentState {
-    auto_charge: bool,
+    auto_charge: AutoCharge,
 }
 
 #[derive(Debug)]
@@ -117,7 +118,6 @@ impl TeslaState {
 
 #[allow(clippy::too_many_lines)]
 pub fn monitor_charging(
-    // state: &InitState,
     persistent_state_database: &persistent_state::PersistentStateDatabase,
     car: &car::Config,
     receivers: Inputs,
@@ -131,7 +131,6 @@ pub fn monitor_charging(
     let psr = persistent_state_database.for_name::<PersistentState>(&id, "tesla_monitor_charging");
     let ps = psr.load().unwrap_or_default();
 
-    // let mqtt = state.mqtt.clone();
     let auto_charge_rx = receivers.auto_charge;
 
     let meters = Meters::new(car);
@@ -184,7 +183,7 @@ pub fn monitor_charging(
             battery_level: tesla_state.battery_level,
             charging_state: tesla_state.charging_state,
             charge_limit: tesla_state.charge_limit,
-            charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
+            auto_charge: ps.auto_charge,
         });
 
         meters.set_charging(tesla_state.charging_state, tesla_state.charge_limit);
@@ -201,8 +200,8 @@ pub fn monitor_charging(
                 Ok(cmd) = auto_charge_s.recv() => {
                     if let Json(Command::Device(cmd)) = cmd {
                         ps.auto_charge = match cmd.action {
-                            DeviceAction::TurnOn => true,
-                            DeviceAction::TurnOff => false,
+                            DeviceAction::TurnOn => AutoCharge::Auto,
+                            DeviceAction::TurnOff => AutoCharge::Manual,
                         };
                         psr.save(&ps).unwrap_or_else(|e| {
                             error!(%id, "Error saving persistent state: {}", e);
@@ -236,23 +235,25 @@ pub fn monitor_charging(
             }
 
             let is_at_home = tesla_state.is_at_home;
-            let send_left_home_commands =
-                was_at_home && !is_at_home && amber_charge_request.is_auto();
+            let send_left_home_commands = was_at_home && !is_at_home;
 
             if send_left_home_commands {
                 let command = command_processor::Command::new().set_charge_limit(90);
                 tx_command.try_send(command);
+            } else if matches!(ps.auto_charge, AutoCharge::Manual) {
+                debug!(%id, "Manual charge active");
+            } else if !is_at_home {
+                debug!(%id, "Car is not at home");
             } else {
-                let charge_request =
-                    should_charge_maybe_at_home(is_at_home, &ps, amber_charge_request);
-                check_charge(&config, &tx_command, &tesla_state, charge_request);
+                debug!(%id, "Checking car charge");
+                check_charge(&config, &tx_command, &tesla_state, amber_charge_request);
             }
 
             tx_summary.try_send(ChargingInformation {
                 battery_level: tesla_state.battery_level,
                 charge_limit: tesla_state.charge_limit,
                 charging_state: tesla_state.charging_state,
-                charge_request_at_home: should_charge_at_home(&ps, amber_charge_request),
+                auto_charge: ps.auto_charge,
             });
 
             update_auto_charge(ps.auto_charge, &tesla_state, &tx_auto_charge);
@@ -267,31 +268,8 @@ pub fn monitor_charging(
     .pipe(Ok)
 }
 
-const fn should_charge_maybe_at_home(
-    is_at_home: bool,
-    ps: &PersistentState,
-    amber_charge_request: ChargeRequest,
-) -> ChargeRequest {
-    if is_at_home && ps.auto_charge {
-        amber_charge_request
-    } else {
-        ChargeRequest::Manual
-    }
-}
-
-const fn should_charge_at_home(
-    ps: &PersistentState,
-    amber_charge_request: ChargeRequest,
-) -> ChargeRequest {
-    if ps.auto_charge {
-        amber_charge_request
-    } else {
-        ChargeRequest::Manual
-    }
-}
-
 fn update_auto_charge(
-    auto_charge: bool,
+    auto_charge: AutoCharge,
     tesla_state: &TeslaState,
     mqtt: &stateful::Sender<DevicePower>,
 ) {
@@ -299,9 +277,9 @@ fn update_auto_charge(
     let is_charging = tesla_state.is_charging();
     let status = match (notified_errors, auto_charge, is_charging) {
         (true, _, _) => DevicePower::DeviceError,
-        (false, true, false) => DevicePower::AutoOff,
-        (false, true, true) => DevicePower::On,
-        (false, false, _) => DevicePower::Off,
+        (false, AutoCharge::Auto, false) => DevicePower::AutoOff,
+        (false, AutoCharge::Auto, true) => DevicePower::On,
+        (false, AutoCharge::Manual, _) => DevicePower::Off,
     };
 
     mqtt.try_send(status);
@@ -328,28 +306,23 @@ fn check_charge(
     let (should_charge, charge_limit) = should_charge(charge_request, tesla_state);
 
     // We should not attempt to start charging if charging is complete.
-    let charging_state = tesla_state.charging_state;
-    let can_start_charge = charging_state != ChargingStateEnum::Complete;
+    let can_start_charge = tesla_state.charging_state != ChargingStateEnum::Complete;
 
     info!(%id, "Current data: {charge_request:?}, {tesla_state:?}",);
     info!(%id, "Desired State: should charge: {should_charge:?}, can start charge: {can_start_charge}, charge limit: {charge_limit}");
-
-    // Do we need to set the charge limit?
-    let set_charge_limit =
-        should_charge != ShouldCharge::DontTouch && tesla_state.charge_limit != charge_limit;
 
     // Construct sequence of commands to send to Tesla.
     let mut sequence = command_processor::Command::new();
 
     // Set the charge limit if required.
-    if set_charge_limit {
+    if tesla_state.charge_limit != charge_limit {
         info!(%id, "Setting charge limit to {}", charge_limit);
         sequence = sequence.set_charge_limit(charge_limit);
     }
 
     // Get charging state
     #[allow(clippy::match_same_arms)]
-    let charging_summary = match charging_state {
+    let charging_summary = match tesla_state.charging_state {
         ChargingStateEnum::Starting => ChargingSummary::Charging,
         ChargingStateEnum::Charging => ChargingSummary::Charging,
         ChargingStateEnum::Complete => ChargingSummary::NotCharging,
@@ -389,14 +362,13 @@ fn check_charge(
 enum ShouldCharge {
     DoCharge,
     DoNotCharge,
-    DontTouch,
+    // DontTouch,
 }
 
 fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (ShouldCharge, u8) {
     let (should_charge, charge_limit) = match charge_request {
         // RequestedCharge::DontCharge => (ShouldCharge::DoNotCharge, 50),
         ChargeRequest::ChargeTo(limit) => (ShouldCharge::DoCharge, limit),
-        ChargeRequest::Manual => (ShouldCharge::DontTouch, tesla_state.charge_limit),
     };
 
     #[allow(clippy::match_same_arms)]
@@ -409,9 +381,45 @@ fn should_charge(charge_request: ChargeRequest, tesla_state: &TeslaState) -> (Sh
             }
         }
         (sc @ ShouldCharge::DoNotCharge, _) => sc,
-        (sc @ ShouldCharge::DontTouch, _) => sc,
     };
 
     let charge_limit = charge_limit.clamp(50, 90);
     (should_charge, charge_limit)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    #[rstest::rstest]
+    #[case(r#"{"auto_charge":true}"#, AutoCharge::Auto)]
+    #[case(r#"{"auto_charge":false}"#, AutoCharge::Manual)]
+    fn test_persistent_state_legacy_bool_format(#[case] json: &str, #[case] expected: AutoCharge) {
+        // States written before auto_charge became an AutoCharge stored a
+        // boolean; they must keep deserializing.
+        let ps: PersistentState = serde_json::from_str(json).unwrap();
+        assert_eq!(ps.auto_charge, expected);
+    }
+
+    #[test]
+    fn test_persistent_state_serializes_as_bool() {
+        // The on-disk format stays a boolean so old and new versions can
+        // read each other's state.
+        let ps = PersistentState {
+            auto_charge: AutoCharge::Auto,
+        };
+        let json = serde_json::to_string(&ps).unwrap();
+        assert_eq!(json, r#"{"auto_charge":true}"#);
+    }
+
+    #[test]
+    fn test_persistent_state_default_is_manual() {
+        // Matches the previous bool default of false.
+        assert!(matches!(
+            PersistentState::default().auto_charge,
+            AutoCharge::Manual
+        ));
+    }
 }

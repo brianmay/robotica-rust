@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_ui_config_from_yaml() {
-        let yaml = r#"
+        let yaml = r"
 instance: home
 views:
   - id: brian
@@ -258,7 +258,7 @@ profiles:
   brian:
     - brian
     - tags
-"#;
+";
         let config: UiConfig = serde_yaml_ng::from_str(yaml).unwrap();
         assert!(config.validate().is_ok());
         assert_eq!(config.profile_config("brian").unwrap().views.len(), 2);

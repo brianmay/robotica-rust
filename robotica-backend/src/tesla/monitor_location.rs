@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use chrono::Timelike;
 use robotica_common::robotica::{message::Message, message::MessagePriority, zones::OccupiedZones};
 use robotica_tokio::{
     pipes::{stateful, stateless, Subscriber, Subscription},
@@ -6,11 +9,12 @@ use robotica_tokio::{
 };
 use tap::Pipe;
 use tokio::select;
+use tokio::time::{interval, MissedTickBehavior};
 use tracing::{debug, error};
 
-use crate::{amber::car::ChargeRequest, car};
+use crate::{amber::car::ChargeRequest, car, tesla::AutoCharge};
 
-use super::{private::new_message, ChargingInformation, ShouldPlugin};
+use super::{private::new_message, ChargingInformation, PluginAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChargingMessage {
@@ -98,8 +102,9 @@ pub fn monitor(
     car: &car::Config,
     message_sink: stateless::Sender<Message>,
     location_stream: stateful::Receiver<OccupiedZones>,
+    charge_request: stateful::Receiver<ChargeRequest>,
     charging_info: stateful::Receiver<ChargingInformation>,
-) -> stateful::Receiver<ShouldPlugin> {
+) -> stateful::Receiver<PluginAction> {
     let (tx, rx) = stateful::create_pipe("tesla_should_plugin");
 
     let car = car.clone();
@@ -109,63 +114,94 @@ pub fn monitor(
         let name = &car.name;
 
         let mut location_s = location_stream.subscribe().await;
+        let mut charge_request_s = charge_request.subscribe().await;
         let mut charging_info_s = charging_info.subscribe().await;
 
-        let Ok(mut old_location) = location_s.recv().await else {
+        let Ok(mut location) = location_s.recv().await else {
             error!(%id, "Failed to get initial Tesla location");
             return;
         };
 
-        let Ok(mut old_charging_info) = charging_info_s.recv().await else {
+        let Ok(mut charge_request) = charge_request_s.recv().await else {
+            error!(%id, "Failed to get initial charge request information");
+            return;
+        };
+
+        let Ok(mut charging_info) = charging_info_s.recv().await else {
             error!(%id, "Failed to get initial Tesla charging information");
             return;
         };
 
-        debug!(%id, "Initial Tesla location: {:?}", old_location);
+        debug!(%id, "Initial Tesla location: {:?}", location);
         debug!(
             %id,
             "Initial Tesla charging information: {:?}",
-            old_charging_info
+            charging_info
         );
 
+        // The in_window check in the loop body depends on the current time,
+        // but the select! below only wakes when the location, charge request
+        // or charging information changes. This timer is required so that
+        // in_window is re-evaluated as time passes; without it the 18:00-22:00
+        // window would never be entered or left while the car is asleep and no
+        // charge plan is active.
+        let mut window_ticker = interval(Duration::from_mins(5));
+        window_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // The first tick completes immediately; consume it so the timer does
+        // not fire an extra iteration before time has actually passed.
+        window_ticker.tick().await;
+
         loop {
-            let should_plugin = if old_location.is_at_home()
-                && !old_charging_info.charging_state.is_plugged_in()
-                && old_charging_info.battery_level <= 80
-            {
-                ShouldPlugin::ShouldPlugin
-            } else {
-                ShouldPlugin::NoActionRequired
+            let time = chrono::Local::now();
+            let in_window = (18..=22).contains(&time.hour());
+
+            let would_charge_at_home = matches!(charge_request, ChargeRequest::ChargeTo(limit) if limit > charging_info.battery_level)
+                || (in_window && charging_info.battery_level < 70);
+
+            let is_at_home = location.is_at_home();
+            let is_plugged_in = charging_info.charging_state.is_plugged_in();
+            let on_manual_charge = matches!(charging_info.auto_charge, AutoCharge::Manual);
+
+            tx.try_send(PluginAction {
+                switch_to_auto: on_manual_charge && is_at_home && would_charge_at_home,
+                plugin: is_at_home && !is_plugged_in && would_charge_at_home,
+            });
+
+            // This is applicable on assumption that car will arrive at home.
+            let announce_action = PluginAction {
+                switch_to_auto: on_manual_charge,
+                plugin: would_charge_at_home,
             };
-            tx.try_send(should_plugin);
 
             select! {
                 Ok(new_charging_info) = charging_info_s.recv() => {
-                    if old_location.is_at_home()  {
-                        announce_charging_state(&car, &old_charging_info, &new_charging_info, &message_sink);
-                    }
-                    old_charging_info = new_charging_info;
+                    announce_charging_state(&car, &charging_info, &new_charging_info, &message_sink);
+                    charging_info = new_charging_info;
                 },
+                Ok(new_charge_request) = charge_request_s.recv() => {
+                    charge_request = new_charge_request;
+                }
                 Ok(new_location) = location_s.recv() => {
-                    if !old_location.is_near_home() && new_location.is_near_home() {
-                        let level = old_charging_info.battery_level;
-
-                        let (limit_type, limit) = match old_charging_info.charge_request_at_home {
-                            ChargeRequest::ChargeTo(limit) => ("auto", limit),
-                            ChargeRequest::Manual => ("manual", old_charging_info.charge_limit),
-                        };
-                        let msg = if level < limit {
-                            format!("{name} is at {level}% and would {limit_type} charge to {limit}%")
-                        } else {
-                            format!("{name} is at {level}% and the {limit_type} limit is {limit}%")
-                        };
+                    if !location.is_near_home() && new_location.is_near_home() {
+                        let level = charging_info.battery_level;
+                        let mut postfix = String::new();
+                        if announce_action.switch_to_auto {
+                            postfix += " and is on manual charge";
+                        }
+                        if announce_action.plugin {
+                            postfix += " and should be plugged in";
+                        }
+                        let msg = format!("{name} is at {level}%{postfix}");
                         let msg = new_message(msg, MessagePriority::Info, &car.audience.locations);
                         message_sink.try_send(msg);
                     }
-
-                    old_location = new_location;
+                    location = new_location;
                 }
-
+                _ = window_ticker.tick() => {
+                    // No state to update here; time may have crossed a window
+                    // boundary, so the loop body re-evaluates in_window with
+                    // the current time.
+                }
             }
         }
     });

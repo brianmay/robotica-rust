@@ -734,7 +734,7 @@ fn monitor_tesla(
 
     let monitor_charging_receivers = tesla::monitor_charging::Inputs::from_receivers(
         &receivers,
-        charge_request,
+        charge_request.clone(),
         auto_charge,
         locations.is_home,
     );
@@ -757,6 +757,7 @@ fn monitor_tesla(
         car,
         message_sink.clone(),
         locations.location,
+        charge_request,
         outputs.charging_information,
     );
 

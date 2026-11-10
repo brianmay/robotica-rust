@@ -1,38 +1,60 @@
+use std::time::Duration;
+
 use robotica_common::robotica::{message::Message, message::MessagePriority};
 use robotica_tokio::{
-    pipes::{stateful, Subscriber, Subscription},
+    pipes::{delays::DelayInputOptions, stateful, Subscriber, Subscription},
     spawn,
 };
-use std::time::Duration;
 use tracing::debug;
 
 use crate::{car, reminders::ReminderService};
 
-use super::{private::new_message, ShouldPlugin};
+use super::{private::new_message, PluginAction};
 
 pub fn plug_in_reminder(
     car: &car::Config,
-    should_plugin_stream: stateful::Receiver<ShouldPlugin>,
+    plugin_action_stream: stateful::Receiver<PluginAction>,
     reminders: &ReminderService,
 ) {
     let car = car.clone();
     let reminders = reminders.clone();
 
-    let should_plugin_stream = should_plugin_stream.delay_repeat(
-        "tesla_should_plugin (repeat)",
+    // Hold plugin actions for a grace period before they reach the reminder
+    // loop, so that arriving home does not create a reminder immediately and
+    // the user has time to plug in. A later action clears the pending one, so
+    // plugging in during the grace period means the reminder is never
+    // created; actions without plugin set pass through undelayed.
+    let plugin_action_stream = plugin_action_stream.delay_input(
+        "tesla_should_plugin (delay)",
         Duration::from_mins(10),
-        |(_, should_plugin)| *should_plugin == ShouldPlugin::ShouldPlugin,
+        |(_, action)| action.plugin,
+        DelayInputOptions::default(),
     );
 
     spawn(async move {
-        let mut s = should_plugin_stream.subscribe().await;
-        let mut reminder: Option<crate::reminders::Reminder> = None;
+        let mut s = plugin_action_stream.subscribe().await;
+        let mut auto_reminder: Option<crate::reminders::Reminder> = None;
+        let mut plugin_reminder: Option<crate::reminders::Reminder> = None;
 
-        while let Ok(should_plugin) = s.recv().await {
-            let active = should_plugin == ShouldPlugin::ShouldPlugin;
+        while let Ok(action) = s.recv().await {
+            if action.switch_to_auto {
+                if auto_reminder.is_none() {
+                    let name = &car.name;
+                    let msg: Message = new_message(
+                        format!("{name} should be automatic"),
+                        MessagePriority::Error,
+                        &car.audience.charging,
+                    );
+                    let key = format!("{}/auto", car.id);
+                    debug!(reminder_key = %key, "Creating auto reminder");
+                    auto_reminder = Some(reminders.create(key, msg));
+                }
+            } else if auto_reminder.take().is_some() {
+                debug!("Auto reminder is no longer active");
+            }
 
-            if active {
-                if reminder.is_none() {
+            if action.plugin {
+                if plugin_reminder.is_none() {
                     let name = &car.name;
                     let msg: Message = new_message(
                         format!("{name} might fly away and should be leashed"),
@@ -41,9 +63,9 @@ pub fn plug_in_reminder(
                     );
                     let key = format!("{}/plug_in", car.id);
                     debug!(reminder_key = %key, "Creating plug-in reminder");
-                    reminder = Some(reminders.create(key, msg));
+                    plugin_reminder = Some(reminders.create(key, msg));
                 }
-            } else if reminder.take().is_some() {
+            } else if plugin_reminder.take().is_some() {
                 debug!("Plug-in reminder is no longer active");
             }
         }

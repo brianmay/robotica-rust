@@ -22,15 +22,12 @@ pub struct SetChargeEndTime {
 pub enum ChargeRequest {
     /// Charge to a specific level
     ChargeTo(u8),
-    /// Do not touch the charge level
-    Manual,
 }
 
 impl std::fmt::Display for ChargeRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ChargeRequest::ChargeTo(level) => write!(f, "charge to {level}%"),
-            ChargeRequest::Manual => write!(f, "manual charge"),
         }
     }
 }

@@ -7,8 +7,6 @@ pub mod plug_in_reminder;
 mod private;
 pub mod token;
 
-use crate::amber::car::ChargeRequest;
-
 use monitor_doors::{DoorState, UserIsPresent};
 use reqwest::Url;
 use robotica_common::teslamate;
@@ -125,17 +123,61 @@ pub struct Config {
     pub teslamate: TeslamateConfig,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ShouldPlugin {
-    ShouldPlugin,
-    NoActionRequired,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+pub struct PluginAction {
+    /// Auto charge is off while charging is needed at home; switch back to
+    /// automatic charging.
+    ///
+    /// This does not require the car to be unplugged: a plugged-in car on
+    /// manual charge is not charging even though charging is needed.
+    pub switch_to_auto: bool,
+    /// The car is at home, unplugged, and charging is needed.
+    pub plugin: bool,
+}
+
+/// Whether charging is controlled automatically or manually.
+///
+/// Serialized as a boolean (`true` is auto) so persistent state written by
+/// older versions remains compatible.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Serialize, Deserialize)]
+#[serde(from = "bool", into = "bool")]
+pub enum AutoCharge {
+    /// Charging is controlled automatically.
+    Auto,
+    /// Charging is controlled manually.
+    #[default]
+    Manual,
+}
+
+impl From<bool> for AutoCharge {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::Auto
+        } else {
+            Self::Manual
+        }
+    }
+}
+
+impl From<AutoCharge> for bool {
+    fn from(value: AutoCharge) -> Self {
+        matches!(value, AutoCharge::Auto)
+    }
+}
+
+impl std::fmt::Display for AutoCharge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::Manual => write!(f, "manual"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChargingInformation {
     battery_level: u8,
     charge_limit: u8,
-    charge_request_at_home: ChargeRequest,
-    // charge_request: ChargeRequest,
+    auto_charge: AutoCharge,
     charging_state: ChargingStateEnum,
 }

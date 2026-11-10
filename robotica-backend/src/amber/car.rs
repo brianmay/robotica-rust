@@ -33,17 +33,7 @@ use tracing::{debug, error, info};
 #[serde(rename_all = "snake_case")]
 pub enum ChargeRequest {
     ChargeTo(u8),
-    //DoNotCharge,
-    Manual,
-}
-
-impl ChargeRequest {
-    pub const fn is_auto(self) -> bool {
-        match self {
-            Self::ChargeTo(_) => true,
-            Self::Manual => false,
-        }
-    }
+    // DoNotCharge,
 }
 
 impl combined::RequestTrait for ChargeRequest {
@@ -56,7 +46,6 @@ impl combined::RequestTrait for ChargeRequest {
     fn get_meter_value(&self) -> Self::GaugeType {
         match self {
             Self::ChargeTo(limit) => u64::from(*limit),
-            Self::Manual => 0,
         }
     }
 
@@ -75,9 +64,6 @@ impl combined::Max for ChargeRequest {
     fn max(self, other: Self) -> Self {
         match (self, other) {
             (Self::ChargeTo(a), Self::ChargeTo(b)) => Self::ChargeTo(a.max(b)),
-            (Self::ChargeTo(a), Self::Manual) => Self::ChargeTo(a),
-            (Self::Manual, Self::ChargeTo(b)) => Self::ChargeTo(b),
-            (Self::Manual, Self::Manual) => Self::Manual,
         }
     }
 }
