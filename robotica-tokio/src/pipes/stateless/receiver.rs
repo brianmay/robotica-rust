@@ -1,7 +1,7 @@
 //! Stateless receiver code.
 
 use super::{create_pipe, Sender};
-use crate::pipes::{Subscriber, Subscription as SubscriptionTrait};
+use crate::pipes::{Subscriber, Subscription as SubscriptionTrait, PIPE_SIZE};
 use crate::{pipes::RecvError, spawn};
 use async_trait::async_trait;
 use tokio::{
@@ -55,14 +55,15 @@ where
         let msg = ReceiveMessage::Subscribe(tx);
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
-            return Subscription::null(self.tx.clone());
+            return Subscription::null(self.tx.clone(), self.name.clone());
         }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);
-                Subscription::null(self.tx.clone())
+                Subscription::null(self.tx.clone(), self.name.clone())
             },
             |rx| Subscription {
+                name: self.name.clone(),
                 rx,
                 _tx: self.tx.clone(),
             },
@@ -259,6 +260,7 @@ where
 
 /// A subscription to receive data from an entity.
 pub struct Subscription<T> {
+    name: String,
     rx: broadcast::Receiver<T>,
     // We need to keep this to ensure connection stays alive.
     _tx: mpsc::Sender<ReceiveMessage<T>>,
@@ -269,9 +271,9 @@ where
     T: Clone,
 {
     /// Create a null subscription that is already closed.
-    fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
+    fn null(tx: mpsc::Sender<ReceiveMessage<T>>, name: String) -> Self {
         let (_tx, rx) = broadcast::channel(1);
-        Self { rx, _tx: tx }
+        Self { name, rx, _tx: tx }
     }
 }
 
@@ -291,8 +293,11 @@ where
                 Ok(v) => return Ok(v),
                 Err(err) => match err {
                     broadcast::error::RecvError::Closed => return Err(RecvError::Closed),
-                    broadcast::error::RecvError::Lagged(_) => {
-                        error!("recv failed: The pipe was lagged");
+                    broadcast::error::RecvError::Lagged(skipped) => {
+                        error!(
+                            "{}: recv failed: The pipe was lagged, {skipped} messages skipped (capacity {PIPE_SIZE})",
+                            self.name
+                        );
                     }
                 },
             }
@@ -313,8 +318,11 @@ where
                         return Err(RecvError::Closed);
                     }
                     broadcast::error::TryRecvError::Empty => return Ok(None),
-                    broadcast::error::TryRecvError::Lagged(_) => {
-                        error!("try_recv failed: The pipe was lagged");
+                    broadcast::error::TryRecvError::Lagged(skipped) => {
+                        error!(
+                            "{}: try_recv failed: The pipe was lagged, {skipped} messages skipped (capacity {PIPE_SIZE})",
+                            self.name
+                        );
                     }
                 },
             }
@@ -324,13 +332,50 @@ where
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[tokio::test]
     async fn test_null_subscription() {
         let (tx, _rx) = mpsc::channel::<ReceiveMessage<u8>>(1);
-        let mut sub = super::Subscription::null(tx);
+        let mut sub = super::Subscription::null(tx, "test null subscription".into());
         assert!(sub.try_recv().is_err());
         assert!(sub.recv().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_recv_after_lag_returns_oldest_buffered_value() {
+        // tokio rounds the broadcast capacity up to a power of two.
+        const EFFECTIVE_CAPACITY: usize = PIPE_SIZE.next_power_of_two();
+        const SENT: usize = EFFECTIVE_CAPACITY + 10;
+        const SKIPPED: usize = 10;
+        const CHUNK: usize = 20;
+
+        let (tx, rx) = create_pipe("test lagged subscription");
+        let mut victim = rx.subscribe().await;
+        let mut monitor = rx.subscribe().await;
+
+        // Flood the pipe in chunks small enough for the pipe's bounded
+        // inbound channel, pausing between chunks so the task can
+        // broadcast.
+        for i in 0..SENT {
+            tx.try_send(i);
+            if i % CHUNK == CHUNK - 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        }
+
+        // Wait until the last value has been broadcast.
+        loop {
+            if monitor.recv().await.unwrap() == SENT - 1 {
+                break;
+            }
+        }
+
+        // The subscriber fell more than a full buffer behind: the first
+        // SKIPPED values were dropped and recv resumes from the oldest
+        // buffered value.
+        let value = victim.recv().await.unwrap();
+        assert_eq!(value, SKIPPED);
     }
 }

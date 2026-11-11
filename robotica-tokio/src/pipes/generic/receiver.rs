@@ -63,14 +63,15 @@ where
         let msg = ReceiveMessage::Subscribe(tx);
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
-            return Subscription::null(self.tx.clone());
+            return Subscription::null(self.tx.clone(), self.name.clone());
         }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);
-                Subscription::null(self.tx.clone())
+                Subscription::null(self.tx.clone(), self.name.clone())
             },
             |(rx, initial)| Subscription {
+                name: self.name.clone(),
                 rx,
                 _tx: self.tx.clone(),
                 initial,

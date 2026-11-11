@@ -1,7 +1,7 @@
 //! Stateful receiver code.
 
 use super::{create_pipe, Sender};
-use crate::pipes::{Subscriber, Subscription as SubscriptionTrait};
+use crate::pipes::{Subscriber, Subscription as SubscriptionTrait, PIPE_SIZE};
 use crate::{pipes::RecvError, spawn};
 use async_trait::async_trait;
 use futures::Future;
@@ -60,14 +60,15 @@ where
         let msg = ReceiveMessage::Subscribe(tx);
         if let Err(err) = self.tx.send(msg).await {
             error!("{}: subscribe/send failed: {}", self.name, err);
-            return Subscription::null(self.tx.clone());
+            return Subscription::null(self.tx.clone(), self.name.clone());
         }
         rx.await.map_or_else(
             |_| {
                 error!("{}: subscribe/await failed", self.name);
-                Subscription::null(self.tx.clone())
+                Subscription::null(self.tx.clone(), self.name.clone())
             },
             |(rx, initial)| Subscription {
+                name: self.name.clone(),
                 rx,
                 _tx: self.tx.clone(),
                 initial,
@@ -328,6 +329,7 @@ where
 
 /// A subscription to receive data from an entity.
 pub struct Subscription<T> {
+    pub(in crate::pipes) name: String,
     pub(in crate::pipes) rx: broadcast::Receiver<OldNewType<T>>,
     pub(in crate::pipes) _tx: mpsc::Sender<ReceiveMessage<T>>,
     pub(in crate::pipes) initial: Vec<T>,
@@ -338,9 +340,10 @@ where
     T: Clone,
 {
     /// Create a null subscription that is already closed.
-    pub(in crate::pipes) fn null(tx: mpsc::Sender<ReceiveMessage<T>>) -> Self {
+    pub(in crate::pipes) fn null(tx: mpsc::Sender<ReceiveMessage<T>>, name: String) -> Self {
         let (_tx, rx) = broadcast::channel(1);
         Self {
+            name,
             rx,
             _tx: tx,
             initial: Vec::new(),
@@ -369,8 +372,11 @@ where
                 Ok(v) => return Ok(v),
                 Err(err) => match err {
                     broadcast::error::RecvError::Closed => return Err(RecvError::Closed),
-                    broadcast::error::RecvError::Lagged(_) => {
-                        error!("recv failed: The pipe was lagged");
+                    broadcast::error::RecvError::Lagged(skipped) => {
+                        error!(
+                            "{}: recv failed: The pipe was lagged, {skipped} messages skipped (capacity {PIPE_SIZE})",
+                            self.name
+                        );
                     }
                 },
             }
@@ -397,8 +403,11 @@ where
                         return Err(RecvError::Closed);
                     }
                     broadcast::error::TryRecvError::Empty => return Ok(None),
-                    broadcast::error::TryRecvError::Lagged(_) => {
-                        error!("try_recv failed: The pipe was lagged");
+                    broadcast::error::TryRecvError::Lagged(skipped) => {
+                        error!(
+                            "{}: try_recv failed: The pipe was lagged, {skipped} messages skipped (capacity {PIPE_SIZE})",
+                            self.name
+                        );
                     }
                 },
             }
@@ -443,15 +452,48 @@ where
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[tokio::test]
     async fn test_null_subscription() {
         let (tx, _rx) = mpsc::channel::<ReceiveMessage<u8>>(1);
-        let mut sub = super::Subscription::null(tx);
+        let mut sub = super::Subscription::null(tx, "test null subscription".into());
         assert!(sub.try_recv().is_err());
         assert!(sub.try_recv_old_new().is_err());
         assert!(sub.recv().await.is_err());
         assert!(sub.recv_old_new().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_recv_after_lag_returns_oldest_buffered_value() {
+        // tokio rounds the broadcast capacity up to a power of two.
+        const EFFECTIVE_CAPACITY: usize = PIPE_SIZE.next_power_of_two();
+        const SENT: usize = EFFECTIVE_CAPACITY + 10;
+        const SKIPPED: usize = 10;
+
+        let (tx, rx) = create_pipe("test lagged subscription");
+        let mut sub = rx.subscribe().await;
+
+        for i in 0..SENT {
+            tx.try_send(i);
+        }
+
+        // Wait for the pipe task to broadcast all the values.
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if rx.get().await == Some(SENT - 1) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        // The subscriber fell more than a full buffer behind: the first
+        // SKIPPED values were dropped and recv resumes from the oldest
+        // buffered value.
+        let value = sub.recv().await.unwrap();
+        assert_eq!(value, SKIPPED);
     }
 }
