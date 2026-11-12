@@ -5,12 +5,6 @@ ignore = true
 reason = "Stale lock entry — not in any dependency tree"
 
 [[PackageOverrides]]
-name = "rsa"
-ecosystem = "crates.io"
-ignore = true
-reason = "Stale lock entry — not in any dependency tree"
-
-[[PackageOverrides]]
 name = "paste"
 ecosystem = "crates.io"
 ignore = true
@@ -40,13 +34,6 @@ ecosystem = "crates.io"
 version = "0.102.8"
 vulnerability.ignore = true
 reason = "All CVEs are CRL/cert-chain issues requiring either compromised CA or misissued certs. MQTT uses local broker. Pinned by rumqttc — can't update to 0.103.x."
-
-[[PackageOverrides]]
-name = "block-buffer"
-ecosystem = "crates.io"
-version = "0.10.4"
-vulnerability.ignore = true
-reason = "GHSA-qwgh-2vcv-g2f7; OSV lists no fixed version. Transitive via digest in Axum and SQLx; re-evaluate when a patched release is available."
 
 [[PackageOverrides]]
 name = "proc-macro-error2"
