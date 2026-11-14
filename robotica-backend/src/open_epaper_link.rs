@@ -147,7 +147,7 @@ pub fn output_location(
             let mut y = 5;
             let mut template = Template(vec![header(&mut y, name), line(&mut y)]);
             for location in state {
-                template.0.push(text(&mut y, location.name.clone()));
+                template.0.push(text(&mut y, location.name));
             }
             if let Err(e) = template.send(&config).await {
                 error!("Failed to send template: {}", e);
