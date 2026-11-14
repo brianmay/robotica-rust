@@ -207,7 +207,7 @@ pub fn get_room_for_id<S: 'static + ::std::hash::BuildHasher + Send>(
             spawn(async move {
                 let mut sub = tracker.subscribe().await;
                 while let Ok(msg) = sub.recv().await {
-                    tx.try_send(msg.room.clone());
+                    tx.try_send(msg.room);
                 }
             });
             rx

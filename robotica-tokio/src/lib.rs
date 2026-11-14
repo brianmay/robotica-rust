@@ -69,9 +69,5 @@ pub fn is_debug_mode() -> bool {
         return value.to_lowercase() == "true";
     }
 
-    if cfg!(debug_assertions) {
-        return true;
-    }
-
-    false
+    cfg!(debug_assertions)
 }
