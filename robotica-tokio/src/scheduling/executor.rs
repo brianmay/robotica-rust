@@ -436,7 +436,7 @@ impl<T: TimeZone + Copy + Send + Sync> State<T> {
                     for task in &sequence.tasks {
                         for message in task.get_mqtt_messages() {
                             debug!("{now:?}: Sending task {message:?}");
-                            self.mqtt.try_send(message.clone());
+                            self.mqtt.try_send(message);
                         }
                     }
                     self.all_status.insert(sequence, Status::InProgress);

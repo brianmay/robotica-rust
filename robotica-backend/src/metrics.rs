@@ -1,3 +1,5 @@
+#![allow(unreachable_code)]
+
 use chrono::{DateTime, Utc};
 use influxdb::{InfluxDbWriteable, WriteQuery};
 use robotica_common::anavi_thermometer::{self as anavi};

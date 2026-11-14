@@ -1,3 +1,5 @@
+#![allow(unreachable_code)]
+
 use super::{api, Prices, Usage};
 use crate::influxdb as influx;
 use chrono::{DateTime, Utc};

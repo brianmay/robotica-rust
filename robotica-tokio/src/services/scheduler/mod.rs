@@ -95,7 +95,7 @@ where
                                 "{name}: Sending scheduled entry at {}: {:?}",
                                 e.scheduled_time, e.value
                             );
-                            tx_out.try_send(e.value.clone());
+                            tx_out.try_send(e.value);
                         }
                     }
                     // If the entry is in the future, return it.

@@ -23,7 +23,7 @@ pub fn merge_yaml(a: Value, b: Value) -> Result<Value, Error> {
             for (k, vb) in b {
                 let va = a.remove(k.clone()).unwrap_or(Value::Null);
                 if !vb.is_null() {
-                    r.insert(k.clone(), merge_yaml(va, vb)?);
+                    r.insert(k, merge_yaml(va, vb)?);
                 }
             }
             for (k, va) in a {

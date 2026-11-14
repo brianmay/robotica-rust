@@ -92,23 +92,22 @@ pub fn from_str<T: TimeZone>(
             let event_start_opt = event.get_start();
             let event_end_opt = event.get_end();
 
-            let (duration, entry_start_dt, is_all_day) =
-                match (event_start_opt.clone(), event_end_opt.clone()) {
-                    (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
-                        let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
-                        let e_utc = calendar_datetime_to_utc(&e)
-                            .unwrap_or_else(|| start_dt_utc + Duration::hours(1));
-                        (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
-                    }
-                    (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
-                        let dur = Duration::days((e - s).num_days());
-                        (dur, Some(DatePerhapsTime::Date(s)), true)
-                    }
-                    _ => (Duration::hours(1), None, false),
-                };
+            let (duration, entry_start_dt, is_all_day) = match (event_start_opt, event_end_opt) {
+                (Some(DatePerhapsTime::DateTime(s)), Some(DatePerhapsTime::DateTime(e))) => {
+                    let s_utc = calendar_datetime_to_utc(&s).unwrap_or(start_dt_utc);
+                    let e_utc = calendar_datetime_to_utc(&e)
+                        .unwrap_or_else(|| start_dt_utc + Duration::hours(1));
+                    (e_utc - s_utc, Some(DatePerhapsTime::DateTime(s)), false)
+                }
+                (Some(DatePerhapsTime::Date(s)), Some(DatePerhapsTime::Date(e))) => {
+                    let dur = Duration::days((e - s).num_days());
+                    (dur, Some(DatePerhapsTime::Date(s)), true)
+                }
+                _ => (Duration::hours(1), None, false),
+            };
 
             if let Ok(rrule_set) = event.get_recurrence() {
-                let result = rrule_set.clone().all(rrule_limit);
+                let result = rrule_set.all(rrule_limit);
 
                 for occurrence in result.dates {
                     if is_all_day {
@@ -119,13 +118,10 @@ pub fn from_str<T: TimeZone>(
                         let occurrence_utc = occurrence.with_timezone(&Utc);
                         let occurrence_end = occurrence_utc + duration;
 
-                        let summary = event
-                            .get_summary()
-                            .map(ToString::to_string)
-                            .unwrap_or_default();
+                        let summary = event.get_summary().map_or_default(ToString::to_string);
                         let description = event.get_description().map(ToString::to_string);
                         let location = event.get_location().map(ToString::to_string);
-                        let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                        let uid = event.get_uid().map_or_default(ToString::to_string);
                         let status = event.get_status().map(|s| format!("{s:?}"));
 
                         entries.push(CalendarEntry {
@@ -146,13 +142,10 @@ pub fn from_str<T: TimeZone>(
                     }
                     let occurrence_end = occurrence_utc + duration;
 
-                    let summary = event
-                        .get_summary()
-                        .map(ToString::to_string)
-                        .unwrap_or_default();
+                    let summary = event.get_summary().map_or_default(ToString::to_string);
                     let description = event.get_description().map(ToString::to_string);
                     let location = event.get_location().map(ToString::to_string);
-                    let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                    let uid = event.get_uid().map_or_default(ToString::to_string);
                     let status = event.get_status().map(|s| format!("{s:?}"));
 
                     entries.push(CalendarEntry {
@@ -184,13 +177,10 @@ pub fn from_str<T: TimeZone>(
                 };
                 if in_range {
                     let e = s_utc + duration;
-                    let summary = event
-                        .get_summary()
-                        .map(ToString::to_string)
-                        .unwrap_or_default();
+                    let summary = event.get_summary().map_or_default(ToString::to_string);
                     let description = event.get_description().map(ToString::to_string);
                     let location = event.get_location().map(ToString::to_string);
-                    let uid = event.get_uid().map(ToString::to_string).unwrap_or_default();
+                    let uid = event.get_uid().map_or_default(ToString::to_string);
                     let status = event.get_status().map(|s| format!("{s:?}"));
 
                     entries.push(CalendarEntry {

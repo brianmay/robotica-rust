@@ -162,8 +162,7 @@ fn is_tags_ok(config: &Config, today: &HashSet<String>, tomorrow: &HashSet<Strin
 }
 
 /// A scheduling error occurred
-#[derive(Error, Debug)]
-pub enum ScheduleError {}
+pub type ScheduleError = std::convert::Infallible;
 
 /// Create a schedule for given date based on the given tags.
 ///

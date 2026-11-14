@@ -235,7 +235,7 @@ impl Component for OccupancyViewComponent {
                                                             } else {
                                                                 html! {
                                                                     { people.iter().map(|p| {
-                                                                        let dist = p.distance.map(|d| format!(" ({d:.1}m)")).unwrap_or_default();
+                                                                        let dist = p.distance.map_or_default(|d| format!(" ({d:.1}m)"));
                                                                         html! {
                                                                             <span>{ format!("{}{}", p.person_id, dist) }</span>
                                                                         }
