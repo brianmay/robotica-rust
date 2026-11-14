@@ -2,7 +2,7 @@ use robotica_common::robotica::zones::Zone;
 use std::sync::Arc;
 use yew::prelude::*;
 
-pub enum Msg {}
+pub type Msg = std::convert::Infallible;
 
 pub struct List {
     zones: Arc<Vec<Zone>>,
