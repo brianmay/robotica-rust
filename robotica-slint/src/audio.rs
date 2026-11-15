@@ -265,7 +265,7 @@ fn send_state(
 fn send_task(mqtt: &MqttTx, task: &Task) {
     for message in task.get_mqtt_messages() {
         debug!("Sending task {message:?}");
-        mqtt.try_send(message.clone());
+        mqtt.try_send(message);
     }
 }
 
