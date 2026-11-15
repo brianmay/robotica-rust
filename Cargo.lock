@@ -2642,7 +2642,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-sink",
- "gloo-utils 0.3.0",
+ "gloo-utils 0.3.1",
  "http 1.4.0",
  "js-sys",
  "pin-project",
@@ -2718,9 +2718,9 @@ dependencies = [
 
 [[package]]
 name = "gloo-utils"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4202275d95a142fa209a1e35e91c250a710c5600731372cd3464a39ed01573d6"
+checksum = "b49e445aecd7ad851e4a3704f370f53ae7b267ace62d17be3ec4fac5024eec0e"
 dependencies = [
  "js-sys",
  "serde",
@@ -6348,7 +6348,7 @@ dependencies = [
  "gloo-events 0.3.1",
  "gloo-net 0.7.0",
  "gloo-timers 0.4.1",
- "gloo-utils 0.3.0",
+ "gloo-utils 0.3.1",
  "itertools 0.15.0",
  "js-sys",
  "leaflet",
