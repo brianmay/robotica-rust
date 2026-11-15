@@ -1,3 +1,5 @@
+// TODO: remove once influxdb's InfluxDbWriteable derive handles Rust 1.100's
+// never type (Infallible = !); the generated Clone impl trips unreachable_code.
 #![allow(unreachable_code)]
 
 use chrono::{DateTime, Utc};
