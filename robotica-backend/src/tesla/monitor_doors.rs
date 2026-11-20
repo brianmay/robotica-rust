@@ -314,7 +314,6 @@ mod tests {
         car::Config {
             id: Id::new("tesla-1").unwrap(),
             name: "Tesla".to_string(),
-            oel_display: None,
             audience: AudienceConfig {
                 errors: "brian".into(),
                 locations: "brian".into(),

@@ -2,13 +2,12 @@ use robotica_common::robotica::entities::Id;
 use robotica_common::robotica::message::Audience;
 use serde::Deserialize;
 
-use crate::{open_epaper_link, tesla};
+use crate::tesla;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub id: Id,
     pub name: String,
-    pub oel_display: Option<open_epaper_link::Config>,
     pub audience: AudienceConfig,
 
     /// Extra padding in metres added to zone boundaries when testing arrival.

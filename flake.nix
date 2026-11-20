@@ -439,6 +439,33 @@
                     water_heaters = [ ];
                     hdmi_matrices = [ ];
                     door_monitors = [ ];
+                    open_epaper_link = {
+                      url = "http://check.invalid/";
+                      timezone = "Australia/Melbourne";
+                      displays = [
+                        {
+                          type = "locations";
+                          mac = "0000ABCD00000001";
+                          id = "test_car";
+                        }
+                        {
+                          type = "sensors";
+                          mac = "0000ABCD00000002";
+                          name = "Test Sensors";
+                          sensors = [
+                            {
+                              label = "Temp";
+                              topic = "zwave/Test/Environment/49/0/Air_temperature";
+                              unit = "°C";
+                            }
+                            {
+                              label = "Humidity";
+                              topic = "zwave/Test/Environment/49/0/Humidity";
+                            }
+                          ];
+                        }
+                      ];
+                    };
                   };
 
                   secrets = pkgs.writeText "secrets.yaml" ''

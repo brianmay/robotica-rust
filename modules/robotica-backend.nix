@@ -178,10 +178,6 @@ let
       tesla_id = mkOption { type = types.number; };
       teslamate = mkOption { type = teslamate_type; };
       audience = mkOption { type = tesla_audience_type; };
-      oel_display = mkOption {
-        type = lib.types.nullOr display_type;
-        default = null;
-      };
       arrival_radius_m = mkOption {
         type = types.float;
         default = 0.0;
@@ -308,10 +304,65 @@ let
     };
   };
 
-  display_type = types.submodule {
+  open_epaper_link_sensor_type = types.submodule {
+    options = {
+      label = mkOption { type = types.str; };
+      topic = mkOption { type = types.str; };
+      unit = mkOption {
+        type = lib.types.nullOr types.str;
+        default = null;
+      };
+    };
+  };
+
+  # A display, tagged by `type`. The fields of the other variant are
+  # ignored by the Rust deserializer, so only the fields of the
+  # configured variant need to be set (the build time configuration
+  # check rejects a display that is missing a required field).
+  open_epaper_link_display_type = types.submodule {
+    options = {
+      type = mkOption {
+        type = types.enum [
+          "locations"
+          "sensors"
+        ];
+      };
+      mac = mkOption { type = types.str; };
+      id = mkOption {
+        type = lib.types.nullOr id_type;
+        default = null;
+        description = "For a locations display: the id of the tracked object, subscribing to robotica/state/{id}/locations.";
+      };
+      name = mkOption {
+        type = lib.types.nullOr types.str;
+        default = null;
+        description = "For a sensors display: the title shown on the tag.";
+      };
+      sensors = mkOption {
+        type = types.listOf open_epaper_link_sensor_type;
+        default = [ ];
+        description = "For a sensors display: the sensors to show.";
+      };
+      rate_limit_secs = mkOption {
+        type = types.ints.positive;
+        default = 300;
+        description = "Minimum interval between display updates in seconds; limits tag battery drain.";
+      };
+    };
+  };
+
+  open_epaper_link_type = types.submodule {
     options = {
       url = mkOption { type = types.str; };
-      mac = mkOption { type = types.str; };
+      timezone = mkOption {
+        type = types.str;
+        default = "UTC";
+        description = "IANA timezone used to format times displayed on tags.";
+      };
+      displays = mkOption {
+        type = types.listOf open_epaper_link_display_type;
+        default = [ ];
+      };
     };
   };
 
@@ -489,6 +540,10 @@ let
       owntracks = mkOption {
         type = types.listOf owntracks_source_type;
         default = [ ];
+      };
+      open_epaper_link = mkOption {
+        type = lib.types.nullOr open_epaper_link_type;
+        default = null;
       };
     };
   };

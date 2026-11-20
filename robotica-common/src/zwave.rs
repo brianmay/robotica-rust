@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 
 /// Generic Z-Wave Data
-#[derive(serde::Deserialize, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct Data<T> {
     /// The time the data was sent
     pub time: i64,

@@ -109,6 +109,7 @@ pub struct Config {
     pub message_routes: Vec<MessageRouteConfig>,
     #[serde(default)]
     pub owntracks: Vec<OwnTracksSourceConfig>,
+    pub open_epaper_link: Option<crate::open_epaper_link::Config>,
     pub ui: Option<crate::ui::UiConfig>,
 }
 

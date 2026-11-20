@@ -405,6 +405,10 @@ async fn setup_pipes(
         monitor_owntracks(&mut state, owntracks_config, &postgres, &message_sink);
     }
 
+    if let Some(open_epaper_link_config) = config.open_epaper_link {
+        open_epaper_link::run(&open_epaper_link_config, &mut state.subscriptions);
+    }
+
     if let Some(http_config) = config.http {
         // The web frontend is served the default profile, filtered per
         // user; it is also the basis of the per user websocket topic
@@ -725,10 +729,6 @@ fn monitor_tesla(
         car.id.get_state_topic("amber"),
         &SendOptions::new(),
     );
-
-    if let Some(display) = &car.oel_display {
-        open_epaper_link::output_location(&car.name, display.clone(), locations.location.clone());
-    }
 
     let charge_request = charge_state.map(|(_, state)| state.get_result());
 
